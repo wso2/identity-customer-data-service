@@ -1,0 +1,31 @@
+env: "${ENV}" # This will be replaced by the ENV variable
+
+mongodb:
+  uri: "${MONGODB_URI}"
+  database: "custodian_db"
+  profile_collection: "profiles"
+  event_collection: "events"
+  consent_collection: "consents"
+
+log:
+  debug_enabled: true
+
+identity_server:
+  host: "localhost"
+  port: "9443"
+
+cache:
+  enabled: true
+  default_cache_timeout: 15
+
+
+auth:
+  cors_allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:3001"
+    - "https://localhost:9001"
+
+addr:
+  host: 0.0.0.0
+  port: 8900
+
