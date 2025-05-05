@@ -1,0 +1,35 @@
+env: "${ENV}" # This will be replaced by the ENV variable
+
+mongodb:
+  uri: "${MONGODB_URI}"
+  database: "custodian_db"
+  profile_collection: "profiles"
+  event_collection: "events"
+  consent_collection: "consents"
+
+log:
+  debug_enabled: true
+
+cache:
+  enabled: true
+  default_cache_timeout: 15
+
+
+auth:
+  cors_allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:3001"
+    - "https://localhost:9001"
+
+addr:
+  host: 0.0.0.0
+  port: 8900
+
+auth_server:
+  introspectionEndpoint: "https://localhost:9443/oauth2/introspect"
+  tokenEndpoint: "https://localhost:9443/oauth2/token"
+  revocationEndpoint: "https://localhost:9443/oauth2/revoke"
+  client_id: "zWnggcx_LNj9MSuZYxXyyo5lcaIa"
+  client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
+  admin_username: "admin"
+  admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
