@@ -1,0 +1,56 @@
+package config
+
+import (
+	"gopkg.in/yaml.v2"
+	"os"
+	"path"
+)
+
+var AppConfig *Config
+
+type Config struct {
+	MongoDB struct {
+		URI               string `yaml:"uri"`
+		Database          string `yaml:"database"`
+		ProfileCollection string `yaml:"profile_collection"`
+		EventCollection   string `yaml:"event_collection"`
+		ConsentCollection string `yaml:"consent_collection"`
+	} `yaml:"mongodb"`
+	Addr struct {
+		Port string `yaml:"port"`
+		Host string `yaml:"host"`
+	} `yaml:"addr"`
+	Log struct {
+		DebugEnabled bool `yaml:"debug_enabled"`
+	} `yaml:"log"`
+	Auth struct {
+		CORSAllowedOrigins []string `yaml:"cors_allowed_origins"`
+	} `yaml:"auth"`
+	AuthServer struct {
+		IntrospectionEndPoint string `yaml:"introspectionEndpoint"`
+		TokenEndpoint         string `yaml:"tokenEndpoint"`
+		RevocationEndpoint    string `yaml:"revocationEndpoint"`
+		ClientID              string `yaml:"client_id"`
+		ClientSecret          string `yaml:"client_secret"`
+		AdminUsername         string `yaml:"admin_username"`
+		AdminPassword         string `yaml:"admin_password"`
+	} `yaml:"auth_server"`
+}
+
+// LoadConfig loads and sets AppConfig (global variable)
+func LoadConfig(cdsHome, filePath string) (*Config, error) {
+	file, err := os.ReadFile(path.Join(cdsHome, filePath))
+	if err != nil {
+		return nil, err
+	}
+
+	expanded := os.ExpandEnv(string(file))
+
+	var config Config
+	if err := yaml.Unmarshal([]byte(expanded), &config); err != nil {
+		return nil, err
+	}
+
+	AppConfig = &config
+	return AppConfig, nil
+}
