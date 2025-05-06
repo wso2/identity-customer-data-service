@@ -2,45 +2,24 @@ package service
 
 import (
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
+	"net/http"
+	"time"
+
 	"github.com/wso2/identity-customer-data-service/internal/errors"
 	"github.com/wso2/identity-customer-data-service/internal/locks"
 	"github.com/wso2/identity-customer-data-service/internal/models"
-	"github.com/wso2/identity-customer-data-service/internal/repository"
-	"go.mongodb.org/mongo-driver/bson"
-	"net/http"
-	"time"
+	repositories "github.com/wso2/identity-customer-data-service/internal/repository"
 )
 
 // AddUnificationRule Adds a new unification rule.
 func AddUnificationRule(rule models.UnificationRule) error {
 
-	mongoDB := locks.GetMongoDBInstance()
-	unificationRuleRepo := repositories.NewUnificationRuleRepository(mongoDB.Database, constants.UnificationRulesCollection)
-
-	// Check if the attribute exists in profile schema enrichment rules
-	filter := fmt.Sprintf("property_name eq %s", rule.Property)
-	profileEnrichmentRules, err := GetEnrichmentRulesByFilter([]string{filter})
-
-	if err != nil {
-		errors.ErrWhileAddingUnificationRules.Description = "Failed when validating if the attribute exists in " +
-			"enrichment rules."
-		return errors.NewServerError(errors.ErrWhileFetchingEnrichmentRules, err)
-	}
-
-	if len(profileEnrichmentRules) == 0 {
-		// Property does not exist in profile enrichment rules
-		return errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrPropDoesntExists.Code,
-			Message:     errors.ErrPropDoesntExists.Message,
-			Description: fmt.Sprintf("Property %s does not exist as a profile enrichment rule", rule.Property),
-		}, http.StatusConflict)
-	}
+	postgresDB := locks.GetPostgresInstance()
+	unificationRuleRepo := repositories.NewUnificationRuleRepository(postgresDB.DB)
 
 	// Check if a similar unification rule already exists
-	existingRule, err := unificationRuleRepo.GetUnificationRuleByPropertyName(rule.Property)
+	existingRule, err := unificationRuleRepo.GetUnificationRule(rule.RuleId)
 	if err != nil {
-		errors.ErrWhileAddingUnificationRules.Description = "Failed to fetch existing unification rules"
 		return errors.NewServerError(errors.ErrWhileFetchingUnificationRules, err)
 	}
 	if existingRule.RuleId != "" {
@@ -63,35 +42,24 @@ func AddUnificationRule(rule models.UnificationRule) error {
 // GetUnificationRules Fetches all resolution rules.
 func GetUnificationRules() ([]models.UnificationRule, error) {
 
-	mongoDB := locks.GetMongoDBInstance()
-	unificationRepo := repositories.NewUnificationRuleRepository(mongoDB.Database, constants.UnificationRulesCollection)
-	rules, err := unificationRepo.GetUnificationRules()
-	return rules, err
+	postgresDB := locks.GetPostgresInstance()
+	unificationRepo := repositories.NewUnificationRuleRepository(postgresDB.DB)
+	return unificationRepo.GetUnificationRules()
 }
 
 // GetUnificationRule Fetches a specific resolution rule.
 func GetUnificationRule(ruleId string) (models.UnificationRule, error) {
 
-	mongoDB := locks.GetMongoDBInstance()
-	unificationRepo := repositories.NewUnificationRuleRepository(mongoDB.Database, constants.UnificationRulesCollection)
-	rule, err := unificationRepo.GetUnificationRule(ruleId)
-	if rule.RuleId == "" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrResolutionRuleNotFound.Code,
-			Message:     errors.ErrResolutionRuleNotFound.Message,
-			Description: errors.ErrResolutionRuleNotFound.Description,
-		}, http.StatusNotFound)
-
-		return rule, clientError
-	}
-	return rule, err
+	postgresDB := locks.GetPostgresInstance()
+	unificationRepo := repositories.NewUnificationRuleRepository(postgresDB.DB)
+	return unificationRepo.GetUnificationRule(ruleId)
 }
 
 // PatchResolutionRule Applies a partial update on a specific resolution rule.
-func PatchResolutionRule(ruleId string, updates bson.M) error {
+func PatchResolutionRule(ruleId string, updates map[string]interface{}) error {
 
-	mongoDB := locks.GetMongoDBInstance()
-	unificationRulesRepo := repositories.NewUnificationRuleRepository(mongoDB.Database, constants.UnificationRulesCollection)
+	postgresDB := locks.GetPostgresInstance()
+	unificationRulesRepo := repositories.NewUnificationRuleRepository(postgresDB.DB)
 
 	// Only allow patching specific fields
 	allowedFields := map[string]bool{
@@ -103,21 +71,20 @@ func PatchResolutionRule(ruleId string, updates bson.M) error {
 	// Validate that all update fields are allowed
 	for field := range updates {
 		if !allowedFields[field] {
-			clientError := errors.NewClientError(errors.ErrorMessage{
+			return errors.NewClientError(errors.ErrorMessage{
 				Code:        errors.ErrOnlyStatusUpdatePossible.Code,
 				Message:     errors.ErrOnlyStatusUpdatePossible.Message,
-				Description: fmt.Sprintf("Field '%s' can not be updated.", field),
+				Description: fmt.Sprintf("Field '%s' cannot be updated.", field),
 			}, http.StatusBadRequest)
-			return clientError
 		}
 	}
 
 	return unificationRulesRepo.PatchUnificationRule(ruleId, updates)
 }
 
-// DeleteUnificationRule Removes a  unification rule.
+// DeleteUnificationRule Removes a unification rule.
 func DeleteUnificationRule(ruleId string) error {
-	mongoDB := locks.GetMongoDBInstance()
-	unificationRepo := repositories.NewUnificationRuleRepository(mongoDB.Database, constants.UnificationRulesCollection)
+	postgresDB := locks.GetPostgresInstance()
+	unificationRepo := repositories.NewUnificationRuleRepository(postgresDB.DB)
 	return unificationRepo.DeleteUnificationRule(ruleId)
 }

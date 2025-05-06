@@ -3,13 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/joho/godotenv"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
-	"github.com/wso2/identity-customer-data-service/internal/handlers"
-	"github.com/wso2/identity-customer-data-service/internal/locks"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
-	"github.com/wso2/identity-customer-data-service/internal/service"
-	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"log"
 	"net/http"
 	"os"
@@ -18,7 +11,30 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+	"github.com/wso2/identity-customer-data-service/internal/constants"
+	"github.com/wso2/identity-customer-data-service/internal/handlers"
+	"github.com/wso2/identity-customer-data-service/internal/locks"
+	"github.com/wso2/identity-customer-data-service/internal/logger"
+	"github.com/wso2/identity-customer-data-service/internal/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 )
+
+func initPostgresDatabaseFromConfig(config *config.Config) {
+	host := config.DatabaseConfig.Host
+	port := config.DatabaseConfig.Port
+	user := config.DatabaseConfig.User
+	password := config.DatabaseConfig.Password
+	dbname := config.DatabaseConfig.DbName
+
+	if host == "" || port == "" || user == "" || password == "" || dbname == "" {
+		log.Fatal("One or more PostgreSQL configuration values are missing")
+	}
+
+	locks.ConnectPostgres(host, port, user, password, dbname)
+	log.Println("PostgreSQL database initialized successfully from configuration")
+}
 
 func main() {
 	cdsHome := getCDSHome()
@@ -43,9 +59,8 @@ func main() {
 
 	// Apply CORS middleware
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: cdsConfig.Auth.CORSAllowedOrigins,
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		//AllowHeaders:     []string{"Content-Type", "Authorization"},
+		AllowOrigins:     cdsConfig.Auth.CORSAllowedOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"*"}, // Or specify "filter" if needed
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
@@ -59,6 +74,9 @@ func main() {
 
 	// Initialize Event queue
 	service.StartProfileWorker()
+
+	// Initialize PostgreSQL database
+	initPostgresDatabaseFromConfig(cdsConfig)
 
 	api := router.Group(constants.ApiBasePath)
 	handlers.RegisterHandlers(api, server)

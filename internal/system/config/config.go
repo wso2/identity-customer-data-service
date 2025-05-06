@@ -1,9 +1,10 @@
 package config
 
 import (
-	"gopkg.in/yaml.v2"
 	"os"
 	"path"
+
+	"gopkg.in/yaml.v2"
 )
 
 var AppConfig *Config
@@ -35,6 +36,13 @@ type Config struct {
 		AdminUsername         string `yaml:"admin_username"`
 		AdminPassword         string `yaml:"admin_password"`
 	} `yaml:"auth_server"`
+	DatabaseConfig struct {
+		Host     string `yaml:"host"`
+		Port     string `yaml:"port"`
+		User     string `yaml:"user"`
+		Password string `yaml:"password"`
+		DbName   string `yaml:"dbname"`
+	} `yaml:"database"`
 }
 
 // LoadConfig loads and sets AppConfig (global variable)

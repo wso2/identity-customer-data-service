@@ -31,6 +31,7 @@ _package:
 	cp $(BUILD_DIR)/$(BINARY_NAME) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
 	cp -r $(REPOSITORY_DIR) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
 	cp $(VERSION_FILE) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
+	cp -r dbscripts $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
 	cd $(OUTPUT_DIR) && zip -r $(PRODUCT_FOLDER).zip $(PRODUCT_FOLDER) && \
 	rm -rf $(PRODUCT_FOLDER) && \
 	rm -rf $(BUILD_DIR)
