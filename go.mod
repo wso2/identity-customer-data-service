@@ -9,6 +9,7 @@ require (
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.13.3
+	github.com/lib/pq v1.10.9
 	github.com/oapi-codegen/runtime v1.1.1
 	go.mongodb.org/mongo-driver v1.17.3
 )

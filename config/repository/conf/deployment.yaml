@@ -33,3 +33,10 @@ auth_server:
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
   admin_username: "admin"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
+
+database:
+  host: "localhost"
+  port: "5432"
+  user: "cdsuser"
+  password: "cdspwd"
+  dbname: "cdsdb"
