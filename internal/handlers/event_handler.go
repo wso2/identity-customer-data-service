@@ -7,7 +7,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/models"
 	"github.com/wso2/identity-customer-data-service/internal/service"
 	"github.com/wso2/identity-customer-data-service/internal/utils"
-	"go.mongodb.org/mongo-driver/bson"
 	"net/http"
 	"strconv"
 	"time"
@@ -57,24 +56,27 @@ func (s Server) GetEvent(c *gin.Context, eventId string) {
 	c.JSON(http.StatusOK, events)
 }
 
-// TODO remove
 func (s Server) GetEvents(c *gin.Context) {
-	rawFilters := c.QueryArray("filter")
 
-	// Step 2: Parse optional time range
-	var timeFilter bson.M
+	rawFilters := c.QueryArray("filter")
+	var timeFilter map[string]int
 	if timeStr := c.Query("time_range"); timeStr != "" {
-		durationSec, _ := strconv.Atoi(timeStr)       // parse string to int
+		durationSec, err := strconv.Atoi(timeStr) // Parse string to int
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid time_range format, must be an integer representing seconds"})
+			return
+		}
+
 		currentTime := time.Now().UTC().Unix()        // current time in seconds
-		startTime := currentTime - int64(durationSec) // assuming value is in minutes
-		timeFilter = bson.M{
-			"event_timestamp": bson.M{"$gte": startTime},
+		startTime := currentTime - int64(durationSec) // Calculate start time
+		timeFilter = map[string]int{
+			"event_timestamp_gte": int(startTime), // Use the key expected by Postgres FindEvents
 		}
 	}
 
-	// Step 3: Fetch events with filter strings
-	events, err := service.GetEvents(rawFilters, timeFilter)
+	events, err := service.GetEvents(rawFilters, timeFilter) // Pass the map[string]int
 	if err != nil {
+		// Consider logging the error server-side as well
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch events"})
 		return
 	}

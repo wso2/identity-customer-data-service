@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/constants"
+	"github.com/wso2/identity-customer-data-service/internal/database"
 	"github.com/wso2/identity-customer-data-service/internal/errors"
-	"github.com/wso2/identity-customer-data-service/internal/locks"
+	"github.com/wso2/identity-customer-data-service/internal/logger"
 	"github.com/wso2/identity-customer-data-service/internal/models"
 	"github.com/wso2/identity-customer-data-service/internal/repository"
 	"net/http"
@@ -15,9 +16,8 @@ import (
 
 func AddEnrichmentRule(rule models.ProfileEnrichmentRule) error {
 
-	mongoDB := locks.GetMongoDBInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(mongoDB.Database, constants.ProfileSchemaCollection)
-
+	postgresDB := database.GetPostgresInstance()
+	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
 	rule.RuleId = uuid.New().String()
 
 	err, isValid := validateEnrichmentRule(rule)
@@ -25,45 +25,51 @@ func AddEnrichmentRule(rule models.ProfileEnrichmentRule) error {
 		return err
 	}
 
-	rule.CreatedAt = time.Now().UTC().Unix()
-	rule.UpdatedAt = time.Now().UTC().Unix()
+	currentTime := time.Now().UTC().Unix()
+	rule.CreatedAt = currentTime
+	rule.UpdatedAt = currentTime
 
-	return schemaRepo.UpsertEnrichmentRule(rule)
+	return schemaRepo.AddEnrichmentRule(rule)
 }
 
 func GetEnrichmentRules() ([]models.ProfileEnrichmentRule, error) {
-	mongoDB := locks.GetMongoDBInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(mongoDB.Database, constants.ProfileSchemaCollection)
+	postgresDB := database.GetPostgresInstance()
+	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
 	return schemaRepo.GetProfileEnrichmentRules()
 }
 
 func GetEnrichmentRulesByFilter(filters []string) ([]models.ProfileEnrichmentRule, error) {
-	mongoDB := locks.GetMongoDBInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(mongoDB.Database, constants.ProfileSchemaCollection)
+	postgresDB := database.GetPostgresInstance()
+	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
 	return schemaRepo.GetEnrichmentRulesByFilter(filters)
 }
 
 func GetEnrichmentRule(ruleId string) (models.ProfileEnrichmentRule, error) {
-	mongoDB := locks.GetMongoDBInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(mongoDB.Database, constants.ProfileSchemaCollection)
-	return schemaRepo.GetSchemaRule(ruleId)
+	postgresDB := database.GetPostgresInstance()
+	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	return schemaRepo.GetProfileEnrichmentRule(ruleId)
 }
 
 func PutEnrichmentRule(rule models.ProfileEnrichmentRule) error {
-	mongoDB := locks.GetMongoDBInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(mongoDB.Database, constants.ProfileSchemaCollection)
+
+	postgresDB := database.GetPostgresInstance()
+	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
 
 	err, isValid := validateEnrichmentRule(rule)
 	if !isValid {
 		return err
 	}
-	return schemaRepo.UpsertEnrichmentRule(rule)
+	return schemaRepo.UpdateEnrichmentRule(rule)
 }
 
 func DeleteEnrichmentRule(ruleId string) error {
-	mongoDB := locks.GetMongoDBInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(mongoDB.Database, constants.ProfileSchemaCollection)
-	return schemaRepo.DeleteSchemaRule(ruleId)
+	postgresDB := database.GetPostgresInstance()
+	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	rule, _ := schemaRepo.GetProfileEnrichmentRule(ruleId)
+	if rule.RuleId == "" {
+		return nil
+	}
+	return schemaRepo.DeleteProfileEnrichmentRule(rule)
 }
 
 // validateEnrichmentRule validates the enrichment rule.
@@ -79,18 +85,35 @@ func validateEnrichmentRule(rule models.ProfileEnrichmentRule) (error, bool) {
 		return clientError, false
 	}
 
-	//  Required: Rule Type
-	if rule.PropertyType != "static" && rule.PropertyType != "computed" {
+	//  Required for Static: Value
+	if rule.ComputationMethod == "" {
 		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrPropertyTypeValidation.Code,
-			Message:     errors.ErrPropertyTypeValidation.Message,
-			Description: errors.ErrPropertyTypeValidation.Description,
+			Code:        errors.ErrComputationValidation.Code,
+			Message:     errors.ErrComputationValidation.Message,
+			Description: "ComputationMethod type is required.",
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
 
+	if rule.ComputationMethod == "" {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.ErrComputationValidation.Code,
+			Message:     errors.ErrComputationValidation.Message,
+			Description: "ComputationMethod type is required.",
+		}, http.StatusBadRequest)
+		return clientError, false
+	}
+
+	if !constants.AllowedComputationMethods[rule.ComputationMethod] {
+		badReq := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.ErrComputationValidation.Code,
+			Message:     errors.ErrComputationValidation.Message,
+			Description: fmt.Sprintf("'%s' is not an expected computation method.", rule.ComputationMethod),
+		}, http.StatusBadRequest)
+		return badReq, false
+	}
 	//  Required for Static: Value
-	if rule.PropertyType == "static" && rule.Value == "" {
+	if rule.ComputationMethod == "static" && rule.Value == "" {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.ErrEnrichmentRuleValueValidation.Code,
 			Message:     errors.ErrEnrichmentRuleValueValidation.Message,
@@ -99,22 +122,36 @@ func validateEnrichmentRule(rule models.ProfileEnrichmentRule) (error, bool) {
 		return clientError, false
 	}
 
-	//  Required for Computed: Computation logic
-	if rule.PropertyType == "computed" && rule.Computation == "" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrComputationValidation.Code,
-			Message:     errors.ErrComputationValidation.Message,
-			Description: errors.ErrComputationValidation.Description,
-		}, http.StatusBadRequest)
-		return clientError, false
-	}
-
-	if rule.Computation == "copy" && len(rule.SourceFields) != 1 {
+	if rule.ComputationMethod == "extract" && rule.SourceField == "" {
 		return errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.ErrSourceFieldValidation.Code,
 			Message:     errors.ErrSourceFieldValidation.Message,
 			Description: errors.ErrSourceFieldValidation.Description,
 		}, http.StatusBadRequest), false
+	}
+
+	if rule.ComputationMethod == "count" {
+		if rule.TimeRange < 0 || rule.TimeRange > 2592000 {
+			return errors.NewClientError(errors.ErrorMessage{
+				Code:        errors.ErrInvalidTime.Code,
+				Message:     errors.ErrInvalidTime.Message,
+				Description: "Time range should be from least 15 minutes to 30 days.",
+			}, http.StatusBadRequest), false
+		}
+	}
+
+	if rule.ComputationMethod != "count" && rule.TimeRange != 0 {
+		return errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.ErrInvalidTime.Code,
+			Message:     errors.ErrInvalidTime.Message,
+			Description: "Time range is only applicable for count computation.",
+		}, http.StatusBadRequest), false
+	}
+
+	// Validate Time Range
+	if rule.TimeRange == 0 {
+		logger.Debug("Time range is not provided, defaulting to infinite denoted by -1.")
+		rule.TimeRange = -1
 	}
 
 	//  Validate Trigger
@@ -153,22 +190,5 @@ func validateEnrichmentRule(rule models.ProfileEnrichmentRule) (error, bool) {
 		}, http.StatusBadRequest), false
 	}
 
-	//  Validate Masking
-	if rule.MaskingRequired {
-		if rule.MaskingStrategy == "" {
-			return errors.NewClientError(errors.ErrorMessage{
-				Code:        errors.ErrMaskingStratValidation.Code,
-				Message:     errors.ErrMaskingStratValidation.Message,
-				Description: "Masking is required, but no strategy was provided.",
-			}, http.StatusBadRequest), false
-		}
-		if !constants.AllowedMaskingStrategies[strings.ToLower(rule.MaskingStrategy)] {
-			return errors.NewClientError(errors.ErrorMessage{
-				Code:        errors.ErrMaskingStratValidation.Code,
-				Message:     errors.ErrMaskingStratValidation.Message,
-				Description: fmt.Sprintf("Masking strategy '%s' is not supported.", rule.MaskingStrategy),
-			}, http.StatusBadRequest), false
-		}
-	}
 	return nil, true
 }

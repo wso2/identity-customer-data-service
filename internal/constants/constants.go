@@ -4,20 +4,19 @@ import "time"
 
 // Collection names
 const (
-	UnificationRulesCollection = "resolution_rules"
-	EventCollection            = "events"
-	ProfileCollection          = "profiles"
-	ProfileSchemaCollection    = "profile_schema"
+	EventCollection   = "events"
+	ProfileCollection = "profiles"
 )
 const MaxRetryAttempts = 10
 const RetryDelay = 100 * time.Millisecond
 const ApiBasePath = "/api/v1"
 const Filter = "filter"
 
-const (
-	TokenEndpoint      = "/oauth2/token"
-	RevocationEndpoint = "/oauth2/revoke"
-)
+var AllowedFieldsForUnificationRulePatch = map[string]bool{
+	"is_active": true,
+	"priority":  true,
+	"rule_name": true,
+}
 
 var AllowedPropertyTypes = map[string]bool{
 	"string":        true,
@@ -36,34 +35,16 @@ var GoTypeMapping = map[string]string{
 	"arrayofint":    "[]int",
 }
 
-var AllowedTraitTypes = map[string]bool{
-	"static":   true,
-	"computed": true,
+var AllowedComputationMethods = map[string]bool{
+	"static":  true,
+	"extract": true,
+	"count":   true,
 }
 
 var AllowedMergeStrategies = map[string]bool{
 	"overwrite": true,
 	"combine":   true,
 	"ignore":    true,
-}
-
-var AllowedMaskingStrategies = map[string]bool{
-	"partial": true,
-	"hash":    true,
-	"redact":  true,
-}
-
-var AllowedEventTypes = map[string]bool{
-	"track":    true,
-	"identify": true,
-	"page":     true,
-}
-
-var AllowedProfileDataScopes = map[string]bool{
-	"identity":    true,
-	"personality": true,
-	"app_context": true,
-	"session":     true,
 }
 
 var AllowedConditionOperators = map[string]bool{

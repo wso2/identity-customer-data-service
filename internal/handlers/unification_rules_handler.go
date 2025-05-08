@@ -6,7 +6,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/models"
 	"github.com/wso2/identity-customer-data-service/internal/service"
 	"github.com/wso2/identity-customer-data-service/internal/utils"
-	"go.mongodb.org/mongo-driver/bson"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -62,26 +61,17 @@ func (s Server) GetUnificationRule(c *gin.Context, ruleId string) {
 // PatchUnificationRule applies partial updates to a unification rule.
 func (s Server) PatchUnificationRule(c *gin.Context, ruleId string) {
 
-	var updates bson.M
-	if err := c.ShouldBindJSON(&updates); err != nil {
-		badReq := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrBadRequest.Code,
-			Message:     errors.ErrBadRequest.Message,
-			Description: err.Error(),
-		}, http.StatusBadRequest)
-
-		utils.HandleError(c, badReq)
-		return
-	}
-
-	err := service.PatchResolutionRule(ruleId, updates)
+	var rawUpdates map[string]interface{}
+	err := service.PatchUnificationRule(ruleId, rawUpdates)
 	if err != nil {
 		utils.HandleError(c, err)
 		return
 	}
-
 	rule, err := service.GetUnificationRule(ruleId)
-
+	if err != nil {
+		utils.HandleError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, rule)
 }
 

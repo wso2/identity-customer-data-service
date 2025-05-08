@@ -7,6 +7,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func (s Server) GetAllConsentCategories(c *gin.Context) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s Server) AddConsentCategory(c *gin.Context) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s Server) GetConsentCategory(c *gin.Context, id string) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s Server) UpdateConsentCategory(c *gin.Context, id string) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (s Server) GiveConsent(c *gin.Context) {
 	permaID := c.Param("profile_id")
 	appID := c.Param("application_id")

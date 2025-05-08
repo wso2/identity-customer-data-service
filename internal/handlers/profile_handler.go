@@ -109,9 +109,8 @@ func (s Server) GetEnrichmentRule(c *gin.Context, ruleId string) {
 }
 
 func (s Server) PutEnrichmentRule(c *gin.Context, ruleId string) {
-	//TODO update the implementation
-	var rules models.ProfileEnrichmentRule
 
+	var rules models.ProfileEnrichmentRule
 	// fetch and validate if it exists already
 
 	if err := c.ShouldBindJSON(&rules); err != nil {

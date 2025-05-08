@@ -3,6 +3,8 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/database"
 	"strings"
 	"time"
 
@@ -25,8 +27,7 @@ func (repo *UnificationRuleRepository) AddUnificationRule(rule models.Unificatio
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `INSERT INTO unification_rules (rule_id, rule_name, property, priority, is_active, created_at, updated_at) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	query := database.AddUnificationRuleQuery
 	_, err := repo.DB.ExecContext(ctx, query, rule.RuleId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive, rule.CreatedAt, rule.UpdatedAt)
 	if err != nil {
 		return errors.NewServerError(errors.ErrWhileCreatingUnificationRules, err)
@@ -40,7 +41,7 @@ func (repo *UnificationRuleRepository) GetUnificationRules() ([]models.Unificati
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT rule_id, rule_name, property, priority, is_active, created_at, updated_at FROM unification_rules`
+	query := database.GetUnificationRulesQuery
 	rows, err := repo.DB.QueryContext(ctx, query)
 	if err != nil {
 		logger.Info("Error occurred while fetching unification rules.")
@@ -66,7 +67,7 @@ func (repo *UnificationRuleRepository) GetUnificationRule(ruleId string) (models
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT rule_id, rule_name, property, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`
+	query := database.GetUnificationRuleByIdQuery
 	var rule models.UnificationRule
 	if err := repo.DB.QueryRowContext(ctx, query, ruleId).Scan(&rule.RuleId, &rule.RuleName, &rule.Property, &rule.Priority, &rule.IsActive, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
 		if err == sql.ErrNoRows {
@@ -81,27 +82,45 @@ func (repo *UnificationRuleRepository) GetUnificationRule(ruleId string) (models
 	return rule, nil
 }
 
-func (repo *UnificationRuleRepository) PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
+func (repo *UnificationRuleRepository) PatchUnificationRule(ruleId string, update models.UnificationRule) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	setClauses := []string{}
 	args := []interface{}{}
 	argIndex := 1
-	for key, value := range updates {
-		setClauses = append(setClauses, key+" = $"+string(argIndex))
-		args = append(args, value)
+
+	if update.RuleName != "" {
+		setClauses = append(setClauses, fmt.Sprintf("rule_name = $%d", argIndex))
+		args = append(args, update.RuleName)
 		argIndex++
 	}
-	args = append(args, time.Now().Unix(), ruleId)
+	if update.Priority != 0 {
+		setClauses = append(setClauses, fmt.Sprintf("priority = $%d", argIndex))
+		args = append(args, update.Priority)
+		argIndex++
+	}
+	// Note: boolean default is false, so we include it always
+	setClauses = append(setClauses, fmt.Sprintf("is_active = $%d", argIndex))
+	args = append(args, update.IsActive)
+	argIndex++
 
-	query := `UPDATE unification_rules SET ` + strings.Join(setClauses, ", ") + `, updated_at = $` + string(argIndex) + ` WHERE rule_id = $` + string(argIndex+1)
+	// Always update timestamp
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, time.Now().UTC().Unix())
+	argIndex++
+
+	// WHERE clause
+	args = append(args, ruleId)
+	query := fmt.Sprintf(`UPDATE unification_rules SET %s WHERE rule_id = $%d`,
+		strings.Join(setClauses, ", "), argIndex)
+
 	_, err := repo.DB.ExecContext(ctx, query, args...)
 	if err != nil {
 		return errors.NewServerError(errors.ErrWhileUpdatingUnificationRule, err)
 	}
 
-	logger.Info("Successfully updated unification rule for rule_id: " + ruleId)
+	logger.Info("Successfully patched unification rule", "rule_id", ruleId)
 	return nil
 }
 
@@ -109,7 +128,7 @@ func (repo *UnificationRuleRepository) DeleteUnificationRule(ruleId string) erro
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `DELETE FROM unification_rules WHERE rule_id = $1`
+	query := database.DeleteUnificationRuleQuery
 	_, err := repo.DB.ExecContext(ctx, query, ruleId)
 	if err != nil {
 		logger.Error(err, "Error while deleting unification rule for rule_id: "+ruleId)

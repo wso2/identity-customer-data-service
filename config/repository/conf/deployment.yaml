@@ -29,7 +29,7 @@ auth_server:
   introspectionEndpoint: "https://localhost:9443/oauth2/introspect"
   tokenEndpoint: "https://localhost:9443/oauth2/token"
   revocationEndpoint: "https://localhost:9443/oauth2/revoke"
-  client_id: "zWnggcx_LNj9MSuZYxXyyo5lcaIa"
+  client_id: "k06eyXqdJvoSBx_steWLWdCruBca"
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
   admin_username: "admin"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
@@ -37,6 +37,6 @@ auth_server:
 database:
   host: "localhost"
   port: "5432"
-  user: "cdsuser"
-  password: "cdspwd"
-  dbname: "cdsdb"
+  user: "admin"
+  password: "${DB_PASSWORD}"
+  dbname: "iam_cds"
