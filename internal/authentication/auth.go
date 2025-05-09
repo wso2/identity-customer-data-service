@@ -117,7 +117,8 @@ func validateToken(token string) (map[string]interface{}, error) {
 }
 
 func introspectToken(token string) (map[string]interface{}, error) {
-	introspectionURL := config.AppConfig.AuthServer.IntrospectionEndPoint
+	runtimeConfig := config.GetCDSRuntime().Config
+	introspectionURL := runtimeConfig.AuthServer.IntrospectionEndPoint
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
@@ -133,7 +134,7 @@ func introspectToken(token string) (map[string]interface{}, error) {
 		return nil, errors.NewServerError(errors.ErrWhileIntrospectingNewToken, err)
 	}
 
-	auth := base64.StdEncoding.EncodeToString([]byte(config.AppConfig.AuthServer.AdminUsername + ":" + config.AppConfig.AuthServer.AdminPassword))
+	auth := base64.StdEncoding.EncodeToString([]byte(runtimeConfig.AuthServer.AdminUsername + ":" + runtimeConfig.AuthServer.AdminPassword))
 	req.Header.Set("Authorization", "Basic "+auth)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
@@ -165,7 +166,8 @@ func GetTokenFromIS(applicationId string) (string, error) {
 		Transport: tr,
 	}
 
-	endpoint := config.AppConfig.AuthServer.TokenEndpoint
+	runtimeConfig := config.GetCDSRuntime().Config
+	endpoint := runtimeConfig.AuthServer.TokenEndpoint
 
 	data := url.Values{}
 	data.Set("grant_type", "client_credentials")
@@ -177,7 +179,7 @@ func GetTokenFromIS(applicationId string) (string, error) {
 	}
 
 	// Basic Auth Header (e.g., client_id:client_secret)
-	encoded := base64.StdEncoding.EncodeToString([]byte(config.AppConfig.AuthServer.ClientID + ":" + config.AppConfig.AuthServer.ClientSecret))
+	encoded := base64.StdEncoding.EncodeToString([]byte(runtimeConfig.AuthServer.ClientID + ":" + runtimeConfig.AuthServer.ClientSecret))
 
 	req.Header.Add("Authorization", "Basic "+encoded)
 	req.Header.Add("Accept", "application/json")
@@ -223,7 +225,8 @@ func RevokeToken(token string) error {
 		Transport: tr,
 	}
 
-	endpoint := config.AppConfig.AuthServer.RevocationEndpoint
+	runtimeConfig := config.GetCDSRuntime().Config
+	endpoint := runtimeConfig.AuthServer.RevocationEndpoint
 
 	data := url.Values{}
 	data.Set("token", token)
@@ -234,7 +237,7 @@ func RevokeToken(token string) error {
 	}
 
 	// Basic Auth Header (same as token endpoint)
-	encoded := base64.StdEncoding.EncodeToString([]byte(config.AppConfig.AuthServer.ClientID + ":" + config.AppConfig.AuthServer.ClientSecret))
+	encoded := base64.StdEncoding.EncodeToString([]byte(runtimeConfig.AuthServer.ClientID + ":" + runtimeConfig.AuthServer.ClientSecret))
 
 	req.Header.Add("Authorization", "Basic "+encoded)
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")

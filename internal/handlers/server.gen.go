@@ -153,42 +153,6 @@ type TemporaryProfile struct {
 	TemporaryProfileId *string `json:"temporary_profile_id,omitempty"`
 }
 
-// UnificationRule defines model for UnificationRule.
-type UnificationRule struct {
-	// Attribute Attribute path to be used for unification
-	Attribute string `json:"attribute"`
-
-	// CreatedAt UNIX timestamp of creation
-	CreatedAt *int64 `json:"created_at,omitempty"`
-
-	// IsActive Whether the rule is currently active
-	IsActive bool `json:"is_active"`
-
-	// Priority Priority of the rule (lower number = higher priority)
-	Priority int `json:"priority"`
-
-	// RuleId Unique identifier for the resolution rule
-	RuleId *openapi_types.UUID `json:"rule_id,omitempty"`
-
-	// RuleName Descriptive name for the rule
-	RuleName string `json:"rule_name"`
-
-	// UpdatedAt UNIX timestamp of last update
-	UpdatedAt *int64 `json:"updated_at,omitempty"`
-}
-
-// UnificationRulePatch defines model for UnificationRulePatch.
-type UnificationRulePatch struct {
-	// IsActive Whether the rule is currently active
-	IsActive *bool `json:"is_active,omitempty"`
-
-	// Priority Priority of the rule (lower number = higher priority)
-	Priority *int `json:"priority,omitempty"`
-
-	// RuleName Descriptive name for the rule
-	RuleName *string `json:"rule_name,omitempty"`
-}
-
 // RevokeAllConsentsParams defines parameters for RevokeAllConsents.
 type RevokeAllConsentsParams struct {
 	ConsentType *string `form:"consent_type,omitempty" json:"consent_type,omitempty"`
@@ -206,12 +170,6 @@ type PutEnrichmentRuleJSONRequestBody = ProfileEnrichmentRule
 
 // AddEventJSONRequestBody defines body for AddEvent for application/json ContentType.
 type AddEventJSONRequestBody = Event
-
-// AddUnificationRuleJSONRequestBody defines body for AddUnificationRule for application/json ContentType.
-type AddUnificationRuleJSONRequestBody = UnificationRule
-
-// PatchUnificationRuleJSONRequestBody defines body for PatchUnificationRule for application/json ContentType.
-type PatchUnificationRuleJSONRequestBody = UnificationRulePatch
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -272,21 +230,6 @@ type ServerInterface interface {
 	// Retrieve profile by Id
 	// (GET /profiles/{profile_id})
 	GetProfile(c *gin.Context, profileId string)
-	// Get all unification rules
-	// (GET /unification-rules)
-	GetUnificationRules(c *gin.Context)
-	// Add new unification rule
-	// (POST /unification-rules)
-	AddUnificationRule(c *gin.Context)
-	// Delete unification rule
-	// (DELETE /unification-rules/{rule_id})
-	DeleteUnificationRule(c *gin.Context, ruleId string)
-	// Get unification rule rule by ID
-	// (GET /unification-rules/{rule_id})
-	GetUnificationRule(c *gin.Context, ruleId string)
-	// Patch unification rule
-	// (PATCH /unification-rules/{rule_id})
-	PatchUnificationRule(c *gin.Context, ruleId string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -687,104 +630,6 @@ func (siw *ServerInterfaceWrapper) GetProfile(c *gin.Context) {
 	siw.Handler.GetProfile(c, profileId)
 }
 
-// GetUnificationRules operation middleware
-func (siw *ServerInterfaceWrapper) GetUnificationRules(c *gin.Context) {
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.GetUnificationRules(c)
-}
-
-// AddUnificationRule operation middleware
-func (siw *ServerInterfaceWrapper) AddUnificationRule(c *gin.Context) {
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.AddUnificationRule(c)
-}
-
-// DeleteUnificationRule operation middleware
-func (siw *ServerInterfaceWrapper) DeleteUnificationRule(c *gin.Context) {
-
-	var err error
-
-	// ------------- Path parameter "rule_id" -------------
-	var ruleId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "rule_id", c.Param("rule_id"), &ruleId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter rule_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.DeleteUnificationRule(c, ruleId)
-}
-
-// GetUnificationRule operation middleware
-func (siw *ServerInterfaceWrapper) GetUnificationRule(c *gin.Context) {
-
-	var err error
-
-	// ------------- Path parameter "rule_id" -------------
-	var ruleId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "rule_id", c.Param("rule_id"), &ruleId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter rule_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.GetUnificationRule(c, ruleId)
-}
-
-// PatchUnificationRule operation middleware
-func (siw *ServerInterfaceWrapper) PatchUnificationRule(c *gin.Context) {
-
-	var err error
-
-	// ------------- Path parameter "rule_id" -------------
-	var ruleId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "rule_id", c.Param("rule_id"), &ruleId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter rule_id: %w", err), http.StatusBadRequest)
-		return
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		middleware(c)
-		if c.IsAborted() {
-			return
-		}
-	}
-
-	siw.Handler.PatchUnificationRule(c, ruleId)
-}
-
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL      string
@@ -831,9 +676,4 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/profiles", wrapper.GetAllProfiles)
 	router.DELETE(options.BaseURL+"/profiles/:profile_id", wrapper.DeleteProfile)
 	router.GET(options.BaseURL+"/profiles/:profile_id", wrapper.GetProfile)
-	router.GET(options.BaseURL+"/unification-rules", wrapper.GetUnificationRules)
-	router.POST(options.BaseURL+"/unification-rules", wrapper.AddUnificationRule)
-	router.DELETE(options.BaseURL+"/unification-rules/:rule_id", wrapper.DeleteUnificationRule)
-	router.GET(options.BaseURL+"/unification-rules/:rule_id", wrapper.GetUnificationRule)
-	router.PATCH(options.BaseURL+"/unification-rules/:rule_id", wrapper.PatchUnificationRule)
 }

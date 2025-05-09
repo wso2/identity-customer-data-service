@@ -1,15 +1,15 @@
-package repositories
+package store
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/errors"
-	"github.com/wso2/identity-customer-data-service/internal/models"
 )
 
 type ProfileSchemaRepository struct {
@@ -23,13 +23,17 @@ func NewProfileSchemaRepository(db *sql.DB) *ProfileSchemaRepository {
 }
 
 // AddEnrichmentRule adds a new enrichment rule
-func (repo *ProfileSchemaRepository) AddEnrichmentRule(rule models.ProfileEnrichmentRule) error {
+func (repo *ProfileSchemaRepository) AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
-	tx, err := repo.DB.Begin()
+	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get database client: %w", err)
 	}
-	defer tx.Rollback()
+	defer dbClient.Close()
+	tx, err := dbClient.BeginTx()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
 
 	query := `INSERT INTO profile_enrichment_rules 
 		(rule_id, property_name, value_type, merge_strategy, value, computation_method, source_field, time_range, event_type, event_name, created_at, updated_at)
@@ -41,6 +45,7 @@ func (repo *ProfileSchemaRepository) AddEnrichmentRule(rule models.ProfileEnrich
 		rule.UpdatedAt)
 
 	if err != nil {
+		tx.Rollback()
 		return errors.NewServerError(errors.ErrWhileAddingEnrichmentRules, err)
 	}
 
@@ -49,21 +54,29 @@ func (repo *ProfileSchemaRepository) AddEnrichmentRule(rule models.ProfileEnrich
 		(rule_id, field, operator, value) VALUES ($1, $2, $3, $4)`,
 			rule.RuleId, cond.Field, cond.Operator, cond.Value)
 		if err != nil {
+			tx.Rollback()
 			return errors.NewServerError(errors.ErrWhileAddingEnrichmentRules, err)
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
 }
 
 // UpdateEnrichmentRule updates an existing enrichment rule.
-func (repo *ProfileSchemaRepository) UpdateEnrichmentRule(rule models.ProfileEnrichmentRule) error {
+func (repo *ProfileSchemaRepository) UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
-	tx, err := repo.DB.Begin()
+	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get database client: %w", err)
 	}
-	defer tx.Rollback()
+	defer dbClient.Close()
+	tx, err := dbClient.BeginTx()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
 
 	timestamp := time.Now().UTC().Unix()
 
@@ -76,6 +89,7 @@ func (repo *ProfileSchemaRepository) UpdateEnrichmentRule(rule models.ProfileEnr
 		rule.PropertyName, rule.ValueType, rule.MergeStrategy, rule.SourceField, rule.Value, rule.ComputationMethod, rule.TimeRange,
 		rule.Trigger.EventType, rule.Trigger.EventName, timestamp, rule.RuleId)
 	if err != nil {
+		tx.Rollback()
 		return errors.NewServerError(errors.ErrWhileUpdatingEnrichmentRules, err)
 	}
 
@@ -89,118 +103,143 @@ func (repo *ProfileSchemaRepository) UpdateEnrichmentRule(rule models.ProfileEnr
 		(rule_id, field, operator, value) VALUES ($1, $2, $3, $4)`,
 			rule.RuleId, cond.Field, cond.Operator, cond.Value)
 		if err != nil {
+			tx.Rollback()
 			return errors.NewServerError(errors.ErrWhileUpdatingEnrichmentRules, err)
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
 }
 
-func (repo *ProfileSchemaRepository) GetProfileEnrichmentRule(ruleId string) (models.ProfileEnrichmentRule, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (repo *ProfileSchemaRepository) GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return model.ProfileEnrichmentRule{}, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := `SELECT rule_id, property_name, value_type, merge_strategy, value, computation_method, source_field, time_range, event_type, event_name, created_at, updated_at 
 		FROM profile_enrichment_rules WHERE rule_id = $1`
 
-	var rule models.ProfileEnrichmentRule
+	var rule model.ProfileEnrichmentRule
 	var createdAt, updatedAt int64
 
-	row := repo.DB.QueryRowContext(ctx, query, ruleId)
-	err := row.Scan(&rule.RuleId, &rule.PropertyName, &rule.ValueType, &rule.MergeStrategy, &rule.Value,
-		&rule.ComputationMethod, &rule.SourceField, &rule.TimeRange, &rule.Trigger.EventType, &rule.Trigger.EventName,
-		&createdAt, &updatedAt)
+	results, err := dbClient.ExecuteQuery(query, ruleId)
+	row := results[0]
 
-	if err != nil {
-		return rule, err
-	}
+	rule.RuleId = row["rule_id"].(string)
+	rule.PropertyName = row["property_name"].(string)
+	rule.ValueType = row["value_type"].(string)
+	rule.MergeStrategy = row["merge_strategy"].(string)
+	rule.Value = row["value"]
+	rule.ComputationMethod = row["computation_method"].(string)
+	rule.SourceField = row["source_field"].(string)
+	rule.TimeRange = row["time_range"].(int64)
+	rule.Trigger.EventType = row["event_type"].(string)
+	rule.Trigger.EventName = row["event_name"].(string)
+	createdAt = row["created_at"].(int64)
+	updatedAt = row["updated_at"].(int64)
 
 	rule.CreatedAt = createdAt
 	rule.UpdatedAt = updatedAt
 
 	// Fetch trigger conditions
-	condRows, err := repo.DB.QueryContext(ctx,
+	condResults, err := dbClient.ExecuteQuery(
 		`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
 	if err != nil {
 		return rule, err
 	}
-	for condRows.Next() {
-		var cond models.RuleCondition
-		if err := condRows.Scan(&cond.Field, &cond.Operator, &cond.Value); err != nil {
-			return rule, err
-		}
+	for _, row := range condResults {
+		var cond model.RuleCondition
+		cond.Field = row["field"].(string)
+		cond.Operator = row["operator"].(string)
+		cond.Value = row["value"].(string)
+
 		rule.Trigger.Conditions = append(rule.Trigger.Conditions, cond)
 	}
-	condRows.Close()
 	return rule, nil
 }
 
-func (repo *ProfileSchemaRepository) GetProfileEnrichmentRules() ([]models.ProfileEnrichmentRule, error) {
+func (repo *ProfileSchemaRepository) GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := `SELECT rule_id, property_name, value_type, merge_strategy,
 		value, computation_method, source_field, time_range, event_type, event_name, created_at, updated_at 
 		FROM profile_enrichment_rules`
 
-	rules := []models.ProfileEnrichmentRule{}
+	rules := []model.ProfileEnrichmentRule{}
 
-	rows, err := repo.DB.QueryContext(ctx, query)
+	results, err := dbClient.ExecuteQuery(query)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		rule := models.ProfileEnrichmentRule{}
+	for _, row := range results {
+		rule := model.ProfileEnrichmentRule{}
 		var createdAt, updatedAt int64
-		err := rows.Scan(&rule.RuleId, &rule.PropertyName, &rule.ValueType, &rule.MergeStrategy,
-			&rule.Value,
-			&rule.ComputationMethod, &rule.SourceField, &rule.TimeRange, &rule.Trigger.EventType, &rule.Trigger.EventName,
-			&createdAt, &updatedAt)
-		if err != nil {
-			return nil, err
-		}
+
+		rule.RuleId = row["rule_id"].(string)
+		rule.PropertyName = row["property_name"].(string)
+		rule.ValueType = row["value_type"].(string)
+		rule.MergeStrategy = row["merge_strategy"].(string)
+		rule.Value = row["value"]
+		rule.ComputationMethod = row["computation_method"].(string)
+		rule.SourceField = row["source_field"].(string)
+		rule.TimeRange = row["time_range"].(int64)
+		rule.Trigger.EventType = row["event_type"].(string)
+		rule.Trigger.EventName = row["event_name"].(string)
 
 		rule.CreatedAt = createdAt
 		rule.UpdatedAt = updatedAt
 
-		condRows, err := repo.DB.QueryContext(ctx,
+		condResults, err := dbClient.ExecuteQuery(
 			`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
 		if err != nil {
 			return nil, err
 		}
-		for condRows.Next() {
-			var cond models.RuleCondition
-			err := condRows.Scan(&cond.Field, &cond.Operator, &cond.Value)
-			if err != nil {
-				return nil, err
-			}
+		for _, condRow := range condResults {
+			var cond model.RuleCondition
+
+			cond.Field = condRow["field"].(string)
+			cond.Operator = condRow["operator"].(string)
+			cond.Value = condRow["value"].(string)
 			rule.Trigger.Conditions = append(rule.Trigger.Conditions, cond)
 		}
-		condRows.Close()
 		rules = append(rules, rule)
 	}
 
 	return rules, nil
 }
 
-func (repo *ProfileSchemaRepository) DeleteProfileEnrichmentRule(rule models.ProfileEnrichmentRule) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (repo *ProfileSchemaRepository) DeleteProfileEnrichmentRule(rule model.ProfileEnrichmentRule) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
-	_, err := repo.DB.ExecContext(ctx, `DELETE FROM profile_enrichment_rules WHERE rule_id = $1`, rule.RuleId)
+	_, err = dbClient.ExecuteQuery(`DELETE FROM profile_enrichment_rules WHERE rule_id = $1`, rule.RuleId)
 	if err == nil {
 		// Delete unification rules if they exist on the same property name
-		_, err = repo.DB.ExecContext(ctx, `DELETE FROM unification_rules WHERE property_name = $1`, rule.PropertyName)
+		_, err = dbClient.ExecuteQuery(`DELETE FROM unification_rules WHERE property_name = $1`, rule.PropertyName)
 	}
 	return err
 }
 
-func (repo *ProfileSchemaRepository) GetEnrichmentRulesByFilter(filters []string) ([]models.ProfileEnrichmentRule, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (repo *ProfileSchemaRepository) GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	baseQuery := `SELECT rule_id, property_name, value_type, merge_strategy,
 		 value, computation_method, source_field, time_range, event_type, event_name, created_at, updated_at 
@@ -263,24 +302,27 @@ func (repo *ProfileSchemaRepository) GetEnrichmentRulesByFilter(filters []string
 		finalQuery += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-	rules := []models.ProfileEnrichmentRule{}
-	ruleMap := make(map[string]*models.ProfileEnrichmentRule)
+	rules := []model.ProfileEnrichmentRule{}
+	ruleMap := make(map[string]*model.ProfileEnrichmentRule)
 
-	rows, err := repo.DB.QueryContext(ctx, finalQuery, args...)
+	results, err := dbClient.ExecuteQuery(finalQuery, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		rule := models.ProfileEnrichmentRule{}
+	for _, row := range results {
+		rule := model.ProfileEnrichmentRule{}
 		var createdAt, updatedAt int64
-		err := rows.Scan(&rule.RuleId, &rule.PropertyName, &rule.ValueType, &rule.MergeStrategy,
-			&rule.Value, &rule.ComputationMethod, &rule.SourceField, &rule.TimeRange, &rule.Trigger.EventType, &rule.Trigger.EventName,
-			&createdAt, &updatedAt)
-		if err != nil {
-			return nil, err
-		}
+		rule.RuleId = row["rule_id"].(string)
+		rule.PropertyName = row["property_name"].(string)
+		rule.ValueType = row["value_type"].(string)
+		rule.MergeStrategy = row["merge_strategy"].(string)
+		rule.Value = row["value"]
+		rule.ComputationMethod = row["computation_method"].(string)
+		rule.SourceField = row["source_field"].(string)
+		rule.TimeRange = row["time_range"].(int64)
+		rule.Trigger.EventType = row["event_type"].(string)
+		rule.Trigger.EventName = row["event_name"].(string)
 		rule.CreatedAt = createdAt
 		rule.UpdatedAt = updatedAt
 		// Temporarily store in map to avoid duplicate fetches
@@ -290,25 +332,23 @@ func (repo *ProfileSchemaRepository) GetEnrichmentRulesByFilter(filters []string
 
 	// Fetch and attach trigger conditions
 	for _, rule := range rules {
-		condRows, err := repo.DB.QueryContext(ctx,
+		condResults, err := dbClient.ExecuteQuery(
 			`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
 		if err != nil {
 			return nil, err
 		}
-		for condRows.Next() {
-			var cond models.RuleCondition
-			err := condRows.Scan(&cond.Field, &cond.Operator, &cond.Value)
-			if err != nil {
-				condRows.Close()
-				return nil, err
-			}
+		for _, condRow := range condResults {
+			var cond model.RuleCondition
+			cond.Field = condRow["field"].(string)
+			cond.Operator = condRow["operator"].(string)
+			cond.Value = condRow["value"].(string)
+
 			rule.Trigger.Conditions = append(rule.Trigger.Conditions, cond)
 		}
-		condRows.Close()
 	}
 
 	// Apply post-query filters for special fields
-	filtered := []models.ProfileEnrichmentRule{}
+	filtered := []model.ProfileEnrichmentRule{}
 Outer:
 	for _, rule := range rules {
 		for key, vals := range specialClauses {

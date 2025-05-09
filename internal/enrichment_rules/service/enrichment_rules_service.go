@@ -5,19 +5,37 @@ import (
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/constants"
 	"github.com/wso2/identity-customer-data-service/internal/database"
+	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
+	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
 	"github.com/wso2/identity-customer-data-service/internal/errors"
 	"github.com/wso2/identity-customer-data-service/internal/logger"
-	"github.com/wso2/identity-customer-data-service/internal/models"
-	"github.com/wso2/identity-customer-data-service/internal/repository"
 	"net/http"
 	"strings"
 	"time"
 )
 
-func AddEnrichmentRule(rule models.ProfileEnrichmentRule) error {
+type EnrichmentRuleServiceInterface interface {
+	AddEnrichmentRule(rule model.ProfileEnrichmentRule) error
+	GetEnrichmentRules() ([]model.ProfileEnrichmentRule, error)
+	GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule, error)
+	GetEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error)
+	PutEnrichmentRule(rule model.ProfileEnrichmentRule) error
+	DeleteEnrichmentRule(ruleId string) error
+}
+
+// EnrichmentRuleService is the default implementation of the EnrichmentRuleServiceInterface.
+type EnrichmentRuleService struct{}
+
+// GetEnrichmentRuleService creates a new instance of EnrichmentRuleService.
+func GetEnrichmentRuleService() EnrichmentRuleServiceInterface {
+
+	return &EnrichmentRuleService{}
+}
+
+func (ers *EnrichmentRuleService) AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
 	postgresDB := database.GetPostgresInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 	rule.RuleId = uuid.New().String()
 
 	err, isValid := validateEnrichmentRule(rule)
@@ -32,28 +50,28 @@ func AddEnrichmentRule(rule models.ProfileEnrichmentRule) error {
 	return schemaRepo.AddEnrichmentRule(rule)
 }
 
-func GetEnrichmentRules() ([]models.ProfileEnrichmentRule, error) {
+func (ers *EnrichmentRuleService) GetEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 	postgresDB := database.GetPostgresInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 	return schemaRepo.GetProfileEnrichmentRules()
 }
 
-func GetEnrichmentRulesByFilter(filters []string) ([]models.ProfileEnrichmentRule, error) {
+func (ers *EnrichmentRuleService) GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule, error) {
 	postgresDB := database.GetPostgresInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 	return schemaRepo.GetEnrichmentRulesByFilter(filters)
 }
 
-func GetEnrichmentRule(ruleId string) (models.ProfileEnrichmentRule, error) {
+func (ers *EnrichmentRuleService) GetEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error) {
 	postgresDB := database.GetPostgresInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 	return schemaRepo.GetProfileEnrichmentRule(ruleId)
 }
 
-func PutEnrichmentRule(rule models.ProfileEnrichmentRule) error {
+func (ers *EnrichmentRuleService) PutEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
 	postgresDB := database.GetPostgresInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 
 	err, isValid := validateEnrichmentRule(rule)
 	if !isValid {
@@ -62,9 +80,9 @@ func PutEnrichmentRule(rule models.ProfileEnrichmentRule) error {
 	return schemaRepo.UpdateEnrichmentRule(rule)
 }
 
-func DeleteEnrichmentRule(ruleId string) error {
+func (ers *EnrichmentRuleService) DeleteEnrichmentRule(ruleId string) error {
 	postgresDB := database.GetPostgresInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 	rule, _ := schemaRepo.GetProfileEnrichmentRule(ruleId)
 	if rule.RuleId == "" {
 		return nil
@@ -73,7 +91,7 @@ func DeleteEnrichmentRule(ruleId string) error {
 }
 
 // validateEnrichmentRule validates the enrichment rule.
-func validateEnrichmentRule(rule models.ProfileEnrichmentRule) (error, bool) {
+func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 
 	//  Required: Trait Name
 	if rule.PropertyName == "" {

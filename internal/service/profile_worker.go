@@ -7,9 +7,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/constants"
 	"github.com/wso2/identity-customer-data-service/internal/database"
+	erm "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
+	erp "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
+	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
 	"github.com/wso2/identity-customer-data-service/internal/logger"
 	"github.com/wso2/identity-customer-data-service/internal/models"
 	repositories "github.com/wso2/identity-customer-data-service/internal/repository"
+	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
+	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"log"
@@ -77,7 +82,9 @@ func EnrichProfile(event models.Event) error {
 		return err
 	}
 
-	rules, _ := GetEnrichmentRules()
+	ruleProvider := erp.NewEnrichmentRuleProvider()
+	ruleService := ruleProvider.GetEnrichmentRuleService()
+	rules, _ := ruleService.GetEnrichmentRules()
 	for _, rule := range rules {
 		if strings.ToLower(rule.Trigger.EventType) != strings.ToLower(event.EventType) ||
 			strings.ToLower(rule.Trigger.EventName) != strings.ToLower(event.EventName) {
@@ -228,7 +235,9 @@ func unifyProfiles(newProfile models.Profile) (*models.Profile, error) {
 	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 
 	// Step 1: Fetch all unification rules
-	unificationRules, err := GetUnificationRules()
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	unificationRules, err := ruleService.GetUnificationRules()
 	if err != nil {
 		return nil, errors.New("failed to fetch unification rules")
 	}
@@ -249,7 +258,7 @@ func unifyProfiles(newProfile models.Profile) (*models.Profile, error) {
 
 				//  Merge the existing master to the old master of current
 				postgresDB := database.GetPostgresInstance()
-				schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+				schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 				enrichmentRules, _ := schemaRepo.GetProfileEnrichmentRules()
 				newMasterProfile := MergeProfiles(existingProfile, newProfile, enrichmentRules)
 
@@ -329,14 +338,15 @@ func unifyProfiles(newProfile models.Profile) (*models.Profile, error) {
 	return &newProfile, nil
 }
 
-func sortRulesByPriority(rules []models.UnificationRule) {
+func sortRulesByPriority(rules []model.UnificationRule) {
 	sort.Slice(rules, func(i, j int) bool {
 		return rules[i].Priority < rules[j].Priority
 	})
 }
 
 // MergeProfiles merges two profiles based on unification rules
-func MergeProfiles(existingProfile models.Profile, incomingProfile models.Profile, enrichmentRules []models.ProfileEnrichmentRule) models.Profile {
+func MergeProfiles(existingProfile models.Profile, incomingProfile models.Profile,
+	enrichmentRules []erm.ProfileEnrichmentRule) models.Profile {
 
 	merged := existingProfile
 	// todo: I doubt if this is fine.. we need to run through all to build a new profile
@@ -393,7 +403,7 @@ func MergeProfiles(existingProfile models.Profile, incomingProfile models.Profil
 }
 
 // doesProfileMatch checks if two profiles have matching attributes based on a unification rule
-func doesProfileMatch(existingProfile models.Profile, newProfile models.Profile, rule models.UnificationRule) bool {
+func doesProfileMatch(existingProfile models.Profile, newProfile models.Profile, rule model.UnificationRule) bool {
 
 	existingJSON, _ := json.Marshal(existingProfile)
 	newJSON, _ := json.Marshal(newProfile)
@@ -714,7 +724,8 @@ func combineUniqueInts(a, b []int) []int {
 	return combined
 }
 
-func mergeAppData(existing, incoming []models.ApplicationData, rules []models.ProfileEnrichmentRule) []models.ApplicationData {
+func mergeAppData(existing, incoming []models.ApplicationData, rules []erm.ProfileEnrichmentRule) []models.
+	ApplicationData {
 	mergedMap := make(map[string]models.ApplicationData)
 
 	// Initialize with existing

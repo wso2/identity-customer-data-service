@@ -3,22 +3,19 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"path/filepath"
-	"time"
-
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/constants"
 	"github.com/wso2/identity-customer-data-service/internal/database"
-	"github.com/wso2/identity-customer-data-service/internal/handlers"
 	"github.com/wso2/identity-customer-data-service/internal/logger"
 	"github.com/wso2/identity-customer-data-service/internal/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/managers"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
 )
 
 func initPostgresDatabaseFromConfig(config *config.Config) {
@@ -38,7 +35,7 @@ func initPostgresDatabaseFromConfig(config *config.Config) {
 
 func main() {
 	cdsHome := getCDSHome()
-	const configFile = "/config/repository/conf/deployment.yaml"
+	const configFile = "/repository/conf/deployment.yaml"
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
@@ -52,20 +49,13 @@ func main() {
 		log.Fatalf("Failed to load cdsConfig: %v", err)
 	}
 
+	// Initialize runtime configurations.
+	if err := config.InitializeCDSRuntime(cdsHome, cdsConfig); err != nil {
+		log.Fatalf("Failed to initialize thunder runtime: %v", err)
+	}
+
 	// Initialize logger
 	logger.Init(cdsConfig.Log.DebugEnabled)
-	router := gin.Default()
-	server := handlers.NewServer()
-
-	// Apply CORS middleware
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     cdsConfig.Auth.CORSAllowedOrigins,
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"*"}, // Or specify "filter" if needed
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
 
 	// Initialize MongoDB
 	mongoDB := database.ConnectMongoDB(cdsConfig.MongoDB.URI, cdsConfig.MongoDB.Database)
@@ -78,25 +68,57 @@ func main() {
 	// Initialize PostgreSQL database
 	initPostgresDatabaseFromConfig(cdsConfig)
 
-	api := router.Group(constants.ApiBasePath)
-	handlers.RegisterHandlers(api, server)
-	s := &http.Server{
-		Handler: router,
-		Addr:    cdsConfig.Addr.Host + ":" + cdsConfig.Addr.Port,
+	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
+	mux := enableCORS(initMultiplexer())
+	logger.Info("WSO2 CDS starting in: %v", serverAddr)
+	ln, err := net.Listen("tcp", serverAddr)
+	if err != nil {
+		log.Fatalf("Failed to start TLS listener: %v", err)
 	}
 
-	router.OPTIONS("/*path", func(c *gin.Context) {
-		c.Status(200)
-	})
+	logger.Info("WSO2 CDS started in: %v", serverAddr)
+
+	server1 := &http.Server{Handler: mux}
+
+	if err := server1.Serve(ln); err != nil {
+		log.Fatalf("Failed to serve requests: %v", err)
+	}
 
 	// Close MongoDB connection on exit
 	defer mongoDB.Client.Disconnect(nil)
 
 	logger.Info("identity-customer-data-service component has started.")
 
-	// And we serve HTTP until the world ends.
-	log.Fatal(s.ListenAndServe())
+}
 
+// initMultiplexer initializes the HTTP multiplexer and registers the services.
+func initMultiplexer() *http.ServeMux {
+
+	mux := http.NewServeMux()
+	serviceManager := managers.NewServiceManager(mux)
+
+	// Register the services.
+	err := serviceManager.RegisterServices(constants.ApiBasePath)
+	if err != nil {
+		log.Fatalf("Failed to register the services: %v", err)
+	}
+
+	return mux
+}
+
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Length")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func getCDSHome() string {

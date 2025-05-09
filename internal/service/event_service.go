@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/database"
+	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/models"
 	repositories "github.com/wso2/identity-customer-data-service/internal/repository"
 	"log"
@@ -50,7 +51,7 @@ func GetEvent(eventId string) (*models.Event, error) {
 }
 
 // CountEventsMatchingRule retrieves count of events that has occured in a timerange
-func CountEventsMatchingRule(profileId string, trigger models.RuleTrigger, timeRange int64) (int, error) {
+func CountEventsMatchingRule(profileId string, trigger model.RuleTrigger, timeRange int64) (int, error) {
 
 	currentTime := time.Now().UTC().Unix() // current time in seconds
 	startTime := currentTime - timeRange   // assuming value is in minutes
@@ -79,7 +80,7 @@ func CountEventsMatchingRule(profileId string, trigger models.RuleTrigger, timeR
 	return count, nil
 }
 
-func EvaluateConditions(event models.Event, triggerConditions []models.RuleCondition) bool {
+func EvaluateConditions(event models.Event, triggerConditions []model.RuleCondition) bool {
 	for _, cond := range triggerConditions {
 		fieldVal := GetFieldFromEvent(event, cond.Field)
 		if !EvaluateCondition(fieldVal, cond.Operator, cond.Value) {

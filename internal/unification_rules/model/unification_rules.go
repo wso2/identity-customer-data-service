@@ -1,4 +1,4 @@
-package models
+package model
 
 // UnificationRule represents rules for merging user profiles
 type UnificationRule struct {

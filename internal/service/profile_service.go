@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/constants"
 	"github.com/wso2/identity-customer-data-service/internal/database"
+	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
 	errors "github.com/wso2/identity-customer-data-service/internal/errors"
 	"github.com/wso2/identity-customer-data-service/internal/logger"
 	"github.com/wso2/identity-customer-data-service/internal/models"
@@ -236,7 +237,7 @@ func GetAllProfilesWithFilter(filters []string) ([]models.Profile, error) {
 
 	mongoDB := database.GetMongoDBInstance()
 	postgresDB := database.GetPostgresInstance()
-	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
+	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 
 	rules, err := schemaRepo.GetProfileEnrichmentRules()
