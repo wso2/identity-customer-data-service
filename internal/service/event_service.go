@@ -2,11 +2,9 @@ package service
 
 import (
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
-	"github.com/wso2/identity-customer-data-service/internal/locks"
+	"github.com/wso2/identity-customer-data-service/internal/database"
 	"github.com/wso2/identity-customer-data-service/internal/models"
 	repositories "github.com/wso2/identity-customer-data-service/internal/repository"
-	"go.mongodb.org/mongo-driver/bson"
 	"log"
 	"strconv"
 	"strings"
@@ -23,8 +21,8 @@ func AddEvents(event models.Event) error {
 	}
 
 	// Step 2: Store the event
-	mongoDB := locks.GetMongoDBInstance()
-	eventRepo := repositories.NewEventRepository(mongoDB.Database, constants.EventCollection)
+	postgresDB := database.GetPostgresInstance()
+	eventRepo := repositories.NewEventRepository(postgresDB.DB)
 	event.EventType = strings.ToLower(event.EventType)
 	event.EventName = strings.ToLower(event.EventName)
 	if err := eventRepo.AddEvent(event); err != nil {
@@ -39,44 +37,34 @@ func AddEvents(event models.Event) error {
 }
 
 // GetEvents retrieves all events
-func GetEvents(filters []string, timeFilter bson.M) ([]models.Event, error) {
-	mongoDB := locks.GetMongoDBInstance()
-	eventRepo := repositories.NewEventRepository(mongoDB.Database, constants.EventCollection)
+func GetEvents(filters []string, timeFilter map[string]int) ([]models.Event, error) {
+	postgresDB := database.GetPostgresInstance()
+	eventRepo := repositories.NewEventRepository(postgresDB.DB)
 	return eventRepo.FindEvents(filters, timeFilter)
 }
 
 func GetEvent(eventId string) (*models.Event, error) {
-	mongoDB := locks.GetMongoDBInstance()
-	eventRepo := repositories.NewEventRepository(mongoDB.Database, constants.EventCollection)
+	postgresDB := database.GetPostgresInstance()
+	eventRepo := repositories.NewEventRepository(postgresDB.DB)
 	return eventRepo.FindEvent(eventId)
 }
 
 // CountEventsMatchingRule retrieves count of events that has occured in a timerange
-func CountEventsMatchingRule(profileId string, trigger models.RuleTrigger, timeRange string) (int, error) {
+func CountEventsMatchingRule(profileId string, trigger models.RuleTrigger, timeRange int64) (int, error) {
 
-	eventRepo := repositories.NewEventRepository(locks.GetMongoDBInstance().Database, constants.EventCollection)
-	durationInSec, err := strconv.Atoi(timeRange) // parse string to int
-	if err != nil {
-		log.Printf("Invalid time range format: %v", err)
-		//return
+	currentTime := time.Now().UTC().Unix() // current time in seconds
+	startTime := currentTime - timeRange   // assuming value is in minutes
+
+	timeFilter := map[string]int{
+		"event_timestamp_gte": int(startTime), // Use the key expected by Postgres FindEvents
 	}
-
-	currentTime := time.Now().UTC().Unix()          // current time in seconds
-	startTime := currentTime - int64(durationInSec) // assuming value is in minutes
-	log.Println("efef", trigger.EventType)
-	log.Println("efef", trigger.EventName)
-
-	filter := bson.M{
-		"profile_id": profileId,
-		"event_type": strings.ToLower(trigger.EventType),
-		"event_name": strings.ToLower(trigger.EventName),
-		"event_timestamp": bson.M{
-			"$gte": startTime,
-		},
+	rawFilters := []string{
+		fmt.Sprintf("profile_id:%s", profileId),
+		fmt.Sprintf("event_type:%s", strings.ToLower(trigger.EventType)),
+		fmt.Sprintf("event_name:%s", strings.ToLower(trigger.EventName)),
 	}
+	events, err := GetEvents(rawFilters, timeFilter)
 
-	// Fetch matching events
-	events, err := eventRepo.FindEventsWithFilter(filter)
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch events for counting: %v", err)
 	}

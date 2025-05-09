@@ -14,8 +14,8 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/constants"
+	"github.com/wso2/identity-customer-data-service/internal/database"
 	"github.com/wso2/identity-customer-data-service/internal/handlers"
-	"github.com/wso2/identity-customer-data-service/internal/locks"
 	"github.com/wso2/identity-customer-data-service/internal/logger"
 	"github.com/wso2/identity-customer-data-service/internal/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
@@ -32,13 +32,13 @@ func initPostgresDatabaseFromConfig(config *config.Config) {
 		log.Fatal("One or more PostgreSQL configuration values are missing")
 	}
 
-	locks.ConnectPostgres(host, port, user, password, dbname)
+	database.ConnectPostgres(host, port, user, password, dbname)
 	log.Println("PostgreSQL database initialized successfully from configuration")
 }
 
 func main() {
 	cdsHome := getCDSHome()
-	const configFile = "repository/conf/deployment.yaml"
+	const configFile = "/config/repository/conf/deployment.yaml"
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
@@ -68,9 +68,9 @@ func main() {
 	}))
 
 	// Initialize MongoDB
-	mongoDB := locks.ConnectMongoDB(cdsConfig.MongoDB.URI, cdsConfig.MongoDB.Database)
+	mongoDB := database.ConnectMongoDB(cdsConfig.MongoDB.URI, cdsConfig.MongoDB.Database)
 
-	locks.InitLocks(mongoDB.Database)
+	database.InitLocks(mongoDB.Database)
 
 	// Initialize Event queue
 	service.StartProfileWorker()

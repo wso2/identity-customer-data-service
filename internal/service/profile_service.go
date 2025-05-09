@@ -3,8 +3,8 @@ package service
 import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/constants"
+	"github.com/wso2/identity-customer-data-service/internal/database"
 	errors "github.com/wso2/identity-customer-data-service/internal/errors"
-	"github.com/wso2/identity-customer-data-service/internal/locks"
 	"github.com/wso2/identity-customer-data-service/internal/logger"
 	"github.com/wso2/identity-customer-data-service/internal/models"
 	"github.com/wso2/identity-customer-data-service/internal/repository"
@@ -16,10 +16,10 @@ import (
 
 func CreateOrUpdateProfile(event models.Event) (*models.Profile, error) {
 
-	mongoDB := locks.GetMongoDBInstance()
+	mongoDB := database.GetMongoDBInstance()
 	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 
-	lock := locks.GetDistributedLock()
+	lock := database.GetDistributedLock()
 	lockKey := "lock:profile:" + event.ProfileId
 
 	// 🔁 Retry logic for acquiring the lock
@@ -64,7 +64,7 @@ func CreateOrUpdateProfile(event models.Event) (*models.Profile, error) {
 // GetProfile retrieves a profile
 func GetProfile(ProfileId string) (*models.Profile, error) {
 
-	mongoDB := locks.GetMongoDBInstance()
+	mongoDB := database.GetMongoDBInstance()
 	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 
 	profile, _ := profileRepo.FindProfileByID(ProfileId)
@@ -114,9 +114,10 @@ func buildProfileHierarchy(profile *models.Profile, masterProfile *models.Profil
 
 // DeleteProfile removes a profile from MongoDB by `perma_id`
 func DeleteProfile(ProfileId string) error {
-	mongoDB := locks.GetMongoDBInstance()
+	mongoDB := database.GetMongoDBInstance()
 	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
-	eventRepo := repositories.NewEventRepository(mongoDB.Database, constants.EventCollection)
+	postgresDB := database.GetPostgresInstance()
+	eventRepo := repositories.NewEventRepository(postgresDB.DB)
 
 	// Fetch the existing profile before deletion
 	profile, err := profileRepo.FindProfileByID(ProfileId)
@@ -184,7 +185,7 @@ func DeleteProfile(ProfileId string) error {
 }
 
 func waitForProfile(ProfileId string, maxRetries int, delay time.Duration) (*models.Profile, error) {
-	profileRepo := repositories.NewProfileRepository(locks.GetMongoDBInstance().Database, constants.ProfileCollection)
+	profileRepo := repositories.NewProfileRepository(database.GetMongoDBInstance().Database, constants.ProfileCollection)
 
 	for i := 0; i < maxRetries; i++ {
 		profile, err := profileRepo.FindProfileByID(ProfileId)
@@ -201,7 +202,7 @@ func waitForProfile(ProfileId string, maxRetries int, delay time.Duration) (*mod
 
 // GetAllProfiles retrieves all profiles
 func GetAllProfiles() ([]models.Profile, error) {
-	mongoDB := locks.GetMongoDBInstance()
+	mongoDB := database.GetMongoDBInstance()
 	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 
 	existingProfiles, err := profileRepo.GetAllProfiles()
@@ -233,9 +234,11 @@ func GetAllProfiles() ([]models.Profile, error) {
 // GetAllProfilesWithFilter handles fetching all profiles with filter
 func GetAllProfilesWithFilter(filters []string) ([]models.Profile, error) {
 
-	mongoDB := locks.GetMongoDBInstance()
+	mongoDB := database.GetMongoDBInstance()
+	postgresDB := database.GetPostgresInstance()
+	schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
 	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
-	schemaRepo := repositories.NewProfileSchemaRepository(mongoDB.Database, constants.ProfileSchemaCollection)
+
 	rules, err := schemaRepo.GetProfileEnrichmentRules()
 	if err != nil {
 		return nil, errors.NewServerError(errors.ErrWhileFetchingProfileEnrichmentRules, err)

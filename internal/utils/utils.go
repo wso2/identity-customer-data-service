@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -93,53 +91,4 @@ func MergeStringSlices(existing []string, incoming []string, strategy string) []
 		}
 		return merged
 	}
-}
-
-// ApplyMasking applies the given masking strategy to a string value.
-func ApplyMasking(value string, strategy string) string {
-	switch strings.ToLower(strategy) {
-	case "partial":
-		return maskPartial(value)
-	case "hash":
-		return hashValue(value)
-	case "redact":
-		return "REDACTED"
-	default:
-		return value // no masking
-	}
-}
-
-// maskPartial masks the middle part of a string (e.g., email)
-func maskPartial(value string) string {
-	// todo: see if this has to be applied for profiles
-	if len(value) <= 4 {
-		return "***"
-	}
-	visible := 2
-	masked := strings.Repeat("*", len(value)-2*visible)
-	return value[:visible] + masked + value[len(value)-visible:]
-}
-
-// hashValue returns a SHA256 hash of the value
-func hashValue(value string) string {
-	hash := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(hash[:])
-}
-
-// ReverseMasking returns the visible portions of a partially masked string.
-func ReverseMasking(maskedValue, strategy string) string {
-	switch strings.ToLower(strategy) {
-	case "partial":
-		return getVisibleFromPartial(maskedValue)
-	default:
-		return "" // not reversible
-	}
-}
-
-// getVisibleFromPartial extracts the first and last 2 characters
-func getVisibleFromPartial(value string) string {
-	if len(value) <= 4 {
-		return ""
-	}
-	return value[:2] + "..." + value[len(value)-2:]
 }

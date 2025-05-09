@@ -47,15 +47,16 @@ var (
 		Description: "Server error occurred while trying to fetch profile by profileId.",
 	}
 
-	ErrWhileFetchingEnrichmentRules = ErrorMessage{
+	ErrWhileUpdatingEnrichmentRules = ErrorMessage{
 		Code:        errorPrefix + "15008",
-		Message:     "Error while fetching enrichment rules.",
-		Description: "Error while fetching enrichment rules of the organization.",
+		Message:     "Error while updating enrichment rules.",
+		Description: "Error while updating profile enrichment rules",
 	}
 
-	ErrWhileAddingUnificationRules = ErrorMessage{
-		Code:    errorPrefix + "15009",
-		Message: "Error while adding unification rules.",
+	ErrWhileAddingEnrichmentRules = ErrorMessage{
+		Code:        errorPrefix + "15009",
+		Message:     "Error while adding enrichment rules.",
+		Description: "Error while adding enrichment rule of the organization.",
 	}
 
 	ErrWhileFetchingUnificationRule = ErrorMessage{
@@ -177,9 +178,8 @@ var (
 	}
 
 	ErrComputationValidation = ErrorMessage{
-		Code:        errorPrefix + "10014",
-		Message:     "Missing computation logic.",
-		Description: "For computed traits, 'computation' must be provided.",
+		Code:    errorPrefix + "10014",
+		Message: "Invalid computation method.",
 	}
 
 	ErrPropertyNameValidation = ErrorMessage{
@@ -209,13 +209,18 @@ var (
 		Message: "Invalid merge strategy.",
 	}
 
-	ErrMaskingStratValidation = ErrorMessage{
-		Code:    errorPrefix + "10019",
-		Message: "Missing masking strategy.",
-	}
-
 	ErrPropDoesntExists = ErrorMessage{
 		Code:    errorPrefix + "11020",
 		Message: "Property does not exist.",
+	}
+
+	ErrInvalidTime = ErrorMessage{
+		Code:    errorPrefix + "11021",
+		Message: "Validation failed.",
+	}
+
+	ErrInvalidFiltering = ErrorMessage{
+		Code:    errorPrefix + "11022",
+		Message: "Filtering failed.",
 	}
 )

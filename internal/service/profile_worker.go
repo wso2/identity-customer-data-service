@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/constants"
-	"github.com/wso2/identity-customer-data-service/internal/locks"
+	"github.com/wso2/identity-customer-data-service/internal/database"
 	"github.com/wso2/identity-customer-data-service/internal/logger"
 	"github.com/wso2/identity-customer-data-service/internal/models"
 	repositories "github.com/wso2/identity-customer-data-service/internal/repository"
@@ -27,7 +27,7 @@ func StartProfileWorker() {
 
 	go func() {
 		for event := range EnrichmentQueue {
-			profileRepo := repositories.NewProfileRepository(locks.GetMongoDBInstance().Database, constants.ProfileCollection)
+			profileRepo := repositories.NewProfileRepository(database.GetMongoDBInstance().Database, constants.ProfileCollection)
 
 			// Step 1: Enrich
 			if err := EnrichProfile(event); err != nil {
@@ -58,7 +58,7 @@ func EnqueueEventForProcessing(event models.Event) {
 // EnrichProfile extracts properties from events and enrich profile based on the enrichment rules
 func EnrichProfile(event models.Event) error {
 
-	profileRepo := repositories.NewProfileRepository(locks.GetMongoDBInstance().Database, constants.ProfileCollection)
+	profileRepo := repositories.NewProfileRepository(database.GetMongoDBInstance().Database, constants.ProfileCollection)
 
 	profile, _ := waitForProfile(event.ProfileId, 5, 100*time.Millisecond)
 
@@ -91,32 +91,19 @@ func EnrichProfile(event models.Event) error {
 
 		// Step 3: Get value to assign
 		var value interface{}
-		if rule.PropertyType == "static" {
+		if rule.ComputationMethod == "static" {
 			value = rule.Value
-		} else if rule.PropertyType == "computed" {
+		} else {
 			// Basic "copy" computation
-			switch strings.ToLower(rule.Computation) {
-			case "copy":
-				if len(rule.SourceFields) != 1 {
-					log.Printf("Invalid SourceFields for 'copy' computation. Expected 1, got: %d", len(rule.SourceFields))
+			switch strings.ToLower(rule.ComputationMethod) {
+			case "extract":
+				if rule.SourceField == "" {
+					log.Println("Invalid SourceFields for 'extract' computation.")
 					continue
 				}
-				value = GetFieldFromEvent(event, rule.SourceFields[0])
-			case "concat":
-				if rule.SourceFields != nil && len(rule.SourceFields) >= 2 {
-					var parts []string
-					for _, field := range rule.SourceFields {
-						fieldVal := GetFieldFromEvent(event, field)
-						if fieldVal != nil {
-							parts = append(parts, fmt.Sprintf("%v", fieldVal))
-						}
-					}
-					if len(parts) > 0 {
-						value = strings.Join(parts, "") // You can use a separator if needed
-					}
-				}
+				value = GetFieldFromEvent(event, rule.SourceField)
 			case "count":
-				// here since events are per profile - going back to child profile
+				// Since events are per profile - going back to child profile
 				count, err := CountEventsMatchingRule(event.ProfileId, rule.Trigger, rule.TimeRange)
 				if err != nil {
 					logger.Info("Failed to compute count for rule %s: %v", rule.RuleId, err)
@@ -124,7 +111,7 @@ func EnrichProfile(event models.Event) error {
 				}
 				value = count
 			default:
-				logger.Info("Unsupported computation: %s", rule.Computation)
+				logger.Info("Unsupported computation: %s", rule.ComputationMethod)
 				continue
 			}
 		}
@@ -223,9 +210,9 @@ func defaultUpdateAppData(event models.Event, profile *models.Profile, profileRe
 }
 
 func unifyProfiles(newProfile models.Profile) (*models.Profile, error) {
-	mongoDB := locks.GetMongoDBInstance()
+	mongoDB := database.GetMongoDBInstance()
 
-	lock := locks.GetDistributedLock()
+	lock := database.GetDistributedLock()
 	lockKey := "lock:unify:" + newProfile.ProfileId
 
 	// Try to acquire the lock before doing unification
@@ -260,9 +247,9 @@ func unifyProfiles(newProfile models.Profile) (*models.Profile, error) {
 
 			if doesProfileMatch(existingProfile, newProfile, rule) {
 
-				// 🔄 Merge the existing master to the old master of current
-				mongoDB := locks.GetMongoDBInstance()
-				schemaRepo := repositories.NewProfileSchemaRepository(mongoDB.Database, constants.ProfileSchemaCollection)
+				//  Merge the existing master to the old master of current
+				postgresDB := database.GetPostgresInstance()
+				schemaRepo := repositories.NewProfileSchemaRepository(postgresDB.DB)
 				enrichmentRules, _ := schemaRepo.GetProfileEnrichmentRules()
 				newMasterProfile := MergeProfiles(existingProfile, newProfile, enrichmentRules)
 

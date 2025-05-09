@@ -16,23 +16,18 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
-// Defines values for ConsentCategories.
+// Defines values for ConsentCategoryPurpose.
 const (
-	ConsentCategoriesAll                ConsentCategories = "all"
-	ConsentCategoriesApplicationData    ConsentCategories = "application_data"
-	ConsentCategoriesCompleteProfile    ConsentCategories = "complete_profile"
-	ConsentCategoriesIdentify           ConsentCategories = "identify"
-	ConsentCategoriesIdentityAttributes ConsentCategories = "identity_attributes"
-	ConsentCategoriesNone               ConsentCategories = "none"
-	ConsentCategoriesPage               ConsentCategories = "page"
-	ConsentCategoriesTrack              ConsentCategories = "track"
-	ConsentCategoriesTraits             ConsentCategories = "traits"
+	Destination     ConsentCategoryPurpose = "destination"
+	Personalization ConsentCategoryPurpose = "personalization"
+	Profiling       ConsentCategoryPurpose = "profiling"
 )
 
-// Defines values for ConsentConsentType.
+// Defines values for ProfileEnrichmentRuleComputationMethod.
 const (
-	Collection ConsentConsentType = "collection"
-	Sharing    ConsentConsentType = "sharing"
+	Count   ProfileEnrichmentRuleComputationMethod = "count"
+	Extract ProfileEnrichmentRuleComputationMethod = "extract"
+	Static  ProfileEnrichmentRuleComputationMethod = "static"
 )
 
 // Defines values for ProfileEnrichmentRuleMergeStrategy.
@@ -40,12 +35,6 @@ const (
 	Combine   ProfileEnrichmentRuleMergeStrategy = "combine"
 	Ignore    ProfileEnrichmentRuleMergeStrategy = "ignore"
 	Overwrite ProfileEnrichmentRuleMergeStrategy = "overwrite"
-)
-
-// Defines values for ProfileEnrichmentRulePropertyType.
-const (
-	Computed ProfileEnrichmentRulePropertyType = "computed"
-	Static   ProfileEnrichmentRulePropertyType = "static"
 )
 
 // ApplicationData defines model for ApplicationData.
@@ -56,15 +45,12 @@ type ApplicationData struct {
 
 // Consent defines model for Consent.
 type Consent struct {
-	ApplicationId string `json:"application_id"`
-
-	// Categories Consent categories vary by consent_type
-	Categories []ConsentCategories `json:"categories"`
+	ApplicationId      string  `json:"application_id"`
+	CategoryIdentifier *string `json:"category_identifier,omitempty"`
 
 	// ConsentChannel Source of consent
 	ConsentChannel string              `json:"consent_channel"`
 	ConsentId      *openapi_types.UUID `json:"consent_id,omitempty"`
-	ConsentType    ConsentConsentType  `json:"consent_type"`
 	Granted        bool                `json:"granted"`
 	ProfileId      string              `json:"profile_id"`
 	SourceIp       *string             `json:"source_ip,omitempty"`
@@ -72,11 +58,17 @@ type Consent struct {
 	UserAgent      *string             `json:"user_agent,omitempty"`
 }
 
-// ConsentCategories defines model for Consent.Categories.
-type ConsentCategories string
+// ConsentCategory defines model for ConsentCategory.
+type ConsentCategory struct {
+	CategoryIdentifier string                 `json:"category_identifier"`
+	CategoryName       string                 `json:"category_name"`
+	Destinations       *[]string              `json:"destinations,omitempty"`
+	Id                 *openapi_types.UUID    `json:"id,omitempty"`
+	Purpose            ConsentCategoryPurpose `json:"purpose"`
+}
 
-// ConsentConsentType defines model for Consent.ConsentType.
-type ConsentConsentType string
+// ConsentCategoryPurpose defines model for ConsentCategory.Purpose.
+type ConsentCategoryPurpose string
 
 // Device defines model for Device.
 type Device struct {
@@ -113,26 +105,25 @@ type Profile struct {
 
 // ProfileEnrichmentRule defines model for ProfileEnrichmentRule.
 type ProfileEnrichmentRule struct {
-	Computation   *string                             `json:"computation,omitempty"`
-	CreatedAt     *int                                `json:"created_at,omitempty"`
-	Description   *string                             `json:"description,omitempty"`
-	MergeStrategy *ProfileEnrichmentRuleMergeStrategy `json:"merge_strategy,omitempty"`
-	PropertyName  *string                             `json:"property_name,omitempty"`
-	PropertyType  *ProfileEnrichmentRulePropertyType  `json:"property_type,omitempty"`
-	RuleId        *string                             `json:"rule_id,omitempty"`
-	SourceFields  *[]string                           `json:"source_fields,omitempty"`
-	TimeRange     *string                             `json:"time_range,omitempty"`
-	Trigger       *RuleTrigger                        `json:"trigger,omitempty"`
-	UpdatedAt     *int                                `json:"updated_at,omitempty"`
-	Value         *map[string]interface{}             `json:"value,omitempty"`
-	ValueType     *string                             `json:"value_type,omitempty"`
+	ComputationMethod *ProfileEnrichmentRuleComputationMethod `json:"computation_method,omitempty"`
+	CreatedAt         *int                                    `json:"created_at,omitempty"`
+	Description       *string                                 `json:"description,omitempty"`
+	MergeStrategy     *ProfileEnrichmentRuleMergeStrategy     `json:"merge_strategy,omitempty"`
+	PropertyName      *string                                 `json:"property_name,omitempty"`
+	RuleId            *string                                 `json:"rule_id,omitempty"`
+	SourceField       *string                                 `json:"source_field,omitempty"`
+	TimeRange         *string                                 `json:"time_range,omitempty"`
+	Trigger           *RuleTrigger                            `json:"trigger,omitempty"`
+	UpdatedAt         *int                                    `json:"updated_at,omitempty"`
+	Value             *map[string]interface{}                 `json:"value,omitempty"`
+	ValueType         *string                                 `json:"value_type,omitempty"`
 }
+
+// ProfileEnrichmentRuleComputationMethod defines model for ProfileEnrichmentRule.ComputationMethod.
+type ProfileEnrichmentRuleComputationMethod string
 
 // ProfileEnrichmentRuleMergeStrategy defines model for ProfileEnrichmentRule.MergeStrategy.
 type ProfileEnrichmentRuleMergeStrategy string
-
-// ProfileEnrichmentRulePropertyType defines model for ProfileEnrichmentRule.PropertyType.
-type ProfileEnrichmentRulePropertyType string
 
 // ProfileHierarchy defines model for ProfileHierarchy.
 type ProfileHierarchy struct {
@@ -224,6 +215,18 @@ type PatchUnificationRuleJSONRequestBody = UnificationRulePatch
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Get all consent categories
+	// (GET /consent-categories)
+	GetAllConsentCategories(c *gin.Context)
+	// Add consent category
+	// (POST /consent-categories)
+	AddConsentCategory(c *gin.Context)
+	// Get consent category
+	// (GET /consent-categories/{id})
+	GetConsentCategory(c *gin.Context, id string)
+	// Update consent category
+	// (PUT /consent-categories/{id})
+	UpdateConsentCategory(c *gin.Context, id string)
 	// Give or update consent
 	// (POST /consents)
 	GiveConsent(c *gin.Context)
@@ -294,6 +297,80 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// GetAllConsentCategories operation middleware
+func (siw *ServerInterfaceWrapper) GetAllConsentCategories(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetAllConsentCategories(c)
+}
+
+// AddConsentCategory operation middleware
+func (siw *ServerInterfaceWrapper) AddConsentCategory(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AddConsentCategory(c)
+}
+
+// GetConsentCategory operation middleware
+func (siw *ServerInterfaceWrapper) GetConsentCategory(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetConsentCategory(c, id)
+}
+
+// UpdateConsentCategory operation middleware
+func (siw *ServerInterfaceWrapper) UpdateConsentCategory(c *gin.Context) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdateConsentCategory(c, id)
+}
 
 // GiveConsent operation middleware
 func (siw *ServerInterfaceWrapper) GiveConsent(c *gin.Context) {
@@ -735,6 +812,10 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.GET(options.BaseURL+"/consent-categories", wrapper.GetAllConsentCategories)
+	router.POST(options.BaseURL+"/consent-categories", wrapper.AddConsentCategory)
+	router.GET(options.BaseURL+"/consent-categories/:id", wrapper.GetConsentCategory)
+	router.PUT(options.BaseURL+"/consent-categories/:id", wrapper.UpdateConsentCategory)
 	router.POST(options.BaseURL+"/consents", wrapper.GiveConsent)
 	router.DELETE(options.BaseURL+"/consents/:profile_id", wrapper.RevokeAllConsents)
 	router.GET(options.BaseURL+"/consents/:profile_id", wrapper.GetUserConsents)

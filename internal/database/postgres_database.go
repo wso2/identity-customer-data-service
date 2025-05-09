@@ -1,8 +1,9 @@
-package locks
+package database
 
 import (
 	"database/sql"
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/logger"
 	"log"
 	"sync"
 
@@ -25,6 +26,7 @@ func ConnectPostgres(host, port, user, password, dbname string) *PostgresDB {
 		// Build the connection string
 		connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 
+		log.Println("Connecting to PostgreSQL...", connStr)
 		// Open a connection to PostgreSQL
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
@@ -36,7 +38,7 @@ func ConnectPostgres(host, port, user, password, dbname string) *PostgresDB {
 			log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 		}
 
-		log.Println("✅ Connected to PostgreSQL")
+		logger.Info(" Connected to PostgreSQL")
 
 		// Assign global instance
 		postgresInstance = &PostgresDB{

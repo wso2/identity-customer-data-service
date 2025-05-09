@@ -532,19 +532,15 @@ components:
           type: string
         description:
           type: string
-        property_type:
-          type: string
-          enum: [static, computed]
         value:
           type: object
         value_type:
           type: string
-        computation:
+        computation_method:
           type: string
-        source_fields:
-          type: array
-          items:
-            type: string
+          enum: [static, extract, count]
+        source_field:
+          type: string
         time_range:
           type: string
         merge_strategy:
