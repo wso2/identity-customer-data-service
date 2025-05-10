@@ -2,8 +2,6 @@ package service
 
 import (
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/database"
-	repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
@@ -32,8 +30,6 @@ func GetUnificationRuleService() UnificationRuleServiceInterface {
 func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule) error {
 
 	// Check if a similar unification rule already exists
-	postgresDB := database.GetPostgresInstance()
-	eventRepo := repositories(postgresDB.DB)
 	existingRule, err := store.GetUnificationRule(rule.RuleId)
 	if err != nil {
 		return errors2.NewServerError(errors2.ErrWhileFetchingUnificationRules, err)

@@ -8,13 +8,6 @@ import (
 )
 
 type Config struct {
-	MongoDB struct {
-		URI               string `yaml:"uri"`
-		Database          string `yaml:"database"`
-		ProfileCollection string `yaml:"profile_collection"`
-		EventCollection   string `yaml:"event_collection"`
-		ConsentCollection string `yaml:"consent_collection"`
-	} `yaml:"mongodb"`
 	Addr struct {
 		Port int    `yaml:"port"`
 		Host string `yaml:"host"`
