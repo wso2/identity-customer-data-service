@@ -3,7 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"log"
 	"sync"
 

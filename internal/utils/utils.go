@@ -1,47 +1,30 @@
 package utils
 
 import (
+	"encoding/json"
+	"errors" // Standard Go errors package
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
-	"github.com/wso2/identity-customer-data-service/internal/errors"
-	"log"
 	"net/http"
 	"strings"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	customerrors "github.com/wso2/identity-customer-data-service/internal/system/errors" // Alias for the custom errors
+	// package
 )
 
-func HandleError(c *gin.Context, err error) {
-	traceID := c.GetString("traceId")
-	if traceID == "" {
-		traceID = uuid.NewString()
+// HandleHTTPError sends an HTTP error response based on the provided error
+func HandleHTTPError(w http.ResponseWriter, err error) {
+	var clientError *customerrors.ClientError
+	if ok := errors.As(err, &clientError); ok {
+		w.WriteHeader(clientError.StatusCode)
+		json.NewEncoder(w).Encode(clientError.Message)
+		return
 	}
 
-	switch e := err.(type) {
-	case *errors.ClientError:
-		c.JSON(e.StatusCode, gin.H{
-			"error_code":        e.Code,
-			"error_message":     e.Message,
-			"error_description": e.Description,
-			"traceId":           traceID,
-		})
-	case *errors.ServerError:
-		log.Printf("[ERROR] %s ", e.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error_code":        e.Code,
-			"error_message":     e.Message,
-			"error_description": e.Description,
-			"traceId":           traceID,
-		})
-	default:
-		log.Printf("[ERROR] %s ", e.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error_code":        "CDS-50000",
-			"error_message":     "Internal Server Error",
-			"error_description": "An unexpected error occurred.",
-			"traceId":           traceID,
-		})
-	}
+	w.WriteHeader(http.StatusInternalServerError)
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": "Internal server error",
+	})
 }
 
 func NormalizePropertyType(propertyType string) (string, error) {

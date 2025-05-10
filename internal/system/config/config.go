@@ -7,8 +7,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var AppConfig *Config
-
 type Config struct {
 	MongoDB struct {
 		URI               string `yaml:"uri"`
@@ -18,7 +16,7 @@ type Config struct {
 		ConsentCollection string `yaml:"consent_collection"`
 	} `yaml:"mongodb"`
 	Addr struct {
-		Port string `yaml:"port"`
+		Port int    `yaml:"port"`
 		Host string `yaml:"host"`
 	} `yaml:"addr"`
 	Log struct {
@@ -43,6 +41,14 @@ type Config struct {
 		Password string `yaml:"password"`
 		DbName   string `yaml:"dbname"`
 	} `yaml:"database"`
+	DataSource struct {
+		Hostname string `yaml:"hostname"`
+		Port     int    `yaml:"port"`
+		Name     string `yaml:"name"`
+		Username string `yaml:"username"`
+		Password string `yaml:"password"`
+		SSLMode  string `yaml:"sslmode"`
+	} `yaml:"datasource"`
 }
 
 // LoadConfig loads and sets AppConfig (global variable)
@@ -59,6 +65,5 @@ func LoadConfig(cdsHome, filePath string) (*Config, error) {
 		return nil, err
 	}
 
-	AppConfig = &config
-	return AppConfig, nil
+	return &config, nil
 }
