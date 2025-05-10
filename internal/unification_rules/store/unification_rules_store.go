@@ -39,7 +39,7 @@ func GetUnificationRules() ([]model.UnificationRule, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT rule_id, rule_name, property, priority, is_active, created_at, updated_at FROM unification_rules`
+	query := `SELECT rule_id, rule_name, propert_name, priority, is_active, created_at, updated_at FROM unification_rules`
 	results, err := dbClient.ExecuteQuery(query)
 	if err != nil {
 		logger.Info("Error occurred while fetching unification rules.")
@@ -51,7 +51,7 @@ func GetUnificationRules() ([]model.UnificationRule, error) {
 		var rule model.UnificationRule
 		rule.RuleId = row["rule_id"].(string)
 		rule.RuleName = row["rule_name"].(string)
-		rule.Property = row["property"].(string)
+		rule.Property = row["property_name"].(string)
 		rule.Priority = int(row["priority"].(int64))
 		rule.IsActive = row["is_active"].(bool)
 		rule.CreatedAt = row["created_at"].(int64)
@@ -86,7 +86,7 @@ func GetUnificationRule(ruleId string) (model.UnificationRule, error) {
 	var rule model.UnificationRule
 	rule.RuleId = row["rule_id"].(string)
 	rule.RuleName = row["rule_name"].(string)
-	rule.Property = row["property"].(string)
+	rule.Property = row["property_name"].(string)
 	rule.Priority = int(row["priority"].(int64))
 	rule.IsActive = row["is_active"].(bool)
 	rule.CreatedAt = row["created_at"].(int64)

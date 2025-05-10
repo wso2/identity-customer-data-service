@@ -2,262 +2,513 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"log"
 	"strconv"
 	"strings"
 	"time"
-
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // ProfileRepository handles MongoDB operations for profiles
 type ProfileRepository struct {
-	Collection *mongo.Collection
+	DB *sql.DB
 }
 
 // NewProfileRepository creates a new repository instance
-func NewProfileRepository(db *mongo.Database, collectionName string) *ProfileRepository {
+func NewProfileRepository(db *sql.DB) *ProfileRepository {
 	return &ProfileRepository{
-		Collection: db.Collection(collectionName),
+		DB: db,
 	}
 }
 
-// InsertProfile saves a profile in MongoDB
+// Unmarshal JSONB fields separately
+func scanProfileRow(row *sql.Row) (*model.Profile, error) {
+	var (
+		profile                       model.Profile
+		traitsJSON, identityAttrsJSON []byte
+	)
+
+	profile.ProfileHierarchy = &model.ProfileHierarchy{}
+
+	err := row.Scan(
+		&profile.ProfileId,
+		&profile.OriginCountry,
+		&profile.ProfileHierarchy.IsParent,
+		&profile.ProfileHierarchy.ParentProfileID,
+		&profile.ProfileHierarchy.ListProfile,
+		&traitsJSON,
+		&identityAttrsJSON,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal JSON fields
+	if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal traits: %w", err)
+	}
+	if err := json.Unmarshal(identityAttrsJSON, &profile.IdentityAttributes); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal identity attributes: %w", err)
+	}
+
+	return &profile, nil
+}
+
 func (repo *ProfileRepository) InsertProfile(profile model.Profile) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	filter := bson.M{"profile_id": profile.ProfileId}
-	update := bson.M{"$setOnInsert": profile}
+	traitsJSON, _ := json.Marshal(profile.Traits)
+	identityJSON, _ := json.Marshal(profile.IdentityAttributes)
 
-	opts := options.Update().SetUpsert(true)
+	query := `
+		INSERT INTO profiles (
+		profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
+	) VALUES ($1, $2, $3, $4, $5, $6, $7)
+	ON CONFLICT (profile_id) DO NOTHING;`
 
-	_, err := repo.Collection.UpdateOne(ctx, filter, update, opts)
-	return err
-}
-
-// UpdateProfile saves a profile in MongoDB
-func (repo *ProfileRepository) UpdateProfile(profile model.Profile) (*mongo.InsertOneResult, error) {
-	//logger := pkg.GetLogger()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	result, err := repo.Collection.InsertOne(ctx, profile)
+	_, err := repo.DB.ExecContext(ctx, query,
+		profile.ProfileId,
+		profile.OriginCountry,
+		profile.ProfileHierarchy.IsParent,
+		profile.ProfileHierarchy.ParentProfileID,
+		profile.ProfileHierarchy.ListProfile,
+		traitsJSON,
+		identityJSON,
+	)
 
 	if err != nil {
-		//logger.LogMessage("ERROR", "Failed to insert profile: "+err.Error())
-		return nil, err
+		return fmt.Errorf("failed to insert profile: %w", err)
 	}
-	//logger.LogMessage("INFO", "Profile inserted with TraitId: "+result.InsertedID.(string))
-	return result, nil
-}
-
-// GetProfile retrieves a profile by `profile_id`
-func (repo *ProfileRepository) GetProfile(profileId string) (*model.Profile, error) {
-	//logger := pkg.GetLogger()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var profile model.Profile
-	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			//logger.LogMessage("INFO", "Profile not found for profileId: "+profileId)
-			return nil, nil // Return `nil` instead of error
-		}
-		//logger.LogMessage("ERROR", "Error finding profile: "+err.Error())
-		return nil, err
-	}
-
-	//logger.LogMessage("INFO", "Profile retrieved for profileId: "+profileId)
-	return &profile, nil
-}
-
-// FindProfileByID retrieves a profile by `profile_id`
-func (repo *ProfileRepository) FindProfileByID(profileId string) (*model.Profile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	var profile model.Profile
-	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, nil // Profile not found is not an error
-		}
-		return nil, err
-	}
-	return &profile, nil
-}
-
-// DeleteProfile removes a profile from MongoDB using `profile_id`
-func (repo *ProfileRepository) DeleteProfile(profileId string) error {
-	//logger := pkg.GetLogger()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	filter := bson.M{"profile_id": profileId}
-
-	result, err := repo.Collection.DeleteOne(ctx, filter)
-	if err != nil {
-		//logger.LogMessage("ERROR", "Failed to delete profile: "+err.Error())
-		return err
-	}
-
-	if result.DeletedCount == 0 {
-		//logger.LogMessage("INFO", "No profile found to delete")
-		return mongo.ErrNoDocuments
-	}
-
-	//logger.LogMessage("INFO", "Profile deleted successfully")
 	return nil
 }
 
-func (repo *ProfileRepository) DetachChildFromParent(parentID, childID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func (repo *ProfileRepository) insertApplicationData(profileId string, apps []model.ApplicationData) error {
 
-	update := bson.M{
-		"$pull": bson.M{
-			"profile_hierarchy.child_profile_ids": bson.M{
-				"child_profile_id": childID,
-			},
-		},
+	for _, app := range apps {
+		// Construct the update map
+		updateMap := make(map[string]interface{})
+
+		// Inject devices under top-level key
+		if len(app.Devices) > 0 {
+			updateMap["application_data.devices"] = app.Devices
+		}
+
+		// Flatten app-specific fields
+		for k, v := range app.AppSpecificData {
+			updateMap["application_data."+k] = v
+		}
+
+		// Use the existing upsert method
+		err := repo.UpsertAppDatum(profileId, app.AppId, updateMap)
+		if err != nil {
+			return fmt.Errorf("failed to upsert app_data for app %s: %w", app.AppId, err)
+		}
 	}
-	_, err := repo.Collection.UpdateOne(ctx, bson.M{"profile_id": parentID}, update)
-	return err
+	return nil
 }
 
-func (repo *ProfileRepository) DetachPeer(profileID, peerToRemove string) error {
+func (repo *ProfileRepository) GetProfile(profileId string) (*model.Profile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	update := bson.M{
-		"$pull": bson.M{
-			"profile_hierarchy.peer_profile_ids": peerToRemove,
-		},
+	query := `
+		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
+		FROM profiles
+		WHERE profile_id = $1;`
+
+	row := repo.DB.QueryRowContext(ctx, query, profileId)
+
+	profile, err := scanProfileRow(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
 	}
-	_, err := repo.Collection.UpdateOne(ctx, bson.M{"profile_id": profileID}, update)
-	return err
-}
-
-func (repo *ProfileRepository) AddOrUpdateAppContext(profileId string, newAppCtx model.ApplicationData) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Step 1: Fetch full profile
-	var profile model.Profile
-	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
 	if err != nil {
-		return fmt.Errorf("failed to fetch profile: %w", err)
+		return nil, fmt.Errorf("error retrieving profile %s: %w", profileId, err)
+	}
+	profile.ApplicationData, _ = repo.FetchApplicationData(profileId)
+	return profile, nil
+}
+
+func (repo *ProfileRepository) FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
+	query := `SELECT app_id, application_data FROM application_data WHERE profile_id = $1;`
+	rows, err := repo.DB.Query(query, profileId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch app_data: %w", err)
+	}
+	defer rows.Close()
+
+	var apps []model.ApplicationData
+	for rows.Next() {
+		var (
+			appId     string
+			appBlob   []byte
+			appParsed model.ApplicationData
+		)
+
+		if err := rows.Scan(&appId, &appBlob); err != nil {
+			return nil, fmt.Errorf("failed to scan app_data row: %w", err)
+		}
+
+		if err := json.Unmarshal(appBlob, &appParsed); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal app_data: %w", err)
+		}
+
+		apps = append(apps, model.ApplicationData{
+			AppId:           appId,
+			Devices:         appParsed.Devices,
+			AppSpecificData: appParsed.AppSpecificData,
+		})
+	}
+	return apps, nil
+}
+
+func (repo *ProfileRepository) fetchApplicationDataWithAppId(profileId string, appId string) (model.ApplicationData, error) {
+	query := `SELECT app_id, application_data FROM application_data WHERE profile_id = $1 AND app_id = $2;`
+	rows, err := repo.DB.Query(query, profileId, appId)
+	var app model.ApplicationData
+	if err != nil {
+		return app, fmt.Errorf("failed to fetch app_data: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			appId     string
+			appBlob   []byte
+			appParsed model.ApplicationData
+		)
+
+		if err := rows.Scan(&appId, &appBlob); err != nil {
+			return app, fmt.Errorf("failed to scan app_data row: %w", err)
+		}
+
+		if err := json.Unmarshal(appBlob, &appParsed); err != nil {
+			return app, fmt.Errorf("failed to unmarshal app_data: %w", err)
+		}
+
+		app.AppId = appId
+		app.Devices = appParsed.Devices
+		app.AppSpecificData = appParsed.AppSpecificData
+	}
+	return app, nil
+}
+
+func (repo *ProfileRepository) UpdateProfile(profile model.Profile) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	traitsJSON, _ := json.Marshal(profile.Traits)
+	identityJSON, _ := json.Marshal(profile.IdentityAttributes)
+
+	query := `
+		UPDATE profiles SET
+			origin_country = $1,
+			is_parent = $2,
+			parent_profile_id = $3,
+			list_profile = $4,
+			traits = $5,
+			identity_attributes = $6
+		WHERE profile_id = $7;`
+
+	result, err := repo.DB.ExecContext(ctx, query,
+		profile.OriginCountry,
+		profile.ProfileHierarchy.IsParent,
+		profile.ProfileHierarchy.ParentProfileID,
+		profile.ProfileHierarchy.ListProfile,
+		traitsJSON,
+		identityJSON,
+		profile.ProfileId,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update profile: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (repo *ProfileRepository) GetAllProfiles() ([]model.Profile, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	query := `
+		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
+		FROM profiles
+		WHERE list_profile = true;`
+
+	rows, err := repo.DB.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch profiles: %w", err)
+	}
+	defer rows.Close()
+
+	var profiles []model.Profile
+	for rows.Next() {
+		var profile model.Profile
+		profile.ProfileHierarchy = &model.ProfileHierarchy{}
+		var traitsJSON, identityJSON []byte
+		err := rows.Scan(
+			&profile.ProfileId,
+			&profile.OriginCountry,
+			&profile.ProfileHierarchy.IsParent,
+			&profile.ProfileHierarchy.ParentProfileID,
+			&profile.ProfileHierarchy.ListProfile,
+			&traitsJSON,
+			&identityJSON,
+		)
+		if err != nil {
+			return nil, err
+		}
+		json.Unmarshal(traitsJSON, &profile.Traits)
+		json.Unmarshal(identityJSON, &profile.IdentityAttributes)
+
+		// Fetch app data
+		apps, err := repo.FetchApplicationData(profile.ProfileId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch app data for profile %s: %w", profile.ProfileId, err)
+		}
+		profile.ApplicationData = apps
+
+		profiles = append(profiles, profile)
+	}
+	return profiles, nil
+}
+
+// DeleteProfile deletes a profile and its associated data
+func (repo *ProfileRepository) DeleteProfile(profileId string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Step 1: Delete application_data explicitly (optional if ON DELETE CASCADE not enabled)
+	_, err := repo.DB.ExecContext(ctx, `DELETE FROM application_data WHERE profile_id = $1`, profileId)
+	if err != nil {
+		return fmt.Errorf("failed to delete application data for profile %s: %w", profileId, err)
 	}
 
-	// Step 2: Prepare or update application data
+	// Step 2: Delete child relationships where this is a parent (optional safety, ON DELETE CASCADE already exists)
+	_, err = repo.DB.ExecContext(ctx, `DELETE FROM child_profiles WHERE parent_profile_id = $1 OR child_profile_id = $1`, profileId)
+	if err != nil {
+		return fmt.Errorf("failed to delete child profile links for profile %s: %w", profileId, err)
+	}
+
+	// Step 3: Delete the profile itself
+	result, err := repo.DB.ExecContext(ctx, `DELETE FROM profiles WHERE profile_id = $1`, profileId)
+	if err != nil {
+		return fmt.Errorf("failed to delete profile %s: %w", profileId, err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check delete result for profile %s: %w", profileId, err)
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	logger.Info(fmt.Sprintf("INFO: Profile %s and associated data deleted successfully", profileId))
+	return nil
+}
+
+// UpsertIdentityAttribute updates or inserts attributes, enriching array values.
+func (repo *ProfileRepository) UpsertIdentityAttribute(profileId string, updates map[string]interface{}) error {
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	profile, err := repo.GetProfile(profileId)
+	if err != nil {
+		return fmt.Errorf("failed to fetch profile %s for identity attribute upsert: %w", profileId, err)
+	}
+	if profile == nil {
+		return fmt.Errorf("profile doesn't exist for profile id %s", profileId)
+	}
+
+	if profile.IdentityAttributes == nil {
+		profile.IdentityAttributes = make(map[string]interface{})
+	}
+
+	for field, incomingVal := range updates {
+		attrName := strings.TrimPrefix(field, "identity_attributes.")
+		existingVal := profile.IdentityAttributes[attrName]
+		profile.IdentityAttributes[attrName] = enrichFieldValues(existingVal, incomingVal)
+	}
+
+	return repo.UpdateProfile(*profile)
+}
+func (repo *ProfileRepository) UpsertTrait(profileId string, updates map[string]interface{}) error {
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	profile, err := repo.GetProfile(profileId)
+	if err != nil {
+		return fmt.Errorf("failed to fetch profile %s for trait upsert: %w", profileId, err)
+	}
+	if profile == nil {
+		return fmt.Errorf("profile doesn't exist for profile id %s", profileId)
+	}
+
+	if profile.Traits == nil {
+		profile.Traits = make(map[string]interface{})
+	}
+
+	for field, incomingVal := range updates {
+		traitName := strings.TrimPrefix(field, "traits.")
+		existingVal := profile.Traits[traitName]
+		profile.Traits[traitName] = enrichFieldValues(existingVal, incomingVal)
+	}
+
+	return repo.UpdateProfile(*profile)
+}
+
+func (repo *ProfileRepository) UpsertAppDatum(profileId string, appId string, updates map[string]interface{}) error {
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Fetch existing application_data for the given app
+	appData, err := repo.fetchApplicationDataWithAppId(profileId, appId)
+	if err != nil {
+		return fmt.Errorf("failed to fetch existing application data: %w", err)
+	}
+
+	if appData.AppSpecificData == nil {
+		appData.AppSpecificData = make(map[string]interface{})
+	}
+
+	// Separate handling for "devices" key (top-level)
+	for key, incomingVal := range updates {
+		actualKey := strings.TrimPrefix(key, "application_data.")
+
+		if actualKey == "devices" {
+			// Convert to []model.Devices
+			devicesJSON, _ := json.Marshal(incomingVal)
+			var newDevices []model.Devices
+			if err := json.Unmarshal(devicesJSON, &newDevices); err != nil {
+				return fmt.Errorf("failed to parse device list: %w", err)
+			}
+			appData.Devices = mergeDeviceLists(appData.Devices, newDevices)
+		} else {
+			// Merge into app_specific_data
+			existingVal := appData.AppSpecificData[actualKey]
+			appData.AppSpecificData[actualKey] = enrichFieldValues(existingVal, incomingVal)
+		}
+	}
+
+	// Final wrapper for marshaling
+	type ApplicationDataJSON struct {
+		Devices         []model.Devices        `json:"devices,omitempty"`
+		AppSpecificData map[string]interface{} `json:"app_specific_data,omitempty"`
+	}
+
+	wrapper := ApplicationDataJSON{
+		Devices:         appData.Devices,
+		AppSpecificData: appData.AppSpecificData,
+	}
+
+	jsonBytes, err := json.Marshal(wrapper)
+	if err != nil {
+		return fmt.Errorf("failed to marshal application data: %w", err)
+	}
+
+	// Upsert into application_data table
+	query := `
+		INSERT INTO application_data (profile_id, app_id, application_data)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (profile_id, app_id)
+		DO UPDATE SET application_data = EXCLUDED.application_data;
+	`
+
+	_, err = repo.DB.Exec(query, profileId, appId, jsonBytes)
+	if err != nil {
+		return fmt.Errorf("failed to upsert application data: %w", err)
+	}
+
+	return nil
+}
+
+// DetachChildProfileFromParent removes a child from a parent's child_profile_ids list
+func (repo *ProfileRepository) DetachChildProfileFromParent(parentID, childID string) error {
+	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `DELETE FROM child_profiles WHERE parent_profile_id = $1 AND child_profile_id = $2;`
+	result, err := repo.DB.Exec(query, parentID, childID)
+	if err != nil {
+		return fmt.Errorf("failed to delete child relationship: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		logger.Info(fmt.Sprintf("INFO: No child profile %s found under parent %s to remove.", childID, parentID))
+	}
+	return nil
+}
+
+// InsertMergedMasterProfileAppData adds or updates application-specific context data.
+func (repo *ProfileRepository) InsertMergedMasterProfileAppData(profileId string, newAppCtx model.ApplicationData) error {
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	profile, err := repo.GetProfile(profileId)
+	if err != nil {
+		return fmt.Errorf("failed to fetch profile %s for app context update: %w", profileId, err)
+	}
+	if profile == nil {
+		// If profile doesn't exist, we might want to create it with this app data
+		// For now, let's assume profile must exist. Or adjust as per requirements.
+		return fmt.Errorf("profile %s not found for app context update", profileId)
+	}
+
 	updated := false
-	var updatedAppData []model.ApplicationData
+	var resultAppData []model.ApplicationData
 
 	for _, existing := range profile.ApplicationData {
 		if existing.AppId == newAppCtx.AppId {
 			// Merge devices
-			existing.Devices = mergeDeviceLists(existing.Devices, newAppCtx.Devices)
+			existing.Devices = mergeDeviceLists(existing.Devices, newAppCtx.Devices) // Uses your helper
 
 			// Merge app-specific fields
 			if existing.AppSpecificData == nil {
-				existing.AppSpecificData = map[string]interface{}{}
+				existing.AppSpecificData = make(map[string]interface{})
 			}
 			for k, v := range newAppCtx.AppSpecificData {
 				existing.AppSpecificData[k] = v
 			}
-
-			updatedAppData = append(updatedAppData, existing)
+			resultAppData = append(resultAppData, existing)
 			updated = true
 		} else {
-			updatedAppData = append(updatedAppData, existing)
+			resultAppData = append(resultAppData, existing)
 		}
 	}
 
-	// If no existing entry matched, add new one
 	if !updated {
-		updatedAppData = append(updatedAppData, newAppCtx)
+		resultAppData = append(resultAppData, newAppCtx)
 	}
 
-	// Step 3: Persist the updated application data
-	update := bson.M{
-		"$set": bson.M{
-			"application_data": updatedAppData,
-		},
-	}
-	_, err = repo.Collection.UpdateOne(ctx, bson.M{"profile_id": profileId}, update)
-	if err != nil {
-		return fmt.Errorf("failed to update application_data: %w", err)
-	}
-
-	return nil
+	profile.ApplicationData = resultAppData
+	// this inserts the entire application_data blob with the update.
+	return repo.insertApplicationData(profile.ProfileId, profile.ApplicationData)
 }
 
-func (repo *ProfileRepository) PatchAppContext(profileId, appID string, updates bson.M) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	filter := bson.M{fmt.Sprintf("application_data.%s", appID): bson.M{"$exists": true}, "profile_id": profileId}
-	update := bson.M{"$set": bson.M{fmt.Sprintf("application_data.%s", appID): updates}}
-
-	_, err := repo.Collection.UpdateOne(ctx, filter, update)
-	return err
-}
-
-//func (repo *ProfileRepository) GetAppContext(profileId, appID string) (*models.ApplicationData, error) {
-//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-//	defer cancel()
-//
-//	filter := bson.M{"profile_id": profileId}
-//	projection := bson.M{"application_data": 1}
-//
-//	var profile models.Profile
-//	err := repo.Collection.FindOne(ctx, filter, options.FindOne().SetProjection(projection)).Decode(&profile)
-//	if err != nil {
-//		if err == mongo.ErrNoDocuments {
-//			return nil, nil
-//		}
-//		return nil, err
-//	}
-//
-//	appData, exists := profile.ApplicationData[appID]
-//	if !exists {
-//		return nil, nil
-//	}
-//
-//	return &appData, nil
-//}
-
-func decodeDevices(raw interface{}) []model.Devices {
-	var devices []model.Devices
-
-	if rawList, ok := raw.([]interface{}); ok {
-		for _, item := range rawList {
-			if deviceMap, ok := item.(map[string]interface{}); ok {
-				device := model.Devices{}
-				data, _ := json.Marshal(deviceMap)
-				_ = json.Unmarshal(data, &device)
-				devices = append(devices, device)
-			}
-		}
-	}
-
-	return devices
-}
-
+// mergeDeviceLists helper (from original code, assumed correct)
 func mergeDeviceLists(existing, incoming []model.Devices) []model.Devices {
 	deviceMap := make(map[string]model.Devices)
 	for _, d := range existing {
+		if d.DeviceId == "" { // Ensure DeviceId is present for map key
+			continue
+		}
 		deviceMap[d.DeviceId] = d
 	}
 	for _, d := range incoming {
+		if d.DeviceId == "" {
+			continue
+		}
 		deviceMap[d.DeviceId] = d
 	}
 	var merged []model.Devices
@@ -267,407 +518,320 @@ func mergeDeviceLists(existing, incoming []model.Devices) []model.Devices {
 	return merged
 }
 
-//func (repo *ProfileRepository) GetListOfAppContext(profileId string) ([]models.ApplicationData, error) {
-//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-//	defer cancel()
-//
-//	filter := bson.M{"profile_id": profileId}
-//	projection := bson.M{"application_data": 1}
-//
-//	var profile models.Profile
-//	err := repo.Collection.FindOne(ctx, filter, options.FindOne().SetProjection(projection)).Decode(&profile)
-//	if err == mongo.ErrNoDocuments {
-//		return nil, nil
-//	} else if err != nil {
-//		return nil, fmt.Errorf("failed to retrieve application data: %w", err)
-//	}
-//
-//	var flattened []map[string]interface{}
-//
-//	for _, app := range profile.ApplicationData {
-//		flat := map[string]interface{}{
-//			"app_id":  app.AppId,
-//			"devices": app.Devices,
-//		}
-//
-//		// Merge app_specific_data into the flat map
-//		for k, v := range app.AppSpecificData {
-//			flat[k] = v
-//		}
-//
-//		flattened = append(flattened, flat)
-//	}
-//
-//	return flattened, nil
-//}
-
-// AddOrUpdateTraitsData replaces (PUT) the personality data inside Profile
-func (repo *ProfileRepository) AddOrUpdateTraitsData(profileId string, personalityData map[string]interface{}) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// InsertMergedMasterProfileTraitData replaces (PUT) the traits data inside Profile
+func (repo *ProfileRepository) InsertMergedMasterProfileTraitData(profileId string, traitsData map[string]interface{}) error {
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{"profile_id": profileId}
-	update := bson.M{"$set": bson.M{"traits": personalityData}}
-
-	opts := options.Update().SetUpsert(true)
-	_, err := repo.Collection.UpdateOne(ctx, filter, update, opts)
+	profile, err := repo.GetProfile(profileId)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get profile %s for traits update: %w", profileId, err)
 	}
 
-	return nil
+	if profile == nil { // Profile doesn't exist, create a new one with these traits
+		logger.Info(fmt.Sprintf("INFO: Profile %s not found. Creating new profile", profileId))
+		return nil
+	}
+
+	profile.Traits = traitsData
+	return repo.UpdateProfile(*profile) // Update existing profile
 }
 
-// UpsertIdentityData replaces (PUT) the personality data inside Profile
-func (repo *ProfileRepository) UpsertIdentityData(profileId string, identityData map[string]interface{}) error {
+// MergeIdentityDataOfProfiles replaces or adds to identity_attributes in Profile
+func (repo *ProfileRepository) MergeIdentityDataOfProfiles(profileId string, identityData map[string]interface{}) error {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{"profile_id": profileId}
-	updateFields := bson.M{}
+	profile, err := repo.GetProfile(profileId)
+	if err != nil {
+		return fmt.Errorf("failed to get profile %s for identity data upsert: %w", profileId, err)
+	}
+
+	if profile == nil { // Profile doesn't exist, create new one
+		newProfile := model.Profile{
+			ProfileId:          profileId,
+			IdentityAttributes: identityData,
+		}
+		logger.Info(fmt.Sprintf("INFO: Profile %s not found. Creating new profile for MergeIdentityDataOfProfiles.", profileId))
+		return repo.InsertProfile(newProfile)
+	}
+
+	if profile.IdentityAttributes == nil {
+		profile.IdentityAttributes = make(map[string]interface{})
+	}
 	for k, v := range identityData {
-		updateFields["identity_attributes."+k] = v
+		profile.IdentityAttributes[k] = v // Overwrites or adds
 	}
 
-	update := bson.M{"$set": updateFields}
-
-	opts := options.Update().SetUpsert(true) // Insert if not found
-	_, err := repo.Collection.UpdateOne(ctx, filter, update, opts)
-	if err != nil {
-		logger.Error(err, "Failed to update personality data")
-		return err
-	}
-
-	logger.Info("Identity Attributes data updated for user " + profileId)
-	return nil
+	return repo.UpdateProfile(*profile)
 }
 
-// GetAllProfiles retrieves all profiles from MongoDB
-func (repo *ProfileRepository) GetAllProfiles() ([]model.Profile, error) {
-	//logger := pkg.GetLogger()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Exclude profiles where profile_hierarchy.is_master == true
-	// Only fetch profiles with profile_hierarchy.list_profile == true
-	filter := bson.M{
-		"profile_hierarchy.list_profile": true,
-	}
-
-	cursor, err := repo.Collection.Find(ctx, filter)
-	if err != nil {
-		//logger.LogMessage("ERROR", "Failed to fetch profiles: "+err.Error())
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var profiles []model.Profile
-	// 🔹 Decode all profiles
-	if err = cursor.All(ctx, &profiles); err != nil {
-		logger.Error(err, "Error decoding profiles: "+err.Error())
-		return nil, err
-	}
-
-	logger.Info("Successfully fetched profiles")
-	return profiles, nil
-}
-
-func (repo *ProfileRepository) GetAllProfilesWithMongoFilter(filter bson.M) ([]model.Profile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	cursor, err := repo.Collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var profiles []model.Profile
-	if err := cursor.All(ctx, &profiles); err != nil {
-		return nil, err
-	}
-	return profiles, nil
-}
-
+// todo: this has to be fixed with next iteration
+// GetAllProfilesWithFilter retrieves profiles based on a simplified filter string array
 func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
+	//
+	//ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	//defer cancel()
+	//
+	//var conditions []string
+	//var args []interface{}
+	//argId := 1
+	//
+	//for _, f := range filters {
+	//	parts := strings.SplitN(f, " ", 3)
+	//	if len(parts) != 3 {
+	//		logger.Info(fmt.Sprintf("WARN: Invalid filter format: %s", f))
+	//		continue
+	//	}
+	//	jsonPathStr, operator, value := parts[0], strings.ToLower(parts[1]), parts[2]
+	//
+	//	pathParts := strings.Split(jsonPathStr, ".")
+	//	var currentPath string
+	//	if len(pathParts) > 0 {
+	//		currentPath = "profile_data" // Start with the main JSONB column
+	//		for i, p := range pathParts {
+	//			// For map keys or fixed object properties
+	//			if i == len(pathParts)-1 { // Last part, use ->> to get text for comparison
+	//				currentPath += fmt.Sprintf("->>'%s'", p)
+	//			} else {
+	//				currentPath += fmt.Sprintf("->'%s'", p)
+	//			}
+	//		}
+	//	} else {
+	//		logger.Info(fmt.Sprintf("WARN: Invalid field path in filter: %s", jsonPathStr))
+	//		continue
+	//	}
+	//
+	//	switch operator {
+	//	case "eq":
+	//		conditions = append(conditions, fmt.Sprintf("%s = $%d", currentPath, argId))
+	//		args = append(args, value)
+	//		argId++
+	//	case "sw": // starts with
+	//		conditions = append(conditions, fmt.Sprintf("%s LIKE $%d", currentPath, argId))
+	//		args = append(args, value+"%")
+	//		argId++
+	//	case "co": // contains
+	//		conditions = append(conditions, fmt.Sprintf("%s LIKE $%d", currentPath, argId))
+	//		args = append(args, "%"+value+"%")
+	//		argId++
+	//	default:
+	//		logger.Info(fmt.Sprintf("WARN: Unsupported filter operator: %s", operator))
+	//		continue
+	//	}
+	//}
+	//
+	//if len(conditions) == 0 {
+	//	// If no valid filters were processed, decide behavior: return all, empty, or error.
+	//	// For now, returning all if no filters were applied, similar to empty filter in Mongo.
+	//	logger.Info(fmt.Sprintf("INFO: No valid filters applied in GetAllProfilesWithFilter, fetching all listable profiles."))
+	//	return repo.GetAllProfiles() // Default to getting all listable profiles.
+	//}
+	//
+	//sqlQuery := "SELECT profile_data FROM profiles WHERE " + strings.Join(conditions, " AND ")
+	//
+	//rows, err := repo.DB.QueryContext(ctx, sqlQuery, args...)
+	//if err != nil {
+	//	logger.Info(fmt.Sprintf("ERROR: Failed to execute filtered query: %s, Args: %v, Error: %v", sqlQuery, args, err))
+	//	return nil, fmt.Errorf("failed to execute filtered query: %w", err)
+	//}
+	//defer rows.Close()
+	//
+	var profiles []model.Profile
+	//for rows.Next() {
+	//	var profileDataBytes []byte
+	//	if err := rows.Scan(&profileDataBytes); err != nil {
+	//		return nil, fmt.Errorf("error scanning filtered profile data: %w", err)
+	//	}
+	//	var profile model.Profile
+	//	if err := unmarshalProfile(profileDataBytes, &profile); err != nil {
+	//		return nil, fmt.Errorf("error unmarshaling filtered profile: %w", err)
+	//	}
+	//	profiles = append(profiles, profile)
+	//}
+	//if err := rows.Err(); err != nil {
+	//	return nil, fmt.Errorf("error iterating filtered profile rows: %w", err)
+	//}
+	return profiles, nil
+}
 
+func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{}
-	for _, f := range filters {
-		parts := strings.SplitN(f, " ", 3)
-		if len(parts) != 3 {
-			continue
-		}
-		field, operator, value := parts[0], strings.ToLower(parts[1]), parts[2]
+	query := `
+		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
+		FROM profiles
+		WHERE is_parent = true AND profile_id != $1;
+	`
 
-		switch operator {
-		case "eq":
-			filter[field] = value
-		case "sw":
-			filter[field] = bson.M{"$regex": fmt.Sprintf("^%s", value)}
-		case "co":
-			filter[field] = bson.M{"$regex": value}
-		}
-	}
-
-	cursor, err := repo.Collection.Find(ctx, filter)
+	rows, err := repo.DB.QueryContext(ctx, query, currentProfile.ProfileId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch master profiles: %w", err)
 	}
-	defer cursor.Close(ctx)
-
-	var profile []model.Profile
-	if err := cursor.All(ctx, &profile); err != nil {
-		return nil, err
-	}
-	return profile, nil
-}
-
-// GetAllMasterProfilesExceptForCurrent retrieves all master profiles excluding the current profile's parent
-func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	excludedIDs := []string{}
-	excludedIDs = append(excludedIDs, currentProfile.ProfileId)
-
-	// Fetch only master profiles excluding the parent of the current profile
-	filter := bson.M{
-		"profile_hierarchy.is_parent": true,
-		"profile_id": bson.M{
-			"$nin": excludedIDs,
-		},
-	}
-
-	cursor, err := repo.Collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
+	defer rows.Close()
 
 	var profiles []model.Profile
-	if err = cursor.All(ctx, &profiles); err != nil {
-		return nil, err
+	for rows.Next() {
+		var (
+			profile                        model.Profile
+			traitsJSON, identityJSON       []byte
+			isParent, listProfile          bool
+			parentProfileID, originCountry string
+		)
+
+		if err := rows.Scan(
+			&profile.ProfileId,
+			&originCountry,
+			&isParent,
+			&parentProfileID,
+			&listProfile,
+			&traitsJSON,
+			&identityJSON,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan profile row: %w", err)
+		}
+
+		profile.OriginCountry = originCountry
+		profile.ProfileHierarchy = &model.ProfileHierarchy{
+			IsParent:        isParent,
+			ParentProfileID: parentProfileID,
+			ListProfile:     listProfile,
+		}
+
+		if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal traits: %w", err)
+		}
+		if err := json.Unmarshal(identityJSON, &profile.IdentityAttributes); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal identity attributes: %w", err)
+		}
+
+		profile.ApplicationData, _ = repo.FetchApplicationData(profile.ProfileId)
+
+		profiles = append(profiles, profile)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating master profiles: %w", err)
 	}
 
 	return profiles, nil
 }
 
-func (repo *ProfileRepository) UpdateParent(master model.Profile, newProfile model.Profile) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// UpdateParent sets parent_profile_id and is_parent=false for a profile.
+func (repo *ProfileRepository) UpdateParent(master model.Profile, targetProfile model.Profile) error {
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	updateProfile := bson.M{
-		"$set": bson.M{
-			"profile_hierarchy.parent_profile_id": master.ProfileId,
-			"profile_hierarchy.is_parent":         false,
-		},
+	profileToUpdate, err := repo.GetProfile(targetProfile.ProfileId)
+	if err != nil {
+		return fmt.Errorf("failed to get profile %s for parent update: %w", targetProfile.ProfileId, err)
 	}
-	if _, err := repo.Collection.UpdateOne(ctx, bson.M{"profile_id": newProfile.ProfileId}, updateProfile); err != nil {
-		return fmt.Errorf("failed to update profile %s: %w", newProfile.ProfileId, err)
+	if profileToUpdate == nil {
+		return fmt.Errorf("profile %s not found for parent update", targetProfile.ProfileId)
 	}
 
-	return nil
+	if profileToUpdate.ProfileHierarchy == nil {
+		profileToUpdate.ProfileHierarchy = &model.ProfileHierarchy{}
+	}
+	profileToUpdate.ProfileHierarchy.ParentProfileID = master.ProfileId
+	profileToUpdate.ProfileHierarchy.IsParent = false // Explicitly setting child not to be a parent
+
+	return repo.UpdateProfile(*profileToUpdate)
 }
 
-// LinkPeers creates a bidirectional link between two peer profiles
-func (repo *ProfileRepository) LinkPeers(peerprofileId1 string, peerprofileId2 string, ruleName string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// AddEventSchema peer2 to peer1
-	peer2 := model.ChildProfile{
-		ChildProfileId: peerprofileId2,
-		RuleName:       ruleName,
-	}
-	updateProfile1 := bson.M{
-		"$addToSet": bson.M{
-			"profile_hierarchy.peer_profile_ids": peer2,
-		},
-	}
-	if _, err := repo.Collection.UpdateOne(ctx, bson.M{"profile_id": peerprofileId1}, updateProfile1); err != nil {
-		return fmt.Errorf("failed to update peer profile for %s: %w", peerprofileId1, err)
-	}
-
-	// AddEventSchema peer1 to peer2
-	peer1 := model.ChildProfile{
-		ChildProfileId: peerprofileId1, // ✅ Corrected
-		RuleName:       ruleName,
-	}
-	updateProfile2 := bson.M{
-		"$addToSet": bson.M{
-			"profile_hierarchy.peer_profile_ids": peer1,
-		},
-	}
-	if _, err := repo.Collection.UpdateOne(ctx, bson.M{"profile_id": peerprofileId2}, updateProfile2); err != nil {
-		return fmt.Errorf("failed to update peer profile for %s: %w", peerprofileId2, err)
-	}
-
-	return nil
-}
-
-func (repo *ProfileRepository) FindProfileByUserName(userID string) (*model.Profile, error) {
+// FindProfileByUserName retrieves a profile by identity_attributes.user_name
+func (repo *ProfileRepository) FindProfileByUserName(userName string) (*model.Profile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	sqlStatement := `
+        SELECT profile_data
+        FROM profiles
+        WHERE profile_data -> 'identity_attributes' ->> 'user_name' = $1;`
+
+	var profileDataBytes []byte
+	err := repo.DB.QueryRowContext(ctx, sqlStatement, userName).Scan(&profileDataBytes)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil // Not found
+		}
+		return nil, fmt.Errorf("error finding profile by username %s: %w", userName, err)
+	}
 
 	var profile model.Profile
-	err := repo.Collection.FindOne(ctx, bson.M{"identity.user_name": userID}).Decode(&profile)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, nil // Profile not found is not an error
-		}
-		return nil, err
-	}
+	//if err := unmarshalProfile(profileDataBytes, &profile); err != nil {
+	//	return nil, fmt.Errorf("error unmarshaling profile for username %s: %w", userName, err)
+	//}
 	return &profile, nil
 }
 
-func (repo *ProfileRepository) AddChildProfile(parentProfile model.Profile, child model.ChildProfile) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (repo *ProfileRepository) AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile) error {
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{"profile_id": parentProfile.ProfileId}
-	update := bson.M{
-		"$addToSet": bson.M{
-			"profile_hierarchy.child_profile_ids": child,
-		},
-	}
-
-	_, err := repo.Collection.UpdateOne(ctx, filter, update)
+	tx, err := repo.DB.BeginTx(context.Background(), nil)
 	if err != nil {
-		return fmt.Errorf("failed to add child profile to parent %s: %w", parentProfile.ProfileId, err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	return nil
-}
+	defer tx.Rollback()
 
-func (repo *ProfileRepository) UpsertIdentityAttribute(profileId string, updates bson.M) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	query := `
+		INSERT INTO child_profiles (parent_profile_id, child_profile_id, rule_name)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (parent_profile_id, child_profile_id) DO NOTHING;
+	`
 
-	// Fetch the current profile
-	var profile model.Profile
-	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
-	if err != nil {
-		logger.Error(err, "Failed to fetch profile for identity update")
-		return err
-	}
-
-	finalUpdates := bson.M{}
-
-	for field, incomingVal := range updates {
-		property := strings.Split(field, ".")
-		propertyName := property[1]
-		existingVal := profile.IdentityAttributes[propertyName]
-		merged := enrichFieldValues(existingVal, incomingVal)
-		finalUpdates[field] = merged
-	}
-
-	if len(finalUpdates) == 0 {
-		return nil
-	}
-
-	_, err = repo.Collection.UpdateOne(ctx, bson.M{"profile_id": profileId}, bson.M{"$set": finalUpdates})
-	if err != nil {
-		logger.Error(err, "Failed to update identity attributes")
-		return err
-	}
-
-	logger.Info("Identity attribute updated for user " + profileId)
-	return nil
-}
-
-func (repo *ProfileRepository) UpsertTrait(profileId string, updates bson.M) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var profile model.Profile
-	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
-	if err != nil {
-		return fmt.Errorf("failed to fetch profile: %w", err)
-	}
-
-	finalUpdates := bson.M{}
-	for field, incomingVal := range updates {
-		traitPath := strings.Split(field, ".")
-		traitName := traitPath[1]
-		existingVal := profile.Traits[traitName]
-		finalUpdates[field] = enrichFieldValues(existingVal, incomingVal)
-	}
-
-	if len(finalUpdates) == 0 {
-		return nil
-	}
-
-	_, err = repo.Collection.UpdateOne(ctx, bson.M{"profile_id": profileId}, bson.M{"$set": finalUpdates})
-	return err
-}
-
-func (repo *ProfileRepository) UpsertAppDatum(profileId string, appId string, update bson.M) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var profile model.Profile
-	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
-	if err != nil {
-		return fmt.Errorf("failed to fetch profile: %w", err)
-	}
-
-	appIndex := -1
-	for i, app := range profile.ApplicationData {
-		if app.AppId == appId {
-			appIndex = i
-			break
-		}
-	}
-
-	if appIndex != -1 {
-		// App exists → merge
-		existingApp := profile.ApplicationData[appIndex]
-		finalSet := bson.M{}
-
-		for key, incomingVal := range update {
-			traitName := key
-			if strings.HasPrefix(key, "application_data.") {
-				traitName = strings.TrimPrefix(key, "application_data.")
-			}
-			existingVal := existingApp.AppSpecificData[traitName]
-			fieldPath := fmt.Sprintf("application_data.%d.app_specific_data.%s", appIndex, traitName)
-			finalSet[fieldPath] = enrichFieldValues(existingVal, incomingVal)
-		}
-
-		_, err := repo.Collection.UpdateOne(ctx, bson.M{"profile_id": profileId}, bson.M{"$set": finalSet})
+	for _, child := range children {
+		_, err := tx.Exec(query, parentProfile.ProfileId, child.ChildProfileId, child.RuleName)
 		if err != nil {
-			return fmt.Errorf("failed to update existing application_data entry: %w", err)
+			return fmt.Errorf("failed to add child %s to parent %s: %w", child.ChildProfileId, parentProfile.ProfileId, err)
 		}
-		return nil
 	}
 
-	// App does not exist → insert
-	appSpecific := bson.M{}
-	for key, incomingVal := range update {
-		key = strings.TrimPrefix(key, "application_data.app_specific_data.")
-		appSpecific[key] = incomingVal
-	}
+	return tx.Commit()
+}
 
-	newApp := model.ApplicationData{
-		AppId:           appId,
-		AppSpecificData: appSpecific,
-	}
+func (repo *ProfileRepository) FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
+	logger.Info(fmt.Sprintf("Fetching child profiles for parent: %s", parentProfileId))
 
-	_, err = repo.Collection.UpdateOne(ctx, bson.M{"profile_id": profileId}, bson.M{
-		"$push": bson.M{"application_data": newApp},
-	})
+	query := `
+		SELECT child_profile_id, rule_name 
+		FROM child_profiles 
+		WHERE parent_profile_id = $1;
+	`
+
+	rows, err := repo.DB.Query(query, parentProfileId)
 	if err != nil {
-		return fmt.Errorf("failed to insert new application_data entry: %w", err)
+		log.Println("Database query failed", "parentProfileId", parentProfileId, "error", err)
+		return nil, fmt.Errorf("failed to fetch child profiles: %w", err)
 	}
-	return nil
+	defer rows.Close()
+
+	var children []model.ChildProfile
+	for rows.Next() {
+		var child model.ChildProfile
+		if err := rows.Scan(&child.ChildProfileId, &child.RuleName); err != nil {
+			log.Print("Failed to scan row", "parentProfileId", parentProfileId, "error", err)
+			return nil, fmt.Errorf("error scanning child profile row: %w", err)
+		}
+		logger.Debug("Fetched child profile", "childProfileId", child.ChildProfileId, "ruleName", child.RuleName)
+		children = append(children, child)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Println("Row iteration error", "parentProfileId", parentProfileId, "error", err)
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	logger.Info("Successfully fetched child profiles", "parentProfileId", parentProfileId, "count", len(children))
+	return children, nil
 }
 
 func enrichFieldValues(existingVal, incomingVal interface{}) interface{} {
-	switch incoming := incomingVal.(type) {
 
+	switch incoming := incomingVal.(type) {
 	case []string:
 		existing := toStringSlice(existingVal)
 		for _, item := range incoming {
@@ -690,57 +854,54 @@ func enrichFieldValues(existingVal, incomingVal interface{}) interface{} {
 		return incoming // overwrite simple types
 
 	default:
-		return incoming // fallback
+		logger.Info(fmt.Sprintf("WARN: enrichFieldValues encountered unhandled type for incomingVal: %T", incomingVal))
+		return incoming
 	}
 }
 
 func toStringSlice(val interface{}) []string {
+	if val == nil {
+		return []string{}
+	}
 	switch v := val.(type) {
+	case []string:
+		return v
 	case []interface{}:
 		var result []string
 		for _, item := range v {
 			if s, ok := item.(string); ok {
 				result = append(result, s)
+			} else {
+				logger.Info(fmt.Sprintf("WARN: toStringSlice: item in []interface{} is not a string: %T", item))
 			}
 		}
 		return result
-	case primitive.A:
-		var result []string
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				result = append(result, s)
-			}
-		}
-		return result
-	case []string:
-		return v
 	default:
-		return nil
+		logger.Info(fmt.Sprintf("WARN: toStringSlice: value is not []string or []interface{}: %T", val))
+		return []string{}
 	}
 }
 
 func toIntSlice(val interface{}) []int {
+	if val == nil {
+		return []int{}
+	}
 	switch v := val.(type) {
+	case []int:
+		return v
 	case []interface{}:
 		var result []int
 		for _, item := range v {
 			if i, ok := toInt(item); ok {
 				result = append(result, i)
+			} else {
+				logger.Info(fmt.Sprintf("WARN: toIntSlice: item in []interface{} cannot be converted to int: %T", item))
 			}
 		}
 		return result
-	case primitive.A:
-		var result []int
-		for _, item := range v {
-			if i, ok := toInt(item); ok {
-				result = append(result, i)
-			}
-		}
-		return result
-	case []int:
-		return v
 	default:
-		return nil
+		logger.Info(fmt.Sprintf("WARN: toIntSlice: value is not []int or []interface{}: %T", val))
+		return []int{}
 	}
 }
 
@@ -769,9 +930,19 @@ func toInt(val interface{}) (int, bool) {
 	case int32:
 		return int(v), true
 	case int64:
+		// Be cautious about potential overflow if int64 > max int
 		return int(v), true
+	case float32:
+		return int(v), true // Potential loss of precision
 	case float64:
-		return int(v), true
+		return int(v), true // Potential loss of precision
+	case json.Number:
+		if i64, err := v.Int64(); err == nil {
+			return int(i64), true // Potential overflow
+		}
+		if f64, err := v.Float64(); err == nil {
+			return int(f64), true // Potential loss of precision
+		}
 	case string:
 		if i, err := strconv.Atoi(v); err == nil {
 			return i, true

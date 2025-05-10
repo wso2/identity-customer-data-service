@@ -40,7 +40,7 @@ func NewProfileService(mux *http.ServeMux, apiBasePath string) *ProfileService {
 
 func (s *ProfileService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
 
-	mux.HandleFunc(fmt.Sprintf("GET %s/profiles", apiBasePath), s.eventHandler.GetProfile)
+	mux.HandleFunc(fmt.Sprintf("GET %s/profiles", apiBasePath), s.eventHandler.GetAllProfiles)
 	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/", apiBasePath), s.eventHandler.GetProfile)
 	mux.HandleFunc(fmt.Sprintf("DELETE %s/profiles/", apiBasePath), s.eventHandler.DeleteProfile)
 }

@@ -21,7 +21,6 @@ import (
 	model2 "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/service"
 	repositories "github.com/wso2/identity-customer-data-service/internal/profile/store"
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
@@ -36,7 +35,8 @@ func StartProfileWorker() {
 
 	go func() {
 		for event := range EnrichmentQueue {
-			profileRepo := repositories.NewProfileRepository(database.GetMongoDBInstance().Database, constants.ProfileCollection)
+			postgresDB := database.GetPostgresInstance()
+			profileRepo := repositories.NewProfileRepository(postgresDB.DB)
 
 			// Step 1: Enrich
 			if err := EnrichProfile(event); err != nil {
@@ -46,9 +46,8 @@ func StartProfileWorker() {
 			}
 
 			// Step 2: Unify
-			profile, err := profileRepo.FindProfileByID(event.ProfileId)
+			profile, err := profileRepo.GetProfile(event.ProfileId)
 			if err == nil && profile != nil {
-				logger.Info("🔄 Unifying profile:", profile.ProfileId)
 				if _, err := unifyProfiles(*profile); err != nil {
 					logger.Error(err, fmt.Sprintf("Failed to unify profile %s with event %s ", event.ProfileId,
 						event.EventId))
@@ -75,8 +74,8 @@ func (q *ProfileWorkerQueue) Enqueue(event model3.Event) {
 // EnrichProfile extracts properties from events and enrich profile based on the enrichment rules
 func EnrichProfile(event model3.Event) error {
 
-	profileRepo := repositories.NewProfileRepository(database.GetMongoDBInstance().Database, constants.ProfileCollection)
-
+	postgresDB := database.GetPostgresInstance() // Your method to get *sql.DB wrapped or raw
+	profileRepo := repositories.NewProfileRepository(postgresDB.DB)
 	profile, _ := service.WaitForProfile(event.ProfileId, 5, 100*time.Millisecond)
 
 	if profile == nil {
@@ -85,11 +84,12 @@ func EnrichProfile(event model3.Event) error {
 
 	if profile.ProfileHierarchy != nil {
 		if !profile.ProfileHierarchy.IsParent {
-			profile, _ = profileRepo.FindProfileByID(profile.ProfileHierarchy.ParentProfileID)
+			// If the profile is a child, we need to enrich the parent profile
+			profile, _ = profileRepo.GetProfile(profile.ProfileHierarchy.ParentProfileID)
 		}
 	}
 
-	err := defaultUpdateAppData(event, profile, profileRepo)
+	err := defaultInsertAppData(event, profile, profileRepo)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,6 @@ func EnrichProfile(event model3.Event) error {
 			switch strings.ToLower(rule.ComputationMethod) {
 			case "extract":
 				if rule.SourceField == "" {
-					log.Println("Invalid SourceFields for 'extract' computation.")
 					continue
 				}
 				value = service2.GetFieldFromEvent(event, rule.SourceField)
@@ -180,71 +179,73 @@ func EnrichProfile(event model3.Event) error {
 	return nil
 }
 
-func defaultUpdateAppData(event model3.Event, profile *model2.Profile, profileRepo *repositories.ProfileRepository) error {
-	if event.Context != nil {
-		if raw, ok := event.Context["device_id"]; ok {
-			if deviceID, ok := raw.(string); ok && deviceID != "" {
-				devices := model2.Devices{
-					DeviceId: deviceID,
-					LastUsed: event.EventTimestamp, // format to string
-				}
-
-				// Optional enrichment fields
-				if os, ok := event.Context["os"].(string); ok {
-					devices.Os = os
-				}
-				if browser, ok := event.Context["browser"].(string); ok {
-					devices.Browser = browser
-				}
-				if version, ok := event.Context["browser_version"].(string); ok {
-					devices.BrowserVersion = version
-				}
-				if ip, ok := event.Context["ip"].(string); ok {
-					devices.Ip = ip
-				}
-				if deviceType, ok := event.Context["device_type"].(string); ok {
-					devices.DeviceType = deviceType
-				}
-
-				profileId := event.ProfileId
-
-				// Enriching only the master profile
-				//todo: Enrich only the permanent profile
-				if !profile.ProfileHierarchy.IsParent {
-					profileId = profile.ProfileHierarchy.ParentProfileID
-				}
-				appContext := model2.ApplicationData{
-					AppId:   event.AppId,
-					Devices: []model2.Devices{devices},
-				}
-				// upserting device info
-				if err := profileRepo.AddOrUpdateAppContext(profileId, appContext); err != nil {
-					return fmt.Errorf("failed to enrich application data: %v", err)
-				}
-
-			}
-		}
+func defaultInsertAppData(event model3.Event, profile *model2.Profile, profileRepo *repositories.ProfileRepository) error {
+	if event.Context == nil {
+		return nil
 	}
+
+	rawDeviceID, ok := event.Context["device_id"]
+	deviceID, isStr := rawDeviceID.(string)
+	if !ok || !isStr || deviceID == "" {
+		return nil
+	}
+
+	devices := model2.Devices{
+		DeviceId: deviceID,
+		LastUsed: event.EventTimestamp,
+	}
+
+	// Optional enrichments
+	if os, ok := event.Context["os"].(string); ok {
+		devices.Os = os
+	}
+	if browser, ok := event.Context["browser"].(string); ok {
+		devices.Browser = browser
+	}
+	if version, ok := event.Context["browser_version"].(string); ok {
+		devices.BrowserVersion = version
+	}
+	if ip, ok := event.Context["ip"].(string); ok {
+		devices.Ip = ip
+	}
+	if deviceType, ok := event.Context["device_type"].(string); ok {
+		devices.DeviceType = deviceType
+	}
+
+	// Determine which profile to enrich
+	profileId := event.ProfileId
+	if profile.ProfileHierarchy != nil && !profile.ProfileHierarchy.IsParent {
+		profileId = profile.ProfileHierarchy.ParentProfileID
+	}
+
+	// Convert device list to generic format
+	deviceList := []model2.Devices{devices}
+	devicesJSON, err := json.Marshal(deviceList)
+	if err != nil {
+		return fmt.Errorf("failed to marshal device list: %w", err)
+	}
+
+	var deviceInterface interface{}
+	if err := json.Unmarshal(devicesJSON, &deviceInterface); err != nil {
+		return fmt.Errorf("failed to convert devices to generic interface: %w", err)
+	}
+
+	//  Fix: use namespaced key to signal top-level device field
+	updates := map[string]interface{}{
+		"application_data.devices": deviceInterface,
+	}
+
+	if err := profileRepo.UpsertAppDatum(profileId, event.AppId, updates); err != nil {
+		return fmt.Errorf("failed to enrich application data: %v", err)
+	}
+
 	return nil
 }
 
 func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
-	mongoDB := database.GetMongoDBInstance()
 
-	lock := database.GetDistributedLock()
-	lockKey := "lock:unify:" + newProfile.ProfileId
-
-	// Try to acquire the lock before doing unification
-	acquired, err := lock.Acquire(lockKey, 5*time.Second)
-	if err != nil {
-		return nil, fmt.Errorf("failed to acquire lock for unification: %v", err)
-	}
-	if !acquired {
-		return nil, nil // Or retry logic if needed
-	}
-	defer lock.Release(lockKey) // Always release
-
-	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
+	postgresDB := database.GetPostgresInstance()
+	profileRepo := repositories.NewProfileRepository(postgresDB.DB)
 
 	// Step 1: Fetch all unification rules
 	ruleProvider := provider.NewUnificationRuleProvider()
@@ -264,24 +265,31 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 	// 🔹 Step 3: Loop through unification rules and compare profiles
 	for _, rule := range unificationRules {
 
-		for _, existingProfile := range existingMasterProfiles {
+		for _, existingMasterProfile := range existingMasterProfiles {
 
-			if doesProfileMatch(existingProfile, newProfile, rule) {
+			if existingMasterProfile.ProfileId == newProfile.ProfileHierarchy.ParentProfileID {
+				// Skip if the existing master profile is the parent of the new profile
+				return &newProfile, nil
+			}
+
+			if doesProfileMatch(existingMasterProfile, newProfile, rule) {
+
+				existingMasterProfile.ProfileHierarchy.ChildProfiles, _ = profileRepo.FetchChildProfiles(existingMasterProfile.ProfileId)
 
 				//  Merge the existing master to the old master of current
 				postgresDB := database.GetPostgresInstance()
 				schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 				enrichmentRules, _ := schemaRepo.GetProfileEnrichmentRules()
-				newMasterProfile := MergeProfiles(existingProfile, newProfile, enrichmentRules)
+				newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, enrichmentRules)
 
-				if len(existingProfile.ProfileHierarchy.ChildProfiles) == 0 {
+				if len(existingMasterProfile.ProfileHierarchy.ChildProfiles) == 0 {
 					newMasterProfile.ProfileId = uuid.New().String()
 					childProfile1 := model2.ChildProfile{
 						ChildProfileId: newProfile.ProfileId,
 						RuleName:       rule.RuleName,
 					}
 					childProfile2 := model2.ChildProfile{
-						ChildProfileId: existingProfile.ProfileId,
+						ChildProfileId: existingMasterProfile.ProfileId,
 						RuleName:       rule.RuleName,
 					}
 					newMasterProfile.ProfileHierarchy = &model2.ProfileHierarchy{
@@ -295,20 +303,25 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 						return nil, err
 					}
 
-					// Attaching peer profiles for each of the child profiles of old master profile
-					//profileRepo.LinkPeers(newProfile.ProfileId, existingProfile.ProfileId, rule.RuleName)
 					err = profileRepo.UpdateParent(newMasterProfile, newProfile)
-					err = profileRepo.UpdateParent(newMasterProfile, existingProfile)
+					err = profileRepo.UpdateParent(newMasterProfile, existingMasterProfile)
+
+					children := []model2.ChildProfile{childProfile1, childProfile2}
+
+					err = profileRepo.AddChildProfiles(newMasterProfile, children)
+
 					if err != nil {
 						return nil, err
 					}
 
-				} else if (len(existingProfile.ProfileHierarchy.ChildProfiles) > 0) && existingProfile.ProfileHierarchy.IsParent {
+				} else if (len(existingMasterProfile.ProfileHierarchy.ChildProfiles) > 0) && existingMasterProfile.ProfileHierarchy.IsParent {
 					newChild := model2.ChildProfile{
 						ChildProfileId: newProfile.ProfileId,
 						RuleName:       rule.RuleName,
 					}
-					err = profileRepo.AddChildProfile(newMasterProfile, newChild)
+					children := []model2.ChildProfile{newChild}
+
+					err = profileRepo.AddChildProfiles(newMasterProfile, children)
 					err = profileRepo.UpdateParent(newMasterProfile, newProfile)
 					if err != nil {
 						return nil, err
@@ -317,8 +330,7 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 
 				// Update ApplicationData
 				for _, appCtx := range newMasterProfile.ApplicationData {
-					// todo - upsert app -data -and devices - need to check
-					err := profileRepo.AddOrUpdateAppContext(newMasterProfile.ProfileId, appCtx)
+					err := profileRepo.InsertMergedMasterProfileAppData(newMasterProfile.ProfileId, appCtx)
 					if err != nil {
 						log.Println("Failed to update AppContext for:", appCtx.AppId, "Error:", err)
 					}
@@ -326,15 +338,15 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 
 				// Update Traits
 				if newMasterProfile.Traits != nil {
-					err := profileRepo.AddOrUpdateTraitsData(newMasterProfile.ProfileId, newMasterProfile.Traits)
+					err := profileRepo.InsertMergedMasterProfileTraitData(newMasterProfile.ProfileId, newMasterProfile.Traits)
 					if err != nil {
-						log.Println("Failed to update PersonalityData:", err)
+						log.Println("Failed to update traits:", err)
 					}
 				}
 
 				// Update Identity
 				if newMasterProfile.IdentityAttributes != nil {
-					err := profileRepo.UpsertIdentityData(newMasterProfile.ProfileId, newMasterProfile.IdentityAttributes)
+					err := profileRepo.MergeIdentityDataOfProfiles(newMasterProfile.ProfileId, newMasterProfile.IdentityAttributes)
 					if err != nil {
 						log.Println("Failed to update IdentityData:", err)
 					}
@@ -357,8 +369,7 @@ func sortRulesByPriority(rules []model.UnificationRule) {
 }
 
 // MergeProfiles merges two profiles based on unification rules
-func MergeProfiles(existingProfile model2.Profile, incomingProfile model2.Profile,
-	enrichmentRules []erm.ProfileEnrichmentRule) model2.Profile {
+func MergeProfiles(existingProfile model2.Profile, incomingProfile model2.Profile, enrichmentRules []erm.ProfileEnrichmentRule) model2.Profile {
 
 	merged := existingProfile
 	// todo: I doubt if this is fine.. we need to run through all to build a new profile
@@ -612,10 +623,15 @@ func mergeDeviceLists(existingDevices, newDevices []model2.Devices) []model2.Dev
 	deviceMap := make(map[string]model2.Devices)
 
 	for _, device := range existingDevices {
-		deviceMap[device.DeviceId] = device
+		if device.DeviceId != "" {
+			deviceMap[device.DeviceId] = device
+		}
 	}
+
 	for _, device := range newDevices {
-		deviceMap[device.DeviceId] = device
+		if device.DeviceId != "" {
+			deviceMap[device.DeviceId] = device
+		}
 	}
 
 	var mergedDevices []model2.Devices
@@ -736,15 +752,15 @@ func combineUniqueInts(a, b []int) []int {
 	return combined
 }
 
-func mergeAppData(existing, incoming []model2.ApplicationData, rules []erm.ProfileEnrichmentRule) []model2.ApplicationData {
+func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rules []erm.ProfileEnrichmentRule) []model2.ApplicationData {
 	mergedMap := make(map[string]model2.ApplicationData)
 
-	// Initialize with existing
-	for _, app := range existing {
+	// Initialize with existingAppData
+	for _, app := range existingAppData {
 		mergedMap[app.AppId] = app
 	}
 
-	for _, newApp := range incoming {
+	for _, newApp := range incomingAppData {
 		existingApp, found := mergedMap[newApp.AppId]
 		if !found {
 			mergedMap[newApp.AppId] = newApp
@@ -763,7 +779,7 @@ func mergeAppData(existing, incoming []model2.ApplicationData, rules []erm.Profi
 				existingVal := existingApp.AppSpecificData[key]
 
 				// Find merge strategy from enrichment rules
-				strategy := "overwrite"
+				strategy := ""
 				valueType := ""
 
 				for _, r := range rules {
@@ -774,18 +790,24 @@ func mergeAppData(existing, incoming []model2.ApplicationData, rules []erm.Profi
 					}
 				}
 
-				// Merge values
 				mergedVal := MergeTraitValue(existingVal, newVal, strategy, valueType)
+
 				existingApp.AppSpecificData[key] = mergedVal
+
 			}
+		} else {
+			log.Println("No app-specific data in incoming", "app_id", newApp.AppId)
 		}
 
 		mergedMap[newApp.AppId] = existingApp
 	}
 
 	var mergedList []model2.ApplicationData
-	for _, app := range mergedMap {
+	for appID, app := range mergedMap {
+		log.Println("Final merged application data", "app_id", appID, "devices", app.Devices, "app_specific_data", app.AppSpecificData)
 		mergedList = append(mergedList, app)
 	}
+
+	log.Println("Application data merge completed", "total_apps", len(mergedList))
 	return mergedList
 }
