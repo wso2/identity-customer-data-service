@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"github.com/wso2/identity-customer-data-service/internal/logger"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"sync"
 	"time"
 )

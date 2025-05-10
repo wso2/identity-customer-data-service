@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/wso2/identity-customer-data-service/internal/errors"
 )
 
 type ProfileSchemaRepository struct {
@@ -46,7 +45,7 @@ func (repo *ProfileSchemaRepository) AddEnrichmentRule(rule model.ProfileEnrichm
 
 	if err != nil {
 		tx.Rollback()
-		return errors.NewServerError(errors.ErrWhileAddingEnrichmentRules, err)
+		return errors2.NewServerError(errors2.ErrWhileAddingEnrichmentRules, err)
 	}
 
 	for _, cond := range rule.Trigger.Conditions {
@@ -55,7 +54,7 @@ func (repo *ProfileSchemaRepository) AddEnrichmentRule(rule model.ProfileEnrichm
 			rule.RuleId, cond.Field, cond.Operator, cond.Value)
 		if err != nil {
 			tx.Rollback()
-			return errors.NewServerError(errors.ErrWhileAddingEnrichmentRules, err)
+			return errors2.NewServerError(errors2.ErrWhileAddingEnrichmentRules, err)
 		}
 	}
 
@@ -90,12 +89,12 @@ func (repo *ProfileSchemaRepository) UpdateEnrichmentRule(rule model.ProfileEnri
 		rule.Trigger.EventType, rule.Trigger.EventName, timestamp, rule.RuleId)
 	if err != nil {
 		tx.Rollback()
-		return errors.NewServerError(errors.ErrWhileUpdatingEnrichmentRules, err)
+		return errors2.NewServerError(errors2.ErrWhileUpdatingEnrichmentRules, err)
 	}
 
 	_, err = tx.Exec(`DELETE FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
 	if err != nil {
-		return errors.NewServerError(errors.ErrWhileUpdatingEnrichmentRules, err)
+		return errors2.NewServerError(errors2.ErrWhileUpdatingEnrichmentRules, err)
 
 	}
 	for _, cond := range rule.Trigger.Conditions {
@@ -104,7 +103,7 @@ func (repo *ProfileSchemaRepository) UpdateEnrichmentRule(rule model.ProfileEnri
 			rule.RuleId, cond.Field, cond.Operator, cond.Value)
 		if err != nil {
 			tx.Rollback()
-			return errors.NewServerError(errors.ErrWhileUpdatingEnrichmentRules, err)
+			return errors2.NewServerError(errors2.ErrWhileUpdatingEnrichmentRules, err)
 		}
 	}
 
@@ -288,9 +287,9 @@ func (repo *ProfileSchemaRepository) GetEnrichmentRulesByFilter(filters []string
 			// Collect for post-query filtering
 			specialClauses[field] = append(specialClauses[field], value)
 		default:
-			clientError := errors.NewClientError(errors.ErrorMessage{
-				Code:        errors.ErrInvalidFiltering.Code,
-				Message:     errors.ErrInvalidFiltering.Message,
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ErrInvalidFiltering.Code,
+				Message:     errors2.ErrInvalidFiltering.Message,
 				Description: fmt.Sprintf("unsupported field in filtering: %s", field),
 			}, http.StatusBadRequest)
 			return nil, clientError

@@ -2,24 +2,44 @@ package service
 
 import (
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
-	"github.com/wso2/identity-customer-data-service/internal/database"
-	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
-	errors "github.com/wso2/identity-customer-data-service/internal/errors"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
-	"github.com/wso2/identity-customer-data-service/internal/models"
-	"github.com/wso2/identity-customer-data-service/internal/repository"
+	repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	enrichmentModel "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
+	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
+	eventModel "github.com/wso2/identity-customer-data-service/internal/events/model"
+	//repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
+	model2 "github.com/wso2/identity-customer-data-service/internal/profile/model"
+	store2 "github.com/wso2/identity-customer-data-service/internal/profile/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
+
+	"github.com/wso2/identity-customer-data-service/internal/database"
 )
 
-func CreateOrUpdateProfile(event models.Event) (*models.Profile, error) {
+// Define an interface for ProfileRepository to decouple the dependency
+// This interface will be implemented by the actual repository in `store2`
+type ProfileRepository interface {
+	FindProfileByID(profileId string) (*model2.Profile, error)
+	InsertProfile(profile model2.Profile) error
+	DeleteProfile(profileId string) error
+	GetAllProfiles() ([]model2.Profile, error)
+	GetAllProfilesWithFilter(filters []string) ([]model2.Profile, error)
+	DetachChildFromParent(parentID, childID string) error
+}
 
-	mongoDB := database.GetMongoDBInstance()
-	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
+// Update the interface to use the correct type
+// Define an interface for ProfileSchemaRepository to decouple the dependency
+// This interface will be implemented by the actual repository in `store`
+type ProfileSchemaRepository interface {
+	GetProfileEnrichmentRules() ([]enrichmentModel.ProfileEnrichmentRule, error)
+}
 
+func CreateOrUpdateProfile(event eventModel.Event) (*model2.Profile, error) {
 	lock := database.GetDistributedLock()
 	lockKey := "lock:profile:" + event.ProfileId
 
@@ -42,19 +62,21 @@ func CreateOrUpdateProfile(event models.Event) (*models.Profile, error) {
 	defer lock.Release(lockKey)
 
 	// Safe insert if not exists (upsert)
-	profile := models.Profile{
+	profile := model2.Profile{
 		ProfileId: event.ProfileId,
-		ProfileHierarchy: &models.ProfileHierarchy{
+		ProfileHierarchy: &model2.ProfileHierarchy{
 			IsParent:    true,
 			ListProfile: true,
 		},
 	}
 
+	mongoDB := database.GetMongoDBInstance()
+	profileRepo := store2.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 	if err := profileRepo.InsertProfile(profile); err != nil {
 		return nil, fmt.Errorf("failed to insert or ensure profile: %v", err)
 	}
 
-	profileFetched, err := waitForProfile(event.ProfileId, constants.MaxRetryAttempts, constants.RetryDelay)
+	profileFetched, err := WaitForProfile(event.ProfileId, constants.MaxRetryAttempts, constants.RetryDelay)
 	if err != nil || profileFetched == nil {
 		return nil, fmt.Errorf("profile not visible after insert: %v", err)
 	}
@@ -63,17 +85,17 @@ func CreateOrUpdateProfile(event models.Event) (*models.Profile, error) {
 }
 
 // GetProfile retrieves a profile
-func GetProfile(ProfileId string) (*models.Profile, error) {
+func GetProfile(ProfileId string) (*model2.Profile, error) {
 
 	mongoDB := database.GetMongoDBInstance()
-	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
+	profileRepo := store2.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 
 	profile, _ := profileRepo.FindProfileByID(ProfileId)
 	if profile == nil {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrProfileNotFound.Code,
-			Message:     errors.ErrProfileNotFound.Message,
-			Description: errors.ErrProfileNotFound.Description,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrProfileNotFound.Code,
+			Message:     errors2.ErrProfileNotFound.Message,
+			Description: errors2.ErrProfileNotFound.Description,
 		}, http.StatusNotFound)
 		return nil, clientError
 	}
@@ -89,7 +111,7 @@ func GetProfile(ProfileId string) (*models.Profile, error) {
 		masterProfile.ProfileHierarchy = buildProfileHierarchy(profile, masterProfile)
 		masterProfile.ProfileId = profile.ProfileId
 		if err != nil {
-			return nil, errors.NewServerError(errors.ErrWhileFetchingProfile, err)
+			return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
 		}
 		if masterProfile == nil {
 			logger.Debug("Master profile is unfortunately empty")
@@ -99,13 +121,13 @@ func GetProfile(ProfileId string) (*models.Profile, error) {
 	}
 }
 
-func buildProfileHierarchy(profile *models.Profile, masterProfile *models.Profile) *models.ProfileHierarchy {
+func buildProfileHierarchy(profile *model2.Profile, masterProfile *model2.Profile) *model2.ProfileHierarchy {
 
-	profileHierarchy := &models.ProfileHierarchy{
+	profileHierarchy := &model2.ProfileHierarchy{
 		IsParent:        false,
 		ListProfile:     true,
 		ParentProfileID: masterProfile.ProfileId,
-		ChildProfiles:   []models.ChildProfile{},
+		ChildProfiles:   []model2.ChildProfile{},
 	}
 	if len(masterProfile.ProfileHierarchy.ChildProfiles) > 0 {
 		profileHierarchy.ChildProfiles = masterProfile.ProfileHierarchy.ChildProfiles
@@ -116,7 +138,7 @@ func buildProfileHierarchy(profile *models.Profile, masterProfile *models.Profil
 // DeleteProfile removes a profile from MongoDB by `perma_id`
 func DeleteProfile(ProfileId string) error {
 	mongoDB := database.GetMongoDBInstance()
-	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
+	profileRepo := store2.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 	postgresDB := database.GetPostgresInstance()
 	eventRepo := repositories.NewEventRepository(postgresDB.DB)
 
@@ -128,19 +150,19 @@ func DeleteProfile(ProfileId string) error {
 		return nil
 	}
 	if err != nil {
-		return errors.NewServerError(errors.ErrWhileFetchingProfile, err)
+		return errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
 	}
 
 	//  Delete related events
 	if err := eventRepo.DeleteEventsByProfileId(ProfileId); err != nil {
-		return errors.NewServerError(errors.ErrWhileDeletingProfile, err)
+		return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 	}
 
 	if profile.ProfileHierarchy.IsParent && len(profile.ProfileHierarchy.ChildProfiles) == 0 {
 		// Delete the master with no children
 		err = profileRepo.DeleteProfile(ProfileId)
 		if err != nil {
-			return errors.NewServerError(errors.ErrWhileDeletingProfile, err)
+			return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 		}
 		return nil
 	}
@@ -152,20 +174,20 @@ func DeleteProfile(ProfileId string) error {
 			if profile == nil {
 				logger.Debug("Child profile with profile_id: %s that is being deleted is not found",
 					childProfile.ChildProfileId)
-				return errors.NewServerError(errors.ErrWhileDeletingProfile, err)
+				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 			}
 			if err != nil {
-				return errors.NewServerError(errors.ErrWhileDeletingProfile, err)
+				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 			}
 			err = profileRepo.DeleteProfile(childProfile.ChildProfileId)
 			if err != nil {
-				return errors.NewServerError(errors.ErrWhileDeletingProfile, err)
+				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 			}
 		}
 		// now delete master
 		err = profileRepo.DeleteProfile(ProfileId)
 		if err != nil {
-			return errors.NewServerError(errors.ErrWhileDeletingProfile, err)
+			return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 		}
 		return nil
 	}
@@ -174,19 +196,19 @@ func DeleteProfile(ProfileId string) error {
 	if !(profile.ProfileHierarchy.IsParent) {
 		err = profileRepo.DetachChildFromParent(profile.ProfileHierarchy.ParentProfileID, ProfileId)
 		if err != nil {
-			return errors.NewServerError(errors.ErrWhileDeletingProfile, err)
+			return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 		}
 		err = profileRepo.DeleteProfile(ProfileId)
 		if err != nil {
-			return errors.NewServerError(errors.ErrWhileDeletingProfile, err)
+			return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 		}
 	}
 
 	return nil
 }
 
-func waitForProfile(ProfileId string, maxRetries int, delay time.Duration) (*models.Profile, error) {
-	profileRepo := repositories.NewProfileRepository(database.GetMongoDBInstance().Database, constants.ProfileCollection)
+func WaitForProfile(ProfileId string, maxRetries int, delay time.Duration) (*model2.Profile, error) {
+	profileRepo := store2.NewProfileRepository(database.GetMongoDBInstance().Database, constants.ProfileCollection)
 
 	for i := 0; i < maxRetries; i++ {
 		profile, err := profileRepo.FindProfileByID(ProfileId)
@@ -202,19 +224,19 @@ func waitForProfile(ProfileId string, maxRetries int, delay time.Duration) (*mod
 }
 
 // GetAllProfiles retrieves all profiles
-func GetAllProfiles() ([]models.Profile, error) {
+func GetAllProfiles() ([]model2.Profile, error) {
 	mongoDB := database.GetMongoDBInstance()
-	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
+	profileRepo := store2.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 
 	existingProfiles, err := profileRepo.GetAllProfiles()
 	if err != nil {
-		return nil, errors.NewServerError(errors.ErrWhileFetchingProfile, err)
+		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
 	}
 	if existingProfiles == nil {
-		return []models.Profile{}, nil
+		return []model2.Profile{}, nil
 	}
 
-	var result []models.Profile
+	var result []model2.Profile
 	for _, profile := range existingProfiles {
 		if profile.ProfileHierarchy.IsParent {
 			result = append(result, profile)
@@ -233,16 +255,16 @@ func GetAllProfiles() ([]models.Profile, error) {
 }
 
 // GetAllProfilesWithFilter handles fetching all profiles with filter
-func GetAllProfilesWithFilter(filters []string) ([]models.Profile, error) {
+func GetAllProfilesWithFilter(filters []string) ([]model2.Profile, error) {
 
 	mongoDB := database.GetMongoDBInstance()
 	postgresDB := database.GetPostgresInstance()
 	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
-	profileRepo := repositories.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
+	profileRepo := store2.NewProfileRepository(mongoDB.Database, constants.ProfileCollection)
 
 	rules, err := schemaRepo.GetProfileEnrichmentRules()
 	if err != nil {
-		return nil, errors.NewServerError(errors.ErrWhileFetchingProfileEnrichmentRules, err)
+		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfileEnrichmentRules, err)
 	}
 
 	// Step 2: Build trait → valueType mapping
@@ -276,13 +298,13 @@ func GetAllProfilesWithFilter(filters []string) ([]models.Profile, error) {
 	// Step 4: Pass updated filters to repo
 	existingProfiles, err := profileRepo.GetAllProfilesWithFilter(updatedFilters)
 	if err != nil {
-		return nil, errors.NewServerError(errors.ErrWhileFetchingProfile, err)
+		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
 	}
 	if existingProfiles == nil {
-		existingProfiles = []models.Profile{}
+		existingProfiles = []model2.Profile{}
 	}
 
-	var result []models.Profile
+	var result []model2.Profile
 	for _, profile := range existingProfiles {
 		if profile.ProfileHierarchy.IsParent {
 			result = append(result, profile)

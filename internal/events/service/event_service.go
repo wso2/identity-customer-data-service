@@ -2,21 +2,31 @@ package service
 
 import (
 	"fmt"
+
 	"github.com/wso2/identity-customer-data-service/internal/database"
-	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
-	"github.com/wso2/identity-customer-data-service/internal/models"
-	repositories "github.com/wso2/identity-customer-data-service/internal/repository"
+	erm "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
+	"github.com/wso2/identity-customer-data-service/internal/events/model"
+	repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
+
+	service3 "github.com/wso2/identity-customer-data-service/internal/profile/service"
+
 	"log"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// AddEvents stores a single event in MongoDB
-func AddEvents(event models.Event) error {
+// Define an interface for enqueuing events
+// This interface will be implemented by the actual worker in `workers`
+type EventQueue interface {
+	Enqueue(event model.Event)
+}
 
+// AddEvents stores a single event in MongoDB
+func AddEvents(event model.Event, queue EventQueue) error {
 	// Step 1: Ensure profile exists (with lock protection)
-	_, err := CreateOrUpdateProfile(event)
+
+	_, err := service3.CreateOrUpdateProfile(event)
 	if err != nil {
 		return fmt.Errorf("failed to create or fetch profile: %v", err)
 	}
@@ -27,31 +37,30 @@ func AddEvents(event models.Event) error {
 	event.EventType = strings.ToLower(event.EventType)
 	event.EventName = strings.ToLower(event.EventName)
 	if err := eventRepo.AddEvent(event); err != nil {
-
 		return fmt.Errorf("failed to store event: %v", err)
 	}
 
 	// Step 3: Enqueue the event for enrichment/unification (async)
-	EnqueueEventForProcessing(event)
+	queue.Enqueue(event)
 
 	return nil
 }
 
 // GetEvents retrieves all events
-func GetEvents(filters []string, timeFilter map[string]int) ([]models.Event, error) {
+func GetEvents(filters []string, timeFilter map[string]int) ([]model.Event, error) {
 	postgresDB := database.GetPostgresInstance()
 	eventRepo := repositories.NewEventRepository(postgresDB.DB)
 	return eventRepo.FindEvents(filters, timeFilter)
 }
 
-func GetEvent(eventId string) (*models.Event, error) {
+func GetEvent(eventId string) (*model.Event, error) {
 	postgresDB := database.GetPostgresInstance()
 	eventRepo := repositories.NewEventRepository(postgresDB.DB)
 	return eventRepo.FindEvent(eventId)
 }
 
 // CountEventsMatchingRule retrieves count of events that has occured in a timerange
-func CountEventsMatchingRule(profileId string, trigger model.RuleTrigger, timeRange int64) (int, error) {
+func CountEventsMatchingRule(profileId string, trigger erm.RuleTrigger, timeRange int64) (int, error) {
 
 	currentTime := time.Now().UTC().Unix() // current time in seconds
 	startTime := currentTime - timeRange   // assuming value is in minutes
@@ -80,7 +89,7 @@ func CountEventsMatchingRule(profileId string, trigger model.RuleTrigger, timeRa
 	return count, nil
 }
 
-func EvaluateConditions(event models.Event, triggerConditions []model.RuleCondition) bool {
+func EvaluateConditions(event model.Event, triggerConditions []erm.RuleCondition) bool {
 	for _, cond := range triggerConditions {
 		fieldVal := GetFieldFromEvent(event, cond.Field)
 		if !EvaluateCondition(fieldVal, cond.Operator, cond.Value) {
@@ -153,7 +162,7 @@ func compareNumeric(actual interface{}, expected string, op string) bool {
 	}
 }
 
-func GetFieldFromEvent(event models.Event, field string) interface{} {
+func GetFieldFromEvent(event model.Event, field string) interface{} {
 	if event.Properties == nil {
 		return nil
 	}

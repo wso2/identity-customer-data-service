@@ -25,13 +25,13 @@ import (
 )
 
 type EnrichmentRulesService struct {
-	applicationHandler *handler.EnrichmentRulesHandler
+	enrichmentRulesHandler *handler.EnrichmentRulesHandler
 }
 
 func NewEnrichmentRulesService(mux *http.ServeMux, apiBasePath string) *EnrichmentRulesService {
 
 	instance := &EnrichmentRulesService{
-		applicationHandler: handler.NewEnrichmentRulesHandler(),
+		enrichmentRulesHandler: handler.NewEnrichmentRulesHandler(),
 	}
 	instance.RegisterRoutes(mux, apiBasePath)
 
@@ -40,9 +40,9 @@ func NewEnrichmentRulesService(mux *http.ServeMux, apiBasePath string) *Enrichme
 
 func (s *EnrichmentRulesService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
 
-	mux.HandleFunc(fmt.Sprintf("POST %s/enrichment-rules", apiBasePath), s.applicationHandler.CreateEnrichmentRule)
-	mux.HandleFunc(fmt.Sprintf("GET %s/enrichment-rules", apiBasePath), s.applicationHandler.GetEnrichmentRules)
-	mux.HandleFunc(fmt.Sprintf("GET %s/enrichment-rules/", apiBasePath), s.applicationHandler.GetEnrichmentRule)
-	mux.HandleFunc(fmt.Sprintf("PUT %s/enrichment-rules/", apiBasePath), s.applicationHandler.PutEnrichmentRule)
-	mux.HandleFunc(fmt.Sprintf("DELETE %s/enrichment-rules/", apiBasePath), s.applicationHandler.DeleteEnrichmentRule)
+	mux.HandleFunc(fmt.Sprintf("POST %s/enrichment-rules", apiBasePath), s.enrichmentRulesHandler.CreateEnrichmentRule)
+	mux.HandleFunc(fmt.Sprintf("GET %s/enrichment-rules", apiBasePath), s.enrichmentRulesHandler.GetEnrichmentRules)
+	mux.HandleFunc(fmt.Sprintf("GET %s/enrichment-rules/", apiBasePath), s.enrichmentRulesHandler.GetEnrichmentRule)
+	mux.HandleFunc(fmt.Sprintf("PUT %s/enrichment-rules/", apiBasePath), s.enrichmentRulesHandler.PutEnrichmentRule)
+	mux.HandleFunc(fmt.Sprintf("DELETE %s/enrichment-rules/", apiBasePath), s.enrichmentRulesHandler.DeleteEnrichmentRule)
 }

@@ -1,4 +1,4 @@
-package models
+package model
 
 type Event struct {
 	ProfileId      string                 `json:"profile_id" bson:"profile_id"`

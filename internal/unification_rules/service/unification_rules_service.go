@@ -2,12 +2,11 @@ package service
 
 import (
 	"fmt"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
 	"net/http"
 	"time"
-
-	"github.com/wso2/identity-customer-data-service/internal/errors"
 )
 
 type UnificationRuleServiceInterface interface {
@@ -33,13 +32,13 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 	// Check if a similar unification rule already exists
 	existingRule, err := store.GetUnificationRule(rule.RuleId)
 	if err != nil {
-		return errors.NewServerError(errors.ErrWhileFetchingUnificationRules, err)
+		return errors2.NewServerError(errors2.ErrWhileFetchingUnificationRules, err)
 	}
 	if existingRule.RuleId != "" {
 		// Resolution rule already exists
-		return errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrResolutionRuleAlreadyExists.Code,
-			Message:     errors.ErrResolutionRuleAlreadyExists.Message,
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrResolutionRuleAlreadyExists.Code,
+			Message:     errors2.ErrResolutionRuleAlreadyExists.Message,
 			Description: fmt.Sprintf("Unification rule with property %s already exists", rule.Property),
 		}, http.StatusConflict)
 	}
@@ -77,9 +76,9 @@ func (urs *UnificationRuleService) PatchResolutionRule(ruleId string, updates ma
 	// Validate that all update fields are allowed
 	for field := range updates {
 		if !allowedFields[field] {
-			return errors.NewClientError(errors.ErrorMessage{
-				Code:        errors.ErrOnlyStatusUpdatePossible.Code,
-				Message:     errors.ErrOnlyStatusUpdatePossible.Message,
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ErrOnlyStatusUpdatePossible.Code,
+				Message:     errors2.ErrOnlyStatusUpdatePossible.Message,
 				Description: fmt.Sprintf("Field '%s' cannot be updated.", field),
 			}, http.StatusBadRequest)
 		}

@@ -2,9 +2,9 @@ package handler
 
 import (
 	"encoding/json"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/utils"
 	"net/http"
 	"strings"

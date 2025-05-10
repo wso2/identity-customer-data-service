@@ -4,13 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/wso2/identity-customer-data-service/internal/errors"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
 )
 
 func AddUnificationRule(rule model.UnificationRule) error {
@@ -26,7 +25,7 @@ func AddUnificationRule(rule model.UnificationRule) error {
 	_, err = dbClient.ExecuteQuery(query, query, rule.RuleId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive,
 		rule.CreatedAt, rule.UpdatedAt)
 	if err != nil {
-		return errors.NewServerError(errors.ErrWhileCreatingUnificationRules, err)
+		return errors2.NewServerError(errors2.ErrWhileCreatingUnificationRules, err)
 	}
 
 	logger.Info("Unification rule created successfully: " + rule.RuleName)
@@ -44,7 +43,7 @@ func GetUnificationRules() ([]model.UnificationRule, error) {
 	results, err := dbClient.ExecuteQuery(query)
 	if err != nil {
 		logger.Info("Error occurred while fetching unification rules.")
-		return nil, errors.NewServerError(errors.ErrWhileFetchingUnificationRules, err)
+		return nil, errors2.NewServerError(errors2.ErrWhileFetchingUnificationRules, err)
 	}
 
 	var rules []model.UnificationRule
@@ -80,7 +79,7 @@ func GetUnificationRule(ruleId string) (model.UnificationRule, error) {
 			return model.UnificationRule{}, nil
 		}
 		logger.Debug("Error occurred while fetching unification rule with rule_id: "+ruleId, err)
-		return model.UnificationRule{}, errors.NewServerError(errors.ErrWhileFetchingUnificationRule, err)
+		return model.UnificationRule{}, errors2.NewServerError(errors2.ErrWhileFetchingUnificationRule, err)
 	}
 
 	row := results[0]
@@ -117,7 +116,7 @@ func PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
 	query := `UPDATE unification_rules SET ` + strings.Join(setClauses, ", ") + `, updated_at = $` + strconv.Itoa(argIndex) + ` WHERE rule_id = $` + strconv.Itoa(argIndex+1)
 	_, err = dbClient.ExecuteQuery(query, args...)
 	if err != nil {
-		return errors.NewServerError(errors.ErrWhileUpdatingUnificationRule, err)
+		return errors2.NewServerError(errors2.ErrWhileUpdatingUnificationRule, err)
 	}
 
 	logger.Info("Successfully updated unification rule for rule_id: " + ruleId)

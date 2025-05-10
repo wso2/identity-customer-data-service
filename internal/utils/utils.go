@@ -10,8 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
-	customerrors "github.com/wso2/identity-customer-data-service/internal/errors" // Alias for the custom errors package
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	customerrors "github.com/wso2/identity-customer-data-service/internal/system/errors" // Alias for the custom errors
+	// package
 )
 
 func HandleError(c *gin.Context, err error) {

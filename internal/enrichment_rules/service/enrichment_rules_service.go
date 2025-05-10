@@ -3,12 +3,12 @@ package service
 import (
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
 	"github.com/wso2/identity-customer-data-service/internal/database"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
-	"github.com/wso2/identity-customer-data-service/internal/errors"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"net/http"
 	"strings"
 	"time"
@@ -95,73 +95,73 @@ func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 
 	//  Required: Trait Name
 	if rule.PropertyName == "" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrPropertyNameValidation.Code,
-			Message:     errors.ErrPropertyNameValidation.Message,
-			Description: errors.ErrPropertyNameValidation.Description,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrPropertyNameValidation.Code,
+			Message:     errors2.ErrPropertyNameValidation.Message,
+			Description: errors2.ErrPropertyNameValidation.Description,
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
 
 	//  Required for Static: Value
 	if rule.ComputationMethod == "" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrComputationValidation.Code,
-			Message:     errors.ErrComputationValidation.Message,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrComputationValidation.Code,
+			Message:     errors2.ErrComputationValidation.Message,
 			Description: "ComputationMethod type is required.",
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
 
 	if rule.ComputationMethod == "" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrComputationValidation.Code,
-			Message:     errors.ErrComputationValidation.Message,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrComputationValidation.Code,
+			Message:     errors2.ErrComputationValidation.Message,
 			Description: "ComputationMethod type is required.",
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
 
 	if !constants.AllowedComputationMethods[rule.ComputationMethod] {
-		badReq := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrComputationValidation.Code,
-			Message:     errors.ErrComputationValidation.Message,
+		badReq := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrComputationValidation.Code,
+			Message:     errors2.ErrComputationValidation.Message,
 			Description: fmt.Sprintf("'%s' is not an expected computation method.", rule.ComputationMethod),
 		}, http.StatusBadRequest)
 		return badReq, false
 	}
 	//  Required for Static: Value
 	if rule.ComputationMethod == "static" && rule.Value == "" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrEnrichmentRuleValueValidation.Code,
-			Message:     errors.ErrEnrichmentRuleValueValidation.Message,
-			Description: errors.ErrEnrichmentRuleValueValidation.Description,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrEnrichmentRuleValueValidation.Code,
+			Message:     errors2.ErrEnrichmentRuleValueValidation.Message,
+			Description: errors2.ErrEnrichmentRuleValueValidation.Description,
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
 
 	if rule.ComputationMethod == "extract" && rule.SourceField == "" {
-		return errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrSourceFieldValidation.Code,
-			Message:     errors.ErrSourceFieldValidation.Message,
-			Description: errors.ErrSourceFieldValidation.Description,
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrSourceFieldValidation.Code,
+			Message:     errors2.ErrSourceFieldValidation.Message,
+			Description: errors2.ErrSourceFieldValidation.Description,
 		}, http.StatusBadRequest), false
 	}
 
 	if rule.ComputationMethod == "count" {
 		if rule.TimeRange < 0 || rule.TimeRange > 2592000 {
-			return errors.NewClientError(errors.ErrorMessage{
-				Code:        errors.ErrInvalidTime.Code,
-				Message:     errors.ErrInvalidTime.Message,
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ErrInvalidTime.Code,
+				Message:     errors2.ErrInvalidTime.Message,
 				Description: "Time range should be from least 15 minutes to 30 days.",
 			}, http.StatusBadRequest), false
 		}
 	}
 
 	if rule.ComputationMethod != "count" && rule.TimeRange != 0 {
-		return errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrInvalidTime.Code,
-			Message:     errors.ErrInvalidTime.Message,
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrInvalidTime.Code,
+			Message:     errors2.ErrInvalidTime.Message,
 			Description: "Time range is only applicable for count computation.",
 		}, http.StatusBadRequest), false
 	}
@@ -174,9 +174,9 @@ func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 
 	//  Validate Trigger
 	if rule.Trigger.EventType == "" || rule.Trigger.EventName == "" {
-		return errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrTriggerValidation.Code,
-			Message:     errors.ErrTriggerValidation.Message,
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrTriggerValidation.Code,
+			Message:     errors2.ErrTriggerValidation.Message,
 			Description: "Both 'event_type' and 'event_name' must be provided inside trigger",
 		}, http.StatusBadRequest), false
 	}
@@ -184,16 +184,16 @@ func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 	//  Validate Trigger Conditions
 	for _, cond := range rule.Trigger.Conditions {
 		if cond.Field == "" || cond.Operator == "" {
-			return errors.NewClientError(errors.ErrorMessage{
-				Code:        errors.ErrTriggerValidation.Code,
-				Message:     errors.ErrTriggerValidation.Message,
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ErrTriggerValidation.Code,
+				Message:     errors2.ErrTriggerValidation.Message,
 				Description: "Each condition must have a field and operator defined.",
 			}, http.StatusBadRequest), false
 		}
 		if !constants.AllowedConditionOperators[strings.ToLower(cond.Operator)] {
-			return errors.NewClientError(errors.ErrorMessage{
-				Code:        errors.ErrConditionOpValidation.Code,
-				Message:     errors.ErrConditionOpValidation.Message,
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ErrConditionOpValidation.Code,
+				Message:     errors2.ErrConditionOpValidation.Message,
 				Description: fmt.Sprintf("Operator '%s' is not supported.", cond.Operator),
 			}, http.StatusBadRequest), false
 		}
@@ -201,9 +201,9 @@ func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 
 	// Validate Merge Strategy
 	if rule.MergeStrategy != "" && !constants.AllowedMergeStrategies[strings.ToLower(rule.MergeStrategy)] {
-		return errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrMergeStratValidation.Code,
-			Message:     errors.ErrMergeStratValidation.Message,
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrMergeStratValidation.Code,
+			Message:     errors2.ErrMergeStratValidation.Message,
 			Description: fmt.Sprintf("Merge strategy '%s' is not allowed.", rule.MergeStrategy),
 		}, http.StatusBadRequest), false
 	}

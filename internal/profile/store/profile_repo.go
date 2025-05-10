@@ -1,11 +1,11 @@
-package repositories
+package store
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
-	"github.com/wso2/identity-customer-data-service/internal/models"
+	"github.com/wso2/identity-customer-data-service/internal/profile/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -29,7 +29,7 @@ func NewProfileRepository(db *mongo.Database, collectionName string) *ProfileRep
 }
 
 // InsertProfile saves a profile in MongoDB
-func (repo *ProfileRepository) InsertProfile(profile models.Profile) error {
+func (repo *ProfileRepository) InsertProfile(profile model.Profile) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -43,7 +43,7 @@ func (repo *ProfileRepository) InsertProfile(profile models.Profile) error {
 }
 
 // UpdateProfile saves a profile in MongoDB
-func (repo *ProfileRepository) UpdateProfile(profile models.Profile) (*mongo.InsertOneResult, error) {
+func (repo *ProfileRepository) UpdateProfile(profile model.Profile) (*mongo.InsertOneResult, error) {
 	//logger := pkg.GetLogger()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -59,12 +59,12 @@ func (repo *ProfileRepository) UpdateProfile(profile models.Profile) (*mongo.Ins
 }
 
 // GetProfile retrieves a profile by `profile_id`
-func (repo *ProfileRepository) GetProfile(profileId string) (*models.Profile, error) {
+func (repo *ProfileRepository) GetProfile(profileId string) (*model.Profile, error) {
 	//logger := pkg.GetLogger()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var profile models.Profile
+	var profile model.Profile
 	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -80,11 +80,11 @@ func (repo *ProfileRepository) GetProfile(profileId string) (*models.Profile, er
 }
 
 // FindProfileByID retrieves a profile by `profile_id`
-func (repo *ProfileRepository) FindProfileByID(profileId string) (*models.Profile, error) {
+func (repo *ProfileRepository) FindProfileByID(profileId string) (*model.Profile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var profile models.Profile
+	var profile model.Profile
 	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -146,12 +146,12 @@ func (repo *ProfileRepository) DetachPeer(profileID, peerToRemove string) error 
 	return err
 }
 
-func (repo *ProfileRepository) AddOrUpdateAppContext(profileId string, newAppCtx models.ApplicationData) error {
+func (repo *ProfileRepository) AddOrUpdateAppContext(profileId string, newAppCtx model.ApplicationData) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Step 1: Fetch full profile
-	var profile models.Profile
+	var profile model.Profile
 	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
 	if err != nil {
 		return fmt.Errorf("failed to fetch profile: %w", err)
@@ -159,7 +159,7 @@ func (repo *ProfileRepository) AddOrUpdateAppContext(profileId string, newAppCtx
 
 	// Step 2: Prepare or update application data
 	updated := false
-	var updatedAppData []models.ApplicationData
+	var updatedAppData []model.ApplicationData
 
 	for _, existing := range profile.ApplicationData {
 		if existing.AppId == newAppCtx.AppId {
@@ -235,13 +235,13 @@ func (repo *ProfileRepository) PatchAppContext(profileId, appID string, updates 
 //	return &appData, nil
 //}
 
-func decodeDevices(raw interface{}) []models.Devices {
-	var devices []models.Devices
+func decodeDevices(raw interface{}) []model.Devices {
+	var devices []model.Devices
 
 	if rawList, ok := raw.([]interface{}); ok {
 		for _, item := range rawList {
 			if deviceMap, ok := item.(map[string]interface{}); ok {
-				device := models.Devices{}
+				device := model.Devices{}
 				data, _ := json.Marshal(deviceMap)
 				_ = json.Unmarshal(data, &device)
 				devices = append(devices, device)
@@ -252,15 +252,15 @@ func decodeDevices(raw interface{}) []models.Devices {
 	return devices
 }
 
-func mergeDeviceLists(existing, incoming []models.Devices) []models.Devices {
-	deviceMap := make(map[string]models.Devices)
+func mergeDeviceLists(existing, incoming []model.Devices) []model.Devices {
+	deviceMap := make(map[string]model.Devices)
 	for _, d := range existing {
 		deviceMap[d.DeviceId] = d
 	}
 	for _, d := range incoming {
 		deviceMap[d.DeviceId] = d
 	}
-	var merged []models.Devices
+	var merged []model.Devices
 	for _, d := range deviceMap {
 		merged = append(merged, d)
 	}
@@ -344,7 +344,7 @@ func (repo *ProfileRepository) UpsertIdentityData(profileId string, identityData
 }
 
 // GetAllProfiles retrieves all profiles from MongoDB
-func (repo *ProfileRepository) GetAllProfiles() ([]models.Profile, error) {
+func (repo *ProfileRepository) GetAllProfiles() ([]model.Profile, error) {
 	//logger := pkg.GetLogger()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -362,7 +362,7 @@ func (repo *ProfileRepository) GetAllProfiles() ([]models.Profile, error) {
 	}
 	defer cursor.Close(ctx)
 
-	var profiles []models.Profile
+	var profiles []model.Profile
 	// 🔹 Decode all profiles
 	if err = cursor.All(ctx, &profiles); err != nil {
 		logger.Error(err, "Error decoding profiles: "+err.Error())
@@ -373,7 +373,7 @@ func (repo *ProfileRepository) GetAllProfiles() ([]models.Profile, error) {
 	return profiles, nil
 }
 
-func (repo *ProfileRepository) GetAllProfilesWithMongoFilter(filter bson.M) ([]models.Profile, error) {
+func (repo *ProfileRepository) GetAllProfilesWithMongoFilter(filter bson.M) ([]model.Profile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -383,14 +383,14 @@ func (repo *ProfileRepository) GetAllProfilesWithMongoFilter(filter bson.M) ([]m
 	}
 	defer cursor.Close(ctx)
 
-	var profiles []models.Profile
+	var profiles []model.Profile
 	if err := cursor.All(ctx, &profiles); err != nil {
 		return nil, err
 	}
 	return profiles, nil
 }
 
-func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]models.Profile, error) {
+func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -419,7 +419,7 @@ func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]mod
 	}
 	defer cursor.Close(ctx)
 
-	var profile []models.Profile
+	var profile []model.Profile
 	if err := cursor.All(ctx, &profile); err != nil {
 		return nil, err
 	}
@@ -427,7 +427,7 @@ func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]mod
 }
 
 // GetAllMasterProfilesExceptForCurrent retrieves all master profiles excluding the current profile's parent
-func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfile models.Profile) ([]models.Profile, error) {
+func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -448,7 +448,7 @@ func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfi
 	}
 	defer cursor.Close(ctx)
 
-	var profiles []models.Profile
+	var profiles []model.Profile
 	if err = cursor.All(ctx, &profiles); err != nil {
 		return nil, err
 	}
@@ -456,7 +456,7 @@ func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfi
 	return profiles, nil
 }
 
-func (repo *ProfileRepository) UpdateParent(master models.Profile, newProfile models.Profile) error {
+func (repo *ProfileRepository) UpdateParent(master model.Profile, newProfile model.Profile) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -479,7 +479,7 @@ func (repo *ProfileRepository) LinkPeers(peerprofileId1 string, peerprofileId2 s
 	defer cancel()
 
 	// AddEventSchema peer2 to peer1
-	peer2 := models.ChildProfile{
+	peer2 := model.ChildProfile{
 		ChildProfileId: peerprofileId2,
 		RuleName:       ruleName,
 	}
@@ -493,7 +493,7 @@ func (repo *ProfileRepository) LinkPeers(peerprofileId1 string, peerprofileId2 s
 	}
 
 	// AddEventSchema peer1 to peer2
-	peer1 := models.ChildProfile{
+	peer1 := model.ChildProfile{
 		ChildProfileId: peerprofileId1, // ✅ Corrected
 		RuleName:       ruleName,
 	}
@@ -509,11 +509,11 @@ func (repo *ProfileRepository) LinkPeers(peerprofileId1 string, peerprofileId2 s
 	return nil
 }
 
-func (repo *ProfileRepository) FindProfileByUserName(userID string) (*models.Profile, error) {
+func (repo *ProfileRepository) FindProfileByUserName(userID string) (*model.Profile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var profile models.Profile
+	var profile model.Profile
 	err := repo.Collection.FindOne(ctx, bson.M{"identity.user_name": userID}).Decode(&profile)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -524,7 +524,7 @@ func (repo *ProfileRepository) FindProfileByUserName(userID string) (*models.Pro
 	return &profile, nil
 }
 
-func (repo *ProfileRepository) AddChildProfile(parentProfile models.Profile, child models.ChildProfile) error {
+func (repo *ProfileRepository) AddChildProfile(parentProfile model.Profile, child model.ChildProfile) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -547,7 +547,7 @@ func (repo *ProfileRepository) UpsertIdentityAttribute(profileId string, updates
 	defer cancel()
 
 	// Fetch the current profile
-	var profile models.Profile
+	var profile model.Profile
 	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
 	if err != nil {
 		logger.Error(err, "Failed to fetch profile for identity update")
@@ -582,7 +582,7 @@ func (repo *ProfileRepository) UpsertTrait(profileId string, updates bson.M) err
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var profile models.Profile
+	var profile model.Profile
 	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
 	if err != nil {
 		return fmt.Errorf("failed to fetch profile: %w", err)
@@ -608,7 +608,7 @@ func (repo *ProfileRepository) UpsertAppDatum(profileId string, appId string, up
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var profile models.Profile
+	var profile model.Profile
 	err := repo.Collection.FindOne(ctx, bson.M{"profile_id": profileId}).Decode(&profile)
 	if err != nil {
 		return fmt.Errorf("failed to fetch profile: %w", err)
@@ -651,7 +651,7 @@ func (repo *ProfileRepository) UpsertAppDatum(profileId string, appId string, up
 		appSpecific[key] = incomingVal
 	}
 
-	newApp := models.ApplicationData{
+	newApp := model.ApplicationData{
 		AppId:           appId,
 		AppSpecificData: appSpecific,
 	}

@@ -1,4 +1,6 @@
-package models
+package model
+
+import "encoding/json"
 
 // ApplicationData represents contextual data for an application
 type ApplicationData struct {
@@ -17,4 +19,15 @@ type Devices struct {
 	BrowserVersion string `json:"browser_version,omitempty" bson:"browser_version,omitempty"`
 	Ip             string `json:"ip,omitempty" bson:"ip,omitempty"`
 	Region         string `json:"region,omitempty" bson:"region,omitempty"`
+}
+
+func (a ApplicationData) MarshalJSON() ([]byte, error) {
+	base := map[string]interface{}{
+		"application_id": a.AppId,
+		"devices":        a.Devices,
+	}
+	for k, v := range a.AppSpecificData {
+		base[k] = v
+	}
+	return json.Marshal(base)
 }

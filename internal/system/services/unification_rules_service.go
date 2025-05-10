@@ -25,13 +25,13 @@ import (
 )
 
 type UnificationRulesService struct {
-	applicationHandler *handler.UnificationRulesHandler
+	unificationRulesHandler *handler.UnificationRulesHandler
 }
 
 func NewUnificationRulesService(mux *http.ServeMux, apiBasePath string) *UnificationRulesService {
 
 	instance := &UnificationRulesService{
-		applicationHandler: handler.NewUnificationRulesHandler(),
+		unificationRulesHandler: handler.NewUnificationRulesHandler(),
 	}
 	instance.RegisterRoutes(mux, apiBasePath)
 
@@ -40,9 +40,9 @@ func NewUnificationRulesService(mux *http.ServeMux, apiBasePath string) *Unifica
 
 func (s *UnificationRulesService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
 
-	mux.HandleFunc(fmt.Sprintf("POST %s/unification-rules", apiBasePath), s.applicationHandler.AddUnificationRule)
-	mux.HandleFunc(fmt.Sprintf("GET %s/unification-rules", apiBasePath), s.applicationHandler.GetUnificationRules)
-	mux.HandleFunc(fmt.Sprintf("GET %s/unification-rules/", apiBasePath), s.applicationHandler.GetUnificationRule)
-	mux.HandleFunc(fmt.Sprintf("PATCH %s/unification-rules/", apiBasePath), s.applicationHandler.PatchUnificationRule)
-	mux.HandleFunc(fmt.Sprintf("DELETE %s/unification-rules/", apiBasePath), s.applicationHandler.DeleteUnificationRule)
+	mux.HandleFunc(fmt.Sprintf("POST %s/unification-rules", apiBasePath), s.unificationRulesHandler.AddUnificationRule)
+	mux.HandleFunc(fmt.Sprintf("GET %s/unification-rules", apiBasePath), s.unificationRulesHandler.GetUnificationRules)
+	mux.HandleFunc(fmt.Sprintf("GET %s/unification-rules/", apiBasePath), s.unificationRulesHandler.GetUnificationRule)
+	mux.HandleFunc(fmt.Sprintf("PATCH %s/unification-rules/", apiBasePath), s.unificationRulesHandler.PatchUnificationRule)
+	mux.HandleFunc(fmt.Sprintf("DELETE %s/unification-rules/", apiBasePath), s.unificationRulesHandler.DeleteUnificationRule)
 }

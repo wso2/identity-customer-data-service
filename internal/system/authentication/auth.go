@@ -5,6 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/cache"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"io"
 	"log"
 	"net/http"
@@ -12,10 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wso2/identity-customer-data-service/internal/system/cache"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
-	"github.com/wso2/identity-customer-data-service/internal/system/errors"
-	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 )
 
 var (
@@ -40,19 +40,19 @@ func ValidateAuthentication(r *http.Request) (map[string]interface{}, error) {
 func extractBearerToken(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrUnAuthorizedRequest.Code,
-			Message:     errors.ErrUnAuthorizedRequest.Message,
-			Description: errors.ErrUnAuthorizedRequest.Description,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrUnAuthorizedRequest.Code,
+			Message:     errors2.ErrUnAuthorizedRequest.Message,
+			Description: errors2.ErrUnAuthorizedRequest.Description,
 		}, http.StatusUnauthorized)
 		return "", clientError
 	}
 	parts := strings.SplitN(authHeader, " ", 2)
 	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrUnAuthorizedRequest.Code,
-			Message:     errors.ErrUnAuthorizedRequest.Message,
-			Description: errors.ErrUnAuthorizedRequest.Description,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrUnAuthorizedRequest.Code,
+			Message:     errors2.ErrUnAuthorizedRequest.Message,
+			Description: errors2.ErrUnAuthorizedRequest.Description,
 		}, http.StatusUnauthorized)
 		return "", clientError
 	}
@@ -75,20 +75,20 @@ func validateToken(token string) (map[string]interface{}, error) {
 
 	active, ok := claims["active"].(bool)
 	if !ok || !active {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrUnAuthorizedExpiryRequest.Code,
-			Message:     errors.ErrUnAuthorizedExpiryRequest.Message,
-			Description: errors.ErrUnAuthorizedExpiryRequest.Description,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrUnAuthorizedExpiryRequest.Code,
+			Message:     errors2.ErrUnAuthorizedExpiryRequest.Message,
+			Description: errors2.ErrUnAuthorizedExpiryRequest.Description,
 		}, http.StatusUnauthorized)
 		return nil, clientError
 	}
 
 	audiences, ok := claims["aud"].([]interface{})
 	if !ok {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrInvalidAudience.Code,
-			Message:     errors.ErrInvalidAudience.Message,
-			Description: errors.ErrInvalidAudience.Description,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrInvalidAudience.Code,
+			Message:     errors2.ErrInvalidAudience.Message,
+			Description: errors2.ErrInvalidAudience.Description,
 		}, http.StatusUnauthorized)
 		return nil, clientError
 	}
@@ -101,10 +101,10 @@ func validateToken(token string) (map[string]interface{}, error) {
 		}
 	}
 	if !hasCDS {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.ErrInvalidAudience.Code,
-			Message:     errors.ErrInvalidAudience.Message,
-			Description: errors.ErrInvalidAudience.Description,
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrInvalidAudience.Code,
+			Message:     errors2.ErrInvalidAudience.Message,
+			Description: errors2.ErrInvalidAudience.Description,
 		}, http.StatusUnauthorized)
 		return nil, clientError
 	}
@@ -128,7 +128,7 @@ func introspectToken(token string) (map[string]interface{}, error) {
 
 	req, err := http.NewRequest("POST", introspectionURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return nil, errors.NewServerError(errors.ErrWhileIntrospectingNewToken, err)
+		return nil, errors2.NewServerError(errors2.ErrWhileIntrospectingNewToken, err)
 	}
 
 	auth := base64.StdEncoding.EncodeToString([]byte(runtimeConfig.AuthServer.AdminUsername + ":" + runtimeConfig.AuthServer.AdminPassword))
@@ -137,18 +137,18 @@ func introspectToken(token string) (map[string]interface{}, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.NewServerError(errors.ErrWhileIntrospectingNewToken, err)
+		return nil, errors2.NewServerError(errors2.ErrWhileIntrospectingNewToken, err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.NewServerError(errors.ErrWhileIntrospectingNewToken, err)
+		return nil, errors2.NewServerError(errors2.ErrWhileIntrospectingNewToken, err)
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, errors.NewServerError(errors.ErrWhileIntrospectingNewToken, err)
+		return nil, errors2.NewServerError(errors2.ErrWhileIntrospectingNewToken, err)
 	}
 
 	return result, nil
@@ -172,7 +172,7 @@ func GetTokenFromIS(applicationId string) (string, error) {
 
 	req, err := http.NewRequest("POST", endpoint, strings.NewReader(data.Encode()))
 	if err != nil {
-		return "", errors.NewServerError(errors.ErrWhileIssuingNewToken, err)
+		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
 	}
 
 	// Basic Auth Header (e.g., client_id:client_secret)
@@ -185,7 +185,7 @@ func GetTokenFromIS(applicationId string) (string, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Print("making request to token endpoint")
-		return "", errors.NewServerError(errors.ErrWhileIssuingNewToken, err)
+		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
 	}
 	defer resp.Body.Close()
 
@@ -193,19 +193,19 @@ func GetTokenFromIS(applicationId string) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		log.Print("response status code not ok")
-		return "", errors.NewServerError(errors.ErrWhileIssuingNewToken, err)
+		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
 		log.Print("response body unmarshalled")
-		return "", errors.NewServerError(errors.ErrWhileIssuingNewToken, err)
+		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
 	}
 
 	logger.Info("response body unmarshalled")
 	accessToken, ok := result["access_token"].(string)
 	if !ok {
-		return "", errors.NewServerError(errors.ErrWhileIssuingNewToken, err)
+		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
 	}
 	logger.Info(fmt.Sprintf("New access token generated for application : '%s'", applicationId))
 	return accessToken, nil
@@ -230,7 +230,7 @@ func RevokeToken(token string) error {
 
 	req, err := http.NewRequest("POST", endpoint, strings.NewReader(data.Encode()))
 	if err != nil {
-		return errors.NewServerError(errors.ErrWhileRevokingToken, err)
+		return errors2.NewServerError(errors2.ErrWhileRevokingToken, err)
 	}
 
 	// Basic Auth Header (same as token endpoint)
@@ -241,14 +241,14 @@ func RevokeToken(token string) error {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return errors.NewServerError(errors.ErrWhileRevokingToken, err)
+		return errors2.NewServerError(errors2.ErrWhileRevokingToken, err)
 	}
 	defer resp.Body.Close()
 
 	_, _ = io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.NewServerError(errors.ErrWhileRevokingToken, err)
+		return errors2.NewServerError(errors2.ErrWhileRevokingToken, err)
 	}
 
 	logger.Info("Token got revoked successfully")

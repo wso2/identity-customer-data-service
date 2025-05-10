@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
 	"github.com/wso2/identity-customer-data-service/internal/database"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
-	"github.com/wso2/identity-customer-data-service/internal/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
+	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 	"log"
 	"net"
 	"net/http"
@@ -63,7 +63,7 @@ func main() {
 	database.InitLocks(mongoDB.Database)
 
 	// Initialize Event queue
-	service.StartProfileWorker()
+	workers.StartProfileWorker()
 
 	// Initialize PostgreSQL database
 	initPostgresDatabaseFromConfig(cdsConfig)

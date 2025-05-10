@@ -1,17 +1,16 @@
-package repositories
+package store
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
+	_ "github.com/lib/pq" // PostgreSQL driver
+	"github.com/wso2/identity-customer-data-service/internal/events/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"strings"
 	"time"
-
-	_ "github.com/lib/pq"                                            // PostgreSQL driver
-	"github.com/wso2/identity-customer-data-service/internal/models" // Adjust import path as needed
 )
 
 // EventRepository handles PostgreSQL operations for user events
@@ -41,7 +40,7 @@ func marshalJsonb(data map[string]interface{}) (sql.NullString, error) {
 }
 
 // AddEvent inserts a single event
-func (repo *EventRepository) AddEvent(event models.Event) error {
+func (repo *EventRepository) AddEvent(event model.Event) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -72,7 +71,7 @@ func (repo *EventRepository) AddEvent(event models.Event) error {
 }
 
 // AddEvents inserts multiple events in bulk using a transaction
-func (repo *EventRepository) AddEvents(events []models.Event) error {
+func (repo *EventRepository) AddEvents(events []model.Event) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) // Increased timeout for bulk
 	defer cancel()
 
@@ -121,7 +120,7 @@ func (repo *EventRepository) AddEvents(events []models.Event) error {
 }
 
 // FindEvents fetches events based on dynamic filters and time range
-func (repo *EventRepository) FindEvents(filters []string, timeFilter map[string]int) ([]models.Event, error) { // Assuming timeFilter values are int64 for Unix timestamps
+func (repo *EventRepository) FindEvents(filters []string, timeFilter map[string]int) ([]model.Event, error) { // Assuming timeFilter values are int64 for Unix timestamps
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -251,9 +250,9 @@ func (repo *EventRepository) FindEvents(filters []string, timeFilter map[string]
 	}
 	defer rows.Close()
 
-	var events []models.Event
+	var events []model.Event
 	for rows.Next() {
-		var event models.Event
+		var event model.Event
 		var propertiesRaw, contextRaw sql.NullString
 
 		err := rows.Scan(
@@ -291,7 +290,7 @@ func (repo *EventRepository) FindEvents(filters []string, timeFilter map[string]
 }
 
 // FindEvent fetches a single event by its ID
-func (repo *EventRepository) FindEvent(eventId string) (*models.Event, error) {
+func (repo *EventRepository) FindEvent(eventId string) (*model.Event, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -299,7 +298,7 @@ func (repo *EventRepository) FindEvent(eventId string) (*models.Event, error) {
         SELECT profile_id, event_type, event_name, event_id, application_id, org_id, event_timestamp, properties, context
         FROM %s WHERE event_id = $1`, constants.EventCollection)
 
-	var event models.Event
+	var event model.Event
 	var propertiesRaw, contextRaw sql.NullString
 
 	err := repo.DB.QueryRowContext(ctx, query, eventId).Scan(
@@ -374,7 +373,7 @@ func (repo *EventRepository) DeleteEventsByAppID(profileId, appId string) error 
 }
 
 // FindEventsWithFilter fetches events based on a map of filters.
-func (repo *EventRepository) FindEventsWithFilter(filter map[string]interface{}) ([]models.Event, error) {
+func (repo *EventRepository) FindEventsWithFilter(filter map[string]interface{}) ([]model.Event, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -402,9 +401,9 @@ func (repo *EventRepository) FindEventsWithFilter(filter map[string]interface{})
 	}
 	defer rows.Close()
 
-	var events []models.Event
+	var events []model.Event
 	for rows.Next() {
-		var event models.Event
+		var event model.Event
 		var propertiesRaw, contextRaw sql.NullString
 
 		err := rows.Scan(

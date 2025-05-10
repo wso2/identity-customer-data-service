@@ -1,34 +1,38 @@
-package service
+package workers
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/wso2/identity-customer-data-service/internal/constants"
-	"github.com/wso2/identity-customer-data-service/internal/database"
-	erm "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
-	erp "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
-	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
-	"github.com/wso2/identity-customer-data-service/internal/logger"
-	"github.com/wso2/identity-customer-data-service/internal/models"
-	repositories "github.com/wso2/identity-customer-data-service/internal/repository"
-	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
-	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"log"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/wso2/identity-customer-data-service/internal/database"
+	erm "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
+	erp "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
+	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
+	model3 "github.com/wso2/identity-customer-data-service/internal/events/model"
+	service2 "github.com/wso2/identity-customer-data-service/internal/events/service"
+	model2 "github.com/wso2/identity-customer-data-service/internal/profile/model"
+	"github.com/wso2/identity-customer-data-service/internal/profile/service"
+	repositories "github.com/wso2/identity-customer-data-service/internal/profile/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
+	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
+	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-var EnrichmentQueue chan models.Event
+var EnrichmentQueue chan model3.Event
 
 func StartProfileWorker() {
-	EnrichmentQueue = make(chan models.Event, 1000)
+	EnrichmentQueue = make(chan model3.Event, 1000)
 
 	go func() {
 		for event := range EnrichmentQueue {
@@ -54,18 +58,26 @@ func StartProfileWorker() {
 	}()
 }
 
-func EnqueueEventForProcessing(event models.Event) {
+func EnqueueEventForProcessing(event model3.Event) {
 	if EnrichmentQueue != nil {
 		EnrichmentQueue <- event
 	}
 }
 
+// Define a struct that implements the EventQueue interface
+type ProfileWorkerQueue struct{}
+
+// Implement the Enqueue method for ProfileWorkerQueue
+func (q *ProfileWorkerQueue) Enqueue(event model3.Event) {
+	EnqueueEventForProcessing(event)
+}
+
 // EnrichProfile extracts properties from events and enrich profile based on the enrichment rules
-func EnrichProfile(event models.Event) error {
+func EnrichProfile(event model3.Event) error {
 
 	profileRepo := repositories.NewProfileRepository(database.GetMongoDBInstance().Database, constants.ProfileCollection)
 
-	profile, _ := waitForProfile(event.ProfileId, 5, 100*time.Millisecond)
+	profile, _ := service.WaitForProfile(event.ProfileId, 5, 100*time.Millisecond)
 
 	if profile == nil {
 		return fmt.Errorf("profile not found to enrich")
@@ -92,7 +104,7 @@ func EnrichProfile(event models.Event) error {
 		}
 
 		// Step 2: Evaluate conditions
-		if !EvaluateConditions(event, rule.Trigger.Conditions) {
+		if !service2.EvaluateConditions(event, rule.Trigger.Conditions) {
 			continue
 		}
 
@@ -108,10 +120,10 @@ func EnrichProfile(event models.Event) error {
 					log.Println("Invalid SourceFields for 'extract' computation.")
 					continue
 				}
-				value = GetFieldFromEvent(event, rule.SourceField)
+				value = service2.GetFieldFromEvent(event, rule.SourceField)
 			case "count":
 				// Since events are per profile - going back to child profile
-				count, err := CountEventsMatchingRule(event.ProfileId, rule.Trigger, rule.TimeRange)
+				count, err := service2.CountEventsMatchingRule(event.ProfileId, rule.Trigger, rule.TimeRange)
 				if err != nil {
 					logger.Info("Failed to compute count for rule %s: %v", rule.RuleId, err)
 					continue
@@ -168,11 +180,11 @@ func EnrichProfile(event models.Event) error {
 	return nil
 }
 
-func defaultUpdateAppData(event models.Event, profile *models.Profile, profileRepo *repositories.ProfileRepository) error {
+func defaultUpdateAppData(event model3.Event, profile *model2.Profile, profileRepo *repositories.ProfileRepository) error {
 	if event.Context != nil {
 		if raw, ok := event.Context["device_id"]; ok {
 			if deviceID, ok := raw.(string); ok && deviceID != "" {
-				devices := models.Devices{
+				devices := model2.Devices{
 					DeviceId: deviceID,
 					LastUsed: event.EventTimestamp, // format to string
 				}
@@ -201,9 +213,9 @@ func defaultUpdateAppData(event models.Event, profile *models.Profile, profileRe
 				if !profile.ProfileHierarchy.IsParent {
 					profileId = profile.ProfileHierarchy.ParentProfileID
 				}
-				appContext := models.ApplicationData{
+				appContext := model2.ApplicationData{
 					AppId:   event.AppId,
-					Devices: []models.Devices{devices},
+					Devices: []model2.Devices{devices},
 				}
 				// upserting device info
 				if err := profileRepo.AddOrUpdateAppContext(profileId, appContext); err != nil {
@@ -216,7 +228,7 @@ func defaultUpdateAppData(event models.Event, profile *models.Profile, profileRe
 	return nil
 }
 
-func unifyProfiles(newProfile models.Profile) (*models.Profile, error) {
+func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 	mongoDB := database.GetMongoDBInstance()
 
 	lock := database.GetDistributedLock()
@@ -264,18 +276,18 @@ func unifyProfiles(newProfile models.Profile) (*models.Profile, error) {
 
 				if len(existingProfile.ProfileHierarchy.ChildProfiles) == 0 {
 					newMasterProfile.ProfileId = uuid.New().String()
-					childProfile1 := models.ChildProfile{
+					childProfile1 := model2.ChildProfile{
 						ChildProfileId: newProfile.ProfileId,
 						RuleName:       rule.RuleName,
 					}
-					childProfile2 := models.ChildProfile{
+					childProfile2 := model2.ChildProfile{
 						ChildProfileId: existingProfile.ProfileId,
 						RuleName:       rule.RuleName,
 					}
-					newMasterProfile.ProfileHierarchy = &models.ProfileHierarchy{
+					newMasterProfile.ProfileHierarchy = &model2.ProfileHierarchy{
 						IsParent:      true,
 						ListProfile:   false,
-						ChildProfiles: []models.ChildProfile{childProfile1, childProfile2},
+						ChildProfiles: []model2.ChildProfile{childProfile1, childProfile2},
 					}
 					// creating and inserting the new master profile
 					err := profileRepo.InsertProfile(newMasterProfile)
@@ -292,7 +304,7 @@ func unifyProfiles(newProfile models.Profile) (*models.Profile, error) {
 					}
 
 				} else if (len(existingProfile.ProfileHierarchy.ChildProfiles) > 0) && existingProfile.ProfileHierarchy.IsParent {
-					newChild := models.ChildProfile{
+					newChild := model2.ChildProfile{
 						ChildProfileId: newProfile.ProfileId,
 						RuleName:       rule.RuleName,
 					}
@@ -345,8 +357,8 @@ func sortRulesByPriority(rules []model.UnificationRule) {
 }
 
 // MergeProfiles merges two profiles based on unification rules
-func MergeProfiles(existingProfile models.Profile, incomingProfile models.Profile,
-	enrichmentRules []erm.ProfileEnrichmentRule) models.Profile {
+func MergeProfiles(existingProfile model2.Profile, incomingProfile model2.Profile,
+	enrichmentRules []erm.ProfileEnrichmentRule) model2.Profile {
 
 	merged := existingProfile
 	// todo: I doubt if this is fine.. we need to run through all to build a new profile
@@ -403,7 +415,7 @@ func MergeProfiles(existingProfile models.Profile, incomingProfile models.Profil
 }
 
 // doesProfileMatch checks if two profiles have matching attributes based on a unification rule
-func doesProfileMatch(existingProfile models.Profile, newProfile models.Profile, rule model.UnificationRule) bool {
+func doesProfileMatch(existingProfile model2.Profile, newProfile model2.Profile, rule model.UnificationRule) bool {
 
 	existingJSON, _ := json.Marshal(existingProfile)
 	newJSON, _ := json.Marshal(newProfile)
@@ -596,8 +608,8 @@ func mergeSlices(a, b interface{}) interface{} {
 }
 
 // mergeDeviceLists merges devices, ensuring no duplicates based on `device_id`
-func mergeDeviceLists(existingDevices, newDevices []models.Devices) []models.Devices {
-	deviceMap := make(map[string]models.Devices)
+func mergeDeviceLists(existingDevices, newDevices []model2.Devices) []model2.Devices {
+	deviceMap := make(map[string]model2.Devices)
 
 	for _, device := range existingDevices {
 		deviceMap[device.DeviceId] = device
@@ -606,7 +618,7 @@ func mergeDeviceLists(existingDevices, newDevices []models.Devices) []models.Dev
 		deviceMap[device.DeviceId] = device
 	}
 
-	var mergedDevices []models.Devices
+	var mergedDevices []model2.Devices
 	for _, device := range deviceMap {
 		mergedDevices = append(mergedDevices, device)
 	}
@@ -724,9 +736,8 @@ func combineUniqueInts(a, b []int) []int {
 	return combined
 }
 
-func mergeAppData(existing, incoming []models.ApplicationData, rules []erm.ProfileEnrichmentRule) []models.
-	ApplicationData {
-	mergedMap := make(map[string]models.ApplicationData)
+func mergeAppData(existing, incoming []model2.ApplicationData, rules []erm.ProfileEnrichmentRule) []model2.ApplicationData {
+	mergedMap := make(map[string]model2.ApplicationData)
 
 	// Initialize with existing
 	for _, app := range existing {
@@ -772,7 +783,7 @@ func mergeAppData(existing, incoming []models.ApplicationData, rules []erm.Profi
 		mergedMap[newApp.AppId] = existingApp
 	}
 
-	var mergedList []models.ApplicationData
+	var mergedList []model2.ApplicationData
 	for _, app := range mergedMap {
 		mergedList = append(mergedList, app)
 	}

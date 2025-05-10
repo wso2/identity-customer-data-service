@@ -1,6 +1,4 @@
-package models
-
-import "encoding/json"
+package model
 
 type ProfileHierarchy struct {
 	ParentProfileID string         `json:"parent_profile_id,omitempty" bson:"parent_profile_id,omitempty"`
@@ -21,15 +19,4 @@ type Profile struct {
 	Traits             map[string]interface{} `json:"traits,omitempty" bson:"traits,omitempty"`
 	ApplicationData    []ApplicationData      `json:"application_data,omitempty" bson:"application_data,omitempty"`
 	ProfileHierarchy   *ProfileHierarchy      `json:"profile_hierarchy,omitempty" bson:"profile_hierarchy,omitempty"`
-}
-
-func (a ApplicationData) MarshalJSON() ([]byte, error) {
-	base := map[string]interface{}{
-		"application_id": a.AppId,
-		"devices":        a.Devices,
-	}
-	for k, v := range a.AppSpecificData {
-		base[k] = v
-	}
-	return json.Marshal(base)
 }
