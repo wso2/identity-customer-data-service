@@ -31,20 +31,43 @@ CREATE TABLE profile_enrichment_trigger_conditions (
     value VARCHAR(255) NOT NULL
 );
 
+
+-- Profiles Table
+CREATE TABLE profiles (
+    profile_id VARCHAR(255) PRIMARY KEY,
+    origin_country VARCHAR(255),
+    is_parent BOOLEAN DEFAULT TRUE,
+    parent_profile_id VARCHAR(255),
+    list_profile BOOLEAN DEFAULT TRUE,
+    traits JSONB DEFAULT '{}'::jsonb,
+    identity_attributes JSONB DEFAULT '{}'::jsonb
+);
+
+-- Application Data Table
+CREATE TABLE application_data (
+    app_data_id SERIAL PRIMARY KEY,
+    profile_id VARCHAR(255) REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    app_id VARCHAR(255) NOT NULL,
+    application_data JSONB DEFAULT '{}'::jsonb,
+    UNIQUE (profile_id, app_id)
+);
+
+-- Child Profiles Table
+CREATE TABLE child_profiles (
+    parent_profile_id VARCHAR(255) REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    child_profile_id VARCHAR(255) REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    rule_name VARCHAR(255),
+    PRIMARY KEY (parent_profile_id, child_profile_id)
+);
+
 CREATE TABLE events (
-    profile_id VARCHAR(255) NOT NULL,
+    profile_id VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
     event_type VARCHAR(255) NOT NULL,
     event_name VARCHAR(255) NOT NULL,
     event_id VARCHAR(255) PRIMARY KEY,
     application_id VARCHAR(255) NOT NULL,
     org_id VARCHAR(255) NOT NULL,
-    event_timestamp BIGINT NOT NULL, -- Assuming Unix timestamp in seconds
+    event_timestamp BIGINT NOT NULL,
     properties JSONB,
     context JSONB
 );
-
-CREATE TABLE profiles (
-    profile_id VARCHAR(255) PRIMARY KEY, -- Using your natural key as the PK
-    profile_data JSONB NOT NULL -- The entire Profile struct goes here
-);
-

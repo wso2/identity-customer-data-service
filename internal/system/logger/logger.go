@@ -26,7 +26,7 @@ func Init(debugEnabled bool) {
 }
 
 func Info(msg string, keysAndValues ...interface{}) {
-	Log.Info(msg, keysAndValues...)
+	log.Printf(msg, keysAndValues...)
 }
 
 func Error(err error, msg string, keysAndValues ...interface{}) {

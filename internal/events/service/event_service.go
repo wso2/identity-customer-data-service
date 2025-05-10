@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-
 	"github.com/wso2/identity-customer-data-service/internal/database"
 	erm "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/events/model"
@@ -10,7 +9,6 @@ import (
 
 	service3 "github.com/wso2/identity-customer-data-service/internal/profile/service"
 
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -80,9 +78,7 @@ func CountEventsMatchingRule(profileId string, trigger erm.RuleTrigger, timeRang
 	}
 	count := 0
 	for _, event := range events {
-		log.Printf("Evaluating event: %v", event)
 		if EvaluateConditions(event, trigger.Conditions) {
-			log.Printf("incrementing")
 			count++
 		}
 	}

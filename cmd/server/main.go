@@ -18,7 +18,7 @@ import (
 	"path/filepath"
 )
 
-func initPostgresDatabaseFromConfig(config *config.Config) {
+func initDatabaseFromConfig(config *config.Config) {
 	host := config.DatabaseConfig.Host
 	port := config.DatabaseConfig.Port
 	user := config.DatabaseConfig.User
@@ -35,7 +35,7 @@ func initPostgresDatabaseFromConfig(config *config.Config) {
 
 func main() {
 	cdsHome := getCDSHome()
-	const configFile = "/repository/conf/deployment.yaml"
+	const configFile = "/config/repository/conf/deployment.yaml"
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
@@ -57,23 +57,18 @@ func main() {
 	// Initialize logger
 	logger.Init(cdsConfig.Log.DebugEnabled)
 
-	// Initialize MongoDB
-	mongoDB := database.ConnectMongoDB(cdsConfig.MongoDB.URI, cdsConfig.MongoDB.Database)
-
-	database.InitLocks(mongoDB.Database)
+	// Initialize database
+	initDatabaseFromConfig(cdsConfig)
 
 	// Initialize Event queue
 	workers.StartProfileWorker()
-
-	// Initialize PostgreSQL database
-	initPostgresDatabaseFromConfig(cdsConfig)
 
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
 	logger.Info("WSO2 CDS starting in: %v", serverAddr)
 	ln, err := net.Listen("tcp", serverAddr)
 	if err != nil {
-		log.Fatalf("Failed to start TLS listener: %v", err)
+		logger.Error(err, "Failed to start TLS listener")
 	}
 
 	logger.Info("WSO2 CDS started in: %v", serverAddr)
@@ -81,11 +76,8 @@ func main() {
 	server1 := &http.Server{Handler: mux}
 
 	if err := server1.Serve(ln); err != nil {
-		log.Fatalf("Failed to serve requests: %v", err)
+		logger.Error(err, "\"Failed to serve requests.")
 	}
-
-	// Close MongoDB connection on exit
-	defer mongoDB.Client.Disconnect(nil)
 
 	logger.Info("identity-customer-data-service component has started.")
 
@@ -100,7 +92,7 @@ func initMultiplexer() *http.ServeMux {
 	// Register the services.
 	err := serviceManager.RegisterServices(constants.ApiBasePath)
 	if err != nil {
-		log.Fatalf("Failed to register the services: %v", err)
+		logger.Error(err, "Failed to register the services.")
 	}
 
 	return mux

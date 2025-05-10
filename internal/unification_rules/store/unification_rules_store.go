@@ -19,7 +19,7 @@ func AddUnificationRule(rule model.UnificationRule) error {
 	}
 	defer dbClient.Close()
 
-	query := `INSERT INTO unification_rules (rule_id, rule_name, property, priority, is_active, created_at, updated_at) 
+	query := `INSERT INTO unification_rules (rule_id, rule_name, property_name, priority, is_active, created_at, updated_at) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
 	_, err = dbClient.ExecuteQuery(query, query, rule.RuleId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive,
@@ -39,10 +39,10 @@ func GetUnificationRules() ([]model.UnificationRule, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT rule_id, rule_name, property, priority, is_active, created_at, updated_at FROM unification_rules`
+	query := `SELECT rule_id, rule_name, property_name, priority, is_active, created_at, updated_at FROM unification_rules`
 	results, err := dbClient.ExecuteQuery(query)
 	if err != nil {
-		logger.Info("Error occurred while fetching unification rules.")
+		logger.Info("Error occurred while fetching unification rules.", err)
 		return nil, errors2.NewServerError(errors2.ErrWhileFetchingUnificationRules, err)
 	}
 
@@ -51,7 +51,7 @@ func GetUnificationRules() ([]model.UnificationRule, error) {
 		var rule model.UnificationRule
 		rule.RuleId = row["rule_id"].(string)
 		rule.RuleName = row["rule_name"].(string)
-		rule.Property = row["property"].(string)
+		rule.Property = row["property_name"].(string)
 		rule.Priority = int(row["priority"].(int64))
 		rule.IsActive = row["is_active"].(bool)
 		rule.CreatedAt = row["created_at"].(int64)
@@ -71,7 +71,7 @@ func GetUnificationRule(ruleId string) (model.UnificationRule, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT rule_id, rule_name, property, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`
+	query := `SELECT rule_id, rule_name, property_name, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`
 	results, err := dbClient.ExecuteQuery(query, ruleId)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -86,7 +86,7 @@ func GetUnificationRule(ruleId string) (model.UnificationRule, error) {
 	var rule model.UnificationRule
 	rule.RuleId = row["rule_id"].(string)
 	rule.RuleName = row["rule_name"].(string)
-	rule.Property = row["property"].(string)
+	rule.Property = row["property_name"].(string)
 	rule.Priority = int(row["priority"].(int64))
 	rule.IsActive = row["is_active"].(bool)
 	rule.CreatedAt = row["created_at"].(int64)

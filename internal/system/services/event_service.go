@@ -41,7 +41,7 @@ func NewEventService(mux *http.ServeMux, apiBasePath string) *EventService {
 func (s *EventService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
 
 	mux.HandleFunc(fmt.Sprintf("POST %s/events", apiBasePath), s.eventHandler.AddEvent)
-	mux.HandleFunc(fmt.Sprintf("GET %s/events", apiBasePath), s.eventHandler.GetEvent)
+	mux.HandleFunc(fmt.Sprintf("GET %s/events", apiBasePath), s.eventHandler.GetEvents)
 	mux.HandleFunc(fmt.Sprintf("GET %s/events/write-key/", apiBasePath), s.eventHandler.GetWriteKey)
 	mux.HandleFunc(fmt.Sprintf("GET %s/events/", apiBasePath), s.eventHandler.GetEvent)
 }

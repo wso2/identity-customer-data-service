@@ -1,12 +1,5 @@
 env: "${ENV}" # This will be replaced by the ENV variable
 
-mongodb:
-  uri: "${MONGODB_URI}"
-  database: "custodian_db"
-  profile_collection: "profiles"
-  event_collection: "events"
-  consent_collection: "consents"
-
 log:
   debug_enabled: true
 
@@ -22,7 +15,7 @@ auth:
     - "https://localhost:9001"
 
 addr:
-  host: 0.0.0.0
+  host: 127.0.0.1
   port: 8900
 
 auth_server:
@@ -37,14 +30,14 @@ auth_server:
 database:
   host: "localhost"
   port: "5432"
-  user: "cdsuser"
-  password: "cdspwd"
-  dbname: "cdsdb"
+  user: "admin"
+  password: "${DB_PASSWORD}"
+  dbname: "iam_cds"
 
 datasource:
   hostname: "localhost"
   port: 5432
-  username: "cdsuser"
-  password: "cdspwd"
-  name: "cdsdb"
+  username: "admin"
+  password: "${DATA_SOURCE_PASSWORD}"
+  name: "iam_cds"
   sslmode: disable
