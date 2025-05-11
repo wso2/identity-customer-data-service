@@ -5,6 +5,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"github.com/wso2/identity-customer-data-service/internal/utils"
 	"net/http"
 	"strings"
@@ -62,6 +63,7 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 // GetAllProfiles handles profile retrieval with and without filters
 func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request) {
 
+	logger.Info("Fetching all profiles without filters")
 	var profiles []model.Profile
 	var err error
 	// Build the filter from query params
@@ -69,6 +71,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	if len(filter) > 0 {
 		profiles, err = service.GetAllProfilesWithFilter(filter)
 	} else {
+		logger.Info("Fetching all profiles without filters")
 		profiles, err = service.GetAllProfiles()
 	}
 	if err != nil {
