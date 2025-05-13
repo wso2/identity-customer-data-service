@@ -2,9 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -31,14 +31,18 @@ func NewEventHandler() *EventHandler {
 
 // AddEvent handles adding a single event
 func (eh *EventHandler) AddEvent(w http.ResponseWriter, r *http.Request) {
-	if _, err := authentication.ValidateAuthentication(r); err != nil {
-		http.Error(w, "Unauthorized request", http.StatusUnauthorized)
-		return
-	}
 
 	var event model.Event
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	// todo: ideally this has to be the first step. For that, even before extracting the
+	// payload should be able to get the app/orgid from path. Need a modification
+	if _, err := authentication.ValidateAuthentication(r, event); err != nil {
+		log.Print("Unauthorized request: ", err.Error())
+		http.Error(w, "Unauthorized request", http.StatusUnauthorized)
 		return
 	}
 
@@ -95,36 +99,4 @@ func (eh *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(events)
-}
-
-func (eh *EventHandler) GetWriteKey(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-	applicationId := pathParts[len(pathParts)-1]
-	// Step 1: Get existing token if needed (for now assume no previous token available)
-	// If you have a DB or cache, fetch the existing token here.
-	existingToken, _ := authentication.GetTokenFromIS(applicationId)
-
-	// Step 2: If token exists, revoke it first as this would be re-generating a new one
-	if existingToken != "" {
-		err := authentication.RevokeToken(existingToken)
-		if err != nil {
-			utils.HandleHTTPError(w, err)
-			return
-		}
-	}
-
-	// Step 3: Get a new token
-	newToken, err := authentication.GetTokenFromIS(applicationId)
-	if err != nil {
-		utils.HandleHTTPError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"write_key": newToken,
-	})
 }

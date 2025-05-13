@@ -1,256 +1,120 @@
 package authentication
 
 import (
-	"crypto/tls"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/system/cache"
-	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-	"github.com/wso2/identity-customer-data-service/internal/system/logger"
-	"io"
+	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
-	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/api_keys/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
-var (
-	tokenCache = cache.NewCache(15 * time.Minute)
-)
-
-// ValidateAuthentication validates Authorization: Bearer token from the HTTP request
-func ValidateAuthentication(r *http.Request) (map[string]interface{}, error) {
-	token, err := extractBearerToken(r)
+// ValidateAuthentication validates Authorization: ApiKey header from the HTTP request
+func ValidateAuthentication(r *http.Request, event model.Event) (valid bool, error error) {
+	token, err := extractAPIKey(r)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-
-	claims, err := validateToken(token)
-	if err != nil {
-		return nil, err
-	}
-
-	return claims, nil
+	orgID, appID := fetchOrgAndApp(event)
+	return validateAPIKey(token, orgID, appID)
 }
 
-func extractBearerToken(r *http.Request) (string, error) {
+func extractAPIKey(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrUnAuthorizedRequest.Code,
-			Message:     errors2.ErrUnAuthorizedRequest.Message,
-			Description: errors2.ErrUnAuthorizedRequest.Description,
+		return "", errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.ErrUnAuthorizedRequest.Code,
+			Message:     errors.ErrUnAuthorizedRequest.Message,
+			Description: errors.ErrUnAuthorizedRequest.Description,
 		}, http.StatusUnauthorized)
-		return "", clientError
 	}
 	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrUnAuthorizedRequest.Code,
-			Message:     errors2.ErrUnAuthorizedRequest.Message,
-			Description: errors2.ErrUnAuthorizedRequest.Description,
+	if len(parts) != 2 || strings.ToLower(parts[0]) != "apikey" {
+		log.Print("Invalid API key format")
+		return "", errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.ErrUnAuthorizedRequest.Code,
+			Message:     errors.ErrUnAuthorizedRequest.Message,
+			Description: errors.ErrUnAuthorizedRequest.Description,
 		}, http.StatusUnauthorized)
-		return "", clientError
 	}
 	return parts[1], nil
 }
 
-func validateToken(token string) (map[string]interface{}, error) {
+func fetchOrgAndApp(event model.Event) (orgID, appID string) {
+	// Extract values safely
+	orgID = event.OrgId
+	appID = event.AppId
 
-	cachedClaims, found := tokenCache.Get(token)
-	if found {
-		if claims, ok := cachedClaims.(map[string]interface{}); ok {
-			return claims, nil
+	// Normalize default tenant
+	if orgID == "carbon.super" {
+		orgID = "-1234"
+	}
+
+	return orgID, appID
+}
+
+func validateAPIKey(apiKeyStr, orgID, appID string) (valid bool, error error) {
+	if apiKeyStr == "" || appID == "" || orgID == "" {
+		return false, errors.NewClientError(errors.ErrorMessage{
+			Code:        "missing_fields",
+			Message:     "Missing required fields",
+			Description: "api_key, application_id, or org_id is missing",
+		}, http.StatusBadRequest)
+	}
+
+	dbKey, err := store.GetAPIKey(apiKeyStr)
+	if err != nil || dbKey == nil {
+		return false, errors.NewClientError(errors.ErrorMessage{
+			Code:        "invalid_api_key",
+			Message:     "API key not found",
+			Description: "Provided API key is not valid",
+		}, http.StatusUnauthorized)
+	}
+
+	if dbKey.AppID != appID {
+		return false, errors.NewClientError(errors.ErrorMessage{
+			Code:        "mismatch_app_id",
+			Message:     "App ID does not match",
+			Description: "API key does not belong to this application",
+		}, http.StatusUnauthorized)
+	}
+
+	if dbKey.OrgID != orgID {
+		if (orgID == "carbon.super" && dbKey.OrgID == "-1234") ||
+			(dbKey.OrgID == "carbon.super" && orgID == "-1234") {
+			orgID = "carbon.super"
+		} else {
+			return false, errors.NewClientError(errors.ErrorMessage{
+				Code:        "mismatch_org_id",
+				Message:     "Org ID does not match",
+				Description: "API key does not belong to this organization",
+			}, http.StatusUnauthorized)
 		}
-	}
-
-	claims, err := introspectToken(token)
-	if err != nil {
-		return nil, err
-	}
-
-	active, ok := claims["active"].(bool)
-	if !ok || !active {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrUnAuthorizedExpiryRequest.Code,
-			Message:     errors2.ErrUnAuthorizedExpiryRequest.Message,
-			Description: errors2.ErrUnAuthorizedExpiryRequest.Description,
+		return false, errors.NewClientError(errors.ErrorMessage{
+			Code:        "mismatch_org_id",
+			Message:     "Org ID does not match",
+			Description: "API key does not belong to this organization",
 		}, http.StatusUnauthorized)
-		return nil, clientError
 	}
 
-	audiences, ok := claims["aud"].([]interface{})
-	if !ok {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrInvalidAudience.Code,
-			Message:     errors2.ErrInvalidAudience.Message,
-			Description: errors2.ErrInvalidAudience.Description,
+	if dbKey.State != "active" {
+		return false, errors.NewClientError(errors.ErrorMessage{
+			Code:        "revoked",
+			Message:     "API key is not active",
+			Description: "API key is revoked or inactive",
 		}, http.StatusUnauthorized)
-		return nil, clientError
 	}
 
-	hasCDS := false
-	for _, aud := range audiences {
-		if audStr, ok := aud.(string); ok && audStr == "iam-cds" {
-			hasCDS = true
-			break
-		}
-	}
-	if !hasCDS {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrInvalidAudience.Code,
-			Message:     errors2.ErrInvalidAudience.Message,
-			Description: errors2.ErrInvalidAudience.Description,
+	now := time.Now().UTC().Unix()
+	if dbKey.ExpiresAt < now {
+		return false, errors.NewClientError(errors.ErrorMessage{
+			Code:        "expired",
+			Message:     "API key has expired",
+			Description: "API key expiration time has passed",
 		}, http.StatusUnauthorized)
-		return nil, clientError
 	}
 
-	tokenCache.Set(token, claims) // ✅ Store fresh introspection claims
-	return claims, nil
-}
-
-func introspectToken(token string) (map[string]interface{}, error) {
-	runtimeConfig := config.GetCDSRuntime().Config
-	introspectionURL := runtimeConfig.AuthServer.IntrospectionEndPoint
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-
-	data := url.Values{}
-	data.Set("token", token)
-
-	req, err := http.NewRequest("POST", introspectionURL, strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileIntrospectingNewToken, err)
-	}
-
-	auth := base64.StdEncoding.EncodeToString([]byte(runtimeConfig.AuthServer.AdminUsername + ":" + runtimeConfig.AuthServer.AdminPassword))
-	req.Header.Set("Authorization", "Basic "+auth)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileIntrospectingNewToken, err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors2.NewServerError(errors2.ErrWhileIntrospectingNewToken, err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileIntrospectingNewToken, err)
-	}
-
-	return result, nil
-}
-
-func GetTokenFromIS(applicationId string) (string, error) {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Only for local/dev
-	}
-	client := &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: tr,
-	}
-
-	runtimeConfig := config.GetCDSRuntime().Config
-	endpoint := runtimeConfig.AuthServer.TokenEndpoint
-
-	data := url.Values{}
-	data.Set("grant_type", "client_credentials")
-	data.Set("tokenBindingId", applicationId)
-
-	req, err := http.NewRequest("POST", endpoint, strings.NewReader(data.Encode()))
-	if err != nil {
-		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
-	}
-
-	// Basic Auth Header (e.g., client_id:client_secret)
-	encoded := base64.StdEncoding.EncodeToString([]byte(runtimeConfig.AuthServer.ClientID + ":" + runtimeConfig.AuthServer.ClientSecret))
-
-	req.Header.Add("Authorization", "Basic "+encoded)
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Print("making request to token endpoint")
-		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		log.Print("response status code not ok")
-		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		log.Print("response body unmarshalled")
-		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
-	}
-
-	logger.Info("response body unmarshalled")
-	accessToken, ok := result["access_token"].(string)
-	if !ok {
-		return "", errors2.NewServerError(errors2.ErrWhileIssuingNewToken, err)
-	}
-	logger.Info(fmt.Sprintf("New access token generated for application : '%s'", applicationId))
-	return accessToken, nil
-}
-
-// Revoke token issued as write key
-func RevokeToken(token string) error {
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: tr,
-	}
-
-	runtimeConfig := config.GetCDSRuntime().Config
-	endpoint := runtimeConfig.AuthServer.RevocationEndpoint
-
-	data := url.Values{}
-	data.Set("token", token)
-
-	req, err := http.NewRequest("POST", endpoint, strings.NewReader(data.Encode()))
-	if err != nil {
-		return errors2.NewServerError(errors2.ErrWhileRevokingToken, err)
-	}
-
-	// Basic Auth Header (same as token endpoint)
-	encoded := base64.StdEncoding.EncodeToString([]byte(runtimeConfig.AuthServer.ClientID + ":" + runtimeConfig.AuthServer.ClientSecret))
-
-	req.Header.Add("Authorization", "Basic "+encoded)
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return errors2.NewServerError(errors2.ErrWhileRevokingToken, err)
-	}
-	defer resp.Body.Close()
-
-	_, _ = io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return errors2.NewServerError(errors2.ErrWhileRevokingToken, err)
-	}
-
-	logger.Info("Token got revoked successfully")
-	return nil
+	return true, nil
 }

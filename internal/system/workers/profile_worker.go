@@ -108,7 +108,7 @@ func EnrichProfile(event model3.Event) error {
 			continue
 		}
 
-		// Step 3: Get value to assign
+		// Step 3: GetAPIKeyService value to assign
 		var value interface{}
 		if rule.ComputationMethod == "static" {
 			value = rule.Value

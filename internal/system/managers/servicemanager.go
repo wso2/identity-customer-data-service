@@ -46,5 +46,6 @@ func (sm *ServiceManager) RegisterServices(apiBasePath string) error {
 	services.NewEnrichmentRulesService(sm.mux, apiBasePath)
 	services.NewEventService(sm.mux, apiBasePath)
 	services.NewProfileService(sm.mux, apiBasePath)
+	services.NewAPIKeyService(sm.mux, apiBasePath)
 	return nil
 }
