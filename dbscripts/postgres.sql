@@ -71,3 +71,14 @@ CREATE TABLE events (
     properties JSONB,
     context JSONB
 );
+
+CREATE TABLE event_stream_ids (
+    key_id SERIAL PRIMARY KEY,
+    api_key VARCHAR(255) UNIQUE NOT NULL,
+    org_id VARCHAR(255) NOT NULL,
+    app_id VARCHAR(255) NOT NULL,
+    state VARCHAR(255) NOT NULL,
+    expires_at BIGINT NOT NULL,
+    created_at BIGINT NOT NULL
+);
+

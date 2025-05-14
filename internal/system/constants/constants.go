@@ -59,3 +59,9 @@ var AllowedConditionOperators = map[string]bool{
 	"less_than":           true,
 	"less_than_equals":    true,
 }
+
+var ApiKeyStates = map[string]bool{
+	"active":  true,
+	"revoked": true,
+	"expired": true,
+}
