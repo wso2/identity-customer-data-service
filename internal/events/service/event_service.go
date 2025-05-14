@@ -5,8 +5,7 @@ import (
 	erm "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"github.com/wso2/identity-customer-data-service/internal/events/store"
-
-	service3 "github.com/wso2/identity-customer-data-service/internal/profile/service"
+	provider "github.com/wso2/identity-customer-data-service/internal/profile/provider"
 
 	"strconv"
 	"strings"
@@ -28,7 +27,7 @@ func GetEventsService() EventsServiceInterface {
 	return &EventsService{}
 }
 
-// Define an interface for enqueuing events
+// EventQueue Define an interface for enqueuing events
 // This interface will be implemented by the actual worker in `workers`
 type EventQueue interface {
 	Enqueue(event model.Event)
@@ -38,7 +37,9 @@ type EventQueue interface {
 func (es *EventsService) AddEvents(event model.Event, queue EventQueue) error {
 	// Step 1: Ensure profile exists (with lock protection)
 
-	_, err := service3.CreateOrUpdateProfile(event)
+	profilesProvider := provider.NewProfilesProvider()
+	profileService := profilesProvider.GetProfilesService()
+	_, err := profileService.CreateOrUpdateProfile(event)
 	if err != nil {
 		return fmt.Errorf("failed to create or fetch profile: %v", err)
 	}
