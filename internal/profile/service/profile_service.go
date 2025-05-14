@@ -393,3 +393,70 @@ func parseTypedValueForFilters(valueType string, raw string) interface{} {
 		return raw
 	}
 }
+
+func FindProfileByUserName(sub string) (interface{}, error) {
+	postgresDB := database.GetPostgresInstance()
+	profileRepo := store2.NewProfileRepository(postgresDB.DB)
+
+	// TODO: Restrict app-specific fields via client_id from JWT (if available)
+
+	//  TODO: currently userId is defined as a string [] so CONTAINS - but need to decide
+	filter := fmt.Sprintf("identity_attributes.user_id co %s", sub)
+	profiles, err := profileRepo.GetAllProfilesWithFilter([]string{filter})
+	if err != nil {
+		log.Print("error fetching profile by user_id: ", err)
+		return nil, fmt.Errorf("failed to query profiles: %w", err)
+	}
+
+	if len(profiles) == 0 {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrProfileNotFound.Code,
+			Message:     errors2.ErrProfileNotFound.Message,
+			Description: errors2.ErrProfileNotFound.Description,
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
+
+	// 🧠 Track unique parent profile IDs
+	parentProfileIDSet := make(map[string]struct{})
+
+	for _, profile := range profiles {
+		if profile.ProfileHierarchy.IsParent {
+			parentProfileIDSet[profile.ProfileId] = struct{}{}
+		} else {
+			parentProfileIDSet[profile.ProfileHierarchy.ParentProfileID] = struct{}{}
+		}
+	}
+
+	if len(parentProfileIDSet) > 1 {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrMultipleProfileFound.Code,
+			Message:     errors2.ErrMultipleProfileFound.Message,
+			Description: errors2.ErrMultipleProfileFound.Description,
+		}, http.StatusConflict)
+		return nil, clientError
+	}
+
+	// Extract the single master profile ID
+	var masterProfileID string
+	for id := range parentProfileIDSet {
+		masterProfileID = id
+		break
+	}
+
+	master, err := profileRepo.GetProfile(masterProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch master profile %s: %w", masterProfileID, err)
+	}
+	if master == nil {
+		return nil, fmt.Errorf("master profile not found for user_id %s", sub)
+	}
+
+	// 🔄 Load app context (if any)
+	master.ApplicationData, _ = profileRepo.FetchApplicationData(master.ProfileId)
+
+	// 🔇 Wipe hierarchy for the /me response
+	master.ProfileHierarchy = &model2.ProfileHierarchy{}
+
+	return master, nil
+}

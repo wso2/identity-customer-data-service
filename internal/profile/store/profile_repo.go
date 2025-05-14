@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
@@ -583,6 +582,7 @@ func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]mod
 	`
 
 	for _, f := range filters {
+		log.Print("Filter: ", f)
 		parts := strings.SplitN(f, " ", 3)
 		if len(parts) != 3 {
 			continue
@@ -794,30 +794,82 @@ func (repo *ProfileRepository) UpdateParent(master model.Profile, targetProfile 
 	return repo.UpdateProfile(*profileToUpdate)
 }
 
-// FindProfileByUserName retrieves a profile by identity_attributes.user_name
-func (repo *ProfileRepository) FindProfileByUserName(userName string) (*model.Profile, error) {
+// FindProfileByUserName retrieves a profile by its user_name attribute.
+func (repo *ProfileRepository) FindProfileByUserName(userID string) (*model.Profile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	sqlStatement := `
-        SELECT profile_data
-        FROM profiles
-        WHERE profile_data -> 'identity_attributes' ->> 'user_name' = $1;`
+	query := `
+		SELECT profile_id, origin_country, is_parent, parent_profile_id,
+			   list_profile, traits, identity_attributes
+		FROM profiles
+		WHERE identity_attributes ->> 'user_id' = $1;
+	`
 
-	var profileDataBytes []byte
-	err := repo.DB.QueryRowContext(ctx, sqlStatement, userName).Scan(&profileDataBytes)
+	rows, err := repo.DB.QueryContext(ctx, query, userID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil // Not found
+		return nil, fmt.Errorf("error querying profiles for user_id %s: %w", userID, err)
+	}
+	defer rows.Close()
+
+	var parentProfileIDs []string
+	for rows.Next() {
+		var profile model.Profile
+		profile.ProfileHierarchy = &model.ProfileHierarchy{}
+		var traitsJSON, identityJSON []byte
+
+		err := rows.Scan(
+			&profile.ProfileId,
+			&profile.OriginCountry,
+			&profile.ProfileHierarchy.IsParent,
+			&profile.ProfileHierarchy.ParentProfileID,
+			&profile.ProfileHierarchy.ListProfile,
+			&traitsJSON,
+			&identityJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning profile row: %w", err)
 		}
-		return nil, fmt.Errorf("error finding profile by username %s: %w", userName, err)
+
+		if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal traits: %w", err)
+		}
+		if err := json.Unmarshal(identityJSON, &profile.IdentityAttributes); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal identity attributes: %w", err)
+		}
+
+		if profile.ProfileHierarchy.IsParent {
+			parentProfileIDs = append(parentProfileIDs, profile.ProfileId)
+		} else {
+			parentProfileIDs = append(parentProfileIDs, profile.ProfileHierarchy.ParentProfileID)
+		}
 	}
 
-	var profile model.Profile
-	//if err := unmarshalProfile(profileDataBytes, &profile); err != nil {
-	//	return nil, fmt.Errorf("error unmarshaling profile for username %s: %w", userName, err)
-	//}
-	return &profile, nil
+	if len(parentProfileIDs) == 0 {
+		return nil, fmt.Errorf("no profiles found for user_id %s", userID)
+	}
+
+	if len(parentProfileIDs) > 1 {
+		return nil, fmt.Errorf("multiple profiles found with conflicting parent references for user_id %s", userID)
+	}
+
+	masterProfileID := parentProfileIDs[0]
+	master, err := repo.GetProfile(masterProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch master profile %s: %w", masterProfileID, err)
+	}
+	if master == nil {
+		return nil, fmt.Errorf("master profile not found for user_id %s", userID)
+	}
+
+	// Load application data
+	master.ApplicationData, _ = repo.FetchApplicationData(master.ProfileId)
+
+	//  Clear profile hierarchy before returning
+	// Me endpoint doesn't need hierarchy details
+	master.ProfileHierarchy = &model.ProfileHierarchy{}
+
+	return master, nil
 }
 
 func (repo *ProfileRepository) AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile) error {

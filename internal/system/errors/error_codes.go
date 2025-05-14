@@ -223,4 +223,10 @@ var (
 		Code:    errorPrefix + "11022",
 		Message: "Filtering failed.",
 	}
+
+	ErrMultipleProfileFound = ErrorMessage{
+		Code:        errorPrefix + "11023",
+		Message:     "Multiple Profiles found.",
+		Description: "Multiple user profiles record found for the given user_id",
+	}
 )

@@ -25,13 +25,13 @@ import (
 )
 
 type ProfileService struct {
-	eventHandler *handler.ProfileHandler
+	profileHandler *handler.ProfileHandler
 }
 
 func NewProfileService(mux *http.ServeMux, apiBasePath string) *ProfileService {
 
 	instance := &ProfileService{
-		eventHandler: handler.NewProfileHandler(),
+		profileHandler: handler.NewProfileHandler(),
 	}
 	instance.RegisterRoutes(mux, apiBasePath)
 
@@ -40,7 +40,8 @@ func NewProfileService(mux *http.ServeMux, apiBasePath string) *ProfileService {
 
 func (s *ProfileService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
 
-	mux.HandleFunc(fmt.Sprintf("GET %s/profiles", apiBasePath), s.eventHandler.GetAllProfiles)
-	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/", apiBasePath), s.eventHandler.GetProfile)
-	mux.HandleFunc(fmt.Sprintf("DELETE %s/profiles/", apiBasePath), s.eventHandler.DeleteProfile)
+	mux.HandleFunc(fmt.Sprintf("GET %s/profiles", apiBasePath), s.profileHandler.GetAllProfiles)
+	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/Me", apiBasePath), s.profileHandler.GetCurrentUserProfile)
+	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/", apiBasePath), s.profileHandler.GetProfile)
+	mux.HandleFunc(fmt.Sprintf("DELETE %s/profiles/", apiBasePath), s.profileHandler.DeleteProfile)
 }
