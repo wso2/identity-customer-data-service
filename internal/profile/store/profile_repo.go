@@ -567,92 +567,145 @@ func (repo *ProfileRepository) MergeIdentityDataOfProfiles(profileId string, ide
 	return repo.UpdateProfile(*profile)
 }
 
-// todo: this has to be fixed with next iteration
-// GetAllProfilesWithFilter retrieves profiles based on a simplified filter string array
 func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
-	//
-	//ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	//defer cancel()
-	//
-	//var conditions []string
-	//var args []interface{}
-	//argId := 1
-	//
-	//for _, f := range filters {
-	//	parts := strings.SplitN(f, " ", 3)
-	//	if len(parts) != 3 {
-	//		logger.Info(fmt.Sprintf("WARN: Invalid filter format: %s", f))
-	//		continue
-	//	}
-	//	jsonPathStr, operator, value := parts[0], strings.ToLower(parts[1]), parts[2]
-	//
-	//	pathParts := strings.Split(jsonPathStr, ".")
-	//	var currentPath string
-	//	if len(pathParts) > 0 {
-	//		currentPath = "profile_data" // Start with the main JSONB column
-	//		for i, p := range pathParts {
-	//			// For map keys or fixed object properties
-	//			if i == len(pathParts)-1 { // Last part, use ->> to get text for comparison
-	//				currentPath += fmt.Sprintf("->>'%s'", p)
-	//			} else {
-	//				currentPath += fmt.Sprintf("->'%s'", p)
-	//			}
-	//		}
-	//	} else {
-	//		logger.Info(fmt.Sprintf("WARN: Invalid field path in filter: %s", jsonPathStr))
-	//		continue
-	//	}
-	//
-	//	switch operator {
-	//	case "eq":
-	//		conditions = append(conditions, fmt.Sprintf("%s = $%d", currentPath, argId))
-	//		args = append(args, value)
-	//		argId++
-	//	case "sw": // starts with
-	//		conditions = append(conditions, fmt.Sprintf("%s LIKE $%d", currentPath, argId))
-	//		args = append(args, value+"%")
-	//		argId++
-	//	case "co": // contains
-	//		conditions = append(conditions, fmt.Sprintf("%s LIKE $%d", currentPath, argId))
-	//		args = append(args, "%"+value+"%")
-	//		argId++
-	//	default:
-	//		logger.Info(fmt.Sprintf("WARN: Unsupported filter operator: %s", operator))
-	//		continue
-	//	}
-	//}
-	//
-	//if len(conditions) == 0 {
-	//	// If no valid filters were processed, decide behavior: return all, empty, or error.
-	//	// For now, returning all if no filters were applied, similar to empty filter in Mongo.
-	//	logger.Info(fmt.Sprintf("INFO: No valid filters applied in GetAllProfilesWithFilter, fetching all listable profiles."))
-	//	return repo.GetAllProfiles() // Default to getting all listable profiles.
-	//}
-	//
-	//sqlQuery := "SELECT profile_data FROM profiles WHERE " + strings.Join(conditions, " AND ")
-	//
-	//rows, err := repo.DB.QueryContext(ctx, sqlQuery, args...)
-	//if err != nil {
-	//	logger.Info(fmt.Sprintf("ERROR: Failed to execute filtered query: %s, Args: %v, Error: %v", sqlQuery, args, err))
-	//	return nil, fmt.Errorf("failed to execute filtered query: %w", err)
-	//}
-	//defer rows.Close()
-	//
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var conditions []string
+	var args []interface{}
+	argID := 1
+	joinedAppIDs := map[string]bool{}
+
+	baseSQL := `
+		SELECT DISTINCT p.profile_id, p.origin_country, p.is_parent, p.parent_profile_id,
+						p.list_profile, p.traits, p.identity_attributes
+		FROM profiles p
+	`
+
+	for _, f := range filters {
+		parts := strings.SplitN(f, " ", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		field, operator, value := parts[0], parts[1], parts[2]
+
+		scopeKey := strings.SplitN(field, ".", 2)
+		if len(scopeKey) != 2 {
+			continue
+		}
+		scope, key := scopeKey[0], scopeKey[1]
+
+		var clause string
+
+		switch scope {
+		case "identity_attributes", "traits":
+			jsonCol := "p." + scope
+			switch operator {
+			case "eq":
+				clause = fmt.Sprintf("%s ->> '%s' = $%d", jsonCol, key, argID)
+				args = append(args, value)
+			case "co":
+				clause = fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID)
+				args = append(args, "%"+value+"%")
+			case "sw":
+				clause = fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID)
+				args = append(args, value+"%")
+			default:
+				continue
+			}
+			conditions = append(conditions, clause)
+			argID++
+
+		case "application_data":
+			var appAlias, appKey string
+
+			if strings.Contains(key, ".") {
+				appScope := strings.SplitN(key, ".", 2)
+				appID := appScope[0]
+				appKey = appScope[1]
+				appAlias = "a_" + appID
+
+				if !joinedAppIDs[appID] {
+					baseSQL += fmt.Sprintf(`
+						INNER JOIN application_data %s
+						ON %s.profile_id = p.profile_id AND %s.app_id = '%s'
+					`, appAlias, appAlias, appAlias, appID)
+					joinedAppIDs[appID] = true
+				}
+			} else {
+				appKey = key
+				appAlias = "a"
+				if !joinedAppIDs["__generic"] {
+					baseSQL += `
+						INNER JOIN application_data a
+						ON a.profile_id = p.profile_id
+					`
+					joinedAppIDs["__generic"] = true
+				}
+			}
+
+			switch operator {
+			case "eq":
+				clause = fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' = $%d", appAlias, appKey, argID)
+				args = append(args, value)
+			case "co":
+				clause = fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID)
+				args = append(args, "%"+value+"%")
+			case "sw":
+				clause = fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID)
+				args = append(args, value+"%")
+			default:
+				continue
+			}
+			conditions = append(conditions, clause)
+			argID++
+		}
+	}
+
+	// Always ensure list_profile = true
+	conditions = append(conditions, "p.list_profile = true")
+
+	// Final query
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	finalSQL := baseSQL + "\n" + whereClause
+
+	log.Println("FINAL SQL:", finalSQL)
+	log.Println("ARGS:", args)
+
+	rows, err := repo.DB.QueryContext(ctx, finalSQL, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute filtered query: %w", err)
+	}
+	defer rows.Close()
+
 	var profiles []model.Profile
-	//for rows.Next() {
-	//	var profileDataBytes []byte
-	//	if err := rows.Scan(&profileDataBytes); err != nil {
-	//		return nil, fmt.Errorf("error scanning filtered profile data: %w", err)
-	//	}
-	//	var profile model.Profile
-	//	if err := unmarshalProfile(profileDataBytes, &profile); err != nil {
-	//		return nil, fmt.Errorf("error unmarshaling filtered profile: %w", err)
-	//	}
-	//	profiles = append(profiles, profile)
-	//}
-	//if err := rows.Err(); err != nil {
-	//	return nil, fmt.Errorf("error iterating filtered profile rows: %w", err)
-	//}
+	for rows.Next() {
+		var profile model.Profile
+		var traitsJSON, identityJSON []byte
+		profile.ProfileHierarchy = &model.ProfileHierarchy{}
+		if err := rows.Scan(
+			&profile.ProfileId,
+			&profile.OriginCountry,
+			&profile.ProfileHierarchy.IsParent,
+			&profile.ProfileHierarchy.ParentProfileID,
+			&profile.ProfileHierarchy.ListProfile,
+			&traitsJSON,
+			&identityJSON,
+		); err != nil {
+			return nil, fmt.Errorf("error scanning profile row: %w", err)
+		}
+		json.Unmarshal(traitsJSON, &profile.Traits)
+		json.Unmarshal(identityJSON, &profile.IdentityAttributes)
+		profiles = append(profiles, profile)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating profile rows: %w", err)
+	}
+
 	return profiles, nil
 }
 

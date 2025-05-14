@@ -304,71 +304,76 @@ func GetAllProfilesWithFilter(filters []string) ([]model2.Profile, error) {
 	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 	profileRepo := store2.NewProfileRepository(postgresDB.DB)
 
+	// Step 1: Fetch enrichment rules to extract value types
 	rules, err := schemaRepo.GetProfileEnrichmentRules()
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfileEnrichmentRules, err)
 	}
 
-	// Step 2: Build trait → valueType mapping
+	// Step 2: Build field → valueType mapping
 	propertyTypeMap := make(map[string]string)
 	for _, rule := range rules {
 		propertyTypeMap[rule.PropertyName] = rule.ValueType
 	}
 
-	// Step 3: Rewrite filters with correct parsed types
-	var updatedFilters []string
+	// Step 3: Rewrite filters using typed conversion
+	var rewrittenFilters []string
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
 		if len(parts) != 3 {
 			continue
 		}
+
 		field, operator, rawValue := parts[0], parts[1], parts[2]
 		valueType := propertyTypeMap[field]
-		parsed := parseTypedValueForFilters(valueType, rawValue)
+		typedVal := parseTypedValueForFilters(valueType, rawValue)
 
-		// Prepare updated filter string
 		var valueStr string
-		switch v := parsed.(type) {
+		switch v := typedVal.(type) {
 		case string:
 			valueStr = v
 		default:
 			valueStr = fmt.Sprintf("%v", v)
 		}
-		updatedFilters = append(updatedFilters, fmt.Sprintf("%s %s %s", field, operator, valueStr))
+
+		rewrittenFilters = append(rewrittenFilters, fmt.Sprintf("%s %s %s", field, operator, valueStr))
 	}
 
-	// Step 4: Pass updated filters to repo
-	existingProfiles, err := profileRepo.GetAllProfilesWithFilter(updatedFilters)
+	// Step 4: Fetch matching profiles with `list_profile = true`
+	filteredProfiles, err := profileRepo.GetAllProfilesWithFilter(rewrittenFilters)
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
 	}
-	if existingProfiles == nil {
-		existingProfiles = []model2.Profile{}
+	if filteredProfiles == nil {
+		filteredProfiles = []model2.Profile{}
 	}
 
-	// todo: app context should be restricted for apps that is requesting these
-
 	var result []model2.Profile
-	for _, profile := range existingProfiles {
+	for _, profile := range filteredProfiles {
+		if !profile.ProfileHierarchy.ListProfile {
+			continue
+		}
+
 		if profile.ProfileHierarchy.IsParent {
 			result = append(result, profile)
 		} else {
-			// Fetch master and assign current profile ID
+			// Fetch master and attach current profile context
 			master, err := profileRepo.GetProfile(profile.ProfileHierarchy.ParentProfileID)
 			if err != nil || master == nil {
 				continue
 			}
 
 			master.ApplicationData, _ = profileRepo.FetchApplicationData(master.ProfileId)
-
-			// building the hierarchy
 			master.ProfileHierarchy.ChildProfiles, _ = profileRepo.FetchChildProfiles(master.ProfileId)
+
+			// Override for visual reference to the child
 			master.ProfileId = profile.ProfileId
-			master.ProfileHierarchy.ParentProfileID = master.ProfileId
+			master.ProfileHierarchy.ParentProfileID = profile.ProfileId
 
 			result = append(result, *master)
 		}
 	}
+
 	return result, nil
 }
 
