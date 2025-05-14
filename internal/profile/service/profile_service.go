@@ -143,7 +143,6 @@ func GetProfile(ProfileId string) (*model2.Profile, error) {
 func DeleteProfile(ProfileId string) error {
 
 	postgresDB := database.GetPostgresInstance()
-	eventRepo := repositories.NewEventRepository(postgresDB.DB)
 	profileRepo := store2.NewProfileRepository(postgresDB.DB)
 
 	// Fetch the existing profile before deletion
@@ -158,7 +157,7 @@ func DeleteProfile(ProfileId string) error {
 	}
 
 	//  Delete related events
-	if err := eventRepo.DeleteEventsByProfileId(ProfileId); err != nil {
+	if err := repositories.DeleteEventsByProfileId(ProfileId); err != nil {
 		return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
 	}
 
@@ -301,11 +300,10 @@ func GetAllProfiles() ([]model2.Profile, error) {
 func GetAllProfilesWithFilter(filters []string) ([]model2.Profile, error) {
 
 	postgresDB := database.GetPostgresInstance()
-	schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
 	profileRepo := store2.NewProfileRepository(postgresDB.DB)
 
 	// Step 1: Fetch enrichment rules to extract value types
-	rules, err := schemaRepo.GetProfileEnrichmentRules()
+	rules, err := store.GetProfileEnrichmentRules()
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfileEnrichmentRules, err)
 	}

@@ -277,9 +277,7 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 				existingMasterProfile.ProfileHierarchy.ChildProfiles, _ = profileRepo.FetchChildProfiles(existingMasterProfile.ProfileId)
 
 				//  Merge the existing master to the old master of current
-				postgresDB := database.GetPostgresInstance()
-				schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
-				enrichmentRules, _ := schemaRepo.GetProfileEnrichmentRules()
+				enrichmentRules, _ := store.GetProfileEnrichmentRules()
 				newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, enrichmentRules)
 
 				if len(existingMasterProfile.ProfileHierarchy.ChildProfiles) == 0 {
