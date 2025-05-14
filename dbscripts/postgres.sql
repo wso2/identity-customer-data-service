@@ -72,7 +72,7 @@ CREATE TABLE events (
     context JSONB
 );
 
-CREATE TABLE api_keys (
+CREATE TABLE event_stream_ids (
     key_id SERIAL PRIMARY KEY,
     api_key VARCHAR(255) UNIQUE NOT NULL,
     org_id VARCHAR(255) NOT NULL,

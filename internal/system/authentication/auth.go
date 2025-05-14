@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package authentication
 
 import (
@@ -7,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wso2/identity-customer-data-service/internal/api_keys/store"
+	"github.com/wso2/identity-customer-data-service/internal/event_stream_ids/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
@@ -18,7 +36,7 @@ func ValidateAuthentication(r *http.Request, event model.Event) (valid bool, err
 		return false, err
 	}
 	orgID, appID := fetchOrgAndApp(event)
-	return validateAPIKey(token, orgID, appID)
+	return validateEventStreamId(token, orgID, appID)
 }
 
 func extractAPIKey(r *http.Request) (string, error) {
@@ -31,7 +49,7 @@ func extractAPIKey(r *http.Request) (string, error) {
 		}, http.StatusUnauthorized)
 	}
 	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || strings.ToLower(parts[0]) != "apikey" {
+	if len(parts) != 2 || parts[0] != "eventStreamId" {
 		log.Print("Invalid API key format")
 		return "", errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.ErrUnAuthorizedRequest.Code,
@@ -55,16 +73,16 @@ func fetchOrgAndApp(event model.Event) (orgID, appID string) {
 	return orgID, appID
 }
 
-func validateAPIKey(apiKeyStr, orgID, appID string) (valid bool, error error) {
-	if apiKeyStr == "" || appID == "" || orgID == "" {
+func validateEventStreamId(eventStreamId, orgID, appID string) (valid bool, error error) {
+	if eventStreamId == "" || appID == "" || orgID == "" {
 		return false, errors.NewClientError(errors.ErrorMessage{
 			Code:        "missing_fields",
 			Message:     "Missing required fields",
-			Description: "api_key, application_id, or org_id is missing",
+			Description: "event_stream_id, application_id, or org_id is missing",
 		}, http.StatusBadRequest)
 	}
 
-	dbKey, err := store.GetAPIKey(apiKeyStr)
+	dbKey, err := store.GetEventStreamId(eventStreamId)
 	if err != nil || dbKey == nil {
 		return false, errors.NewClientError(errors.ErrorMessage{
 			Code:        "invalid_api_key",
