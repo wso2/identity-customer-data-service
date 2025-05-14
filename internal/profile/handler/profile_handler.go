@@ -6,7 +6,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
-	"github.com/wso2/identity-customer-data-service/internal/utils"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strings"
 	"sync"

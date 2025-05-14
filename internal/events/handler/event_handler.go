@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"github.com/wso2/identity-customer-data-service/internal/events/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"github.com/wso2/identity-customer-data-service/internal/utils"
 )
 
 type EventHandler struct {
