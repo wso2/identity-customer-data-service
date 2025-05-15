@@ -33,16 +33,22 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		rule.UpdatedAt)
 
 	if err != nil {
-		tx.Rollback()
+		err = tx.Rollback()
+		if err != nil {
+			return err
+		}
 		return errors2.NewServerError(errors2.ErrWhileAddingEnrichmentRules, err)
 	}
 
 	for _, cond := range rule.Trigger.Conditions {
-		_, err := tx.Exec(`INSERT INTO profile_enrichment_trigger_conditions 
+		_, err = tx.Exec(`INSERT INTO profile_enrichment_trigger_conditions 
 		(rule_id, field, operator, value) VALUES ($1, $2, $3, $4)`,
 			rule.RuleId, cond.Field, cond.Operator, cond.Value)
 		if err != nil {
-			tx.Rollback()
+			err = tx.Rollback()
+			if err != nil {
+				return err
+			}
 			return errors2.NewServerError(errors2.ErrWhileAddingEnrichmentRules, err)
 		}
 	}
@@ -77,7 +83,10 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		rule.PropertyName, rule.ValueType, rule.MergeStrategy, rule.SourceField, rule.Value, rule.ComputationMethod, rule.TimeRange,
 		rule.Trigger.EventType, rule.Trigger.EventName, timestamp, rule.RuleId)
 	if err != nil {
-		tx.Rollback()
+		err = tx.Rollback()
+		if err != nil {
+			return err
+		}
 		return errors2.NewServerError(errors2.ErrWhileUpdatingEnrichmentRules, err)
 	}
 
@@ -91,7 +100,10 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		(rule_id, field, operator, value) VALUES ($1, $2, $3, $4)`,
 			rule.RuleId, cond.Field, cond.Operator, cond.Value)
 		if err != nil {
-			tx.Rollback()
+			err := tx.Rollback()
+			if err != nil {
+				return err
+			}
 			return errors2.NewServerError(errors2.ErrWhileUpdatingEnrichmentRules, err)
 		}
 	}
@@ -116,6 +128,9 @@ func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error
 	var createdAt, updatedAt int64
 
 	results, err := dbClient.ExecuteQuery(query, ruleId)
+	if err != nil {
+		return model.ProfileEnrichmentRule{}, err
+	}
 	row := results[0]
 
 	rule.RuleId = row["rule_id"].(string)

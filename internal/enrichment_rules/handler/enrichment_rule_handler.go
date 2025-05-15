@@ -40,7 +40,7 @@ func (erh *EnrichmentRulesHandler) CreateEnrichmentRule(w http.ResponseWriter, r
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(rule)
+	_ = json.NewEncoder(w).Encode(rule)
 }
 
 // GetEnrichmentRules handles retrieve of all rules with or without filters
@@ -57,7 +57,7 @@ func (erh *EnrichmentRulesHandler) GetEnrichmentRules(w http.ResponseWriter, r *
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(rules)
+		_ = json.NewEncoder(w).Encode(rules)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (erh *EnrichmentRulesHandler) GetEnrichmentRules(w http.ResponseWriter, r *
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rules)
+	_ = json.NewEncoder(w).Encode(rules)
 }
 
 // GetEnrichmentRule handles retrieivng a specific rule
@@ -88,7 +88,7 @@ func (erh *EnrichmentRulesHandler) GetEnrichmentRule(w http.ResponseWriter, r *h
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rule)
+	_ = json.NewEncoder(w).Encode(rule)
 }
 
 func (erh *EnrichmentRulesHandler) PutEnrichmentRule(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +109,7 @@ func (erh *EnrichmentRulesHandler) PutEnrichmentRule(w http.ResponseWriter, r *h
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rules)
+	_ = json.NewEncoder(w).Encode(rules)
 }
 
 // DeleteEnrichmentRule handles DELETE /unification_rules/:rule_name

@@ -74,7 +74,7 @@ func (eh *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(events)
+	_ = json.NewEncoder(w).Encode(events)
 }
 
 // GetEvents fetches all events with optional filters
@@ -104,5 +104,5 @@ func (eh *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(events)
+	_ = json.NewEncoder(w).Encode(events)
 }

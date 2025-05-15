@@ -810,7 +810,10 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 	for _, child := range children {
 		_, err := tx.Exec(query, parentProfile.ProfileId, child.ChildProfileId, child.RuleName)
 		if err != nil {
-			tx.Rollback()
+			err := tx.Rollback()
+			if err != nil {
+				return err
+			}
 			return fmt.Errorf("failed to add child %s to parent %s: %w", child.ChildProfileId, parentProfile.ProfileId, err)
 		}
 	}

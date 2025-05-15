@@ -68,7 +68,10 @@ func (ah *EventStreamIdHandler) AddEventStreamId(w http.ResponseWriter, r *http.
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(apiKey)
+	err = json.NewEncoder(w).Encode(apiKey)
+	if err != nil {
+		return
+	}
 }
 
 // GetEventStreamId fetches either all or one API key
@@ -85,7 +88,7 @@ func (ah *EventStreamIdHandler) GetEventStreamId(w http.ResponseWriter, r *http.
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(key)
+		_ = json.NewEncoder(w).Encode(key)
 		return
 	}
 }
@@ -107,7 +110,7 @@ func (ah *EventStreamIdHandler) GetEventStreamIdPerApp(w http.ResponseWriter, r 
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(summary)
+	_ = json.NewEncoder(w).Encode(summary)
 }
 
 // RotateEventStreamId regenerates a key for a given app/key
@@ -122,7 +125,7 @@ func (ah *EventStreamIdHandler) RotateEventStreamId(w http.ResponseWriter, r *ht
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(newKey)
+	_ = json.NewEncoder(w).Encode(newKey)
 }
 
 // RevokeEventStreamId disables the API key
@@ -140,5 +143,5 @@ func (ah *EventStreamIdHandler) RevokeEventStreamId(w http.ResponseWriter, r *ht
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("api key revoked"))
+	_, _ = w.Write([]byte("api key revoked"))
 }

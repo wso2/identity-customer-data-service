@@ -71,7 +71,10 @@ func AddEvents(events []model.Event) error {
 
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
@@ -141,7 +144,7 @@ func FindEvents(filters []string, timeFilter map[string]int) ([]model.Event, err
 		baseField := jsonPathParts[0]
 
 		if !allowedFields[baseField] {
-			logger.Info(fmt.Sprintf("Invalid base field name in filter: %s", baseField))
+			logger.Info("Invalid base field name in filter: " + baseField)
 			continue
 		}
 
@@ -224,7 +227,6 @@ func FindEvents(filters []string, timeFilter map[string]int) ([]model.Event, err
 	if ts, ok := timeFilter["event_timestamp_lte"]; ok {
 		queryBuilder.WriteString(fmt.Sprintf(" AND event_timestamp <= $%d", argCount))
 		args = append(args, ts)
-		argCount++
 	}
 
 	queryString := queryBuilder.String()

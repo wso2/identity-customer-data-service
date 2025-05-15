@@ -43,7 +43,7 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(profile)
+	_ = json.NewEncoder(w).Encode(profile)
 }
 
 // DeleteProfile handles profile deletion
@@ -85,5 +85,5 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(profiles)
+	_ = json.NewEncoder(w).Encode(profiles)
 }
