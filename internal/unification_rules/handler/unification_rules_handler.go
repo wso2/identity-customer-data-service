@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/wso2/identity-customer-data-service/internal/utils"
 )
 
 type UnificationRulesHandler struct {

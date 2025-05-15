@@ -1,9 +1,8 @@
 package database
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"hash/fnv" // For hashing string keys to integers
 )
 
@@ -13,12 +12,10 @@ type DistributedLock interface {
 }
 
 // PostgresLock implements DistributedLock using PostgreSQL advisory locks.
-type PostgresLock struct {
-	conn *sql.Conn
-}
+type PostgresLock struct{}
 
-func NewPostgresLock(conn *sql.Conn) *PostgresLock {
-	return &PostgresLock{conn: conn}
+func NewPostgresLock() *PostgresLock {
+	return &PostgresLock{}
 }
 
 // PostgreSQL advisory locks use bigint or two integers. We'll use a single bigint.
@@ -33,13 +30,21 @@ func (l *PostgresLock) generateLockKey(key string) (int64, error) {
 }
 
 func (l *PostgresLock) Acquire(key string) (bool, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return false, fmt.Errorf("failed to get DB client: %w", err)
+	}
+	defer dbClient.Close()
 	lockID, err := l.generateLockKey(key)
 	if err != nil {
 		return false, err
 	}
 
 	var acquired bool
-	err = l.conn.QueryRowContext(context.Background(), "SELECT pg_try_advisory_lock($1)", lockID).Scan(&acquired)
+	results, err := dbClient.ExecuteQuery("SELECT pg_try_advisory_lock($1)", lockID)
+	row := results[0]
+	acquired = row["pg_try_advisory_lock"].(bool)
 	if err != nil {
 		return false, fmt.Errorf("pg_try_advisory_lock failed: %w", err)
 	}
@@ -47,14 +52,22 @@ func (l *PostgresLock) Acquire(key string) (bool, error) {
 }
 
 func (l *PostgresLock) Release(key string) error {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get DB client: %w", err)
+	}
+	defer dbClient.Close()
 	lockID, err := l.generateLockKey(key)
 	if err != nil {
 		return err
 	}
 
 	var released bool
-	err = l.conn.QueryRowContext(context.Background(), "SELECT pg_advisory_unlock($1)", lockID).Scan(&released)
-	if err != nil {
+	results, err := dbClient.ExecuteQuery("SELECT pg_advisory_unlock($1)", lockID)
+	row := results[0]
+	released = row["pg_advisory_unlock"].(bool)
+	if err != nil || !released {
 		return fmt.Errorf("pg_advisory_unlock failed: %w", err)
 	}
 

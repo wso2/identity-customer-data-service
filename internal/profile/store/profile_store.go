@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"log"
 	"strconv"
@@ -14,20 +16,8 @@ import (
 	"time"
 )
 
-// ProfileRepository handles MongoDB operations for profiles
-type ProfileRepository struct {
-	DB *sql.DB
-}
-
-// NewProfileRepository creates a new repository instance
-func NewProfileRepository(db *sql.DB) *ProfileRepository {
-	return &ProfileRepository{
-		DB: db,
-	}
-}
-
 // Unmarshal JSONB fields separately
-func scanProfileRow(row *sql.Row) (*model.Profile, error) {
+func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 	var (
 		profile                       model.Profile
 		traitsJSON, identityAttrsJSON []byte
@@ -35,33 +25,31 @@ func scanProfileRow(row *sql.Row) (*model.Profile, error) {
 
 	profile.ProfileHierarchy = &model.ProfileHierarchy{}
 
-	err := row.Scan(
-		&profile.ProfileId,
-		&profile.OriginCountry,
-		&profile.ProfileHierarchy.IsParent,
-		&profile.ProfileHierarchy.ParentProfileID,
-		&profile.ProfileHierarchy.ListProfile,
-		&traitsJSON,
-		&identityAttrsJSON,
-	)
-	if err != nil {
-		return nil, err
-	}
+	profile.ProfileId = row["profile_id"].(string)
+	profile.OriginCountry = row["origin_country"].(string)
+	profile.ProfileHierarchy.IsParent = row["is_parent"].(bool)
+	profile.ProfileHierarchy.ParentProfileID = row["parent_profile_id"].(string)
+	profile.ProfileHierarchy.ListProfile = row["list_profile"].(bool)
+	traitsJSON = row["traits"].([]byte)
+	identityAttrsJSON = row["identity_attributes"].([]byte)
 
 	// Unmarshal JSON fields
 	if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal traits: %w", err)
+		return model.Profile{}, fmt.Errorf("failed to unmarshal traits: %w", err)
 	}
 	if err := json.Unmarshal(identityAttrsJSON, &profile.IdentityAttributes); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal identity attributes: %w", err)
+		return model.Profile{}, fmt.Errorf("failed to unmarshal identity attributes: %w", err)
 	}
 
-	return &profile, nil
+	return profile, nil
 }
 
-func (repo *ProfileRepository) InsertProfile(profile model.Profile) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func InsertProfile(profile model.Profile) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	traitsJSON, _ := json.Marshal(profile.Traits)
 	identityJSON, _ := json.Marshal(profile.IdentityAttributes)
@@ -72,7 +60,7 @@ func (repo *ProfileRepository) InsertProfile(profile model.Profile) error {
 	) VALUES ($1, $2, $3, $4, $5, $6, $7)
 	ON CONFLICT (profile_id) DO NOTHING;`
 
-	_, err := repo.DB.ExecContext(ctx, query,
+	_, err = dbClient.ExecuteQuery(query,
 		profile.ProfileId,
 		profile.OriginCountry,
 		profile.ProfileHierarchy.IsParent,
@@ -88,7 +76,7 @@ func (repo *ProfileRepository) InsertProfile(profile model.Profile) error {
 	return nil
 }
 
-func (repo *ProfileRepository) insertApplicationData(profileId string, apps []model.ApplicationData) error {
+func InsertApplicationData(profileId string, apps []model.ApplicationData) error {
 
 	for _, app := range apps {
 		// Construct the update map
@@ -105,7 +93,7 @@ func (repo *ProfileRepository) insertApplicationData(profileId string, apps []mo
 		}
 
 		// Use the existing upsert method
-		err := repo.UpsertAppDatum(profileId, app.AppId, updateMap)
+		err := UpsertAppDatum(profileId, app.AppId, updateMap)
 		if err != nil {
 			return fmt.Errorf("failed to upsert app_data for app %s: %w", app.AppId, err)
 		}
@@ -113,47 +101,54 @@ func (repo *ProfileRepository) insertApplicationData(profileId string, apps []mo
 	return nil
 }
 
-func (repo *ProfileRepository) GetProfile(profileId string) (*model.Profile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func GetProfile(profileId string) (*model.Profile, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := `
 		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
 		FROM profiles
 		WHERE profile_id = $1;`
 
-	row := repo.DB.QueryRowContext(ctx, query, profileId)
+	results, err := dbClient.ExecuteQuery(query, profileId)
 
-	profile, err := scanProfileRow(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
+	profile, err := scanProfileRow(results[0])
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving profile %s: %w", profileId, err)
 	}
-	profile.ApplicationData, _ = repo.FetchApplicationData(profileId)
-	return profile, nil
+	profile.ApplicationData, _ = FetchApplicationData(profileId)
+	return &profile, nil
 }
 
-func (repo *ProfileRepository) FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
+func FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 	query := `SELECT app_id, application_data FROM application_data WHERE profile_id = $1;`
-	rows, err := repo.DB.Query(query, profileId)
+	results, err := dbClient.ExecuteQuery(query, profileId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch app_data: %w", err)
 	}
-	defer rows.Close()
 
 	var apps []model.ApplicationData
-	for rows.Next() {
+	for _, row := range results {
 		var (
 			appId     string
 			appBlob   []byte
 			appParsed model.ApplicationData
 		)
 
-		if err := rows.Scan(&appId, &appBlob); err != nil {
-			return nil, fmt.Errorf("failed to scan app_data row: %w", err)
-		}
+		appId = row["app_id"].(string)
+		appBlob = row["application_data"].([]byte)
 
 		if err := json.Unmarshal(appBlob, &appParsed); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal app_data: %w", err)
@@ -168,25 +163,29 @@ func (repo *ProfileRepository) FetchApplicationData(profileId string) ([]model.A
 	return apps, nil
 }
 
-func (repo *ProfileRepository) fetchApplicationDataWithAppId(profileId string, appId string) (model.ApplicationData, error) {
+func FetchApplicationDataWithAppId(profileId string, appId string) (model.ApplicationData, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return model.ApplicationData{}, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 	query := `SELECT app_id, application_data FROM application_data WHERE profile_id = $1 AND app_id = $2;`
-	rows, err := repo.DB.Query(query, profileId, appId)
+	results, err := dbClient.ExecuteQuery(query, profileId, appId)
 	var app model.ApplicationData
 	if err != nil {
 		return app, fmt.Errorf("failed to fetch app_data: %w", err)
 	}
-	defer rows.Close()
 
-	for rows.Next() {
+	for _, row := range results {
 		var (
 			appId     string
 			appBlob   []byte
 			appParsed model.ApplicationData
 		)
 
-		if err := rows.Scan(&appId, &appBlob); err != nil {
-			return app, fmt.Errorf("failed to scan app_data row: %w", err)
-		}
+		appId = row["app_id"].(string)
+		appBlob = row["application_data"].([]byte)
 
 		if err := json.Unmarshal(appBlob, &appParsed); err != nil {
 			return app, fmt.Errorf("failed to unmarshal app_data: %w", err)
@@ -199,9 +198,12 @@ func (repo *ProfileRepository) fetchApplicationDataWithAppId(profileId string, a
 	return app, nil
 }
 
-func (repo *ProfileRepository) UpdateProfile(profile model.Profile) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func UpdateProfile(profile model.Profile) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	traitsJSON, _ := json.Marshal(profile.Traits)
 	identityJSON, _ := json.Marshal(profile.IdentityAttributes)
@@ -216,7 +218,7 @@ func (repo *ProfileRepository) UpdateProfile(profile model.Profile) error {
 			identity_attributes = $6
 		WHERE profile_id = $7;`
 
-	result, err := repo.DB.ExecContext(ctx, query,
+	result, err := dbClient.ExecuteQuery(query,
 		profile.OriginCountry,
 		profile.ProfileHierarchy.IsParent,
 		profile.ProfileHierarchy.ParentProfileID,
@@ -228,50 +230,36 @@ func (repo *ProfileRepository) UpdateProfile(profile model.Profile) error {
 	if err != nil {
 		return fmt.Errorf("failed to update profile: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows := len(result)
 	if rows == 0 {
 		return sql.ErrNoRows
 	}
 	return nil
 }
 
-func (repo *ProfileRepository) GetAllProfiles() ([]model.Profile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func GetAllProfiles() ([]model.Profile, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := `
 		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
 		FROM profiles
 		WHERE list_profile = true;`
 
-	rows, err := repo.DB.QueryContext(ctx, query)
+	results, err := dbClient.ExecuteQuery(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch profiles: %w", err)
 	}
-	defer rows.Close()
 
 	var profiles []model.Profile
-	for rows.Next() {
-		var profile model.Profile
-		profile.ProfileHierarchy = &model.ProfileHierarchy{}
-		var traitsJSON, identityJSON []byte
-		err := rows.Scan(
-			&profile.ProfileId,
-			&profile.OriginCountry,
-			&profile.ProfileHierarchy.IsParent,
-			&profile.ProfileHierarchy.ParentProfileID,
-			&profile.ProfileHierarchy.ListProfile,
-			&traitsJSON,
-			&identityJSON,
-		)
-		if err != nil {
-			return nil, err
-		}
-		json.Unmarshal(traitsJSON, &profile.Traits)
-		json.Unmarshal(identityJSON, &profile.IdentityAttributes)
+	for _, row := range results {
+		var profile, _ = scanProfileRow(row)
 
 		// Fetch app data
-		apps, err := repo.FetchApplicationData(profile.ProfileId)
+		apps, err := FetchApplicationData(profile.ProfileId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch app data for profile %s: %w", profile.ProfileId, err)
 		}
@@ -283,32 +271,33 @@ func (repo *ProfileRepository) GetAllProfiles() ([]model.Profile, error) {
 }
 
 // DeleteProfile deletes a profile and its associated data
-func (repo *ProfileRepository) DeleteProfile(profileId string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func DeleteProfile(profileId string) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	// Step 1: Delete application_data explicitly (optional if ON DELETE CASCADE not enabled)
-	_, err := repo.DB.ExecContext(ctx, `DELETE FROM application_data WHERE profile_id = $1`, profileId)
+	_, err = dbClient.ExecuteQuery(`DELETE FROM application_data WHERE profile_id = $1`, profileId)
 	if err != nil {
 		return fmt.Errorf("failed to delete application data for profile %s: %w", profileId, err)
 	}
 
 	// Step 2: Delete child relationships where this is a parent (optional safety, ON DELETE CASCADE already exists)
-	_, err = repo.DB.ExecContext(ctx, `DELETE FROM child_profiles WHERE parent_profile_id = $1 OR child_profile_id = $1`, profileId)
+	_, err = dbClient.ExecuteQuery(
+		`DELETE FROM child_profiles WHERE parent_profile_id = $1 OR child_profile_id = $1`, profileId)
 	if err != nil {
 		return fmt.Errorf("failed to delete child profile links for profile %s: %w", profileId, err)
 	}
 
 	// Step 3: Delete the profile itself
-	result, err := repo.DB.ExecContext(ctx, `DELETE FROM profiles WHERE profile_id = $1`, profileId)
+	result, err := dbClient.ExecuteQuery(`DELETE FROM profiles WHERE profile_id = $1`, profileId)
 	if err != nil {
 		return fmt.Errorf("failed to delete profile %s: %w", profileId, err)
 	}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to check delete result for profile %s: %w", profileId, err)
-	}
+	rows := len(result)
 	if rows == 0 {
 		return sql.ErrNoRows
 	}
@@ -318,11 +307,9 @@ func (repo *ProfileRepository) DeleteProfile(profileId string) error {
 }
 
 // UpsertIdentityAttribute updates or inserts attributes, enriching array values.
-func (repo *ProfileRepository) UpsertIdentityAttribute(profileId string, updates map[string]interface{}) error {
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func UpsertIdentityAttribute(profileId string, updates map[string]interface{}) error {
 
-	profile, err := repo.GetProfile(profileId)
+	profile, err := GetProfile(profileId)
 	if err != nil {
 		return fmt.Errorf("failed to fetch profile %s for identity attribute upsert: %w", profileId, err)
 	}
@@ -340,13 +327,11 @@ func (repo *ProfileRepository) UpsertIdentityAttribute(profileId string, updates
 		profile.IdentityAttributes[attrName] = enrichFieldValues(existingVal, incomingVal)
 	}
 
-	return repo.UpdateProfile(*profile)
+	return UpdateProfile(*profile)
 }
-func (repo *ProfileRepository) UpsertTrait(profileId string, updates map[string]interface{}) error {
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func UpsertTrait(profileId string, updates map[string]interface{}) error {
 
-	profile, err := repo.GetProfile(profileId)
+	profile, err := GetProfile(profileId)
 	if err != nil {
 		return fmt.Errorf("failed to fetch profile %s for trait upsert: %w", profileId, err)
 	}
@@ -364,15 +349,13 @@ func (repo *ProfileRepository) UpsertTrait(profileId string, updates map[string]
 		profile.Traits[traitName] = enrichFieldValues(existingVal, incomingVal)
 	}
 
-	return repo.UpdateProfile(*profile)
+	return UpdateProfile(*profile)
 }
 
-func (repo *ProfileRepository) UpsertAppDatum(profileId string, appId string, updates map[string]interface{}) error {
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func UpsertAppDatum(profileId string, appId string, updates map[string]interface{}) error {
 
 	// Fetch existing application_data for the given app
-	appData, err := repo.fetchApplicationDataWithAppId(profileId, appId)
+	appData, err := FetchApplicationDataWithAppId(profileId, appId)
 	if err != nil {
 		return fmt.Errorf("failed to fetch existing application data: %w", err)
 	}
@@ -424,7 +407,13 @@ func (repo *ProfileRepository) UpsertAppDatum(profileId string, appId string, up
 		DO UPDATE SET application_data = EXCLUDED.application_data;
 	`
 
-	_, err = repo.DB.Exec(query, profileId, appId, jsonBytes)
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
+
+	_, err = dbClient.ExecuteQuery(query, profileId, appId, jsonBytes)
 	if err != nil {
 		return fmt.Errorf("failed to upsert application data: %w", err)
 	}
@@ -433,17 +422,20 @@ func (repo *ProfileRepository) UpsertAppDatum(profileId string, appId string, up
 }
 
 // DetachChildProfileFromParent removes a child from a parent's child_profile_ids list
-func (repo *ProfileRepository) DetachChildProfileFromParent(parentID, childID string) error {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func DetachChildProfileFromParent(parentID, childID string) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := `DELETE FROM child_profiles WHERE parent_profile_id = $1 AND child_profile_id = $2;`
-	result, err := repo.DB.Exec(query, parentID, childID)
+	result, err := dbClient.ExecuteQuery(query, parentID, childID)
 	if err != nil {
 		return fmt.Errorf("failed to delete child relationship: %w", err)
 	}
 
-	rowsAffected, _ := result.RowsAffected()
+	rowsAffected := len(result)
 	if rowsAffected == 0 {
 		logger.Info(fmt.Sprintf("INFO: No child profile %s found under parent %s to remove.", childID, parentID))
 	}
@@ -451,11 +443,9 @@ func (repo *ProfileRepository) DetachChildProfileFromParent(parentID, childID st
 }
 
 // InsertMergedMasterProfileAppData adds or updates application-specific context data.
-func (repo *ProfileRepository) InsertMergedMasterProfileAppData(profileId string, newAppCtx model.ApplicationData) error {
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func InsertMergedMasterProfileAppData(profileId string, newAppCtx model.ApplicationData) error {
 
-	profile, err := repo.GetProfile(profileId)
+	profile, err := GetProfile(profileId)
 	if err != nil {
 		return fmt.Errorf("failed to fetch profile %s for app context update: %w", profileId, err)
 	}
@@ -493,7 +483,7 @@ func (repo *ProfileRepository) InsertMergedMasterProfileAppData(profileId string
 
 	profile.ApplicationData = resultAppData
 	// this inserts the entire application_data blob with the update.
-	return repo.insertApplicationData(profile.ProfileId, profile.ApplicationData)
+	return InsertApplicationData(profile.ProfileId, profile.ApplicationData)
 }
 
 // mergeDeviceLists helper (from original code, assumed correct)
@@ -519,11 +509,9 @@ func mergeDeviceLists(existing, incoming []model.Devices) []model.Devices {
 }
 
 // InsertMergedMasterProfileTraitData replaces (PUT) the traits data inside Profile
-func (repo *ProfileRepository) InsertMergedMasterProfileTraitData(profileId string, traitsData map[string]interface{}) error {
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func InsertMergedMasterProfileTraitData(profileId string, traitsData map[string]interface{}) error {
 
-	profile, err := repo.GetProfile(profileId)
+	profile, err := GetProfile(profileId)
 	if err != nil {
 		return fmt.Errorf("failed to get profile %s for traits update: %w", profileId, err)
 	}
@@ -534,16 +522,13 @@ func (repo *ProfileRepository) InsertMergedMasterProfileTraitData(profileId stri
 	}
 
 	profile.Traits = traitsData
-	return repo.UpdateProfile(*profile) // Update existing profile
+	return UpdateProfile(*profile) // Update existing profile
 }
 
 // MergeIdentityDataOfProfiles replaces or adds to identity_attributes in Profile
-func (repo *ProfileRepository) MergeIdentityDataOfProfiles(profileId string, identityData map[string]interface{}) error {
+func MergeIdentityDataOfProfiles(profileId string, identityData map[string]interface{}) error {
 
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	profile, err := repo.GetProfile(profileId)
+	profile, err := GetProfile(profileId)
 	if err != nil {
 		return fmt.Errorf("failed to get profile %s for identity data upsert: %w", profileId, err)
 	}
@@ -554,7 +539,7 @@ func (repo *ProfileRepository) MergeIdentityDataOfProfiles(profileId string, ide
 			IdentityAttributes: identityData,
 		}
 		logger.Info(fmt.Sprintf("INFO: Profile %s not found. Creating new profile for MergeIdentityDataOfProfiles.", profileId))
-		return repo.InsertProfile(newProfile)
+		return InsertProfile(newProfile)
 	}
 
 	if profile.IdentityAttributes == nil {
@@ -564,12 +549,15 @@ func (repo *ProfileRepository) MergeIdentityDataOfProfiles(profileId string, ide
 		profile.IdentityAttributes[k] = v // Overwrites or adds
 	}
 
-	return repo.UpdateProfile(*profile)
+	return UpdateProfile(*profile)
 }
 
-func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	var conditions []string
 	var args []interface{}
@@ -676,42 +664,29 @@ func (repo *ProfileRepository) GetAllProfilesWithFilter(filters []string) ([]mod
 	log.Println("FINAL SQL:", finalSQL)
 	log.Println("ARGS:", args)
 
-	rows, err := repo.DB.QueryContext(ctx, finalSQL, args...)
+	results, err := dbClient.ExecuteQuery(finalSQL, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute filtered query: %w", err)
 	}
-	defer rows.Close()
 
 	var profiles []model.Profile
-	for rows.Next() {
-		var profile model.Profile
-		var traitsJSON, identityJSON []byte
-		profile.ProfileHierarchy = &model.ProfileHierarchy{}
-		if err := rows.Scan(
-			&profile.ProfileId,
-			&profile.OriginCountry,
-			&profile.ProfileHierarchy.IsParent,
-			&profile.ProfileHierarchy.ParentProfileID,
-			&profile.ProfileHierarchy.ListProfile,
-			&traitsJSON,
-			&identityJSON,
-		); err != nil {
+	for _, row := range results {
+		profile, err := scanProfileRow(row)
+		if err != nil {
 			return nil, fmt.Errorf("error scanning profile row: %w", err)
 		}
-		json.Unmarshal(traitsJSON, &profile.Traits)
-		json.Unmarshal(identityJSON, &profile.IdentityAttributes)
 		profiles = append(profiles, profile)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating profile rows: %w", err)
 	}
 
 	return profiles, nil
 }
 
-func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := `
 		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
@@ -719,14 +694,13 @@ func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfi
 		WHERE is_parent = true AND profile_id != $1;
 	`
 
-	rows, err := repo.DB.QueryContext(ctx, query, currentProfile.ProfileId)
+	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch master profiles: %w", err)
 	}
-	defer rows.Close()
 
 	var profiles []model.Profile
-	for rows.Next() {
+	for _, row := range results {
 		var (
 			profile                        model.Profile
 			traitsJSON, identityJSON       []byte
@@ -734,17 +708,13 @@ func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfi
 			parentProfileID, originCountry string
 		)
 
-		if err := rows.Scan(
-			&profile.ProfileId,
-			&originCountry,
-			&isParent,
-			&parentProfileID,
-			&listProfile,
-			&traitsJSON,
-			&identityJSON,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan profile row: %w", err)
-		}
+		profile.ProfileId = row["profile_id"].(string)
+		originCountry = row["origin_country"].(string)
+		isParent = row["is_parent"].(bool)
+		parentProfileID = row["parent_profile_id"].(string)
+		listProfile = row["list_profile"].(bool)
+		traitsJSON = row["traits"].([]byte)
+		identityJSON = row["identity_attributes"].([]byte)
 
 		profile.OriginCountry = originCountry
 		profile.ProfileHierarchy = &model.ProfileHierarchy{
@@ -760,24 +730,20 @@ func (repo *ProfileRepository) GetAllMasterProfilesExceptForCurrent(currentProfi
 			return nil, fmt.Errorf("failed to unmarshal identity attributes: %w", err)
 		}
 
-		profile.ApplicationData, _ = repo.FetchApplicationData(profile.ProfileId)
+		profile.ApplicationData, _ = FetchApplicationData(profile.ProfileId)
 
 		profiles = append(profiles, profile)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating master profiles: %w", err)
 	}
 
 	return profiles, nil
 }
 
 // UpdateParent sets parent_profile_id and is_parent=false for a profile.
-func (repo *ProfileRepository) UpdateParent(master model.Profile, targetProfile model.Profile) error {
+func UpdateParent(master model.Profile, targetProfile model.Profile) error {
 	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	profileToUpdate, err := repo.GetProfile(targetProfile.ProfileId)
+	profileToUpdate, err := GetProfile(targetProfile.ProfileId)
 	if err != nil {
 		return fmt.Errorf("failed to get profile %s for parent update: %w", targetProfile.ProfileId, err)
 	}
@@ -791,21 +757,24 @@ func (repo *ProfileRepository) UpdateParent(master model.Profile, targetProfile 
 	profileToUpdate.ProfileHierarchy.ParentProfileID = master.ProfileId
 	profileToUpdate.ProfileHierarchy.IsParent = false // Explicitly setting child not to be a parent
 
-	return repo.UpdateProfile(*profileToUpdate)
+	return UpdateProfile(*profileToUpdate)
 }
 
 // FindProfileByUserName retrieves a profile by identity_attributes.user_name
-func (repo *ProfileRepository) FindProfileByUserName(userName string) (*model.Profile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func FindProfileByUserName(userName string) (*model.Profile, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	sqlStatement := `
         SELECT profile_data
         FROM profiles
         WHERE profile_data -> 'identity_attributes' ->> 'user_name' = $1;`
 
-	var profileDataBytes []byte
-	err := repo.DB.QueryRowContext(ctx, sqlStatement, userName).Scan(&profileDataBytes)
+	_, err = dbClient.ExecuteQuery(sqlStatement, userName)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // Not found
@@ -820,15 +789,17 @@ func (repo *ProfileRepository) FindProfileByUserName(userName string) (*model.Pr
 	return &profile, nil
 }
 
-func (repo *ProfileRepository) AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile) error {
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
-	tx, err := repo.DB.BeginTx(context.Background(), nil)
+	tx, err := dbClient.BeginTx()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
 
 	query := `
 		INSERT INTO child_profiles (parent_profile_id, child_profile_id, rule_name)
@@ -839,6 +810,7 @@ func (repo *ProfileRepository) AddChildProfiles(parentProfile model.Profile, chi
 	for _, child := range children {
 		_, err := tx.Exec(query, parentProfile.ProfileId, child.ChildProfileId, child.RuleName)
 		if err != nil {
+			tx.Rollback()
 			return fmt.Errorf("failed to add child %s to parent %s: %w", child.ChildProfileId, parentProfile.ProfileId, err)
 		}
 	}
@@ -846,36 +818,33 @@ func (repo *ProfileRepository) AddChildProfiles(parentProfile model.Profile, chi
 	return tx.Commit()
 }
 
-func (repo *ProfileRepository) FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
+func FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
 	logger.Info(fmt.Sprintf("Fetching child profiles for parent: %s", parentProfileId))
 
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 	query := `
 		SELECT child_profile_id, rule_name 
 		FROM child_profiles 
 		WHERE parent_profile_id = $1;
 	`
 
-	rows, err := repo.DB.Query(query, parentProfileId)
+	results, err := dbClient.ExecuteQuery(query, parentProfileId)
 	if err != nil {
 		log.Println("Database query failed", "parentProfileId", parentProfileId, "error", err)
 		return nil, fmt.Errorf("failed to fetch child profiles: %w", err)
 	}
-	defer rows.Close()
 
 	var children []model.ChildProfile
-	for rows.Next() {
+	for _, row := range results {
 		var child model.ChildProfile
-		if err := rows.Scan(&child.ChildProfileId, &child.RuleName); err != nil {
-			log.Print("Failed to scan row", "parentProfileId", parentProfileId, "error", err)
-			return nil, fmt.Errorf("error scanning child profile row: %w", err)
-		}
+		child.ChildProfileId = row["child_profile_id"].(string)
+		child.RuleName = row["rule_name"].(string)
 		logger.Debug("Fetched child profile", "childProfileId", child.ChildProfileId, "ruleName", child.RuleName)
 		children = append(children, child)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Println("Row iteration error", "parentProfileId", parentProfileId, "error", err)
-		return nil, fmt.Errorf("row iteration error: %w", err)
 	}
 
 	logger.Info("Successfully fetched child profiles", "parentProfileId", parentProfileId, "count", len(children))

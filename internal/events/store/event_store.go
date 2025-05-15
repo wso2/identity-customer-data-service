@@ -1,29 +1,16 @@
 package store
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"strings"
-	"time"
 )
-
-// EventRepository handles PostgreSQL operations for user events
-type EventRepository struct {
-	DB *sql.DB
-}
-
-// NewEventRepository initializes a repository for the events table
-func NewEventRepository(db *sql.DB) *EventRepository {
-	return &EventRepository{
-		DB: db,
-	}
-}
 
 // Helper to marshal JSONB fields, handling nil maps
 func marshalJsonb(data map[string]interface{}) (sql.NullString, error) {
@@ -40,9 +27,13 @@ func marshalJsonb(data map[string]interface{}) (sql.NullString, error) {
 }
 
 // AddEvent inserts a single event
-func (repo *EventRepository) AddEvent(event model.Event) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func AddEvent(event model.Event) error {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	propertiesJson, err := marshalJsonb(event.Properties)
 	if err != nil {
@@ -57,7 +48,7 @@ func (repo *EventRepository) AddEvent(event model.Event) error {
         INSERT INTO %s (profile_id, event_type, event_name, event_id, application_id, org_id, event_timestamp, properties, context)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, constants.EventCollection)
 
-	_, err = repo.DB.ExecContext(ctx, query,
+	_, err = dbClient.ExecuteQuery(query,
 		event.ProfileId, event.EventType, event.EventName, event.EventId,
 		event.AppId, event.OrgId, event.EventTimestamp, propertiesJson, contextJson,
 	)
@@ -71,25 +62,22 @@ func (repo *EventRepository) AddEvent(event model.Event) error {
 }
 
 // AddEvents inserts multiple events in bulk using a transaction
-func (repo *EventRepository) AddEvents(events []model.Event) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) // Increased timeout for bulk
-	defer cancel()
-
-	tx, err := repo.DB.BeginTx(ctx, nil)
+func AddEvents(events []model.Event) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
+
+	tx, err := dbClient.BeginTx()
+	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback() // Rollback if not committed
 
 	query := fmt.Sprintf(`
         INSERT INTO %s (profile_id, event_type, event_name, event_id, application_id, org_id, event_timestamp, properties, context)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, constants.EventCollection)
-
-	stmt, err := tx.PrepareContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
 
 	for _, event := range events {
 		propertiesJson, err := marshalJsonb(event.Properties)
@@ -101,7 +89,7 @@ func (repo *EventRepository) AddEvents(events []model.Event) error {
 			return fmt.Errorf("failed to marshal context for event %s: %w", event.EventId, err)
 		}
 
-		_, err = stmt.ExecContext(ctx,
+		_, err = tx.Exec(query,
 			event.ProfileId, event.EventType, event.EventName, event.EventId,
 			event.AppId, event.OrgId, event.EventTimestamp, propertiesJson, contextJson,
 		)
@@ -120,9 +108,7 @@ func (repo *EventRepository) AddEvents(events []model.Event) error {
 }
 
 // FindEvents fetches events based on dynamic filters and time range
-func (repo *EventRepository) FindEvents(filters []string, timeFilter map[string]int) ([]model.Event, error) { // Assuming timeFilter values are int64 for Unix timestamps
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func FindEvents(filters []string, timeFilter map[string]int) ([]model.Event, error) { // Assuming timeFilter values are int64 for Unix timestamps
 
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString(fmt.Sprintf("SELECT profile_id, event_type, event_name, event_id, application_id, org_id, event_timestamp, properties, context FROM %s WHERE 1=1", constants.EventCollection))
@@ -244,25 +230,31 @@ func (repo *EventRepository) FindEvents(filters []string, timeFilter map[string]
 	queryString := queryBuilder.String()
 	logger.Info(fmt.Sprintf("Executing query: %s with args: %v", queryString, args)) // Logging query
 
-	rows, err := repo.DB.QueryContext(ctx, queryString, args...)
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
+
+	results, err := dbClient.ExecuteQuery(queryString, args...)
 	if err != nil {
 		return nil, fmt.Errorf("database query failed: %w", err)
 	}
-	defer rows.Close()
 
 	var events []model.Event
-	for rows.Next() {
+	for _, row := range results {
 		var event model.Event
 		var propertiesRaw, contextRaw sql.NullString
 
-		err := rows.Scan(
-			&event.ProfileId, &event.EventType, &event.EventName, &event.EventId,
-			&event.AppId, &event.OrgId, &event.EventTimestamp,
-			&propertiesRaw, &contextRaw,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
+		event.ProfileId = row["profile_id"].(string)
+		event.EventType = row["event_type"].(string)
+		event.EventName = row["event_name"].(string)
+		event.EventId = row["event_id"].(string)
+		event.AppId = row["application_id"].(string)
+		event.OrgId = row["org_id"].(string)
+		event.EventTimestamp = int(row["event_timestamp"].(int64))
+		propertiesRaw = row["properties"].(sql.NullString)
+		contextRaw = row["context"].(sql.NullString)
 
 		if propertiesRaw.Valid {
 			if err := json.Unmarshal([]byte(propertiesRaw.String), &event.Properties); err != nil {
@@ -282,17 +274,16 @@ func (repo *EventRepository) FindEvents(filters []string, timeFilter map[string]
 		events = append(events, event)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
-	}
-
 	return events, nil
 }
 
 // FindEvent fetches a single event by its ID
-func (repo *EventRepository) FindEvent(eventId string) (*model.Event, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func FindEvent(eventId string) (*model.Event, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := fmt.Sprintf(`
         SELECT profile_id, event_type, event_name, event_id, application_id, org_id, event_timestamp, properties, context
@@ -301,11 +292,18 @@ func (repo *EventRepository) FindEvent(eventId string) (*model.Event, error) {
 	var event model.Event
 	var propertiesRaw, contextRaw sql.NullString
 
-	err := repo.DB.QueryRowContext(ctx, query, eventId).Scan(
-		&event.ProfileId, &event.EventType, &event.EventName, &event.EventId,
-		&event.AppId, &event.OrgId, &event.EventTimestamp,
-		&propertiesRaw, &contextRaw,
-	)
+	results, err := dbClient.ExecuteQuery(query, eventId)
+	for _, row := range results {
+		event.ProfileId = row["profile_id"].(string)
+		event.EventType = row["event_type"].(string)
+		event.EventName = row["event_name"].(string)
+		event.EventId = row["event_id"].(string)
+		event.AppId = row["application_id"].(string)
+		event.OrgId = row["org_id"].(string)
+		event.EventTimestamp = int(row["event_timestamp"].(int64))
+		propertiesRaw = row["properties"].(sql.NullString)
+		contextRaw = row["context"].(sql.NullString)
+	}
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -333,19 +331,19 @@ func (repo *EventRepository) FindEvent(eventId string) (*model.Event, error) {
 }
 
 // DeleteEvent deletes a single event by its ID
-func (repo *EventRepository) DeleteEvent(eventId string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func DeleteEvent(eventId string) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := fmt.Sprintf("DELETE FROM %s WHERE event_id = $1", constants.EventCollection)
-	result, err := repo.DB.ExecContext(ctx, query, eventId)
+	result, err := dbClient.ExecuteQuery(query, eventId)
 	if err != nil {
 		return err
 	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err // Log this error as it's unusual
-	}
+	rowsAffected := len(result)
 	if rowsAffected == 0 {
 		return sql.ErrNoRows // Or a custom "not found" error
 	}
@@ -353,29 +351,38 @@ func (repo *EventRepository) DeleteEvent(eventId string) error {
 }
 
 // DeleteEventsByProfileId deletes all events for a given profile ID
-func (repo *EventRepository) DeleteEventsByProfileId(profileId string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func DeleteEventsByProfileId(profileId string) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := fmt.Sprintf("DELETE FROM %s WHERE profile_id = $1", constants.EventCollection)
-	_, err := repo.DB.ExecContext(ctx, query, profileId) // RowsAffected could be checked
+	_, err = dbClient.ExecuteQuery(query, profileId) // RowsAffected could be checked
 	return err
 }
 
 // DeleteEventsByAppID deletes events for a specific profile ID and application ID
-func (repo *EventRepository) DeleteEventsByAppID(profileId, appId string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func DeleteEventsByAppID(profileId, appId string) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	query := fmt.Sprintf("DELETE FROM %s WHERE profile_id = $1 AND application_id = $2", constants.EventCollection)
-	_, err := repo.DB.ExecContext(ctx, query, profileId, appId) // RowsAffected could be checked
+	_, err = dbClient.ExecuteQuery(query, profileId, appId) // RowsAffected could be checked
 	return err
 }
 
 // FindEventsWithFilter fetches events based on a map of filters.
-func (repo *EventRepository) FindEventsWithFilter(filter map[string]interface{}) ([]model.Event, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func FindEventsWithFilter(filter map[string]interface{}) ([]model.Event, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database client: %w", err)
+	}
+	defer dbClient.Close()
 
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString(fmt.Sprintf("SELECT profile_id, event_type, event_name, event_id, application_id, org_id, event_timestamp, properties, context FROM %s", constants.EventCollection))
@@ -395,25 +402,25 @@ func (repo *EventRepository) FindEventsWithFilter(filter map[string]interface{})
 		queryBuilder.WriteString(strings.Join(conditions, " AND "))
 	}
 
-	rows, err := repo.DB.QueryContext(ctx, queryBuilder.String(), args...)
+	results, err := dbClient.ExecuteQuery(queryBuilder.String(), args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var events []model.Event
-	for rows.Next() {
+	for _, row := range results {
 		var event model.Event
 		var propertiesRaw, contextRaw sql.NullString
 
-		err := rows.Scan(
-			&event.ProfileId, &event.EventType, &event.EventName, &event.EventId,
-			&event.AppId, &event.OrgId, &event.EventTimestamp,
-			&propertiesRaw, &contextRaw,
-		)
-		if err != nil {
-			return nil, err
-		}
+		event.ProfileId = row["profile_id"].(string)
+		event.EventType = row["event_type"].(string)
+		event.EventName = row["event_name"].(string)
+		event.EventId = row["event_id"].(string)
+		event.AppId = row["application_id"].(string)
+		event.OrgId = row["org_id"].(string)
+		event.EventTimestamp = int(row["event_timestamp"].(int64))
+		propertiesRaw = row["properties"].(sql.NullString)
+		contextRaw = row["context"].(sql.NullString)
 
 		if propertiesRaw.Valid {
 			if err := json.Unmarshal([]byte(propertiesRaw.String), &event.Properties); err != nil {
@@ -430,9 +437,6 @@ func (repo *EventRepository) FindEventsWithFilter(filter map[string]interface{})
 			event.Context = nil
 		}
 		events = append(events, event)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, err
 	}
 	return events, err
 }

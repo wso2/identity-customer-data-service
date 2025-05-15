@@ -3,10 +3,10 @@ package handler
 import (
 	"encoding/json"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
-	"github.com/wso2/identity-customer-data-service/internal/profile/service"
+	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
-	"github.com/wso2/identity-customer-data-service/internal/utils"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strings"
 	"sync"
@@ -35,7 +35,9 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	profileId := pathParts[len(pathParts)-1]
 	var profile *model.Profile
 	var err error
-	profile, err = service.GetProfile(profileId)
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+	profile, err = profilesService.GetProfile(profileId)
 	if err != nil {
 		utils.HandleHTTPError(w, err)
 		return
@@ -52,7 +54,9 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	profileId := pathParts[len(pathParts)-1]
-	err := service.DeleteProfile(profileId)
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+	err := profilesService.DeleteProfile(profileId)
 	if err != nil {
 		utils.HandleHTTPError(w, err)
 		return
@@ -68,11 +72,13 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	var err error
 	// Build the filter from query params
 	filter := r.URL.Query()[constants.Filter] // Handles multiple filters
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
 	if len(filter) > 0 {
-		profiles, err = service.GetAllProfilesWithFilter(filter)
+		profiles, err = profilesService.GetAllProfilesWithFilter(filter)
 	} else {
 		logger.Info("Fetching all profiles without filters")
-		profiles, err = service.GetAllProfiles()
+		profiles, err = profilesService.GetAllProfiles()
 	}
 	if err != nil {
 		utils.HandleHTTPError(w, err)

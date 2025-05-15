@@ -1,7 +1,6 @@
 package store
 
 import (
-	"database/sql"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
@@ -11,18 +10,8 @@ import (
 	"time"
 )
 
-type ProfileSchemaRepository struct {
-	DB *sql.DB
-}
-
-func NewProfileSchemaRepository(db *sql.DB) *ProfileSchemaRepository {
-	return &ProfileSchemaRepository{
-		DB: db,
-	}
-}
-
 // AddEnrichmentRule adds a new enrichment rule
-func (repo *ProfileSchemaRepository) AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
+func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -65,7 +54,7 @@ func (repo *ProfileSchemaRepository) AddEnrichmentRule(rule model.ProfileEnrichm
 }
 
 // UpdateEnrichmentRule updates an existing enrichment rule.
-func (repo *ProfileSchemaRepository) UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
+func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -113,7 +102,7 @@ func (repo *ProfileSchemaRepository) UpdateEnrichmentRule(rule model.ProfileEnri
 	return nil
 }
 
-func (repo *ProfileSchemaRepository) GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error) {
+func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error) {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		return model.ProfileEnrichmentRule{}, fmt.Errorf("failed to get database client: %w", err)
@@ -162,7 +151,7 @@ func (repo *ProfileSchemaRepository) GetProfileEnrichmentRule(ruleId string) (mo
 	return rule, nil
 }
 
-func (repo *ProfileSchemaRepository) GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
+func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -218,7 +207,7 @@ func (repo *ProfileSchemaRepository) GetProfileEnrichmentRules() ([]model.Profil
 	return rules, nil
 }
 
-func (repo *ProfileSchemaRepository) DeleteProfileEnrichmentRule(rule model.ProfileEnrichmentRule) error {
+func DeleteProfileEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		return fmt.Errorf("failed to get database client: %w", err)
@@ -233,7 +222,7 @@ func (repo *ProfileSchemaRepository) DeleteProfileEnrichmentRule(rule model.Prof
 	return err
 }
 
-func (repo *ProfileSchemaRepository) GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule, error) {
+func GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule, error) {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database client: %w", err)

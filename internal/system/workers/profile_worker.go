@@ -14,15 +14,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/wso2/identity-customer-data-service/internal/database"
+	_ "github.com/wso2/identity-customer-data-service/internal/database"
 	erm "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	erp "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
 	model3 "github.com/wso2/identity-customer-data-service/internal/events/model"
 	service2 "github.com/wso2/identity-customer-data-service/internal/events/service"
 	model2 "github.com/wso2/identity-customer-data-service/internal/profile/model"
-	"github.com/wso2/identity-customer-data-service/internal/profile/service"
-	repositories "github.com/wso2/identity-customer-data-service/internal/profile/store"
+	pp "github.com/wso2/identity-customer-data-service/internal/profile/provider"
+	_ "github.com/wso2/identity-customer-data-service/internal/profile/store"
+	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
@@ -35,8 +36,6 @@ func StartProfileWorker() {
 
 	go func() {
 		for event := range EnrichmentQueue {
-			postgresDB := database.GetPostgresInstance()
-			profileRepo := repositories.NewProfileRepository(postgresDB.DB)
 
 			// Step 1: Enrich
 			if err := EnrichProfile(event); err != nil {
@@ -46,7 +45,7 @@ func StartProfileWorker() {
 			}
 
 			// Step 2: Unify
-			profile, err := profileRepo.GetProfile(event.ProfileId)
+			profile, err := profileStore.GetProfile(event.ProfileId)
 			if err == nil && profile != nil {
 				if _, err := unifyProfiles(*profile); err != nil {
 					logger.Error(err, fmt.Sprintf("Failed to unify profile %s with event %s ", event.ProfileId,
@@ -74,9 +73,9 @@ func (q *ProfileWorkerQueue) Enqueue(event model3.Event) {
 // EnrichProfile extracts properties from events and enrich profile based on the enrichment rules
 func EnrichProfile(event model3.Event) error {
 
-	postgresDB := database.GetPostgresInstance() // Your method to get *sql.DB wrapped or raw
-	profileRepo := repositories.NewProfileRepository(postgresDB.DB)
-	profile, _ := service.WaitForProfile(event.ProfileId, 5, 100*time.Millisecond)
+	profilesProvider := pp.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+	profile, _ := profilesService.WaitForProfile(event.ProfileId, 5, 100*time.Millisecond)
 
 	if profile == nil {
 		return fmt.Errorf("profile not found to enrich")
@@ -85,11 +84,11 @@ func EnrichProfile(event model3.Event) error {
 	if profile.ProfileHierarchy != nil {
 		if !profile.ProfileHierarchy.IsParent {
 			// If the profile is a child, we need to enrich the parent profile
-			profile, _ = profileRepo.GetProfile(profile.ProfileHierarchy.ParentProfileID)
+			profile, _ = profileStore.GetProfile(profile.ProfileHierarchy.ParentProfileID)
 		}
 	}
 
-	err := defaultInsertAppData(event, profile, profileRepo)
+	err := defaultInsertAppData(event, profile)
 	if err != nil {
 		return err
 	}
@@ -154,18 +153,18 @@ func EnrichProfile(event model3.Event) error {
 		update := bson.M{fieldPath: value}
 		switch namespace {
 		case "traits":
-			err := profileRepo.UpsertTrait(profile.ProfileId, update)
+			err := profileStore.UpsertTrait(profile.ProfileId, update)
 			if err != nil {
 				log.Println("Error updating personality data:", err)
 			}
 		case "identity_attributes":
-			err := profileRepo.UpsertIdentityAttribute(profile.ProfileId, update)
+			err := profileStore.UpsertIdentityAttribute(profile.ProfileId, update)
 			if err != nil {
 				log.Println("Error updating identity data:", err)
 			}
 			continue
 		case "application_data":
-			err := profileRepo.UpsertAppDatum(profile.ProfileId, event.AppId, update)
+			err := profileStore.UpsertAppDatum(profile.ProfileId, event.AppId, update)
 			if err != nil {
 				log.Println("Error updating application data:", err)
 			}
@@ -179,7 +178,7 @@ func EnrichProfile(event model3.Event) error {
 	return nil
 }
 
-func defaultInsertAppData(event model3.Event, profile *model2.Profile, profileRepo *repositories.ProfileRepository) error {
+func defaultInsertAppData(event model3.Event, profile *model2.Profile) error {
 	if event.Context == nil {
 		return nil
 	}
@@ -235,7 +234,7 @@ func defaultInsertAppData(event model3.Event, profile *model2.Profile, profileRe
 		"application_data.devices": deviceInterface,
 	}
 
-	if err := profileRepo.UpsertAppDatum(profileId, event.AppId, updates); err != nil {
+	if err := profileStore.UpsertAppDatum(profileId, event.AppId, updates); err != nil {
 		return fmt.Errorf("failed to enrich application data: %v", err)
 	}
 
@@ -243,9 +242,6 @@ func defaultInsertAppData(event model3.Event, profile *model2.Profile, profileRe
 }
 
 func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
-
-	postgresDB := database.GetPostgresInstance()
-	profileRepo := repositories.NewProfileRepository(postgresDB.DB)
 
 	// Step 1: Fetch all unification rules
 	ruleProvider := provider.NewUnificationRuleProvider()
@@ -256,7 +252,7 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 	}
 
 	// 🔹 Step 2: Fetch all existing profiles from DB
-	existingMasterProfiles, err := profileRepo.GetAllMasterProfilesExceptForCurrent(newProfile)
+	existingMasterProfiles, err := profileStore.GetAllMasterProfilesExceptForCurrent(newProfile)
 	if err != nil {
 		return nil, errors.New("failed to fetch existing profiles")
 	}
@@ -274,12 +270,10 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 
 			if doesProfileMatch(existingMasterProfile, newProfile, rule) {
 
-				existingMasterProfile.ProfileHierarchy.ChildProfiles, _ = profileRepo.FetchChildProfiles(existingMasterProfile.ProfileId)
+				existingMasterProfile.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(existingMasterProfile.ProfileId)
 
 				//  Merge the existing master to the old master of current
-				postgresDB := database.GetPostgresInstance()
-				schemaRepo := store.NewProfileSchemaRepository(postgresDB.DB)
-				enrichmentRules, _ := schemaRepo.GetProfileEnrichmentRules()
+				enrichmentRules, _ := store.GetProfileEnrichmentRules()
 				newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, enrichmentRules)
 
 				if len(existingMasterProfile.ProfileHierarchy.ChildProfiles) == 0 {
@@ -298,17 +292,17 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 						ChildProfiles: []model2.ChildProfile{childProfile1, childProfile2},
 					}
 					// creating and inserting the new master profile
-					err := profileRepo.InsertProfile(newMasterProfile)
+					err := profileStore.InsertProfile(newMasterProfile)
 					if err != nil {
 						return nil, err
 					}
 
-					err = profileRepo.UpdateParent(newMasterProfile, newProfile)
-					err = profileRepo.UpdateParent(newMasterProfile, existingMasterProfile)
+					err = profileStore.UpdateParent(newMasterProfile, newProfile)
+					err = profileStore.UpdateParent(newMasterProfile, existingMasterProfile)
 
 					children := []model2.ChildProfile{childProfile1, childProfile2}
 
-					err = profileRepo.AddChildProfiles(newMasterProfile, children)
+					err = profileStore.AddChildProfiles(newMasterProfile, children)
 
 					if err != nil {
 						return nil, err
@@ -321,8 +315,8 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 					}
 					children := []model2.ChildProfile{newChild}
 
-					err = profileRepo.AddChildProfiles(newMasterProfile, children)
-					err = profileRepo.UpdateParent(newMasterProfile, newProfile)
+					err = profileStore.AddChildProfiles(newMasterProfile, children)
+					err = profileStore.UpdateParent(newMasterProfile, newProfile)
 					if err != nil {
 						return nil, err
 					}
@@ -330,7 +324,7 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 
 				// Update ApplicationData
 				for _, appCtx := range newMasterProfile.ApplicationData {
-					err := profileRepo.InsertMergedMasterProfileAppData(newMasterProfile.ProfileId, appCtx)
+					err := profileStore.InsertMergedMasterProfileAppData(newMasterProfile.ProfileId, appCtx)
 					if err != nil {
 						log.Println("Failed to update AppContext for:", appCtx.AppId, "Error:", err)
 					}
@@ -338,7 +332,7 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 
 				// Update Traits
 				if newMasterProfile.Traits != nil {
-					err := profileRepo.InsertMergedMasterProfileTraitData(newMasterProfile.ProfileId, newMasterProfile.Traits)
+					err := profileStore.InsertMergedMasterProfileTraitData(newMasterProfile.ProfileId, newMasterProfile.Traits)
 					if err != nil {
 						log.Println("Failed to update traits:", err)
 					}
@@ -346,7 +340,7 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 
 				// Update Identity
 				if newMasterProfile.IdentityAttributes != nil {
-					err := profileRepo.MergeIdentityDataOfProfiles(newMasterProfile.ProfileId, newMasterProfile.IdentityAttributes)
+					err := profileStore.MergeIdentityDataOfProfiles(newMasterProfile.ProfileId, newMasterProfile.IdentityAttributes)
 					if err != nil {
 						log.Println("Failed to update IdentityData:", err)
 					}

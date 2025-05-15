@@ -2,18 +2,18 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/wso2/identity-customer-data-service/internal/events/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"log"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/wso2/identity-customer-data-service/internal/events/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authentication"
 
 	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"github.com/wso2/identity-customer-data-service/internal/utils"
 )
 
 type EventHandler struct {
@@ -47,7 +47,9 @@ func (eh *EventHandler) AddEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queue := &workers.ProfileWorkerQueue{}
-	if err := service.AddEvents(event, queue); err != nil {
+	eventsProvider := provider.NewEventsProvider()
+	eventsService := eventsProvider.GetEventsService()
+	if err := eventsService.AddEvents(event, queue); err != nil {
 		utils.HandleHTTPError(w, err)
 		return
 	}
@@ -63,7 +65,9 @@ func (eh *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events, err := service.GetEvent(eventId)
+	eventsProvider := provider.NewEventsProvider()
+	eventsService := eventsProvider.GetEventsService()
+	events, err := eventsService.GetEvent(eventId)
 	if err != nil {
 		http.Error(w, "Failed to fetch events", http.StatusInternalServerError)
 		return
@@ -91,7 +95,9 @@ func (eh *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	events, err := service.GetEvents(rawFilters, timeFilter)
+	eventsProvider := provider.NewEventsProvider()
+	eventsService := eventsProvider.GetEventsService()
+	events, err := eventsService.GetEvents(rawFilters, timeFilter)
 	if err != nil {
 		http.Error(w, "Failed to fetch events", http.StatusInternalServerError)
 		return

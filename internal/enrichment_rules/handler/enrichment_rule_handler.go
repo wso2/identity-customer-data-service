@@ -5,7 +5,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
-	"github.com/wso2/identity-customer-data-service/internal/utils"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strings"
 	"sync"
