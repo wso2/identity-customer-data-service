@@ -34,6 +34,7 @@ func initDatabaseFromConfig(config *config.Config) {
 }
 
 func main() {
+
 	cdsHome := getCDSHome()
 	const configFile = "/config/repository/conf/deployment.yaml"
 
