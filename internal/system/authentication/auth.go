@@ -100,21 +100,13 @@ func validateEventStreamId(eventStreamId, orgID, appID string) (valid bool, erro
 	}
 
 	if dbKey.OrgID != orgID {
-		if (orgID == "carbon.super" && dbKey.OrgID == "-1234") ||
-			(dbKey.OrgID == "carbon.super" && orgID == "-1234") {
-			orgID = "carbon.super"
-		} else {
+		if !(orgID == "carbon.super" && dbKey.OrgID == "-1234") && !(dbKey.OrgID == "carbon.super" && orgID == "-1234") {
 			return false, errors.NewClientError(errors.ErrorMessage{
 				Code:        "mismatch_org_id",
 				Message:     "Org ID does not match",
 				Description: "API key does not belong to this organization",
 			}, http.StatusUnauthorized)
 		}
-		return false, errors.NewClientError(errors.ErrorMessage{
-			Code:        "mismatch_org_id",
-			Message:     "Org ID does not match",
-			Description: "API key does not belong to this organization",
-		}, http.StatusUnauthorized)
 	}
 
 	if dbKey.State != "active" {

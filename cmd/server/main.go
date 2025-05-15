@@ -39,7 +39,7 @@ func main() {
 	if err != nil || len(envFiles) == 0 {
 		logger.Error(err, "No .env files found in config directory")
 	}
-	err = godotenv.Load(envFiles...)
+	_ = godotenv.Load(envFiles...)
 
 	// Load the configuration file
 	cdsConfig, err := config.LoadConfig(cdsHome, configFile)

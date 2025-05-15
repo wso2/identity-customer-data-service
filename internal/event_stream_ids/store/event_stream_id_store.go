@@ -41,7 +41,10 @@ func InsertEventStreamId(eventStreamId *model.EventStreamId) error {
 	query := `INSERT INTO event_stream_ids (event_stream_id, org_id, app_id, state, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6)`
 	_, err = tx.Exec(query, eventStreamId.EventStreamId, eventStreamId.OrgID, eventStreamId.AppID, eventStreamId.State, eventStreamId.ExpiresAt, eventStreamId.CreatedAt)
 	if err != nil {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("failed to insert event_stream_id eventStreamId: %w", err)
 	}
 	return tx.Commit()
@@ -106,7 +109,10 @@ func UpdateState(eventStreamId string, state string) error {
 	query := `UPDATE event_stream_ids SET state = $1 WHERE event_stream_id = $2`
 	_, err = tx.Exec(query, state, eventStreamId)
 	if err != nil {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf("failed to update event_stream_id state: %w", err)
 	}
 	return tx.Commit()

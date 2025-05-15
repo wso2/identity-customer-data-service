@@ -12,12 +12,12 @@ func HandleHTTPError(w http.ResponseWriter, err error) {
 	var clientError *customerrors.ClientError
 	if ok := errors.As(err, &clientError); ok {
 		w.WriteHeader(clientError.StatusCode)
-		json.NewEncoder(w).Encode(clientError.Message)
+		_ = json.NewEncoder(w).Encode(clientError.Message)
 		return
 	}
 
 	w.WriteHeader(http.StatusInternalServerError)
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"error": "Internal server error",
 	})
 }

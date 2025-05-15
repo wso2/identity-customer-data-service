@@ -7,7 +7,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"log"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,7 +38,7 @@ func StartProfileWorker() {
 
 			// Step 1: Enrich
 			if err := EnrichProfile(event); err != nil {
-				logger.Error(err, fmt.Sprintf("Failed to enrich profile %a with event %s ", event.ProfileId,
+				logger.Error(err, fmt.Sprintf("Failed to enrich profile %s with event %s ", event.ProfileId,
 					event.EventId))
 				continue
 			}
@@ -97,8 +96,8 @@ func EnrichProfile(event model3.Event) error {
 	ruleService := ruleProvider.GetEnrichmentRuleService()
 	rules, _ := ruleService.GetEnrichmentRules()
 	for _, rule := range rules {
-		if strings.ToLower(rule.Trigger.EventType) != strings.ToLower(event.EventType) ||
-			strings.ToLower(rule.Trigger.EventName) != strings.ToLower(event.EventName) {
+		if !strings.EqualFold(rule.Trigger.EventType, event.EventType) ||
+			!strings.EqualFold(rule.Trigger.EventName, event.EventName) {
 			continue
 		}
 
@@ -298,7 +297,13 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 					}
 
 					err = profileStore.UpdateParent(newMasterProfile, newProfile)
+					if err != nil {
+						return nil, err
+					}
 					err = profileStore.UpdateParent(newMasterProfile, existingMasterProfile)
+					if err != nil {
+						return nil, err
+					}
 
 					children := []model2.ChildProfile{childProfile1, childProfile2}
 
@@ -316,6 +321,9 @@ func unifyProfiles(newProfile model2.Profile) (*model2.Profile, error) {
 					children := []model2.ChildProfile{newChild}
 
 					err = profileStore.AddChildProfiles(newMasterProfile, children)
+					if err != nil {
+						return nil, err
+					}
 					err = profileStore.UpdateParent(newMasterProfile, newProfile)
 					if err != nil {
 						return nil, err
@@ -552,64 +560,6 @@ func parseValueForValueType(valueType string, raw interface{}) interface{} {
 
 	// Fallback: return as-is
 	return raw
-}
-
-// mergeStructFields merges non-zero fields from `src` into `dest`
-func mergeStructFields(dest interface{}, src interface{}) {
-	destVal := reflect.ValueOf(dest).Elem()
-	srcVal := reflect.ValueOf(src).Elem()
-
-	for i := 0; i < srcVal.NumField(); i++ {
-		field := srcVal.Type().Field(i)
-		srcField := srcVal.Field(i)
-		destField := destVal.FieldByName(field.Name)
-
-		// Skip if not settable or zero value
-		if !destField.CanSet() || isZeroValue(srcField) {
-			continue
-		}
-
-		// Handle slices: combine with deduplication
-		if srcField.Kind() == reflect.Slice {
-			merged := mergeSlices(destField.Interface(), srcField.Interface())
-			destField.Set(reflect.ValueOf(merged))
-			continue
-		}
-
-		// Simple overwrite
-		destField.Set(srcField)
-	}
-}
-
-// isZeroValue checks if a field is zero value (e.g. "", nil, 0, false)
-func isZeroValue(v reflect.Value) bool {
-	return reflect.DeepEqual(v.Interface(), reflect.Zero(v.Type()).Interface())
-}
-
-// mergeSlices merges two slices and removes duplicates
-func mergeSlices(a, b interface{}) interface{} {
-	aVal := reflect.ValueOf(a)
-	bVal := reflect.ValueOf(b)
-
-	existing := make(map[interface{}]bool)
-	result := reflect.MakeSlice(aVal.Type(), 0, aVal.Len()+bVal.Len())
-
-	// Helper to append unique values
-	appendUnique := func(val reflect.Value) {
-		if !existing[val.Interface()] {
-			existing[val.Interface()] = true
-			result = reflect.Append(result, val)
-		}
-	}
-
-	for i := 0; i < aVal.Len(); i++ {
-		appendUnique(aVal.Index(i))
-	}
-	for i := 0; i < bVal.Len(); i++ {
-		appendUnique(bVal.Index(i))
-	}
-
-	return result.Interface()
 }
 
 // mergeDeviceLists merges devices, ensuring no duplicates based on `device_id`
