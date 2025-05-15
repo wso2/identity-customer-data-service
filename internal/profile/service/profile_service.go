@@ -186,17 +186,11 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 	// If it is a child profile, delete it
 	if !(profile.ProfileHierarchy.IsParent) {
 		parentProfile, err := profileStore.GetProfile(profile.ProfileHierarchy.ParentProfileID)
-		if err != nil {
-			return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
-		}
 		parentProfile.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(parentProfile.ProfileId)
 
 		if len(parentProfile.ProfileHierarchy.ChildProfiles) == 1 {
 			// delete the parent as this is the only child
 			err = profileStore.DeleteProfile(profile.ProfileHierarchy.ParentProfileID)
-			if err != nil {
-				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
-			}
 			err = profileStore.DeleteProfile(ProfileId)
 			if err != nil {
 				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)

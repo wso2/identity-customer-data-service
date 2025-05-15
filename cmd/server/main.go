@@ -36,7 +36,7 @@ func initDatabaseFromConfig(config *config.Config) {
 func main() {
 
 	cdsHome := getCDSHome()
-	const configFile = "/config/repository/conf/deployment.yaml"
+	const configFile = "/repository/conf/deployment.yaml"
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
