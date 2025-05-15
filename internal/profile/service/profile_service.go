@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
 	"log"
@@ -41,20 +40,13 @@ func GetProfilesService() ProfilesServiceInterface {
 
 func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) (*profileModel.Profile, error) {
 
-	ctx := context.Background()
-	postgresDB := database.GetPostgresInstance()
-	conn, err := postgresDB.DB.Conn(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get DB connection: %w", err)
-	}
-	defer conn.Close() // ensures lock is released and session is closed
-
 	// Create a lock tied to this connection
-	lock := database.NewPostgresLock(conn)
+	lock := database.NewPostgresLock()
 	lockIdentifier := event.ProfileId
 
 	//  Attempt to acquire the lock with retry
 	var acquired bool
+	var err error
 	for i := 0; i < constants.MaxRetryAttempts; i++ {
 		acquired, err = lock.Acquire(lockIdentifier)
 		if err != nil {

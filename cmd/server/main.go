@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
-	"github.com/wso2/identity-customer-data-service/internal/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
@@ -29,13 +28,12 @@ func initDatabaseFromConfig(config *config.Config) {
 		log.Fatal("One or more PostgreSQL configuration values are missing")
 	}
 
-	database.ConnectPostgres(host, port, user, password, dbname)
 	log.Println("PostgreSQL database initialized successfully from configuration")
 }
 
 func main() {
 	cdsHome := getCDSHome()
-	const configFile = "/config/repository/conf/deployment.yaml"
+	const configFile = "/repository/conf/deployment.yaml"
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
