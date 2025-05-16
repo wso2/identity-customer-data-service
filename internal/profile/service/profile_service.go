@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
 	"log"
 	"net/http"
 	"strconv"
@@ -16,8 +17,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/logger"
-
-	"github.com/wso2/identity-customer-data-service/internal/database"
 )
 
 type ProfilesServiceInterface interface {
@@ -41,7 +40,7 @@ func GetProfilesService() ProfilesServiceInterface {
 func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) (*profileModel.Profile, error) {
 
 	// Create a lock tied to this connection
-	lock := database.NewPostgresLock()
+	lock := client.NewPostgresLock()
 	lockIdentifier := event.ProfileId
 
 	//  Attempt to acquire the lock with retry
