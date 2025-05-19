@@ -31,6 +31,19 @@ type DBConfig struct {
 	driverName string
 }
 
+var testDBOverride *sql.DB
+
+func SetTestDB(db *sql.DB) {
+	testDBOverride = db
+}
+
+func (p *DBProvider) GetDBClient() (*sql.DB, error) {
+	if testDBOverride != nil {
+		return testDBOverride, nil
+	}
+	return defaultDBConnection() // your existing logic
+}
+
 // DBProviderInterface defines the interface for getting database clients.
 type DBProviderInterface interface {
 	GetDBClient() (client.DBClientInterface, error)
