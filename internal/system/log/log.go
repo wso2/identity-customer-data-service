@@ -22,12 +22,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"sync"
 )
 
 var (
 	logger *Logger
-	once   sync.Once
 )
 
 // Logger is a wrapper around the slog logger.

@@ -1,11 +1,29 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package service
 
 import (
 	"context"
 	"fmt"
 	repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,13 +35,12 @@ import (
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-	"github.com/wso2/identity-customer-data-service/internal/system/logger"
 )
 
 type ProfilesServiceInterface interface {
 	DeleteProfile(profileId string) error
 	GetAllProfiles() ([]profileModel.Profile, error)
-	CreateOrUpdateProfile(event eventModel.Event) (*profileModel.Profile, error)
+	CreateOrUpdateProfile(event eventModel.Event) error
 	GetProfile(profileId string) (*profileModel.Profile, error)
 	WaitForProfile(profileID string, maxRetries int, retryDelay time.Duration) (*profileModel.Profile, error)
 	GetAllProfilesWithFilter(filters []string) ([]profileModel.Profile, error)
@@ -38,7 +55,9 @@ func GetProfilesService() ProfilesServiceInterface {
 	return &ProfilesService{}
 }
 
-func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) (*profileModel.Profile, error) {
+func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
+
+	// todo: should we throw an error here at all?
 
 	// Create a lock tied to this connection
 	lock := client.NewPostgresLock()
@@ -47,10 +66,12 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) (*profi
 	//  Attempt to acquire the lock with retry
 	var acquired bool
 	var err error
+	logger := log.GetLogger()
 	for i := 0; i < constants.MaxRetryAttempts; i++ {
 		acquired, err = lock.Acquire(lockIdentifier)
 		if err != nil {
-			return nil, fmt.Errorf("lock acquisition error for %s: %w", event.ProfileId, err)
+			logger.Error(fmt.Sprintf("Error acquiring lock for %s: %v", event.ProfileId, err))
+			// todo: should we throw an error here?
 		}
 		if acquired {
 			break
@@ -58,7 +79,8 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) (*profi
 		time.Sleep(constants.RetryDelay)
 	}
 	if !acquired {
-		return nil, fmt.Errorf("could not acquire lock for profile %s after %d retries", event.ProfileId, constants.MaxRetryAttempts)
+		// todo: should we throw an error here?
+		logger.Error(fmt.Sprintf("Failed to acquire lock for %s after %d attempts", event.ProfileId, constants.MaxRetryAttempts))
 	}
 	defer func() {
 		_ = lock.Release(lockIdentifier) //  Always attempt to release
@@ -77,21 +99,26 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) (*profi
 	}
 
 	if err := profileStore.InsertProfile(profileToUpsert); err != nil {
-		return nil, fmt.Errorf("failed to insert or update profile %s: %w", event.ProfileId, err)
+		return err
 	}
 
 	profileFetched, errWait := ps.WaitForProfile(event.ProfileId, constants.MaxRetryAttempts, constants.RetryDelay)
 	if errWait != nil || profileFetched == nil {
-		return nil, fmt.Errorf("profile %s not visible after insert/update: %w", event.ProfileId, errWait)
+		logger.Warn(fmt.Sprintf("Profile: %s not visible after insert/update: %v", event.ProfileId, errWait))
+		// todo: should we throw an error here?
+		return nil
 	}
 
-	return profileFetched, nil
+	return nil
 }
 
 // GetProfile retrieves a profile
 func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.Profile, error) {
 
-	profile, _ := profileStore.GetProfile(ProfileId)
+	profile, err := profileStore.GetProfile(ProfileId)
+	if err != nil {
+		return nil, err
+	}
 	if profile == nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.ErrProfileNotFound.Code,
@@ -108,18 +135,22 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.Profile, 
 		masterProfile, err := profileStore.GetProfile(profile.ProfileHierarchy.ParentProfileID)
 		// todo: app context should be restricted for apps that is requesting these
 
-		masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
+		if err != nil {
+			return nil, err
+		}
+		masterProfile.ApplicationData, err = profileStore.FetchApplicationData(masterProfile.ProfileId)
+
+		if err != nil {
+			return nil, err
+		}
 
 		// building the hierarchy
-		masterProfile.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(masterProfile.ProfileId)
+		masterProfile.ProfileHierarchy.ChildProfiles, err = profileStore.FetchChildProfiles(masterProfile.ProfileId)
 		masterProfile.ProfileHierarchy.ParentProfileID = masterProfile.ProfileId
 		masterProfile.ProfileId = profile.ProfileId
 
 		if err != nil {
-			return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
-		}
-		if masterProfile == nil {
-			return nil, nil
+			return nil, err
 		}
 		return masterProfile, nil
 	}
@@ -130,18 +161,33 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 
 	// Fetch the existing profile before deletion
 	profile, err := profileStore.GetProfile(ProfileId)
+	logger := log.GetLogger()
 	if profile == nil {
-		logger.Info(fmt.Sprintf("Profile with profile_id: %s that is requested for deletion is not found",
+		logger.Warn(fmt.Sprintf("Profile with profile_id: %s that is requested for deletion is not found",
 			ProfileId))
 		return nil
 	}
 	if err != nil {
-		return errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
+		errorMsg := fmt.Sprintf("Error deleting profile with profile_id: %s", ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE.Code,
+			Message:     errors2.DELETE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 
 	//  Delete related events
 	if err := repositories.DeleteEventsByProfileId(ProfileId); err != nil {
-		return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+		errorMsg := fmt.Sprintf("Error deleting events for the profile with profile_id: %s", ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE.Code,
+			Message:     errors2.DELETE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 
 	if profile.ProfileHierarchy.IsParent {
@@ -153,7 +199,14 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 		// Delete the parent with no children
 		err = profileStore.DeleteProfile(ProfileId)
 		if err != nil {
-			return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+			errorMsg := fmt.Sprintf("Error deleting profile with profile_id: %s which is a parent and no children", ProfileId)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.DELETE_PROFILE.Code,
+				Message:     errors2.DELETE_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
 		return nil
 	}
@@ -163,22 +216,50 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 		for _, childProfile := range profile.ProfileHierarchy.ChildProfiles {
 			profile, err := profileStore.GetProfile(childProfile.ChildProfileId)
 			if profile == nil {
-				logger.Debug("Child profile with profile_id: %s that is being deleted is not found",
+				errorMsg := fmt.Sprintf("Child profile with profile_id: %s that is being deleted is not found",
 					childProfile.ChildProfileId)
-				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.DELETE_PROFILE.Code,
+					Message:     errors2.DELETE_PROFILE.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
 			if err != nil {
-				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+				errorMsg := fmt.Sprintf("Error while deleting Child profile with profile_id: %s that is being deleted is not found",
+					childProfile.ChildProfileId)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.DELETE_PROFILE.Code,
+					Message:     errors2.DELETE_PROFILE.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
 			err = profileStore.DeleteProfile(childProfile.ChildProfileId)
 			if err != nil {
-				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+				errorMsg := fmt.Sprintf("Error while deleting profile with profile_id: %s ", childProfile.ChildProfileId)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.DELETE_PROFILE.Code,
+					Message:     errors2.DELETE_PROFILE.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
 		}
 		// now delete master
 		err = profileStore.DeleteProfile(ProfileId)
 		if err != nil {
-			return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+			errorMsg := fmt.Sprintf("Error while deleting parent profile: %s ", ProfileId)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.DELETE_PROFILE.Code,
+				Message:     errors2.DELETE_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
 		return nil
 	}
@@ -221,7 +302,7 @@ func (ps *ProfilesService) WaitForProfile(profileID string, maxRetries int, retr
 
 	var profile *profileModel.Profile
 	var lastErr error
-
+	logger := log.GetLogger()
 	for i := 0; i < maxRetries; i++ {
 		if i > 0 { // Only sleep on subsequent retries
 			time.Sleep(retryDelay)
@@ -231,8 +312,7 @@ func (ps *ProfilesService) WaitForProfile(profileID string, maxRetries int, retr
 			return profile, nil
 		}
 		if lastErr != nil {
-			log.Print("waitForProfile: Error during fetch attempt", "profileId", profileID, "attempt", i+1, "error", lastErr)
-			// Continue to retry, lastErr will be reported if all retries fail
+			logger.Error(fmt.Sprintf("Error fetching profile : %s", profileID))
 		}
 	}
 
