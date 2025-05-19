@@ -32,14 +32,13 @@ auth_server:
 database:
   host: "localhost"
   port: "5432"
-  user: "admin"
-  password: "${DB_PASSWORD}"
-  dbname: "iam_cds"
+  user: "cdsuser"
+  password: "cdspwd"
+  dbname: "cdsdb"
 
 datasource:
   hostname: "localhost"
   port: 5432
-  username: "admin"
-  password: "${DATA_SOURCE_PASSWORD}"
-  name: "iam_cds"
-  sslmode: disable
+  username: "cdsuser"
+  password: "cdspwd"
+  name: "cdsdb"
