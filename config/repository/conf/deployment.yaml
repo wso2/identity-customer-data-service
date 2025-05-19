@@ -42,3 +42,4 @@ datasource:
   username: "cdsuser"
   password: "cdspwd"
   name: "cdsdb"
+  sslmode: disable

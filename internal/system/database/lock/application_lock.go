@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package client
+package lock
 
 import (
 	"fmt"

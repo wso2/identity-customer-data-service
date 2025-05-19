@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	_ "github.com/wso2/identity-customer-data-service/internal/database"
 	erm "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	erp "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"

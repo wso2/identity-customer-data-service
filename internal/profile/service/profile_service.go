@@ -21,7 +21,7 @@ package service
 import (
 	"fmt"
 	repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
-	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/lock"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"net/http"
 	"strconv"
@@ -59,7 +59,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 	// todo: should we throw an error here at all?
 
 	// Create a lock tied to this connection
-	lock := client.NewPostgresLock()
+	lock := lock.NewPostgresLock()
 	lockIdentifier := event.ProfileId
 
 	//  Attempt to acquire the lock with retry
