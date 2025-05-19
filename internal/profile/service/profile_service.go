@@ -19,11 +19,10 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	repositories "github.com/wso2/identity-customer-data-service/internal/events/store"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -268,7 +267,14 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 	if !(profile.ProfileHierarchy.IsParent) {
 		parentProfile, err := profileStore.GetProfile(profile.ProfileHierarchy.ParentProfileID)
 		if err != nil {
-			return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+			errorMsg := fmt.Sprintf("Error while deleting the child profile: %s ", ProfileId)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.DELETE_PROFILE.Code,
+				Message:     errors2.DELETE_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
 		parentProfile.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(parentProfile.ProfileId)
 
@@ -276,20 +282,48 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 			// delete the parent as this is the only child
 			err = profileStore.DeleteProfile(profile.ProfileHierarchy.ParentProfileID)
 			if err != nil {
-				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+				errorMsg := fmt.Sprintf("Error while deleting the master profile: %s ", ProfileId)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.DELETE_PROFILE.Code,
+					Message:     errors2.DELETE_PROFILE.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
 			err = profileStore.DeleteProfile(ProfileId)
 			if err != nil {
-				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+				errorMsg := fmt.Sprintf("Error while deleting the  profile: %s ", ProfileId)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.DELETE_PROFILE.Code,
+					Message:     errors2.DELETE_PROFILE.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
 		} else {
 			err = profileStore.DetachChildProfileFromParent(profile.ProfileHierarchy.ParentProfileID, ProfileId)
 			if err != nil {
-				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+				errorMsg := fmt.Sprintf("Error while current profile from parent: %s ", ProfileId)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.DELETE_PROFILE.Code,
+					Message:     errors2.DELETE_PROFILE.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
 			err = profileStore.DeleteProfile(ProfileId)
 			if err != nil {
-				return errors2.NewServerError(errors2.ErrWhileDeletingProfile, err)
+				errorMsg := fmt.Sprintf("Error while deleting the current profile: %s ", ProfileId)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.DELETE_PROFILE.Code,
+					Message:     errors2.DELETE_PROFILE.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
 		}
 
