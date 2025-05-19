@@ -20,6 +20,8 @@ package service
 
 import (
 	"fmt"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,8 +45,9 @@ func GetEventStreamIdService() EventStreamIdServiceInterface {
 	return &EventStreamIdService{}
 }
 
-// CreateAPIKey generates and stores a new API key
+// CreateEventStreamId generates and stores a new API key
 func (s *EventStreamIdService) CreateEventStreamId(orgID, appID string) (*model.EventStreamId, error) {
+
 	key := generateSecureToken()
 	now := time.Now().Unix()
 	exp := now + (60 * 60 * 24 * 365) // 1 year
@@ -59,25 +62,36 @@ func (s *EventStreamIdService) CreateEventStreamId(orgID, appID string) (*model.
 	}
 
 	if err := store.InsertEventStreamId(eventStreamId); err != nil {
-		return nil, fmt.Errorf("failed to insert API key: %w", err)
+		return nil, err
 	}
 	return eventStreamId, nil
 }
 
 // GetEventStreamIdPerApp returns an API key for a specific org and app
 func (s *EventStreamIdService) GetEventStreamIdPerApp(orgID, appID string) ([]*model.EventStreamId, error) {
+
 	eventStreamId, err := store.GetEventStreamIdsPerApp(orgID, appID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve Event stream id: %w", err)
+		return nil, err
 	}
 	return eventStreamId, nil
 }
 
 // GetEventStreamId retrieves an API key by its value
 func (s *EventStreamIdService) GetEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
+
 	key, err := store.GetEventStreamId(eventStreamId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve eventStreamId: %w", err)
+		return nil, err
+	}
+	if key == nil {
+		errorMsg := fmt.Sprintf("No meta data found for event stream id: %s", eventStreamId)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_EVENT_STREAM_ID.Code,
+			Message:     errors2.GET_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, http.StatusNotFound)
+		return nil, clientError
 	}
 	return key, nil
 }
@@ -86,8 +100,17 @@ func (s *EventStreamIdService) GetEventStreamId(eventStreamId string) (*model.Ev
 func (s *EventStreamIdService) RotateEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
 
 	oldEventStreamId, _ := store.GetEventStreamId(eventStreamId)
+	if oldEventStreamId == nil {
+		errorMsg := fmt.Sprintf("No meta data found for event stream id: %s", eventStreamId)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_EVENT_STREAM_ID.Code,
+			Message:     errors2.GET_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
 	if err := store.UpdateState(oldEventStreamId.EventStreamId, "revoked"); err != nil {
-		return nil, fmt.Errorf("failed to revoke old API eventStreamId: %w", err)
+		return nil, err
 	}
 
 	eventStreamId = generateSecureToken()
@@ -104,19 +127,21 @@ func (s *EventStreamIdService) RotateEventStreamId(eventStreamId string) (*model
 	}
 
 	if err := store.InsertEventStreamId(newEventStreamId); err != nil {
-		return nil, fmt.Errorf("failed to insert new API eventStreamId: %w", err)
+		return nil, err
 	}
 	return newEventStreamId, nil
 }
 
 // RevokeEventStreamId sets the state of the key to 'revoked'
 func (s *EventStreamIdService) RevokeEventStreamId(eventStreamId string) error {
+
 	if err := store.UpdateState(eventStreamId, "revoked"); err != nil {
-		return fmt.Errorf("failed to revoke EventStreamId: %w", err)
+		return err
 	}
 	return nil
 }
 
+// generateSecureToken generates a secure token using UUID
 func generateSecureToken() string {
 	return uuid.New().String()
 }

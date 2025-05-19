@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package store
 
 import (
@@ -5,6 +23,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"net/http"
 	"strings"
 	"time"
@@ -14,13 +33,30 @@ import (
 func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return fmt.Errorf("failed to get database client: %w", err)
+		errorMsg := fmt.Sprintf("Failed to get db client for adding enrichment rule for property: %s",
+			rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_ENRICHMENT_RULE.Code,
+			Message:     errors2.ADD_ENRICHMENT_RULE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	defer dbClient.Close()
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		errorMsg := fmt.Sprintf("Failed to begin transaction for adding enrichment rule for property: %s",
+			rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_ENRICHMENT_RULE.Code,
+			Message:     errors2.ADD_ENRICHMENT_RULE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 
 	query := `INSERT INTO profile_enrichment_rules 
@@ -35,9 +71,24 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 	if err != nil {
 		err = tx.Rollback()
 		if err != nil {
-			return err
+			errorMsg := fmt.Sprintf("Failed to rollback transaction for adding enrichment rule for property: %s",
+				rule.PropertyName)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.ADD_ENRICHMENT_RULE.Code,
+				Message:     errors2.ADD_ENRICHMENT_RULE.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
-		return errors2.NewServerError(errors2.ErrWhileAddingEnrichmentRules, err)
+		errorMsg := fmt.Sprintf("Failed on inserting enrichment rule for property: %s", rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_ENRICHMENT_RULE.Code,
+			Message:     errors2.ADD_ENRICHMENT_RULE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 
 	for _, cond := range rule.Trigger.Conditions {
@@ -47,14 +98,39 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		if err != nil {
 			err = tx.Rollback()
 			if err != nil {
-				return err
+				errorMsg := fmt.Sprintf("Failed to rollback transaction for trigger conditions for the"+
+					" enrichment rule for property: %s",
+					rule.PropertyName)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.ADD_ENRICHMENT_RULE.Code,
+					Message:     errors2.ADD_ENRICHMENT_RULE.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
-			return errors2.NewServerError(errors2.ErrWhileAddingEnrichmentRules, err)
+			errorMsg := fmt.Sprintf("Failed on inserting trigger conditions for the enrichment rule "+
+				"for property: %s", rule.PropertyName)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.ADD_ENRICHMENT_RULE.Code,
+				Message:     errors2.ADD_ENRICHMENT_RULE.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		errorMsg := fmt.Sprintf("Failed on commiting transaction while adding enrichment rule "+
+			"for property: %s", rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_ENRICHMENT_RULE.Code,
+			Message:     errors2.ADD_ENRICHMENT_RULE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	return nil
 }
@@ -63,13 +139,30 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return fmt.Errorf("failed to get database client: %w", err)
+		errorMsg := fmt.Sprintf("Failed to get database client for updating enrichment rule for property: %s.",
+			rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
+			Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	defer dbClient.Close()
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		errorMsg := fmt.Sprintf("Failed to beging transaction for updating enrichment rule for property: %s.",
+			rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
+			Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 
 	timestamp := time.Now().UTC().Unix()
@@ -85,14 +178,37 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 	if err != nil {
 		err = tx.Rollback()
 		if err != nil {
-			return err
+			errorMsg := fmt.Sprintf("Failed to rollback while updating enrichment rule for property: %s.",
+				rule.PropertyName)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
+				Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
-		return errors2.NewServerError(errors2.ErrWhileUpdatingEnrichmentRules, err)
+		errorMsg := fmt.Sprintf("Failed to update enrichment rule for property: %s.", rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
+			Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 
 	_, err = tx.Exec(`DELETE FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
 	if err != nil {
-		return errors2.NewServerError(errors2.ErrWhileUpdatingEnrichmentRules, err)
+		errorMsg := fmt.Sprintf("Failed to update trigger conditions of enrichment rule for property: %s.",
+			rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
+			Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 
 	}
 	for _, cond := range rule.Trigger.Conditions {
@@ -102,22 +218,56 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		if err != nil {
 			err := tx.Rollback()
 			if err != nil {
-				return err
+				errorMsg := fmt.Sprintf("Failed to rollback updating trigger conditions of enrichment rule for "+
+					"property: %s.", rule.PropertyName)
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
+					Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
+					Description: errorMsg,
+				}, err)
+				return serverError
 			}
-			return errors2.NewServerError(errors2.ErrWhileUpdatingEnrichmentRules, err)
+			errorMsg := fmt.Sprintf("Failed to update trigger conditions of the enrichment rule for property: %s.",
+				rule.PropertyName)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
+				Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		errorMsg := fmt.Sprintf("Failed to commit transaction for updating enrichment rule for property: %s.",
+			rule.PropertyName)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
+			Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	return nil
 }
 
 func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error) {
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return model.ProfileEnrichmentRule{}, fmt.Errorf("failed to get database client: %w", err)
+		errorMsg := fmt.Sprintf("Failed to get database client for fetching enrichment rule with "+
+			"enrichment rule id: %s.", ruleId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FETCH_ENRICHMENT_RULES.Code,
+			Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return model.ProfileEnrichmentRule{}, serverError
 	}
 	defer dbClient.Close()
 
@@ -129,7 +279,14 @@ func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error
 
 	results, err := dbClient.ExecuteQuery(query, ruleId)
 	if err != nil {
-		return model.ProfileEnrichmentRule{}, err
+		errorMsg := fmt.Sprintf("Failed to fetch enrichment rule with rule id: %s.", ruleId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FETCH_ENRICHMENT_RULES.Code,
+			Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return model.ProfileEnrichmentRule{}, serverError
 	}
 	row := results[0]
 
@@ -153,7 +310,14 @@ func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error
 	condResults, err := dbClient.ExecuteQuery(
 		`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
 	if err != nil {
-		return rule, err
+		errorMsg := fmt.Sprintf("Failed to fetch trigger conditions for enrichment rule with rule id: %s.", ruleId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FETCH_ENRICHMENT_RULES.Code,
+			Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return rule, serverError
 	}
 	for _, row := range condResults {
 		var cond model.RuleCondition
@@ -169,8 +333,16 @@ func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error
 func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get database client: %w", err)
+		errorMsg := "Failed to get database client for fetching enrichment rules."
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FETCH_ENRICHMENT_RULES.Code,
+			Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
 	}
 	defer dbClient.Close()
 
@@ -182,7 +354,14 @@ func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 
 	results, err := dbClient.ExecuteQuery(query)
 	if err != nil {
-		return nil, err
+		errorMsg := "Failed to fetch enrichment rules."
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FETCH_ENRICHMENT_RULES.Code,
+			Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
 	}
 
 	for _, row := range results {
@@ -206,7 +385,14 @@ func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 		condResults, err := dbClient.ExecuteQuery(
 			`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
 		if err != nil {
-			return nil, err
+			errorMsg := "Failed to fetch trigger conditions for enrichment rule(s)."
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.FETCH_ENRICHMENT_RULES.Code,
+				Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
+				Description: errorMsg,
+			}, err)
+			return nil, serverError
 		}
 		for _, condRow := range condResults {
 			var cond model.RuleCondition
@@ -223,24 +409,60 @@ func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 }
 
 func DeleteProfileEnrichmentRule(rule model.ProfileEnrichmentRule) error {
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return fmt.Errorf("failed to get database client: %w", err)
+		errorMsg := fmt.Sprintf("Failed to get database client for deleting enrichment rule with rule id: %s", rule.RuleId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_ENRICHMENT_RULES.Code,
+			Message:     errors2.DELETE_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	defer dbClient.Close()
 
 	_, err = dbClient.ExecuteQuery(`DELETE FROM profile_enrichment_rules WHERE rule_id = $1`, rule.RuleId)
-	if err == nil {
-		// Delete unification rules if they exist on the same property name
-		_, err = dbClient.ExecuteQuery(`DELETE FROM unification_rules WHERE property_name = $1`, rule.PropertyName)
+	if err != nil {
+		errorMsg := "Failed to delete enrichment rule."
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_ENRICHMENT_RULES.Code,
+			Message:     errors2.DELETE_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
-	return err
+	// Delete unification rules if they exist on the same property name
+	_, err = dbClient.ExecuteQuery(`DELETE FROM unification_rules WHERE property_name = $1`, rule.PropertyName)
+	if err != nil {
+		errorMsg := "Failed to delete unification rules."
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_ENRICHMENT_RULES.Code,
+			Message:     errors2.DELETE_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+	return nil
 }
 
 func GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule, error) {
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get database client: %w", err)
+		errorMsg := "Failed to get database client for filtering enrichment rules."
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FILTER_ENRICHMENT_RULES.Code,
+			Message:     errors2.FILTER_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
 	}
 	defer dbClient.Close()
 
@@ -257,7 +479,15 @@ func GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule
 	for _, f := range filters {
 		tokens := strings.SplitN(f, " ", 3)
 		if len(tokens) != 3 {
-			return nil, fmt.Errorf("invalid filter format: %s", f)
+			// todo: see if this is client or server error
+			errorMsg := "Invalid filter format."
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_ENRICHMENT_RULES.Code,
+				Message:     errors2.FILTER_ENRICHMENT_RULES.Message,
+				Description: errorMsg,
+			}, err)
+			return nil, serverError
 		}
 
 		field := tokens[0]
@@ -292,9 +522,9 @@ func GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule
 			specialClauses[field] = append(specialClauses[field], value)
 		default:
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.ErrInvalidFiltering.Code,
-				Message:     errors2.ErrInvalidFiltering.Message,
-				Description: fmt.Sprintf("unsupported field in filtering: %s", field),
+				Code:        errors2.INVALID_ENRICHMENT_RULE_FILTERING.Code,
+				Message:     errors2.INVALID_ENRICHMENT_RULE_FILTERING.Message,
+				Description: fmt.Sprintf("Unsupported field in filtering: %s", field),
 			}, http.StatusBadRequest)
 			return nil, clientError
 		}
@@ -310,7 +540,14 @@ func GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule
 
 	results, err := dbClient.ExecuteQuery(finalQuery, args...)
 	if err != nil {
-		return nil, err
+		errorMsg := "Failed to execute query for filtering enrichment rules."
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FILTER_ENRICHMENT_RULES.Code,
+			Message:     errors2.FILTER_ENRICHMENT_RULES.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
 	}
 
 	for _, row := range results {
@@ -338,7 +575,14 @@ func GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule
 		condResults, err := dbClient.ExecuteQuery(
 			`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
 		if err != nil {
-			return nil, err
+			errorMsg := "Failed to execute query for fetching trigger conditions for filtering enrichment rules."
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_ENRICHMENT_RULES.Code,
+				Message:     errors2.FILTER_ENRICHMENT_RULES.Message,
+				Description: errorMsg,
+			}, err)
+			return nil, serverError
 		}
 		for _, condRow := range condResults {
 			var cond model.RuleCondition

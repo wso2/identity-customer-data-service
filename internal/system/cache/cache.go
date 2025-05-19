@@ -1,7 +1,8 @@
 package cache
 
 import (
-	"github.com/wso2/identity-customer-data-service/internal/system/logger"
+	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"sync"
 	"time"
 )
@@ -28,7 +29,8 @@ func NewCache(defaultTTL time.Duration) *Cache {
 // Set adds an item to the cache
 func (c *Cache) Set(key string, value interface{}) {
 
-	logger.Debug("Setting cache")
+	logger := log.GetLogger()
+	logger.Debug(fmt.Sprint("Setting cache for key: ", key))
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -42,7 +44,8 @@ func (c *Cache) Set(key string, value interface{}) {
 // Get retrieves an item from the cache
 func (c *Cache) Get(key string) (interface{}, bool) {
 
-	logger.Debug("Getting cache")
+	logger := log.GetLogger()
+	logger.Debug(fmt.Sprint("Getting cache for key: ", key))
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 

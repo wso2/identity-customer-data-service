@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package main
 
 import (
@@ -7,10 +25,9 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
-	"github.com/wso2/identity-customer-data-service/internal/system/logger"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -18,6 +35,8 @@ import (
 )
 
 func initDatabaseFromConfig(config *config.Config) {
+
+	logger := log.GetLogger()
 	host := config.DatabaseConfig.Host
 	port := config.DatabaseConfig.Port
 	user := config.DatabaseConfig.User
@@ -25,35 +44,39 @@ func initDatabaseFromConfig(config *config.Config) {
 	dbname := config.DatabaseConfig.DbName
 
 	if host == "" || port == "" || user == "" || password == "" || dbname == "" {
-		log.Fatal("One or more PostgreSQL configuration values are missing")
+		logger.Error("One or more Database configuration values are missing.")
 	}
 
-	log.Println("PostgreSQL database initialized successfully from configuration")
+	logger.Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, db host:%s, "+
+		"db port:%s", dbname, host, port))
 }
 
 func main() {
+
 	cdsHome := getCDSHome()
 	const configFile = "/repository/conf/deployment.yaml"
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
-		logger.Error(err, "No .env files found in config directory")
+		fmt.Errorf("No .env files found in config directory: %v", err)
 	}
 	_ = godotenv.Load(envFiles...)
 
 	// Load the configuration file
 	cdsConfig, err := config.LoadConfig(cdsHome, configFile)
 	if err != nil {
-		log.Fatalf("Failed to load cdsConfig: %v", err)
+		fmt.Errorf("Failed to load cdsConfig: %v", err)
 	}
 
 	// Initialize runtime configurations.
 	if err := config.InitializeCDSRuntime(cdsHome, cdsConfig); err != nil {
-		log.Fatalf("Failed to initialize thunder runtime: %v", err)
+		fmt.Errorf("Failed to initialize cds runtime.", err)
 	}
 
 	// Initialize logger
-	logger.Init(cdsConfig.Log.DebugEnabled)
+	if err := log.Init(cdsConfig.Log.LogLevel); err != nil {
+		fmt.Errorf("Failed to initialize cds runtime.", err)
+	}
 
 	// Initialize database
 	initDatabaseFromConfig(cdsConfig)
@@ -63,18 +86,19 @@ func main() {
 
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
-	logger.Info("WSO2 CDS starting in: %v", serverAddr)
+
+	logger := log.GetLogger()
+	logger.Info(fmt.Sprintf("WSO2 CDS starting in server address: %s", serverAddr))
 	ln, err := net.Listen("tcp", serverAddr)
 	if err != nil {
-		logger.Error(err, "Failed to start TLS listener")
+		logger.Error("Error when starting the CDS.", log.Error(err))
 	}
 
-	logger.Info("WSO2 CDS started in: %v", serverAddr)
-
+	logger.Info(fmt.Sprintf("WSO2 CDS started in server address: %s", serverAddr))
 	server1 := &http.Server{Handler: mux}
 
 	if err := server1.Serve(ln); err != nil {
-		logger.Error(err, "\"Failed to serve requests.")
+		logger.Error("Failed to serve requests. ", log.Error(err))
 	}
 
 	logger.Info("identity-customer-data-service component has started.")
@@ -86,11 +110,11 @@ func initMultiplexer() *http.ServeMux {
 
 	mux := http.NewServeMux()
 	serviceManager := managers.NewServiceManager(mux)
-
+	logger := log.GetLogger()
 	// Register the services.
 	err := serviceManager.RegisterServices(constants.ApiBasePath)
 	if err != nil {
-		logger.Error(err, "Failed to register the services.")
+		logger.Error("Failed to register the services. ", log.Error(err))
 	}
 
 	return mux
@@ -119,13 +143,13 @@ func getCDSHome() string {
 	flag.Parse()
 
 	if *projectHomeFlag != "" {
-		logger.Info(fmt.Sprintf("Using %s from command line argument", *projectHomeFlag))
+		fmt.Errorf("Using %s from command line argument", *projectHomeFlag)
 		projectHome = *projectHomeFlag
 	} else {
 		// If no command line argument is provided, use the current working directory.
 		dir, dirErr := os.Getwd()
 		if dirErr != nil {
-			logger.Error(dirErr, "Failed to get current working directory")
+			fmt.Errorf("Failed to get current working directory", dirErr)
 		}
 		projectHome = dir
 	}

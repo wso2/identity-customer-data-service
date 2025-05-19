@@ -1,7 +1,9 @@
 env: "${ENV}" # This will be replaced by the ENV variable
 
 log:
-  debug_enabled: true
+  log_level: "${LOG_LEVEL}"
+  #    - "INFO", "WARN", "ERROR", "DEBUG" - and environment specific log level
+
 
 cache:
   enabled: true
