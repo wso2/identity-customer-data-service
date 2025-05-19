@@ -20,7 +20,7 @@ package handler
 
 import (
 	"encoding/json"
-	"log"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strings"
 
@@ -57,14 +57,13 @@ func extractEventStreamId(path string) string {
 func (ah *EventStreamIdHandler) AddEventStreamId(w http.ResponseWriter, r *http.Request) {
 	orgID, appID, ok := extractTenantAndApp(r.URL.Path)
 	if !ok {
-		http.Error(w, "invalid URL format", http.StatusBadRequest)
+		http.Error(w, "invalid URL format", http.StatusNotFound)
 		return
 	}
 	apiKeyService := provider.NewEventStreamIdProvider().GetEventStreamIdService()
 	apiKey, err := apiKeyService.CreateEventStreamId(orgID, appID)
 	if err != nil {
-		log.Print("failed to create api key: ", err)
-		http.Error(w, "failed to create api key", http.StatusInternalServerError)
+		utils.HandleError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -81,10 +80,9 @@ func (ah *EventStreamIdHandler) GetEventStreamId(w http.ResponseWriter, r *http.
 
 	apiKeyService := provider.NewEventStreamIdProvider().GetEventStreamIdService()
 	if apiKeyID != "" {
-		log.Print("fetching api key: ", apiKeyID)
 		key, err := apiKeyService.GetEventStreamId(apiKeyID)
 		if err != nil || key == nil {
-			http.Error(w, "api key not found", http.StatusNotFound)
+			utils.HandleError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

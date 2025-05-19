@@ -20,22 +20,41 @@ package store
 
 import (
 	"fmt"
-
 	"github.com/wso2/identity-customer-data-service/internal/event_stream_ids/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
 // InsertEventStreamId inserts a new event_stream_id  into the database using DBClientInterface
 func InsertEventStreamId(eventStreamId *model.EventStreamId) error {
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return fmt.Errorf("failed to get DB client: %w", err)
+		errorMsg := fmt.Sprintf("Failed to get db client for event stream id with id: %s",
+			eventStreamId.EventStreamId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_EVENT_STREAM_ID.Code,
+			Message:     errors2.ADD_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	defer dbClient.Close()
 
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		errorMsg := fmt.Sprintf("Failed to begin transaction to add event stream id with id: %s",
+			eventStreamId.EventStreamId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_EVENT_STREAM_ID.Code,
+			Message:     errors2.ADD_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 
 	query := `INSERT INTO event_stream_ids (event_stream_id, org_id, app_id, state, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6)`
@@ -43,17 +62,42 @@ func InsertEventStreamId(eventStreamId *model.EventStreamId) error {
 	if err != nil {
 		err := tx.Rollback()
 		if err != nil {
-			return err
+			errorMsg := fmt.Sprintf("Failed to rollback adding event stream id: %s",
+				eventStreamId.EventStreamId)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.ADD_EVENT_STREAM_ID.Code,
+				Message:     errors2.ADD_EVENT_STREAM_ID.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
-		return fmt.Errorf("failed to insert event_stream_id eventStreamId: %w", err)
+		errorMsg := fmt.Sprintf("Failed to add event stream id: %s",
+			eventStreamId.EventStreamId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_EVENT_STREAM_ID.Code,
+			Message:     errors2.ADD_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	return tx.Commit()
 }
 
 func GetEventStreamIdsPerApp(orgID string, appID string) ([]*model.EventStreamId, error) {
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get DB client: %w", err)
+		errorMsg := fmt.Sprintf("Failed to get db client for event stream id for app: %s", appID)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_EVENT_STREAM_ID.Code,
+			Message:     errors2.GET_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
 	}
 	defer dbClient.Close()
 
@@ -63,7 +107,14 @@ func GetEventStreamIdsPerApp(orgID string, appID string) ([]*model.EventStreamId
 
 	rows, err := dbClient.ExecuteQuery(query, orgID, appID)
 	if err != nil {
-		return nil, err
+		errorMsg := fmt.Sprintf("Failed in fetching event stream ids for app: %s", appID)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_EVENT_STREAM_ID.Code,
+			Message:     errors2.GET_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
 	}
 	if len(rows) == 0 {
 		return nil, nil
@@ -78,16 +129,35 @@ func GetEventStreamIdsPerApp(orgID string, appID string) ([]*model.EventStreamId
 
 // GetEventStreamId retrieves an API key by its key string
 func GetEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get DB client: %w", err)
+		errorMsg := fmt.Sprintf("Failed to get db client for  fetching meta data for event stream id: %s", eventStreamId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_EVENT_STREAM_ID.Code,
+			Message:     errors2.GET_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
 	}
 	defer dbClient.Close()
 
 	query := `SELECT event_stream_id, org_id, app_id, state, expires_at, created_at FROM event_stream_ids WHERE event_stream_id = $1`
 	rows, err := dbClient.ExecuteQuery(query, eventStreamId)
-	if err != nil || len(rows) == 0 {
-		return nil, err
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed in fetching meta data for event stream id: %s", eventStreamId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_EVENT_STREAM_ID.Code,
+			Message:     errors2.GET_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	if len(rows) == 0 {
+		return nil, nil
 	}
 	row := rows[0]
 	return mapRowToEventStreamId(row), nil
@@ -95,15 +165,31 @@ func GetEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
 
 // UpdateState updates the state of an API key
 func UpdateState(eventStreamId string, state string) error {
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		return fmt.Errorf("failed to get DB client: %w", err)
+		errorMsg := fmt.Sprintf("Failed to get db client for updating meta data for event stream id: %s", eventStreamId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_EVENT_STREAM_ID.Code,
+			Message:     errors2.UPDATE_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	defer dbClient.Close()
 
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		errorMsg := fmt.Sprintf("Failed to begin transaction for updating meta data for event stream id: %s", eventStreamId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_EVENT_STREAM_ID.Code,
+			Message:     errors2.UPDATE_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 
 	query := `UPDATE event_stream_ids SET state = $1 WHERE event_stream_id = $2`
@@ -111,9 +197,23 @@ func UpdateState(eventStreamId string, state string) error {
 	if err != nil {
 		err := tx.Rollback()
 		if err != nil {
-			return err
+			errorMsg := fmt.Sprintf("Failed to rollback updating meta data for event stream id: %s", eventStreamId)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_EVENT_STREAM_ID.Code,
+				Message:     errors2.UPDATE_EVENT_STREAM_ID.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
 		}
-		return fmt.Errorf("failed to update event_stream_id state: %w", err)
+		errorMsg := fmt.Sprintf("Failed to updating meta data for event stream id: %s", eventStreamId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_EVENT_STREAM_ID.Code,
+			Message:     errors2.UPDATE_EVENT_STREAM_ID.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
 	return tx.Commit()
 }

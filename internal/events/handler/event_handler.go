@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/wso2/identity-customer-data-service/internal/events/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
-	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -41,7 +40,6 @@ func (eh *EventHandler) AddEvent(w http.ResponseWriter, r *http.Request) {
 	// todo: ideally this has to be the first step. For that, even before extracting the
 	// payload should be able to get the app/orgid from path. Need a modification
 	if _, err := authentication.ValidateAuthentication(r, event); err != nil {
-		log.Print("Unauthorized request: ", err.Error())
 		http.Error(w, "Unauthorized request", http.StatusUnauthorized)
 		return
 	}
@@ -50,7 +48,7 @@ func (eh *EventHandler) AddEvent(w http.ResponseWriter, r *http.Request) {
 	eventsProvider := provider.NewEventsProvider()
 	eventsService := eventsProvider.GetEventsService()
 	if err := eventsService.AddEvents(event, queue); err != nil {
-		utils.HandleHTTPError(w, err)
+		utils.HandleError(w, err)
 		return
 	}
 
@@ -69,10 +67,11 @@ func (eh *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 	eventsService := eventsProvider.GetEventsService()
 	events, err := eventsService.GetEvent(eventId)
 	if err != nil {
-		http.Error(w, "Failed to fetch events", http.StatusInternalServerError)
+		utils.HandleError(w, err)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(events)
 }
@@ -99,10 +98,11 @@ func (eh *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	eventsService := eventsProvider.GetEventsService()
 	events, err := eventsService.GetEvents(rawFilters, timeFilter)
 	if err != nil {
-		http.Error(w, "Failed to fetch events", http.StatusInternalServerError)
+		utils.HandleError(w, err)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(events)
 }

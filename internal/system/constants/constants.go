@@ -11,6 +11,7 @@ const MaxRetryAttempts = 10
 const RetryDelay = 100 * time.Millisecond
 const ApiBasePath = "/api/v1"
 const Filter = "filter"
+const DEFAULT_LOG_LEVEL = "INFO"
 
 var AllowedFieldsForUnificationRulePatch = map[string]bool{
 	"is_active": true,

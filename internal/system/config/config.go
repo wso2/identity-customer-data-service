@@ -13,7 +13,7 @@ type Config struct {
 		Host string `yaml:"host"`
 	} `yaml:"addr"`
 	Log struct {
-		DebugEnabled bool `yaml:"debug_enabled"`
+		LogLevel string `yaml:"log_level"`
 	} `yaml:"log"`
 	Auth struct {
 		CORSAllowedOrigins []string `yaml:"cors_allowed_origins"`

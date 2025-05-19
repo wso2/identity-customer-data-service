@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package errors
 
 const errorPrefix = "CDS-"
@@ -9,24 +27,6 @@ var (
 		Code:        errorPrefix + "15001",
 		Message:     "Error while adding unification rules.",
 		Description: "Error while adding unification rules for the organization.",
-	}
-
-	ErrWhileRevokingToken = ErrorMessage{
-		Code:        errorPrefix + "15002",
-		Message:     "Token revocation failed.",
-		Description: "Error while revoking the token",
-	}
-
-	ErrWhileIssuingNewToken = ErrorMessage{
-		Code:        errorPrefix + "15003",
-		Message:     "Token issuance failed.",
-		Description: "Error while issuing new token",
-	}
-
-	ErrWhileIntrospectingNewToken = ErrorMessage{
-		Code:        errorPrefix + "15004",
-		Message:     "Token introspection failed.",
-		Description: "Error while introspecting the token",
 	}
 
 	ErrWhileFetchingProfileEnrichmentRules = ErrorMessage{
@@ -47,16 +47,44 @@ var (
 		Description: "Server error occurred while trying to fetch profile by profileId.",
 	}
 
-	ErrWhileUpdatingEnrichmentRules = ErrorMessage{
-		Code:        errorPrefix + "15008",
-		Message:     "Error while updating enrichment rules.",
-		Description: "Error while updating profile enrichment rules",
+	ADD_ENRICHMENT_RULE = ErrorMessage{
+		Code:    errorPrefix + "15009",
+		Message: "Error while adding enrichment rules.",
 	}
 
-	ErrWhileAddingEnrichmentRules = ErrorMessage{
-		Code:        errorPrefix + "15009",
-		Message:     "Error while adding enrichment rules.",
-		Description: "Error while adding enrichment rule of the organization.",
+	ADD_EVENT_STREAM_ID = ErrorMessage{
+		Code:    errorPrefix + "15009",
+		Message: "Error while adding event stream id.",
+	}
+
+	GET_EVENT_STREAM_ID = ErrorMessage{
+		Code:    errorPrefix + "15009",
+		Message: "Error while fetching event stream id.",
+	}
+
+	UPDATE_EVENT_STREAM_ID = ErrorMessage{
+		Code:    errorPrefix + "15009",
+		Message: "Error while fetching event stream id.",
+	}
+
+	UPDATE_ENRICHMENT_RULES = ErrorMessage{
+		Code:    errorPrefix + "15008",
+		Message: "Error while updating enrichment rules.",
+	}
+
+	FETCH_ENRICHMENT_RULES = ErrorMessage{
+		Code:    errorPrefix + "15008",
+		Message: "Error while fetching enrichment rule(s).",
+	}
+
+	DELETE_ENRICHMENT_RULES = ErrorMessage{
+		Code:    errorPrefix + "15008",
+		Message: "Error while deleting enrichment rule.",
+	}
+
+	FILTER_ENRICHMENT_RULES = ErrorMessage{
+		Code:    errorPrefix + "15008",
+		Message: "Error while filtering enrichment rules.",
 	}
 
 	ErrWhileFetchingUnificationRule = ErrorMessage{
@@ -77,25 +105,68 @@ var (
 		Description: "Error while updating unification rule of the organization.",
 	}
 
-	ErrWhileAddingEvent = ErrorMessage{
-		Code:        errorPrefix + "15013",
-		Message:     "Error while adding event.",
-		Description: "Error while adding event.",
+	ADD_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15009",
+		Message: "Error while adding unification rules.",
 	}
 
-	ErrWhileBuildingPath = ErrorMessage{
-		Code:    errorPrefix + "15014",
-		Message: "Error while building URL.",
+	GET_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15009",
+		Message: "Error while fetching unification rules.",
 	}
 
-	ErrWhileGeneratingWriteKey = ErrorMessage{
-		Code:    errorPrefix + "15015",
-		Message: "Error while generating the write key.",
+	UPDATE_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15009",
+		Message: "Error while updating unification rules.",
+	}
+
+	LOCK_ACQUIRE = ErrorMessage{
+		Code:    errorPrefix + "15016",
+		Message: "Advisory lock acquisition failed",
+	}
+
+	DB_CLIENT_INIT = ErrorMessage{
+		Code:    errorPrefix + "15017",
+		Message: "Unable to initialize database client.",
+	}
+
+	DB_TRANSACTION_INIT = ErrorMessage{
+		Code:    errorPrefix + "15017",
+		Message: "Failed to begin transaction",
+	}
+
+	LOCK_RELEASE = ErrorMessage{
+		Code:    errorPrefix + "15018",
+		Message: "Error while releasing the lock.",
+	}
+
+	LOCK_KEY_GEN = ErrorMessage{
+		Code:    errorPrefix + "15018",
+		Message: "Error generating advisory lock key",
+	}
+
+	LOCK_RESULT_INVALID = ErrorMessage{
+		Code:    errorPrefix + "15018",
+		Message: "Invalid response from advisory lock query.",
+	}
+
+	MARSHAL_JSON = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Error while marshalling JSON.",
+	}
+	UNMARSHAL_JSON = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Error while un-marshalling JSON.",
+	}
+
+	INVALID_TYPE = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Invalid type.",
 	}
 
 	// Client error codes
 
-	ErrBadRequest = ErrorMessage{
+	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "11001",
 		Message: "Invalid body format.",
 	}
@@ -162,7 +233,7 @@ var (
 	ErrResolutionRuleAlreadyExists = ErrorMessage{
 		Code:        errorPrefix + "11011",
 		Message:     "Rule already exist.",
-		Description: "No user profile record found for the given profile_id",
+		Description: "Resolution rule already exists",
 	}
 
 	ErrPropertyTypeValidation = ErrorMessage{
@@ -186,6 +257,11 @@ var (
 		Code:        errorPrefix + "10015",
 		Message:     "Missing computation logic.",
 		Description: "For computed traits, 'computation' must be provided.",
+	}
+
+	ENRICHMENT_RULE_VALIDATION = ErrorMessage{
+		Code:    errorPrefix + "10015",
+		Message: "Enrichment rule validation failed",
 	}
 
 	ErrSourceFieldValidation = ErrorMessage{
@@ -219,8 +295,78 @@ var (
 		Message: "Validation failed.",
 	}
 
-	ErrInvalidFiltering = ErrorMessage{
+	INVALID_ENRICHMENT_RULE_FILTERING = ErrorMessage{
 		Code:    errorPrefix + "11022",
-		Message: "Filtering failed.",
+		Message: "Enrichment rules filtering failed.",
+	}
+
+	ADD_EVENT = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Error while adding event.",
+	}
+
+	GET_EVENT = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Error while fetching event.",
+	}
+
+	DELETE_EVENT = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Error while deleting event.",
+	}
+
+	EVENT_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Event not found.",
+	}
+
+	ADD_PROFILE = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Profile addition failed.",
+	}
+
+	GET_PROFILE = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Fetching profile(s) failed.",
+	}
+
+	FILTER_PROFILE = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Filtering profiles failed.",
+	}
+
+	UPDATE_PROFILE = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Profile update failed.",
+	}
+
+	DELETE_PROFILE = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Profile deletion failed.",
+	}
+
+	ADD_APP_DATA = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Add app data failed.",
+	}
+
+	GET_APP_DATA = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Fetching app data failed.",
+	}
+
+	UPDATE_APP_DATA = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Updating app data failed.",
+	}
+
+	UPDATE_IDENTITY_ATT = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Updating identity attribute failed.",
+	}
+
+	UPDATE_TRAIT = ErrorMessage{
+		Code:    errorPrefix + "11023",
+		Message: "Updating trait failed.",
 	}
 )
