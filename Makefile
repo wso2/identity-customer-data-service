@@ -10,6 +10,16 @@ VERSION=$(shell cat $(VERSION_FILE))
 # ZIP_FILE_NAME=${BINARY_NAME_PREFIX}-$(VERSION)
 PRODUCT_FOLDER=$(BINARY_NAME)-$(VERSION)
 
+# Tools
+PROJECT_DIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+PROJECT_BIN_DIR := $(PROJECT_DIR)/bin
+TOOL_BIN ?= $(PROJECT_BIN_DIR)/tools
+GOLANGCI_LINT ?= $(TOOL_BIN)/golangci-lint
+GOLANGCI_LINT_VERSION ?= v1.64.8
+
+$(TOOL_BIN):
+	mkdir -p $(TOOL_BIN)
+
 # Default target.
 all: clean build
 
@@ -19,6 +29,9 @@ clean:
 
 # Build project and package it.
 build: _build _package
+
+lint: golangci-lint
+	cd . && $(GOLANGCI_LINT) run ./...
 
 # Build the Go project.
 _build:
@@ -44,4 +57,16 @@ help:
 	@echo "  test         - Run all tests."
 	@echo "  help         - Show the help message."
 
-.PHONY: all clean build _build _package help
+.PHONY: all clean build lint help
+
+.PHONY: go_install_tool golangci-lint
+
+define go_install_tool
+	cd /tmp && \
+	GOBIN=$(TOOL_BIN) go install $(2)@$(3)
+endef
+
+golangci-lint: $(GOLANGCI_LINT)
+
+$(GOLANGCI_LINT): $(TOOL_BIN)
+	$(call go_install_tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))

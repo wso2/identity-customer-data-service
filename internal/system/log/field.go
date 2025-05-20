@@ -16,15 +16,33 @@
  * under the License.
  */
 
-package model
+package log
 
-// UnificationRule represents rules for merging user profiles
-type UnificationRule struct {
-	RuleId    string `json:"rule_id" bson:"rule_id" binding:"required"`
-	RuleName  string `json:"rule_name" bson:"rule_name" binding:"required"`
-	Property  string `json:"property_name" bson:"property_name" binding:"required"`
-	Priority  int    `json:"priority" bson:"priority" binding:"required"`
-	IsActive  bool   `json:"is_active" bson:"is_active" binding:"required"`
-	CreatedAt int64  `json:"created_at" bson:"created_at"`
-	UpdatedAt int64  `json:"updated_at" bson:"updated_at"`
+// Field represents a key-value pair for structured logging.
+type Field struct {
+	Key   string
+	Value interface{}
+}
+
+// String creates a Field with a string value.
+func String(key, value string) Field {
+
+	return Field{Key: key, Value: value}
+}
+
+// Int creates a Field with an integer value.
+func Int(key string, value int) Field {
+
+	return Field{Key: key, Value: value}
+}
+
+// Any creates a Field with any value.
+func Any(key string, value interface{}) Field {
+
+	return Field{Key: key, Value: value}
+}
+
+func Error(value error) Field {
+
+	return Field{Key: "error", Value: value}
 }

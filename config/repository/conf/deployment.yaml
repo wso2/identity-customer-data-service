@@ -1,7 +1,9 @@
 env: "${ENV}" # This will be replaced by the ENV variable
 
 log:
-  debug_enabled: true
+  log_level: "${LOG_LEVEL}"
+  #    - "INFO", "WARN", "ERROR", "DEBUG" - and environment specific log level
+
 
 cache:
   enabled: true
@@ -30,14 +32,14 @@ auth_server:
 database:
   host: "localhost"
   port: "5432"
-  user: "admin"
-  password: "${DB_PASSWORD}"
-  dbname: "iam_cds"
+  user: "cdsuser"
+  password: "cdspwd"
+  dbname: "cdsdb"
 
 datasource:
   hostname: "localhost"
   port: 5432
-  username: "admin"
-  password: "${DATA_SOURCE_PASSWORD}"
-  name: "iam_cds"
+  username: "cdsuser"
+  password: "cdspwd"
+  name: "cdsdb"
   sslmode: disable

@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 type UnificationRuleServiceInterface interface {
 	AddUnificationRule(rule model.UnificationRule) error
 	GetUnificationRules() ([]model.UnificationRule, error)
-	GetUnificationRule(ruleId string) (model.UnificationRule, error)
+	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
 	PatchResolutionRule(ruleId string, updates map[string]interface{}) error
 	DeleteUnificationRule(ruleId string) error
 }
@@ -31,10 +32,18 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 
 	// Check if a similar unification rule already exists
 	existingRule, err := store.GetUnificationRule(rule.RuleId)
+	logger := log.GetLogger()
 	if err != nil {
-		return errors2.NewServerError(errors2.ErrWhileFetchingUnificationRules, err)
+		errorMsg := fmt.Sprintf("Error occurred while checking for existing unification rule: %s", rule.RuleId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ErrWhileFetchingUnificationRules.Code,
+			Message:     errors2.ErrWhileFetchingUnificationRules.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
 	}
-	if existingRule.RuleId != "" {
+	if existingRule == nil {
 		// Resolution rule already exists
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.ErrResolutionRuleAlreadyExists.Code,
@@ -58,9 +67,20 @@ func (urs *UnificationRuleService) GetUnificationRules() ([]model.UnificationRul
 }
 
 // GetUnificationRule Fetches a specific resolution rule.
-func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (model.UnificationRule, error) {
+func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 
-	return store.GetUnificationRule(ruleId)
+	unificationRule, err := store.GetUnificationRule(ruleId)
+	if err != nil {
+		return nil, err
+	}
+	if unificationRule == nil {
+		return nil, errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrResolutionRuleNotFound.Code,
+			Message:     errors2.ErrResolutionRuleNotFound.Message,
+			Description: fmt.Sprintf("Unification rule with ID %s not found", ruleId),
+		}, http.StatusNotFound)
+	}
+	return unificationRule, err
 }
 
 // PatchResolutionRule Applies a partial update on a specific resolution rule.

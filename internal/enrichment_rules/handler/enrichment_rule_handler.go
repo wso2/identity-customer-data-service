@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package handler
 
 import (
@@ -5,7 +23,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
-	"github.com/wso2/identity-customer-data-service/internal/utils"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strings"
 	"sync"
@@ -36,11 +54,11 @@ func (erh *EnrichmentRulesHandler) CreateEnrichmentRule(w http.ResponseWriter, r
 	ruleService := ruleProvider.GetEnrichmentRuleService()
 	err := ruleService.AddEnrichmentRule(rule)
 	if err != nil {
-		utils.HandleHTTPError(w, err)
+		utils.HandleError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(rule)
+	_ = json.NewEncoder(w).Encode(rule)
 }
 
 // GetEnrichmentRules handles retrieve of all rules with or without filters
@@ -53,22 +71,24 @@ func (erh *EnrichmentRulesHandler) GetEnrichmentRules(w http.ResponseWriter, r *
 	if len(filters) > 0 {
 		rules, err := ruleService.GetEnrichmentRulesByFilter(filters)
 		if err != nil {
-			utils.HandleHTTPError(w, err)
+			utils.HandleError(w, err)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(rules)
+		_ = json.NewEncoder(w).Encode(rules)
 		return
 	}
 
 	// fallback: all rules
 	rules, err := ruleService.GetEnrichmentRules()
 	if err != nil {
-		utils.HandleHTTPError(w, err)
+		utils.HandleError(w, err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rules)
+	_ = json.NewEncoder(w).Encode(rules)
 }
 
 // GetEnrichmentRule handles retrieivng a specific rule
@@ -84,11 +104,12 @@ func (erh *EnrichmentRulesHandler) GetEnrichmentRule(w http.ResponseWriter, r *h
 	ruleService := ruleProvider.GetEnrichmentRuleService()
 	rule, err := ruleService.GetEnrichmentRule(ruleId)
 	if err != nil {
-		utils.HandleHTTPError(w, err)
+		utils.HandleError(w, err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rule)
+	_ = json.NewEncoder(w).Encode(rule)
 }
 
 func (erh *EnrichmentRulesHandler) PutEnrichmentRule(w http.ResponseWriter, r *http.Request) {
@@ -105,11 +126,11 @@ func (erh *EnrichmentRulesHandler) PutEnrichmentRule(w http.ResponseWriter, r *h
 	ruleService := ruleProvider.GetEnrichmentRuleService()
 	err := ruleService.PutEnrichmentRule(rules)
 	if err != nil {
-		utils.HandleHTTPError(w, err)
+		utils.HandleError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rules)
+	_ = json.NewEncoder(w).Encode(rules)
 }
 
 // DeleteEnrichmentRule handles DELETE /unification_rules/:rule_name
@@ -130,8 +151,10 @@ func (erh *EnrichmentRulesHandler) DeleteEnrichmentRule(w http.ResponseWriter, r
 	ruleService := ruleProvider.GetEnrichmentRuleService()
 	err := ruleService.DeleteEnrichmentRule(ruleId)
 	if err != nil {
-		utils.HandleHTTPError(w, err)
+		utils.HandleError(w, err)
+		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
 	json.NewEncoder(w)
 }

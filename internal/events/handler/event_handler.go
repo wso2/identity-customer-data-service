@@ -2,18 +2,17 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/wso2/identity-customer-data-service/internal/events/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/wso2/identity-customer-data-service/internal/events/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authentication"
 
 	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"github.com/wso2/identity-customer-data-service/internal/utils"
 )
 
 type EventHandler struct {
@@ -31,10 +30,6 @@ func NewEventHandler() *EventHandler {
 
 // AddEvent handles adding a single event
 func (eh *EventHandler) AddEvent(w http.ResponseWriter, r *http.Request) {
-	if _, err := authentication.ValidateAuthentication(r); err != nil {
-		http.Error(w, "Unauthorized request", http.StatusUnauthorized)
-		return
-	}
 
 	var event model.Event
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
@@ -42,9 +37,18 @@ func (eh *EventHandler) AddEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// todo: ideally this has to be the first step. For that, even before extracting the
+	// payload should be able to get the app/orgid from path. Need a modification
+	if _, err := authentication.ValidateAuthenticationForEvent(r, event); err != nil {
+		http.Error(w, "Unauthorized request", http.StatusUnauthorized)
+		return
+	}
+
 	queue := &workers.ProfileWorkerQueue{}
-	if err := service.AddEvents(event, queue); err != nil {
-		utils.HandleHTTPError(w, err)
+	eventsProvider := provider.NewEventsProvider()
+	eventsService := eventsProvider.GetEventsService()
+	if err := eventsService.AddEvents(event, queue); err != nil {
+		utils.HandleError(w, err)
 		return
 	}
 
@@ -59,14 +63,17 @@ func (eh *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events, err := service.GetEvent(eventId)
+	eventsProvider := provider.NewEventsProvider()
+	eventsService := eventsProvider.GetEventsService()
+	events, err := eventsService.GetEvent(eventId)
 	if err != nil {
-		http.Error(w, "Failed to fetch events", http.StatusInternalServerError)
+		utils.HandleError(w, err)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(events)
+	_ = json.NewEncoder(w).Encode(events)
 }
 
 // GetEvents fetches all events with optional filters
@@ -87,44 +94,15 @@ func (eh *EventHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	events, err := service.GetEvents(rawFilters, timeFilter)
+	eventsProvider := provider.NewEventsProvider()
+	eventsService := eventsProvider.GetEventsService()
+	events, err := eventsService.GetEvents(rawFilters, timeFilter)
 	if err != nil {
-		http.Error(w, "Failed to fetch events", http.StatusInternalServerError)
+		utils.HandleError(w, err)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(events)
-}
-
-func (eh *EventHandler) GetWriteKey(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-	applicationId := pathParts[len(pathParts)-1]
-	// Step 1: Get existing token if needed (for now assume no previous token available)
-	// If you have a DB or cache, fetch the existing token here.
-	existingToken, _ := authentication.GetTokenFromIS(applicationId)
-
-	// Step 2: If token exists, revoke it first as this would be re-generating a new one
-	if existingToken != "" {
-		err := authentication.RevokeToken(existingToken)
-		if err != nil {
-			utils.HandleHTTPError(w, err)
-			return
-		}
-	}
-
-	// Step 3: Get a new token
-	newToken, err := authentication.GetTokenFromIS(applicationId)
-	if err != nil {
-		utils.HandleHTTPError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"write_key": newToken,
-	})
+	_ = json.NewEncoder(w).Encode(events)
 }
