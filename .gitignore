@@ -25,6 +25,7 @@ replay_pid*
 
 # Project build directory
 target/
+bin/
 
 # OS generated files
 .DS_Store
