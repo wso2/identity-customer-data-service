@@ -2,6 +2,8 @@ package integration
 
 import (
 	"context"
+	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
@@ -12,19 +14,34 @@ import (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+	os.Setenv("TEST_MODE", "true") // ✅ Add this
 
-	pg, _ := setup.SetupTestPostgres(ctx)
-	//if err != nil {
-	//	log.Fatalf("Failed to start test DB: %v", err)
-	//}
-	defer pg.Container.Terminate(ctx)
+	conf := config.Config{
+		Log: config.LogConfig{
+			LogLevel: "DEBUG",
+		},
+	}
+	config.OverrideCDSRuntime(conf)
+	_ = log.Init("DEBUG")
 
-	log.Init("DEBUG")
-	//logger := log.GetLogger()
+	pg, err := setup.SetupTestPostgres(ctx)
+	if err != nil {
+		fmt.Println("Failed to start test DB:", err)
+		os.Exit(1)
+	}
 
 	provider.SetTestDB(pg.DB)
+	err = utils.CreateTablesFromFile(pg.DB, "/Users/admin/Documents/Repos/OnPrem/identity-customer-data-service/test/setup/schema.sql")
+	if err != nil {
+		fmt.Println("Failed to create tables from schema:", err)
+		os.Exit(1)
+	}
 
-	_ = utils.CreateTablesFromFile(pg.DB, "test/setup/schema.sql")
+	// Run tests
+	code := m.Run()
 
-	os.Exit(m.Run())
+	// Terminate container manually after tests complete
+	_ = pg.Container.Terminate(ctx)
+
+	os.Exit(code)
 }

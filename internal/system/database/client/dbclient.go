@@ -20,6 +20,7 @@ package client
 
 import (
 	"database/sql"
+	"os"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -89,7 +90,9 @@ func (client *DBClient) BeginTx() (*sql.Tx, error) {
 }
 
 // Close closes the database connection.
-func (client *DBClient) Close() error {
-
-	return client.db.Close()
+func (c *DBClient) Close() error {
+	if os.Getenv("TEST_MODE") == "true" {
+		return nil
+	}
+	return c.db.Close()
 }

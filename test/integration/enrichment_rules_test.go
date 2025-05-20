@@ -26,7 +26,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/service"
 )
 
-func Test_EnrichmentRuleCRUD(t *testing.T) {
+func Test_EnrichmentRule(t *testing.T) {
 
 	svc := service.GetEnrichmentRuleService()
 
