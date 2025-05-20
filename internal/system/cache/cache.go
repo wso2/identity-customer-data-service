@@ -51,11 +51,12 @@ func (c *Cache) Get(key string) (interface{}, bool) {
 
 	item, found := c.items[key]
 	if !found {
+		logger.Debug(fmt.Sprint("Cache not found for key: ", key))
 		return nil, false
 	}
-
 	// Check if expired
 	if time.Now().After(item.Expiration) {
+		logger.Debug(fmt.Sprint("Cache expired for key: ", key))
 		return nil, false
 	}
 

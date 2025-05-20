@@ -62,7 +62,7 @@ func validateToken(token string) (bool, error) {
 		}
 	}
 
-	//  For now assume JWT — parse claims
+	//  todo: For now assume JWT — parse claims. For opaque need to call introspection endpoint
 	claims, err := ParseJWTClaims(token)
 	if err != nil {
 		return false, unauthorizedError()
@@ -73,7 +73,7 @@ func validateToken(token string) (bool, error) {
 		return false, unauthorizedError()
 	}
 
-	// ⏺️ Store in cache
+	//  Store in cache
 	tokenCache.Set(token, claims)
 
 	return true, nil
@@ -81,6 +81,9 @@ func validateToken(token string) (bool, error) {
 
 // parseJWTClaims parses claims from a JWT without verifying the signature
 func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
+
+	logger := log.GetLogger()
+	logger.Debug("Parsing JWT claims?")
 	claims := jwt.MapClaims{}
 	_, _, err := new(jwt.Parser).ParseUnverified(tokenString, claims)
 	if err != nil {

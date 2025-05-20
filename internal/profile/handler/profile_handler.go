@@ -98,14 +98,13 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	//logger := log.GetLogger()
 	//  Fetch profile
 	profile, err := service.FindProfileByUserName(sub)
 	if err != nil || profile == nil {
-		log.Print("error fetching profile: ", err)
-		http.Error(w, "Profile not found", http.StatusNotFound)
+		utils.HandleError(w, err)
 		return
 	}
-
 	//  Return JSON
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(profile)
