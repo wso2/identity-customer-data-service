@@ -18,37 +18,31 @@
 
 package config
 
-import "sync"
-
-// CDSRuntime holds the runtime configuration for the CDS server.
-type CDSRuntime struct {
-	CDSHome string `yaml:"cds_home"`
-	Config  Config `yaml:"config"`
-}
-
-var (
-	runtimeConfig *CDSRuntime
-	once          sync.Once
+import (
+	"gopkg.in/yaml.v2"
+	"os"
+	"path"
 )
 
-// InitializeCDSRuntime initializes the CDSRuntime configuration.
-func InitializeCDSRuntime(home string, config *Config) error {
+// LoadConfig loads and sets AppConfig (global variable)
+func LoadConfig(cdsHome, filePath string) (*Config, error) {
+	file, err := os.ReadFile(path.Join(cdsHome, filePath))
+	if err != nil {
+		return nil, err
+	}
 
-	once.Do(func() {
-		runtimeConfig = &CDSRuntime{
-			CDSHome: home,
-			Config:  *config,
-		}
-	})
+	expanded := os.ExpandEnv(string(file))
 
-	return nil
+	var cfg Config
+	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
 
-// GetCDSRuntime returns the CDSRuntime configuration.
-func GetCDSRuntime() *CDSRuntime {
-
-	if runtimeConfig == nil {
-		panic("CDSRuntime is not initialized")
+// CDSRuntime holds the runtime configuration for the application
+func OverrideCDSRuntime(conf Config) {
+	runtimeConfig = &CDSRuntime{
+		Config: conf,
 	}
-	return runtimeConfig
 }

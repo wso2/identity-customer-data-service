@@ -37,13 +37,6 @@ func SetTestDB(db *sql.DB) {
 	testDBOverride = db
 }
 
-func (p *DBProvider) GetDBClient() (*sql.DB, error) {
-	if testDBOverride != nil {
-		return testDBOverride, nil
-	}
-	return defaultDBConnection() // your existing logic
-}
-
 // DBProviderInterface defines the interface for getting database clients.
 type DBProviderInterface interface {
 	GetDBClient() (client.DBClientInterface, error)
@@ -61,7 +54,10 @@ func NewDBProvider() DBProviderInterface {
 // GetDBClient returns a database client based on the provided database name.
 func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 
-	// Create the database connection string based on the configured database type.
+	if testDBOverride != nil {
+		return client.NewDBClient(testDBOverride), nil
+	}
+	// Production DB setup
 	runtimeConfig := config.GetCDSRuntime().Config
 	dbConfig := getDBConfig(runtimeConfig)
 

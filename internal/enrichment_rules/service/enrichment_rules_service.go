@@ -83,6 +83,7 @@ func (ers *EnrichmentRuleService) GetEnrichmentRule(ruleId string) (model.Profil
 func (ers *EnrichmentRuleService) PutEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
 	err, isValid := validateEnrichmentRule(rule)
+	// todo: DEfine allowed updatable fields - it has to become a Patch then
 	if !isValid {
 		return err
 	}

@@ -19,76 +19,89 @@
 package integration
 
 import (
-	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/service"
-	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
-	"github.com/wso2/identity-customer-data-service/test/setup"
-	"testing"
 )
 
-func TestEnrichmentRule_CreateUpdateDelete(t *testing.T) {
-	ctx := context.Background()
-	testDB, err := setup.SetupTestDB(ctx)
-	assert.NoError(t, err)
-	defer testDB.Container.Terminate(ctx)
-
-	// Override the provider DB
-	provider.SetTestDB(testDB.DB)
+func Test_EnrichmentRuleCRUD(t *testing.T) {
 
 	svc := service.GetEnrichmentRuleService()
 
-	// Step 1: Create Rule
-	rule := model.ProfileEnrichmentRule{
-		PropertyName:      "traits.test_interest",
-		ValueType:         "arrayOfString",
+	// Define enrichment rules
+	rule1 := model.ProfileEnrichmentRule{
+		PropertyName:      "traits.hobby",
+		ValueType:         "string",
 		MergeStrategy:     "overwrite",
-		Value:             "music",
-		ComputationMethod: "static",
+		Value:             "reading",
+		ComputationMethod: "extract",
+		SourceField:       "category",
 		Trigger: model.RuleTrigger{
 			EventType:  "track",
-			EventName:  "interest_selected",
+			EventName:  "hobby_selected",
 			Conditions: []model.RuleCondition{},
 		},
 	}
 
-	err = svc.AddEnrichmentRule(rule)
-	assert.NoError(t, err)
-
-	// Step 2: Fetch it to get assigned rule_id
-	rules, err := svc.GetEnrichmentRules()
-	assert.NoError(t, err)
-	var inserted model.ProfileEnrichmentRule
-	for _, r := range rules {
-		if r.PropertyName == rule.PropertyName {
-			inserted = r
-			break
-		}
+	rule2 := model.ProfileEnrichmentRule{
+		PropertyName:      "traits.favorite_classical_artist",
+		ValueType:         "string",
+		MergeStrategy:     "combine",
+		Value:             "Mozart",
+		ComputationMethod: "static",
+		Trigger: model.RuleTrigger{
+			EventType: "track",
+			EventName: "music_selected",
+			Conditions: []model.RuleCondition{
+				{Field: "genre", Operator: "equals", Value: "classical"},
+			},
+		},
 	}
-	assert.NotEmpty(t, inserted.RuleId)
 
-	// Step 3: Update the rule
-	inserted.MergeStrategy = "combine"
-	inserted.ComputationMethod = "extract"
-	inserted.SourceField = "genre"
+	var addedRules []model.ProfileEnrichmentRule
 
-	err = svc.PutEnrichmentRule(inserted)
-	assert.NoError(t, err)
+	t.Run("Add enrichment rules", func(t *testing.T) {
+		err := svc.AddEnrichmentRule(rule1)
+		assert.NoError(t, err, "Failed to add rule1")
 
-	// Step 4: Verify the update
-	updated, err := svc.GetEnrichmentRule(inserted.RuleId)
-	assert.NoError(t, err)
-	assert.Equal(t, "combine", updated.MergeStrategy)
-	assert.Equal(t, "extract", updated.ComputationMethod)
-	assert.Equal(t, "genre", updated.SourceField)
-	assert.Equal(t, "value", "")
+		err = svc.AddEnrichmentRule(rule2)
+		assert.NoError(t, err, "Failed to add rule2")
 
-	// Step 5: Delete
-	err = svc.DeleteEnrichmentRule(inserted.RuleId)
-	assert.NoError(t, err)
+		rules, err := svc.GetEnrichmentRules()
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(rules), "Expected 2 enrichment rules")
 
-	// Verify deletion
-	deleted, err := svc.GetEnrichmentRule(inserted.RuleId)
-	assert.NoError(t, err)
-	assert.Empty(t, deleted.RuleId)
+		addedRules = rules
+	})
+
+	t.Run("Update enrichment rule", func(t *testing.T) {
+		var toUpdate model.ProfileEnrichmentRule
+		for _, r := range addedRules {
+			if r.PropertyName == rule1.PropertyName {
+				r.MergeStrategy = "combine"
+				toUpdate = r
+				break
+			}
+		}
+		// todo: Need to define what fields can be updated
+		err := svc.PutEnrichmentRule(toUpdate)
+		assert.NoError(t, err, "Failed to update rule1")
+
+		updated, err := svc.GetEnrichmentRule(toUpdate.RuleId)
+		assert.NoError(t, err)
+		assert.Equal(t, "combine", updated.MergeStrategy)
+	})
+
+	t.Run("Delete enrichment rules", func(t *testing.T) {
+		for _, r := range addedRules {
+			err := svc.DeleteEnrichmentRule(r.RuleId)
+			assert.NoError(t, err, "Failed to delete rule %s", r.RuleId)
+		}
+
+		remaining, err := svc.GetEnrichmentRules()
+		assert.NoError(t, err)
+		assert.Empty(t, remaining, "Expected no remaining enrichment rules")
+	})
 }
