@@ -39,6 +39,11 @@ func (m *MockEventStreamIdStore) InsertEventStreamId(e *model.EventStreamId) err
 
 func (m *MockEventStreamIdStore) GetEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
 	args := m.Called(eventStreamId)
+
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
 	return args.Get(0).(*model.EventStreamId), args.Error(1)
 }
 
@@ -71,6 +76,90 @@ func TestCreateEventStreamId(t *testing.T) {
 	assert.Equal(t, "app1", result.AppID)
 	assert.Equal(t, "active", result.State)
 	assert.True(t, result.ExpiresAt > time.Now().Unix())
+
+	mockStore.AssertExpectations(t)
+}
+
+func TestGetEventStreamIdPerApp(t *testing.T) {
+
+	mockStore := new(MockEventStreamIdStore)
+	svc := EventStreamIdService{store: mockStore}
+
+	expected := []*model.EventStreamId{
+		{EventStreamId: "id1", OrgID: "org1", AppID: "app1"},
+	}
+
+	mockStore.On("GetEventStreamIdsPerApp", "org1", "app1").Return(expected, nil)
+
+	result, err := svc.GetEventStreamIdPerApp("org1", "app1")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expected, result)
+
+	mockStore.AssertExpectations(t)
+}
+
+func TestGetEventStreamId_Found(t *testing.T) {
+	mockStore := new(MockEventStreamIdStore)
+	svc := EventStreamIdService{store: mockStore}
+
+	expected := &model.EventStreamId{EventStreamId: "id1", OrgID: "org1", AppID: "app1"}
+
+	mockStore.On("GetEventStreamId", "id1").Return(expected, nil)
+
+	result, err := svc.GetEventStreamId("id1")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expected, result)
+
+	mockStore.AssertExpectations(t)
+}
+
+func TestGetEventStreamId_NotFound(t *testing.T) {
+	mockStore := new(MockEventStreamIdStore)
+	svc := EventStreamIdService{store: mockStore}
+
+	mockStore.On("GetEventStreamId", "missing").Return(nil, nil)
+
+	result, err := svc.GetEventStreamId("missing")
+
+	assert.Nil(t, result)
+	assert.Error(t, err)
+
+	mockStore.AssertExpectations(t)
+}
+
+func TestRotateEventStreamId(t *testing.T) {
+	mockStore := new(MockEventStreamIdStore)
+	svc := EventStreamIdService{store: mockStore}
+
+	old := &model.EventStreamId{EventStreamId: "old_id", OrgID: "org1", AppID: "app1", State: "active"}
+
+	mockStore.On("GetEventStreamId", "old_id").Return(old, nil)
+	mockStore.On("UpdateState", "old_id", "revoked").Return(nil)
+	mockStore.On("InsertEventStreamId", mock.MatchedBy(func(e *model.EventStreamId) bool {
+		return e.OrgID == "org1" && e.AppID == "app1" && e.State == "active"
+	})).Return(nil)
+
+	result, err := svc.RotateEventStreamId("old_id")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "org1", result.OrgID)
+	assert.Equal(t, "app1", result.AppID)
+	assert.Equal(t, "active", result.State)
+
+	mockStore.AssertExpectations(t)
+}
+
+func TestRevokeEventStreamId(t *testing.T) {
+	mockStore := new(MockEventStreamIdStore)
+	svc := EventStreamIdService{store: mockStore}
+
+	mockStore.On("UpdateState", "id1", "revoked").Return(nil)
+
+	err := svc.RevokeEventStreamId("id1")
+
+	assert.NoError(t, err)
 
 	mockStore.AssertExpectations(t)
 }
