@@ -58,7 +58,7 @@ func (eh *EventHandler) AddEvent(w http.ResponseWriter, r *http.Request) {
 
 	// todo: ideally this has to be the first step. For that, even before extracting the
 	// payload should be able to get the app/orgid from path. Need a modification
-	if _, err := authentication.ValidateAuthentication(r, event); err != nil {
+	if _, err := authentication.ValidateAuthenticationForEvent(r, event); err != nil {
 		http.Error(w, "Unauthorized request", http.StatusUnauthorized)
 		return
 	}

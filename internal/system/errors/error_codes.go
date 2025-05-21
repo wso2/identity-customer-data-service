@@ -373,4 +373,10 @@ var (
 		Code:    errorPrefix + "11023",
 		Message: "Updating trait failed.",
 	}
+
+	ErrMultipleProfileFound = ErrorMessage{
+		Code:        errorPrefix + "11023",
+		Message:     "Multiple Profiles found.",
+		Description: "Multiple user profiles record found for the given user_id",
+	}
 )

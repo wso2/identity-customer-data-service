@@ -22,6 +22,8 @@ import (
 	"encoding/json"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
+	"github.com/wso2/identity-customer-data-service/internal/profile/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/authentication"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
@@ -64,6 +66,48 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(profile)
+}
+
+// GetCurrentUserProfile handles retrieval of the current user's profile
+func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
+
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
+		return
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+
+	//  Validate token
+	isValid, err := authentication.ValidateAuthentication(r)
+	if err != nil || !isValid {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	//  Get claims from cache
+	claims, ok := authentication.GetCachedClaims(token)
+	if !ok {
+		http.Error(w, "Token claims not found", http.StatusUnauthorized)
+		return
+	}
+
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+		return
+	}
+
+	//logger := log.GetLogger()
+	//  Fetch profile
+	profile, err := service.FindProfileByUserName(sub)
+	if err != nil || profile == nil {
+		utils.HandleError(w, err)
+		return
+	}
+	//  Return JSON
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(profile)
 }
 
 // DeleteProfile handles profile deletion

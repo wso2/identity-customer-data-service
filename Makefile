@@ -34,7 +34,11 @@ lint: golangci-lint
 	cd . && $(GOLANGCI_LINT) run ./...
 
 integration-test:
+ifdef test
 	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration -run $(test) | tee $(OUTPUT_DIR)/integration-test.log
+else
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration | tee $(OUTPUT_DIR)/integration-test.log
+endif
 
 # Build the Go project.
 _build:

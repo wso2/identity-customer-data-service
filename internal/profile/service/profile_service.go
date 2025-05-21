@@ -500,3 +500,80 @@ func parseTypedValueForFilters(valueType string, raw string) interface{} {
 		return raw
 	}
 }
+
+// FindProfileByUserName retrieves a profile by user_id
+func FindProfileByUserName(sub string) (interface{}, error) {
+
+	// TODO: Restrict app-specific fields via client_id from JWT (if available)
+	//  TODO: currently userId is defined as a string [] so CONTAINS - but need to decide
+	filter := fmt.Sprintf("identity_attributes.user_id co %s", sub)
+	profiles, err := profileStore.GetAllProfilesWithFilter([]string{filter})
+	logger := log.GetLogger()
+	if err != nil {
+		logger.Debug(fmt.Sprintf("Error fetching profile by user_id:%s ", sub), log.Error(err))
+		return nil, fmt.Errorf("failed to query profiles: %w", err)
+	}
+
+	if len(profiles) == 0 {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrProfileNotFound.Code,
+			Message:     errors2.ErrProfileNotFound.Message,
+			Description: errors2.ErrProfileNotFound.Description,
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
+
+	//  Track unique parent profile IDs
+	parentProfileIDSet := make(map[string]struct{})
+
+	for _, profile := range profiles {
+		if profile.ProfileHierarchy.IsParent {
+			parentProfileIDSet[profile.ProfileId] = struct{}{}
+		} else {
+			parentProfileIDSet[profile.ProfileHierarchy.ParentProfileID] = struct{}{}
+		}
+	}
+
+	if len(parentProfileIDSet) > 1 {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrMultipleProfileFound.Code,
+			Message:     errors2.ErrMultipleProfileFound.Message,
+			Description: errors2.ErrMultipleProfileFound.Description,
+		}, http.StatusConflict)
+		return nil, clientError
+	}
+
+	// Extract the single master profile ID
+	var masterProfileID string
+	for id := range parentProfileIDSet {
+		masterProfileID = id
+		break
+	}
+
+	master, err := profileStore.GetProfile(masterProfileID)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Error fetching master profile by user_id: %s", sub)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ErrMultipleProfileFound.Code,
+			Message:     errors2.ErrMultipleProfileFound.Message,
+			Description: errors2.ErrMultipleProfileFound.Description,
+		}, err)
+		return nil, serverError
+	}
+	if master == nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ErrProfileNotFound.Code,
+			Message:     errors2.ErrProfileNotFound.Message,
+			Description: errors2.ErrProfileNotFound.Description,
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
+	//  Load app context (if any)
+	master.ApplicationData, _ = profileStore.FetchApplicationData(master.ProfileId)
+
+	//  Wipe hierarchy for the /me response
+	master.ProfileHierarchy = &profileModel.ProfileHierarchy{}
+
+	return master, nil
+}
