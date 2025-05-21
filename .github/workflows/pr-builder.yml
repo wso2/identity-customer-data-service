@@ -8,7 +8,8 @@ on:
 
 jobs:
   build-and-lint:
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'trigger-pr-builder')
+    if: github.event_name == 'pull_request' && 
+        (github.event.action == 'synchronize' || contains(github.event.pull_request.labels.*.name, 'trigger-pr-builder'))
     runs-on: ubuntu-latest
 
     steps:
