@@ -1178,7 +1178,8 @@ func FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for fetching child profiles")
+		errorMsg := fmt.Sprintf("Failed to get database client for fetching child profiles for parent: %s",
+			parentProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE.Code,
