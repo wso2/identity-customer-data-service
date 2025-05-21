@@ -38,11 +38,15 @@ type EventStreamIdServiceInterface interface {
 }
 
 // EventStreamIdService is the default implementation of EventStreamIdServiceInterface.
-type EventStreamIdService struct{}
+type EventStreamIdService struct {
+	store store.EventStreamIdStoreInterface
+}
 
 // GetEventStreamIdService returns a concrete service with store injected
 func GetEventStreamIdService() EventStreamIdServiceInterface {
-	return &EventStreamIdService{}
+	return &EventStreamIdService{
+		store: &store.EventStreamIdStore{}, // ✅ real store implementation
+	}
 }
 
 // CreateEventStreamId generates and stores a new API key
@@ -61,7 +65,7 @@ func (s *EventStreamIdService) CreateEventStreamId(orgID, appID string) (*model.
 		CreatedAt:     now,
 	}
 
-	if err := store.InsertEventStreamId(eventStreamId); err != nil {
+	if err := s.store.InsertEventStreamId(eventStreamId); err != nil {
 		return nil, err
 	}
 	return eventStreamId, nil
@@ -70,7 +74,7 @@ func (s *EventStreamIdService) CreateEventStreamId(orgID, appID string) (*model.
 // GetEventStreamIdPerApp returns an API key for a specific org and app
 func (s *EventStreamIdService) GetEventStreamIdPerApp(orgID, appID string) ([]*model.EventStreamId, error) {
 
-	eventStreamId, err := store.GetEventStreamIdsPerApp(orgID, appID)
+	eventStreamId, err := s.store.GetEventStreamIdsPerApp(orgID, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +84,7 @@ func (s *EventStreamIdService) GetEventStreamIdPerApp(orgID, appID string) ([]*m
 // GetEventStreamId retrieves an API key by its value
 func (s *EventStreamIdService) GetEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
 
-	key, err := store.GetEventStreamId(eventStreamId)
+	key, err := s.store.GetEventStreamId(eventStreamId)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +103,7 @@ func (s *EventStreamIdService) GetEventStreamId(eventStreamId string) (*model.Ev
 // RotateEventStreamId revokes the old API key and creates a new one for the same org/app
 func (s *EventStreamIdService) RotateEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
 
-	oldEventStreamId, _ := store.GetEventStreamId(eventStreamId)
+	oldEventStreamId, _ := s.store.GetEventStreamId(eventStreamId)
 	if oldEventStreamId == nil {
 		errorMsg := fmt.Sprintf("No meta data found for event stream id: %s", eventStreamId)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -109,7 +113,7 @@ func (s *EventStreamIdService) RotateEventStreamId(eventStreamId string) (*model
 		}, http.StatusNotFound)
 		return nil, clientError
 	}
-	if err := store.UpdateState(oldEventStreamId.EventStreamId, "revoked"); err != nil {
+	if err := s.store.UpdateState(oldEventStreamId.EventStreamId, "revoked"); err != nil {
 		return nil, err
 	}
 
@@ -126,7 +130,7 @@ func (s *EventStreamIdService) RotateEventStreamId(eventStreamId string) (*model
 		CreatedAt:     now,
 	}
 
-	if err := store.InsertEventStreamId(newEventStreamId); err != nil {
+	if err := s.store.InsertEventStreamId(newEventStreamId); err != nil {
 		return nil, err
 	}
 	return newEventStreamId, nil
@@ -135,7 +139,7 @@ func (s *EventStreamIdService) RotateEventStreamId(eventStreamId string) (*model
 // RevokeEventStreamId sets the state of the key to 'revoked'
 func (s *EventStreamIdService) RevokeEventStreamId(eventStreamId string) error {
 
-	if err := store.UpdateState(eventStreamId, "revoked"); err != nil {
+	if err := s.store.UpdateState(eventStreamId, "revoked"); err != nil {
 		return err
 	}
 	return nil

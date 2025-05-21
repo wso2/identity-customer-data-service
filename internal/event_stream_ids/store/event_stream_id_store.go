@@ -26,8 +26,17 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
+type EventStreamIdStoreInterface interface {
+	InsertEventStreamId(*model.EventStreamId) error
+	GetEventStreamIdsPerApp(orgID string, appID string) ([]*model.EventStreamId, error)
+	GetEventStreamId(eventStreamId string) (*model.EventStreamId, error)
+	UpdateState(eventStreamId string, state string) error
+}
+
+type EventStreamIdStore struct{}
+
 // InsertEventStreamId inserts a new event_stream_id  into the database using DBClientInterface
-func InsertEventStreamId(eventStreamId *model.EventStreamId) error {
+func (s *EventStreamIdStore) InsertEventStreamId(eventStreamId *model.EventStreamId) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -85,7 +94,7 @@ func InsertEventStreamId(eventStreamId *model.EventStreamId) error {
 	return tx.Commit()
 }
 
-func GetEventStreamIdsPerApp(orgID string, appID string) ([]*model.EventStreamId, error) {
+func (s *EventStreamIdStore) GetEventStreamIdsPerApp(orgID string, appID string) ([]*model.EventStreamId, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -128,7 +137,7 @@ func GetEventStreamIdsPerApp(orgID string, appID string) ([]*model.EventStreamId
 }
 
 // GetEventStreamId retrieves an API key by its key string
-func GetEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
+func (s *EventStreamIdStore) GetEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -164,7 +173,7 @@ func GetEventStreamId(eventStreamId string) (*model.EventStreamId, error) {
 }
 
 // UpdateState updates the state of an API key
-func UpdateState(eventStreamId string, state string) error {
+func (s *EventStreamIdStore) UpdateState(eventStreamId string, state string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()

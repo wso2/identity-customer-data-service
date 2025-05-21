@@ -30,6 +30,10 @@ import (
 	"time"
 )
 
+type AuthService struct {
+	store store.EventStreamIdStoreInterface
+}
+
 var (
 	tokenCache       = cache.NewCache(15 * time.Minute)
 	expectedAudience = "iam-cds"
@@ -159,7 +163,10 @@ func ValidateAuthenticationForEvent(r *http.Request, event model.Event) (valid b
 		return false, err
 	}
 	orgID, appID := fetchOrgAndApp(event)
-	return validateEventStreamId(token, orgID, appID)
+	authSvc := &AuthService{
+		store: &store.EventStreamIdStore{},
+	}
+	return authSvc.validateEventStreamId(token, orgID, appID)
 }
 
 func extractAPIKey(r *http.Request) (string, error) {
@@ -199,7 +206,7 @@ func fetchOrgAndApp(event model.Event) (orgID, appID string) {
 	return orgID, appID
 }
 
-func validateEventStreamId(eventStreamId, orgID, appID string) (valid bool, error error) {
+func (s *AuthService) validateEventStreamId(eventStreamId, orgID, appID string) (valid bool, error error) {
 	if eventStreamId == "" || appID == "" || orgID == "" {
 		return false, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        "missing_fields",
@@ -208,7 +215,7 @@ func validateEventStreamId(eventStreamId, orgID, appID string) (valid bool, erro
 		}, http.StatusBadRequest)
 	}
 
-	dbKey, err := store.GetEventStreamId(eventStreamId)
+	dbKey, err := s.store.GetEventStreamId(eventStreamId)
 	if err != nil || dbKey == nil {
 		return false, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        "invalid_api_key",
