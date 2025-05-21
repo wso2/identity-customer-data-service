@@ -110,7 +110,7 @@ func Test_Profiles(t *testing.T) {
 	})
 
 	t.Run("Filter profiles by email", func(t *testing.T) {
-		filter := []string{"identity_attributes.email+co+vivek@wso2.com"}
+		filter := []string{"identity_attributes.email co test-cds@wso2.com"}
 		filteredProfiles, err := profileSvc.GetAllProfilesWithFilter(filter)
 		require.NoError(t, err)
 		require.Len(t, filteredProfiles, 1)

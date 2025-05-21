@@ -21,7 +21,9 @@ package utils
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 )
 
 func CreateTablesFromFile(db *sql.DB, path string) error {
@@ -36,4 +38,29 @@ func CreateTablesFromFile(db *sql.DB, path string) error {
 	}
 
 	return nil
+}
+
+func GetTestHome() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	for {
+		testSetupPath := filepath.Join(dir, "test", "setup", "schema.sql")
+		if _, err := os.Stat(testSetupPath); err == nil {
+			return dir // Found project root
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			log.Fatalf("Project root with schema.sql not found")
+		}
+		dir = parent
+	}
+}
+
+// GetSchemaPath returns the full path to the schema.sql file
+func GetSchemaPath() string {
+	return filepath.Join(GetTestHome(), "test", "setup", "schema.sql")
 }

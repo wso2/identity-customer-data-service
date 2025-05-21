@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	workers.StartProfileWorker() // Start the real enrichment queue worker
 
 	provider.SetTestDB(pg.DB)
-	err = utils.CreateTablesFromFile(pg.DB, "/Users/admin/Documents/Repos/OnPrem/identity-customer-data-service/test/setup/schema.sql")
+	err = utils.CreateTablesFromFile(pg.DB, utils.GetSchemaPath())
 	if err != nil {
 		fmt.Println("Failed to create tables from schema:", err)
 		os.Exit(1)

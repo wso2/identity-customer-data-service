@@ -1,3 +1,13 @@
+-- Drop in reverse dependency order
+DROP TABLE IF EXISTS event_stream_ids;
+DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS child_profiles;
+DROP TABLE IF EXISTS application_data;
+DROP TABLE IF EXISTS profiles;
+DROP TABLE IF EXISTS profile_enrichment_trigger_conditions;
+DROP TABLE IF EXISTS profile_enrichment_rules;
+DROP TABLE IF EXISTS unification_rules;
+
 CREATE TABLE unification_rules (
     rule_id VARCHAR(255) PRIMARY KEY,
     rule_name VARCHAR(255) NOT NULL,
