@@ -58,24 +58,24 @@ func main() {
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
-		fmt.Errorf("No .env files found in config directory: %v", err)
+		fmt.Println("No .env files found in config directory. ", err)
 	}
 	_ = godotenv.Load(envFiles...)
 
 	// Load the configuration file
 	cdsConfig, err := config.LoadConfig(cdsHome, configFile)
 	if err != nil {
-		fmt.Errorf("Failed to load cdsConfig: %v", err)
+		fmt.Println("Failed to load cdsConfig. ", err)
 	}
 
 	// Initialize runtime configurations.
 	if err := config.InitializeCDSRuntime(cdsHome, cdsConfig); err != nil {
-		fmt.Errorf("Failed to initialize cds runtime.", err)
+		fmt.Println("Failed to initialize cds runtime.", err)
 	}
 
 	// Initialize logger
 	if err := log.Init(cdsConfig.Log.LogLevel); err != nil {
-		fmt.Errorf("Failed to initialize cds runtime.", err)
+		fmt.Println("Failed to initialize cds runtime.", err)
 	}
 
 	// Initialize database
@@ -143,13 +143,13 @@ func getCDSHome() string {
 	flag.Parse()
 
 	if *projectHomeFlag != "" {
-		fmt.Errorf("Using %s from command line argument", *projectHomeFlag)
+		fmt.Printf("Using %s from command line argument", *projectHomeFlag)
 		projectHome = *projectHomeFlag
 	} else {
 		// If no command line argument is provided, use the current working directory.
 		dir, dirErr := os.Getwd()
 		if dirErr != nil {
-			fmt.Errorf("Failed to get current working directory", dirErr)
+			fmt.Println("Failed to get current working directory", dirErr)
 		}
 		projectHome = dir
 	}

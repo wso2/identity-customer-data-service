@@ -95,7 +95,7 @@ func InsertProfile(profile model.Profile) error {
 	)
 
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to insert profile with Id: %s")
+		errorMsg := fmt.Sprintf("Failed to insert profile with Id: %s", profile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_PROFILE.Code,
@@ -337,7 +337,7 @@ func UpdateProfile(profile model.Profile) error {
 			identity_attributes = $6
 		WHERE profile_id = $7;`
 
-	result, err := dbClient.ExecuteQuery(query,
+	_, err = dbClient.ExecuteQuery(query,
 		profile.OriginCountry,
 		profile.ProfileHierarchy.IsParent,
 		profile.ProfileHierarchy.ParentProfileID,
@@ -347,18 +347,6 @@ func UpdateProfile(profile model.Profile) error {
 		profile.ProfileId,
 	)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed updating the profile: %s", profile.ProfileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
-	rows := len(result)
-	if rows == 0 {
-		// todo: should we return a client error or server ?
 		errorMsg := fmt.Sprintf("Failed updating the profile: %s", profile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
@@ -680,7 +668,7 @@ func DetachChildProfileFromParent(parentID, childID string) error {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for deleting child relationship")
+		errorMsg := fmt.Sprintf("Failed to get database client for deleting child relationship of child: %s of parent: %s", parentID, childID)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE.Code,
@@ -694,7 +682,8 @@ func DetachChildProfileFromParent(parentID, childID string) error {
 	query := `DELETE FROM child_profiles WHERE parent_profile_id = $1 AND child_profile_id = $2;`
 	result, err := dbClient.ExecuteQuery(query, parentID, childID)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to delete child relationship")
+		errorMsg := fmt.Sprintf("Failed to delete child relationship of child: %s of parent: %s",
+			parentID, childID)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE.Code,
@@ -861,7 +850,7 @@ func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client filtering profiles.")
+		errorMsg := "Failed to get database client filtering profiles."
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.FILTER_PROFILE.Code,
@@ -1010,7 +999,8 @@ func GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for fetching master profiles")
+		errorMsg := fmt.Sprintf("Failed to get database client for fetching master profiles for profile: %s",
+			currentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DB_CLIENT_INIT.Code,
@@ -1122,7 +1112,8 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for adding child profiles")
+		errorMsg := fmt.Sprintf("Failed to get database client for adding child profiles for parent: %s",
+			parentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
@@ -1135,7 +1126,8 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to begin transaction for adding child profiles")
+		errorMsg := fmt.Sprintf("Failed to begin transaction for adding child profiles for parent: %s",
+			parentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
@@ -1186,7 +1178,8 @@ func FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for fetching child profiles")
+		errorMsg := fmt.Sprintf("Failed to get database client for fetching child profiles for parent: %s",
+			parentProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE.Code,
@@ -1222,7 +1215,11 @@ func FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
 		children = append(children, child)
 	}
 
-	logger.Info(fmt.Sprintf("Successfully fetched child profiles for parent profile: %s", parentProfileId))
+	if len(children) == 0 {
+		logger.Info(fmt.Sprintf("No child profiles found for parent profile: %s", parentProfileId))
+	} else {
+		logger.Info(fmt.Sprintf("Successfully fetched child profiles for parent profile: %s", parentProfileId))
+	}
 	return children, nil
 }
 

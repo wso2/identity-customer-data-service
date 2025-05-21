@@ -776,7 +776,7 @@ func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rul
 
 			}
 		} else {
-			logger.Warn(fmt.Sprintf("No app-specific data for application:", newApp.AppId))
+			logger.Warn(fmt.Sprintf("No app-specific data for application: %s", newApp.AppId))
 		}
 
 		mergedMap[newApp.AppId] = existingApp

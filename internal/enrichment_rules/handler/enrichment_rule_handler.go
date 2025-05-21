@@ -57,6 +57,7 @@ func (erh *EnrichmentRulesHandler) CreateEnrichmentRule(w http.ResponseWriter, r
 		utils.HandleError(w, err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(rule)
 }

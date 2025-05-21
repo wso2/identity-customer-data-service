@@ -2,10 +2,12 @@ package service
 
 import (
 	"fmt"
+	enrStore "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
+
 	"net/http"
 	"time"
 )
@@ -31,7 +33,7 @@ func GetUnificationRuleService() UnificationRuleServiceInterface {
 func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule) error {
 
 	// Check if a similar unification rule already exists
-	existingRule, err := store.GetUnificationRule(rule.RuleId)
+	existingRule, err := store.GetUnificationRules()
 	logger := log.GetLogger()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while checking for existing unification rule: %s", rule.RuleId)
@@ -43,13 +45,39 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		}, err)
 		return serverError
 	}
-	if existingRule == nil {
-		// Resolution rule already exists
+
+	for _, existing := range existingRule {
+		if existing.Property == rule.Property {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ErrPropertyAlreadyExists.Code,
+				Message:     errors2.ErrPropertyAlreadyExists.Message,
+				Description: fmt.Sprintf("Unification rule with property %s already exists", rule.Property),
+			}, http.StatusConflict)
+		}
+	}
+
+	// Validate if the property name belongs in enrichment rules
+	filter := []string{fmt.Sprintf("property_name eq %s", rule.Property)}
+	resolutionRules, err := enrStore.GetEnrichmentRulesByFilter(filter)
+
+	if err != nil {
+		errorMsg := fmt.Sprintf("Error occurred while checking for existing enrichment rule: %s", rule.Property)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_UNIFICATION_RULE.Code,
+			Message:     errors2.ADD_UNIFICATION_RULE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	if len(resolutionRules) == 0 { // captures nil as well
 		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrResolutionRuleAlreadyExists.Code,
-			Message:     errors2.ErrResolutionRuleAlreadyExists.Message,
-			Description: fmt.Sprintf("Unification rule with property %s already exists", rule.Property),
-		}, http.StatusConflict)
+			Code:        errors2.ADD_UNIFICATION_RULE.Code,
+			Message:     errors2.ADD_UNIFICATION_RULE.Message,
+			Description: fmt.Sprintf("Unification rule with property %s not found in enrichment rules", rule.Property),
+		}, http.StatusBadRequest)
+
 	}
 
 	// Set timestamps
