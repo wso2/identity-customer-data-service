@@ -33,6 +33,9 @@ build: _build _package
 lint: golangci-lint
 	cd . && $(GOLANGCI_LINT) run ./...
 
+integration-test:
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration -run $(test) | tee $(OUTPUT_DIR)/integration-test.log
+
 # Build the Go project.
 _build:
 	mkdir -p $(BUILD_DIR) && \
@@ -51,11 +54,13 @@ _package:
 
 help:
 	@echo "Makefile targets:"
-	@echo "  all          - Clean, build, and test the project."
-	@echo "  clean        - Remove build artifacts."
-	@echo "  build        - Build the Go project."
-	@echo "  test         - Run all tests."
-	@echo "  help         - Show the help message."
+	@echo "  all               - Clean, build, and test the project."
+	@echo "  clean             - Remove build artifacts."
+	@echo "  build             - Build the Go project."
+	@echo "  integration-test  - Run integration tests (use TEST=TestName to filter specific test)."
+	@echo "  lint              - Run golangci-lint."
+	@echo "  help              - Show this help message."
+
 
 .PHONY: all clean build lint help
 

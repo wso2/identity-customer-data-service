@@ -230,10 +230,14 @@ var (
 		Description: "No user profile record found for the given profile_id",
 	}
 
-	ErrResolutionRuleAlreadyExists = ErrorMessage{
-		Code:        errorPrefix + "11011",
-		Message:     "Rule already exist.",
-		Description: "Resolution rule already exists",
+	ErrPropertyDoesnotExists = ErrorMessage{
+		Code:    errorPrefix + "11011",
+		Message: "Property does not exist.",
+	}
+
+	ErrPropertyAlreadyExists = ErrorMessage{
+		Code:    errorPrefix + "11011",
+		Message: "Property already exist.",
 	}
 
 	ErrPropertyTypeValidation = ErrorMessage{

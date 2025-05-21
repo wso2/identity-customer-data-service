@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package store
 
 import (
@@ -327,8 +345,6 @@ func FindEvents(filters []string, timeFilter map[string]int) ([]model.Event, err
 		event.AppId = row["application_id"].(string)
 		event.OrgId = row["org_id"].(string)
 		event.EventTimestamp = int(row["event_timestamp"].(int64))
-		//propertiesRaw = row["properties"].(sql.NullString)
-		//contextRaw = row["context"].(sql.NullString)
 
 		// Handle properties
 		if raw, ok := row["properties"].([]byte); ok && len(raw) > 0 {
@@ -401,8 +417,37 @@ func FindEvent(eventId string) (*model.Event, error) {
 		event.AppId = row["application_id"].(string)
 		event.OrgId = row["org_id"].(string)
 		event.EventTimestamp = int(row["event_timestamp"].(int64))
-		propertiesRaw = row["properties"].(sql.NullString)
-		contextRaw = row["context"].(sql.NullString)
+		// Handle properties
+		if raw, ok := row["properties"].([]byte); ok && len(raw) > 0 {
+			if err := json.Unmarshal(raw, &event.Properties); err != nil {
+				errorMsg := "Failed in unmarshalling events from database to event object"
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.UNMARSHAL_JSON.Code,
+					Message:     errors2.UNMARSHAL_JSON.Message,
+					Description: errorMsg,
+				}, err)
+				return nil, serverError
+			}
+		} else {
+			event.Properties = make(map[string]interface{}) // Initialize empty if null or empty
+		}
+
+		// Handle context
+		if raw, ok := row["context"].([]byte); ok && len(raw) > 0 {
+			if err := json.Unmarshal(raw, &event.Context); err != nil {
+				errorMsg := "Failed in unmarshalling event context from database to event object"
+				logger.Debug(errorMsg, log.Error(err))
+				serverError := errors2.NewServerError(errors2.ErrorMessage{
+					Code:        errors2.UNMARSHAL_JSON.Code,
+					Message:     errors2.UNMARSHAL_JSON.Message,
+					Description: errorMsg,
+				}, err)
+				return nil, serverError
+			}
+		} else {
+			event.Context = make(map[string]interface{}) // Initialize empty if null or empty
+		}
 	}
 
 	if err != nil {

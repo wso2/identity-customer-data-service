@@ -24,6 +24,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,7 +76,13 @@ func (eh *EventHandler) AddEvent(w http.ResponseWriter, r *http.Request) {
 
 // GetEvent fetches a specific event
 func (eh *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
-	eventId := r.URL.Query().Get("event_id")
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 3 {
+		http.Error(w, "Invalid path", http.StatusNotFound)
+		return
+	}
+	eventId := pathParts[len(pathParts)-1]
 	if eventId == "" {
 		http.Error(w, "Missing event_id parameter", http.StatusBadRequest)
 		return

@@ -195,6 +195,7 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 	}
 
 	if profile.ProfileHierarchy.IsParent && len(profile.ProfileHierarchy.ChildProfiles) == 0 {
+		logger.Info(fmt.Sprintf("Deleting parent profile: %s with no children", ProfileId))
 		// Delete the parent with no children
 		err = profileStore.DeleteProfile(ProfileId)
 		if err != nil {
@@ -237,6 +238,9 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 				return serverError
 			}
 			err = profileStore.DeleteProfile(childProfile.ChildProfileId)
+			logger.Info(fmt.Sprintf("Deleting child  profile: %s with of parent: %s",
+				childProfile.ChildProfileId, ProfileId))
+
 			if err != nil {
 				errorMsg := fmt.Sprintf("Error while deleting profile with profile_id: %s ", childProfile.ChildProfileId)
 				logger.Debug(errorMsg, log.Error(err))
@@ -250,6 +254,7 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 		}
 		// now delete master
 		err = profileStore.DeleteProfile(ProfileId)
+		logger.Info(fmt.Sprintf("Deleting parent profile: %s with children", ProfileId))
 		if err != nil {
 			errorMsg := fmt.Sprintf("Error while deleting parent profile: %s ", ProfileId)
 			logger.Debug(errorMsg, log.Error(err))
@@ -265,6 +270,8 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 
 	// If it is a child profile, delete it
 	if !(profile.ProfileHierarchy.IsParent) {
+		logger.Info(fmt.Sprintf("Deleting child profile: %s with parent: %s", ProfileId,
+			profile.ProfileHierarchy.ParentProfileID))
 		parentProfile, err := profileStore.GetProfile(profile.ProfileHierarchy.ParentProfileID)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Error while deleting the child profile: %s ", ProfileId)
@@ -280,6 +287,8 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 
 		if len(parentProfile.ProfileHierarchy.ChildProfiles) == 1 {
 			// delete the parent as this is the only child
+			logger.Info(fmt.Sprintf("Deleting parent profile: %s with of current : %s",
+				profile.ProfileHierarchy.ParentProfileID, ProfileId))
 			err = profileStore.DeleteProfile(profile.ProfileHierarchy.ParentProfileID)
 			if err != nil {
 				errorMsg := fmt.Sprintf("Error while deleting the master profile: %s ", ProfileId)
@@ -302,6 +311,8 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 				}, err)
 				return serverError
 			}
+			logger.Info(fmt.Sprintf("Deleted current profile: %s with parent: %s", ProfileId,
+				profile.ProfileHierarchy.ParentProfileID))
 		} else {
 			err = profileStore.DetachChildProfileFromParent(profile.ProfileHierarchy.ParentProfileID, ProfileId)
 			if err != nil {
@@ -314,6 +325,8 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 				}, err)
 				return serverError
 			}
+			logger.Debug(fmt.Sprintf("Detaching current profile: %s from parent: %s", ProfileId,
+				profile.ProfileHierarchy.ParentProfileID))
 			err = profileStore.DeleteProfile(ProfileId)
 			if err != nil {
 				errorMsg := fmt.Sprintf("Error while deleting the current profile: %s ", ProfileId)
@@ -325,6 +338,7 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 				}, err)
 				return serverError
 			}
+			logger.Info(fmt.Sprintf("Deleted current profile: %s with parent: %s", ProfileId))
 		}
 
 	}

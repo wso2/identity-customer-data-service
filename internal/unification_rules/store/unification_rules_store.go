@@ -49,7 +49,7 @@ func AddUnificationRule(rule model.UnificationRule) error {
 	query := `INSERT INTO unification_rules (rule_id, rule_name, property_name, priority, is_active, created_at, updated_at) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
-	_, err = dbClient.ExecuteQuery(query, query, rule.RuleId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive,
+	_, err = dbClient.ExecuteQuery(query, rule.RuleId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive,
 		rule.CreatedAt, rule.UpdatedAt)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while adding unification rule: %s", rule.RuleName)

@@ -337,7 +337,7 @@ func UpdateProfile(profile model.Profile) error {
 			identity_attributes = $6
 		WHERE profile_id = $7;`
 
-	result, err := dbClient.ExecuteQuery(query,
+	_, err = dbClient.ExecuteQuery(query,
 		profile.OriginCountry,
 		profile.ProfileHierarchy.IsParent,
 		profile.ProfileHierarchy.ParentProfileID,
@@ -347,18 +347,6 @@ func UpdateProfile(profile model.Profile) error {
 		profile.ProfileId,
 	)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed updating the profile: %s", profile.ProfileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
-	rows := len(result)
-	if rows == 0 {
-		// todo: should we return a client error or server ?
 		errorMsg := fmt.Sprintf("Failed updating the profile: %s", profile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
@@ -1222,7 +1210,11 @@ func FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
 		children = append(children, child)
 	}
 
-	logger.Info(fmt.Sprintf("Successfully fetched child profiles for parent profile: %s", parentProfileId))
+	if len(children) == 0 {
+		logger.Info(fmt.Sprintf("No child profiles found for parent profile: %s", parentProfileId))
+	} else {
+		logger.Info(fmt.Sprintf("Successfully fetched child profiles for parent profile: %s", parentProfileId))
+	}
 	return children, nil
 }
 
