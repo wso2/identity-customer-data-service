@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/wso2/identity-customer-data-service/internal/event_stream_ids/model"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
 // MockEventStreamIdStore implements store.EventStreamIdStoreInterface for testing
@@ -36,7 +35,6 @@ func (m *MockEventStreamIdStore) UpdateState(eventStreamId string, state string)
 }
 
 func TestCreateEventStreamId(t *testing.T) {
-	log.Init("DEBUG")
 
 	mockStore := new(MockEventStreamIdStore)
 	svc := EventStreamIdService{store: mockStore}
