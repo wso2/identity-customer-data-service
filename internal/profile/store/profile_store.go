@@ -95,7 +95,7 @@ func InsertProfile(profile model.Profile) error {
 	)
 
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to insert profile with Id: %s")
+		errorMsg := fmt.Sprintf("Failed to insert profile with Id: %s", profile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_PROFILE.Code,
@@ -668,7 +668,7 @@ func DetachChildProfileFromParent(parentID, childID string) error {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for deleting child relationship")
+		errorMsg := fmt.Sprintf("Failed to get database client for deleting child relationship of child: %s of parent: %s", parentID, childID)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE.Code,
@@ -682,7 +682,8 @@ func DetachChildProfileFromParent(parentID, childID string) error {
 	query := `DELETE FROM child_profiles WHERE parent_profile_id = $1 AND child_profile_id = $2;`
 	result, err := dbClient.ExecuteQuery(query, parentID, childID)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to delete child relationship")
+		errorMsg := fmt.Sprintf("Failed to delete child relationship of child: %s of parent: %s",
+			parentID, childID)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE.Code,
@@ -849,7 +850,7 @@ func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client filtering profiles.")
+		errorMsg := "Failed to get database client filtering profiles."
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.FILTER_PROFILE.Code,

@@ -82,7 +82,7 @@ func (l *PostgresLock) Acquire(key string) (bool, error) {
 			Description: errorMsg,
 		}, err)
 	}
-	logger.Debug(fmt.Sprintf("Generated lock Id: %s", lockID))
+	logger.Debug(fmt.Sprintf("Generated lock Id: %d", lockID))
 
 	var acquired bool
 	results, err := dbClient.ExecuteQuery("SELECT pg_try_advisory_lock($1)", lockID)
@@ -152,6 +152,6 @@ func (l *PostgresLock) Release(key string) error {
 		}, err)
 		return serverError
 	}
-	logger.Debug(fmt.Sprintf("Advisory lock released for lock id: %s", lockID))
+	logger.Debug(fmt.Sprintf("Advisory lock released for lock id: %d", lockID))
 	return nil
 }

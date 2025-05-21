@@ -338,7 +338,8 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 				}, err)
 				return serverError
 			}
-			logger.Info(fmt.Sprintf("Deleted current profile: %s with parent: %s", ProfileId))
+			logger.Info(fmt.Sprintf("Deleted current profile: %s with parent: %s",
+				ProfileId, profile.ProfileHierarchy.ParentProfileID))
 		}
 
 	}

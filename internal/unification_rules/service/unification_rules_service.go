@@ -45,15 +45,14 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		}, err)
 		return serverError
 	}
-	if existingRule != nil {
-		for _, existing := range existingRule {
-			if existing.Property == rule.Property {
-				return errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.ErrPropertyAlreadyExists.Code,
-					Message:     errors2.ErrPropertyAlreadyExists.Message,
-					Description: fmt.Sprintf("Unification rule with property %s already exists", rule.Property),
-				}, http.StatusConflict)
-			}
+
+	for _, existing := range existingRule {
+		if existing.Property == rule.Property {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ErrPropertyAlreadyExists.Code,
+				Message:     errors2.ErrPropertyAlreadyExists.Message,
+				Description: fmt.Sprintf("Unification rule with property %s already exists", rule.Property),
+			}, http.StatusConflict)
 		}
 	}
 
@@ -72,7 +71,7 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		return serverError
 	}
 
-	if resolutionRules == nil || len(resolutionRules) == 0 {
+	if len(resolutionRules) == 0 { // captures nil as well
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.ADD_UNIFICATION_RULE.Code,
 			Message:     errors2.ADD_UNIFICATION_RULE.Message,

@@ -59,13 +59,13 @@ func SetupTestPostgres(ctx context.Context) (*TestPostgres, error) {
 	dsn := fmt.Sprintf("host=%s port=%s user=testuser password=testpass dbname=testdb sslmode=disable", host, port.Port())
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		container.Terminate(ctx)
+		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
 	err = db.Ping()
 	if err != nil {
-		container.Terminate(ctx)
+		_ = container.Terminate(ctx)
 		return nil, err
 	}
 

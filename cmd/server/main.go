@@ -58,24 +58,24 @@ func main() {
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
-		fmt.Errorf("No .env files found in config directory: %v", err)
+		fmt.Println("No .env files found in config directory. ", err)
 	}
 	_ = godotenv.Load(envFiles...)
 
 	// Load the configuration file
 	cdsConfig, err := config.LoadConfig(cdsHome, configFile)
 	if err != nil {
-		fmt.Errorf("Failed to load cdsConfig: %v", err)
+		fmt.Println("Failed to load cdsConfig. ", err)
 	}
 
 	// Initialize runtime configurations.
 	if err := config.InitializeCDSRuntime(cdsHome, cdsConfig); err != nil {
-		fmt.Errorf("Failed to initialize cds runtime.", err)
+		fmt.Println("Failed to initialize cds runtime.", err)
 	}
 
 	// Initialize logger
 	if err := log.Init(cdsConfig.Log.LogLevel); err != nil {
-		fmt.Errorf("Failed to initialize cds runtime.", err)
+		fmt.Println("Failed to initialize cds runtime.", err)
 	}
 
 	// Initialize database
