@@ -18,7 +18,8 @@ on:
 
 jobs:
   build-and-lint:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request' && 
+        (github.event.action == 'synchronize' || contains(github.event.pull_request.labels.*.name, 'trigger-pr-builder'))|| github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
