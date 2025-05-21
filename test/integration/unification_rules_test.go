@@ -31,7 +31,7 @@ import (
 
 func Test_UnificationRule(t *testing.T) {
 
-	t.Run("Pre-requisite: Add enrichment rule", func(t *testing.T) {
+	t.Run("Pre-requisite: Add_enrichment_rule", func(t *testing.T) {
 		enrichmentRule := enrModel.ProfileEnrichmentRule{
 			PropertyName:      "identity.email",
 			ValueType:         "string",
@@ -61,18 +61,18 @@ func Test_UnificationRule(t *testing.T) {
 		UpdatedAt: time.Now().Unix(),
 	}
 
-	t.Run("Add unification rule", func(t *testing.T) {
+	t.Run("Add_unification_rule ", func(t *testing.T) {
 		err := svc.AddUnificationRule(rule)
 		require.NoError(t, err, "Failed to add unification rule")
 	})
 
-	t.Run("Get all unification rules", func(t *testing.T) {
+	t.Run("Get_all_unification_rules", func(t *testing.T) {
 		rules, err := svc.GetUnificationRules()
 		require.NoError(t, err, "Failed to fetch unification rules")
 		require.NotEmpty(t, rules, "Unification rule list is empty")
 	})
 
-	t.Run("Update unification rule", func(t *testing.T) {
+	t.Run("Update_unification_rule", func(t *testing.T) {
 		updates := map[string]interface{}{
 			"is_active": false,
 		}
@@ -84,7 +84,7 @@ func Test_UnificationRule(t *testing.T) {
 		require.False(t, updated.IsActive, "Expected is_active to be false")
 	})
 
-	t.Run("Delete unification rule", func(t *testing.T) {
+	t.Run("Delete_unification_rule", func(t *testing.T) {
 		err := svc.DeleteUnificationRule(rule.RuleName)
 		require.NoError(t, err, "Failed to delete unification rule")
 	})

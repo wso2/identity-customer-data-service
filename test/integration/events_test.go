@@ -47,12 +47,12 @@ func Test_Events(t *testing.T) {
 		EventTimestamp: int(time.Now().UTC().Unix()),
 	}
 
-	t.Run("Add event", func(t *testing.T) {
+	t.Run("Add_event", func(t *testing.T) {
 		err := eventSvc.AddEvents(event, queue)
 		require.NoError(t, err, "Failed to add event")
 	})
 
-	t.Run("Get Profile", func(t *testing.T) {
+	t.Run("Get_Profile", func(t *testing.T) {
 		profileId := event.ProfileId
 		profileService := profservice.GetProfilesService()
 		profile, err := profileService.GetProfile(profileId)
@@ -60,14 +60,14 @@ func Test_Events(t *testing.T) {
 		require.Equal(t, profileId, profile.ProfileId, "Profile ID mismatch")
 	})
 
-	t.Run("Get event by ID", func(t *testing.T) {
+	t.Run("Get_event_by_ID", func(t *testing.T) {
 		result, err := eventSvc.GetEvent(event.EventId)
 		require.NoError(t, err, "Failed to get event")
 		require.Equal(t, event.EventId, result.EventId, "Event ID mismatch")
 		require.Equal(t, "item_purchased", result.EventName)
 	})
 
-	t.Run("Get events with filters", func(t *testing.T) {
+	t.Run("Get_events_with_filters", func(t *testing.T) {
 		filters := []string{
 			"event_type:track",
 			"event_name:item_purchased",

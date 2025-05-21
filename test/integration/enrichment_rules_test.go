@@ -62,7 +62,7 @@ func Test_EnrichmentRule(t *testing.T) {
 
 	var addedRules []model.ProfileEnrichmentRule
 
-	t.Run("Add enrichment rules", func(t *testing.T) {
+	t.Run("Add_enrichment_rule", func(t *testing.T) {
 		err := svc.AddEnrichmentRule(rule1)
 		assert.NoError(t, err, "Failed to add rule1")
 
@@ -76,7 +76,7 @@ func Test_EnrichmentRule(t *testing.T) {
 		addedRules = rules
 	})
 
-	t.Run("Update enrichment rule", func(t *testing.T) {
+	t.Run("Update_enrichment_rule", func(t *testing.T) {
 		var toUpdate model.ProfileEnrichmentRule
 		for _, r := range addedRules {
 			if r.PropertyName == rule1.PropertyName {
@@ -94,7 +94,7 @@ func Test_EnrichmentRule(t *testing.T) {
 		assert.Equal(t, "combine", updated.MergeStrategy)
 	})
 
-	t.Run("Delete enrichment rules", func(t *testing.T) {
+	t.Run("Delete_enrichment_rule", func(t *testing.T) {
 		for _, r := range addedRules {
 			err := svc.DeleteEnrichmentRule(r.RuleId)
 			assert.NoError(t, err, "Failed to delete rule %s", r.RuleId)

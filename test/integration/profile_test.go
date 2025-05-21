@@ -85,12 +85,12 @@ func Test_Profiles(t *testing.T) {
 		},
 	}
 
-	t.Run("Create profile via event", func(t *testing.T) {
+	t.Run("Create_profile_via_event", func(t *testing.T) {
 		err := eventSvc.AddEvents(event1, queue)
 		require.NoError(t, err, "Failed to ingest event and create profile")
 	})
 
-	t.Run("Fetch created profile", func(t *testing.T) {
+	t.Run("Fetch_created_profile", func(t *testing.T) {
 		time.Sleep(5000 * time.Millisecond) // to ensure the event is processed
 		profile, err := profileSvc.GetProfile(profileID1)
 		logger.Debug("Fetched profile: " + profile.ProfileId)
@@ -103,13 +103,13 @@ func Test_Profiles(t *testing.T) {
 		require.Equal(t, "Chrome", profile.ApplicationData[0].Devices[0].Browser)
 	})
 
-	t.Run("Get all profiles", func(t *testing.T) {
+	t.Run("Get_all_profiles", func(t *testing.T) {
 		profiles, err := profileSvc.GetAllProfiles()
 		require.NoError(t, err)
 		require.NotEmpty(t, profiles)
 	})
 
-	t.Run("Filter profiles by email", func(t *testing.T) {
+	t.Run("Filter_profiles", func(t *testing.T) {
 		filter := []string{"identity_attributes.email co test-cds@wso2.com"}
 		filteredProfiles, err := profileSvc.GetAllProfilesWithFilter(filter)
 		require.NoError(t, err)
@@ -117,7 +117,7 @@ func Test_Profiles(t *testing.T) {
 		require.Equal(t, profileID1, filteredProfiles[0].ProfileId)
 	})
 
-	t.Run("Delete profile", func(t *testing.T) {
+	t.Run("Delete_profile", func(t *testing.T) {
 		err := profileSvc.DeleteProfile(profileID1)
 		require.NoError(t, err)
 

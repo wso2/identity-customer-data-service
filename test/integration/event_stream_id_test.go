@@ -30,7 +30,7 @@ func Test_EventStreamId(t *testing.T) {
 	orgID := "test-org"
 	appID := "test-app"
 
-	t.Run("Create event stream ID", func(t *testing.T) {
+	t.Run("Create_event_stream_Id", func(t *testing.T) {
 		key, err := svc.CreateEventStreamId(orgID, appID)
 		require.NoError(t, err, "Failed to create event stream ID")
 		require.Equal(t, orgID, key.OrgID)
@@ -40,20 +40,20 @@ func Test_EventStreamId(t *testing.T) {
 	})
 
 	var streamID string
-	t.Run("Fetch event stream ID by app", func(t *testing.T) {
+	t.Run("Fetch_event_stream_Id_by_app", func(t *testing.T) {
 		keys, err := svc.GetEventStreamIdPerApp(orgID, appID)
 		require.NoError(t, err, "Failed to fetch event stream ID by app")
 		require.NotEmpty(t, keys)
 		streamID = keys[0].EventStreamId
 	})
 
-	t.Run("Get event stream ID by ID", func(t *testing.T) {
+	t.Run("Get_event_stream_Id_by_Id", func(t *testing.T) {
 		key, err := svc.GetEventStreamId(streamID)
 		require.NoError(t, err, "Failed to get event stream ID")
 		require.Equal(t, streamID, key.EventStreamId)
 	})
 
-	t.Run("Rotate event stream ID", func(t *testing.T) {
+	t.Run("Rotate_event_stream_Id", func(t *testing.T) {
 		newKey, err := svc.RotateEventStreamId(streamID)
 		require.NoError(t, err, "Failed to rotate event stream ID")
 		require.NotEqual(t, streamID, newKey.EventStreamId)
@@ -65,7 +65,7 @@ func Test_EventStreamId(t *testing.T) {
 		require.Equal(t, "revoked", oldKey.State)
 	})
 
-	t.Run("Revoke event stream ID", func(t *testing.T) {
+	t.Run("Revoke_event_stream_Id", func(t *testing.T) {
 		keys, _ := svc.GetEventStreamIdPerApp(orgID, appID)
 		require.NotEmpty(t, keys)
 
