@@ -143,13 +143,13 @@ func getCDSHome() string {
 	flag.Parse()
 
 	if *projectHomeFlag != "" {
-		fmt.Errorf("Using %s from command line argument", *projectHomeFlag)
+		fmt.Println("Using %s from command line argument", *projectHomeFlag)
 		projectHome = *projectHomeFlag
 	} else {
 		// If no command line argument is provided, use the current working directory.
 		dir, dirErr := os.Getwd()
 		if dirErr != nil {
-			fmt.Errorf("Failed to get current working directory", dirErr)
+			fmt.Println("Failed to get current working directory", dirErr)
 		}
 		projectHome = dir
 	}

@@ -999,7 +999,8 @@ func GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for fetching master profiles")
+		errorMsg := fmt.Sprintf("Failed to get database client for fetching master profiles for profile: %s",
+			currentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DB_CLIENT_INIT.Code,
@@ -1111,7 +1112,8 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for adding child profiles")
+		errorMsg := fmt.Sprintf("Failed to get database client for adding child profiles for parent: %s",
+			parentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
@@ -1124,7 +1126,8 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to begin transaction for adding child profiles")
+		errorMsg := fmt.Sprintf("Failed to begin transaction for adding child profiles for parent: %s",
+			parentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
