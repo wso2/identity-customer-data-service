@@ -35,10 +35,11 @@ lint: golangci-lint
 
 integration-test:
 ifdef test
-	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration -run $(test) | tee $(OUTPUT_DIR)/integration-test.log
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration -run $(test) | tee $(OUTPUT_DIR)/integration-test.log ; test $${PIPESTATUS[0]} -eq 0
 else
-	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration | tee $(OUTPUT_DIR)/integration-test.log
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration | tee $(OUTPUT_DIR)/integration-test.log ; test $${PIPESTATUS[0]} -eq 0
 endif
+
 
 # Build the Go project.
 _build:
