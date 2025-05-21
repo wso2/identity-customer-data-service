@@ -6,15 +6,27 @@ on:
     branches:
       - poc-cds
 
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: false
+        default: 'poc-cds'
+      pr_number:
+        description: 'Pull Request Number (optional, for logging or future use)'
+        required: false
+
 jobs:
   build-and-lint:
-    if: github.event_name == 'pull_request' && 
-        (github.event.action == 'synchronize' || contains(github.event.pull_request.labels.*.name, 'trigger-pr-builder'))
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          # Use PR branch in PR events, or manual input for workflow_dispatch
+          ref: ${{ github.event.pull_request.head.ref || inputs.branch }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -31,7 +43,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Install system deps
+      - name: Install system dependencies
         run: sudo apt-get install -y make zip
 
       - name: Build
@@ -39,6 +51,6 @@ jobs:
 
       - name: Lint
         run: make lint
-        
+
       - name: Run Integration Tests
         run: make integration-test
