@@ -34,11 +34,10 @@ lint: golangci-lint
 	cd . && $(GOLANGCI_LINT) run ./...
 
 integration-test:
-integration-test:
 ifdef test
-	bash -c 'set -o pipefail; TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration -run $(test) | tee $(OUTPUT_DIR)/integration-test.log'
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration -run $(test)
 else
-	bash -c 'set -o pipefail; TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration | tee $(OUTPUT_DIR)/integration-test.log'
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration
 endif
 
 
