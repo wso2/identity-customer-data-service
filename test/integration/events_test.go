@@ -80,4 +80,11 @@ func Test_Events(t *testing.T) {
 		require.NoError(t, err, "Failed to fetch events with filters")
 		require.GreaterOrEqual(t, len(events), 1, "Expected at least one event")
 	})
+
+	t.Run("Post:Delete_Profile", func(t *testing.T) {
+		profileId := event.ProfileId
+		profileService := profservice.GetProfilesService()
+		err := profileService.DeleteProfile(profileId)
+		require.NoError(t, err, "Failed to delete profile")
+	})
 }

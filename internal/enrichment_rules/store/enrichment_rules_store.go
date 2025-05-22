@@ -254,7 +254,7 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 	return nil
 }
 
-func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error) {
+func GetProfileEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -267,7 +267,7 @@ func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error
 			Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
 			Description: errorMsg,
 		}, err)
-		return model.ProfileEnrichmentRule{}, serverError
+		return nil, serverError
 	}
 	defer dbClient.Close()
 
@@ -286,7 +286,11 @@ func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error
 			Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
 			Description: errorMsg,
 		}, err)
-		return model.ProfileEnrichmentRule{}, serverError
+		return nil, serverError
+	}
+	if len(results) == 0 {
+		logger.Debug(fmt.Sprintf("No enrichment rule found for rule id: %s ", ruleId))
+		return nil, nil
 	}
 	row := results[0]
 
@@ -317,7 +321,7 @@ func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error
 			Message:     errors2.FETCH_ENRICHMENT_RULES.Message,
 			Description: errorMsg,
 		}, err)
-		return rule, serverError
+		return &rule, serverError
 	}
 	for _, row := range condResults {
 		var cond model.RuleCondition
@@ -327,7 +331,7 @@ func GetProfileEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error
 
 		rule.Trigger.Conditions = append(rule.Trigger.Conditions, cond)
 	}
-	return rule, nil
+	return &rule, nil
 }
 
 func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
@@ -408,7 +412,7 @@ func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 	return rules, nil
 }
 
-func DeleteProfileEnrichmentRule(rule model.ProfileEnrichmentRule) error {
+func DeleteProfileEnrichmentRule(rule *model.ProfileEnrichmentRule) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()

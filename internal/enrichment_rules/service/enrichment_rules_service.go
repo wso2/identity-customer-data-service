@@ -35,7 +35,7 @@ type EnrichmentRuleServiceInterface interface {
 	AddEnrichmentRule(rule model.ProfileEnrichmentRule) error
 	GetEnrichmentRules() ([]model.ProfileEnrichmentRule, error)
 	GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule, error)
-	GetEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error)
+	GetEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, error)
 	PutEnrichmentRule(rule model.ProfileEnrichmentRule) error
 	DeleteEnrichmentRule(ruleId string) error
 }
@@ -75,7 +75,7 @@ func (ers *EnrichmentRuleService) GetEnrichmentRulesByFilter(filters []string) (
 	return store.GetEnrichmentRulesByFilter(filters)
 }
 
-func (ers *EnrichmentRuleService) GetEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error) {
+func (ers *EnrichmentRuleService) GetEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, error) {
 
 	return store.GetProfileEnrichmentRule(ruleId)
 }
