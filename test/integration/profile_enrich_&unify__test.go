@@ -487,7 +487,7 @@ func Test_Profile_Enrichment_And_Unification(t *testing.T) {
 	}
 
 	for _, e := range events {
-		time.Sleep(2 * time.Second) // to ensure the event is processed
+		time.Sleep(3 * time.Second) // to ensure the event is processed
 		err := eventsSvc.AddEvents(e, eventQueue)
 		require.NoError(t, err)
 	}

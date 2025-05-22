@@ -59,6 +59,7 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 	return profile, nil
 }
 
+// InsertProfile inserts a new profile into the database
 func InsertProfile(profile model.Profile) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -104,6 +105,7 @@ func InsertProfile(profile model.Profile) error {
 		}, err)
 		return serverError
 	}
+	logger.Info("Profile added successfully: " + profile.ProfileId)
 	return nil
 }
 

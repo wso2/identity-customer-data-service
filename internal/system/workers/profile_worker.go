@@ -749,7 +749,6 @@ func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rul
 
 	logger := log.GetLogger()
 	mergedMap := make(map[string]model2.ApplicationData)
-	logger = log.GetLogger()
 
 	// Initialize with existingAppData
 	for _, app := range existingAppData {

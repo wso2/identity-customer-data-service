@@ -54,9 +54,8 @@ func GetProfilesService() ProfilesServiceInterface {
 	return &ProfilesService{}
 }
 
+// CreateOrUpdateProfile creates or updates a profile
 func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
-
-	// todo: should we throw an error here at all?
 
 	// Create a lock tied to this connection
 	lock := lock.NewPostgresLock()
@@ -98,6 +97,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 	}
 
 	if err := profileStore.InsertProfile(profileToUpsert); err != nil {
+		logger.Error(fmt.Sprintf("Error inserting/updating profile: %s", event.ProfileId), log.Error(err))
 		return err
 	}
 
@@ -107,7 +107,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 		// todo: should we throw an error here?
 		return nil
 	}
-
+	logger.Info("Profile available after insert/update: " + profileFetched.ProfileId)
 	return nil
 }
 
