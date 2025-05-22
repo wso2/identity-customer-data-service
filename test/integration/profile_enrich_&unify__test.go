@@ -591,4 +591,19 @@ func Test_Profile_Enrichment_And_Unification(t *testing.T) {
 		require.Len(t, deviceSet, 4, "Expected 4 unique devices in merged application data")
 	})
 
+	t.Run("Post: Clean_data", func(t *testing.T) {
+
+		enrRule, _ := enrichmentSvc.GetEnrichmentRules()
+		for _, rule := range enrRule {
+			_ = enrichmentSvc.DeleteEnrichmentRule(rule.RuleId)
+		}
+		for _, rule := range rulesU {
+			_ = unificationSvc.DeleteUnificationRule(rule.RuleId)
+		}
+		_ = profileSvc.DeleteProfile(profile1ID)
+		_ = profileSvc.DeleteProfile(profile2ID)
+		_ = profileSvc.DeleteProfile(profile3ID)
+		_ = profileSvc.DeleteProfile(profile4ID)
+	})
+
 }
