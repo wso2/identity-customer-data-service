@@ -54,9 +54,8 @@ func GetProfilesService() ProfilesServiceInterface {
 	return &ProfilesService{}
 }
 
+// CreateOrUpdateProfile creates or updates a profile
 func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
-
-	// todo: should we throw an error here at all?
 
 	// Create a lock tied to this connection
 	lock := lock.NewPostgresLock()
@@ -98,6 +97,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 	}
 
 	if err := profileStore.InsertProfile(profileToUpsert); err != nil {
+		logger.Error(fmt.Sprintf("Error inserting/updating profile: %s", event.ProfileId), log.Error(err))
 		return err
 	}
 
@@ -107,7 +107,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 		// todo: should we throw an error here?
 		return nil
 	}
-
+	logger.Info("Profile available after insert/update: " + profileFetched.ProfileId)
 	return nil
 }
 
@@ -145,7 +145,8 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.Profile, 
 
 		// building the hierarchy
 		masterProfile.ProfileHierarchy.ChildProfiles, err = profileStore.FetchChildProfiles(masterProfile.ProfileId)
-		masterProfile.ProfileHierarchy.ParentProfileID = masterProfile.ProfileId
+		masterProfile.ProfileHierarchy.ParentProfileID = profile.ProfileHierarchy.ParentProfileID
+		masterProfile.ProfileHierarchy.IsParent = false
 		masterProfile.ProfileId = profile.ProfileId
 
 		if err != nil {
@@ -401,7 +402,8 @@ func (ps *ProfilesService) GetAllProfiles() ([]profileModel.Profile, error) {
 			// building the hierarchy
 			master.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(master.ProfileId)
 			master.ProfileId = profile.ProfileId
-			master.ProfileHierarchy.ParentProfileID = master.ProfileId
+			master.ProfileHierarchy.IsParent = false
+			master.ProfileHierarchy.ParentProfileID = profile.ProfileHierarchy.ParentProfileID
 
 			result = append(result, *master)
 		}
