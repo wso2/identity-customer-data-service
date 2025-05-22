@@ -173,8 +173,13 @@ func EnrichProfile(event model3.Event) {
 	}
 }
 
+// defaultInsertAppData inserts application data into the profile
 func defaultInsertAppData(event model3.Event, profile *model2.Profile) error {
+
+	logger := log.GetLogger()
 	if event.Context == nil {
+		logger.Debug(fmt.Sprintf("Event context is nil for event: %s and for profile: %s", event.EventId,
+			event.ProfileId))
 		return nil
 	}
 
@@ -215,7 +220,7 @@ func defaultInsertAppData(event model3.Event, profile *model2.Profile) error {
 	// Convert device list to generic format
 	deviceList := []model2.Devices{devices}
 	devicesJSON, err := json.Marshal(deviceList)
-	logger := log.GetLogger()
+	logger = log.GetLogger()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to convert devices to JSON when inserting app data for profile: %s",
 			profileId)
@@ -256,9 +261,11 @@ func defaultInsertAppData(event model3.Event, profile *model2.Profile) error {
 		return serverError
 	}
 
+	logger.Debug("Successfully inserted application data for profile: " + profileId)
 	return nil
 }
 
+// unifyProfiles unifies profiles based on unification rules
 func unifyProfiles(newProfile model2.Profile) {
 
 	// Step 1: Fetch all unification rules
@@ -266,6 +273,7 @@ func unifyProfiles(newProfile model2.Profile) {
 	ruleService := ruleProvider.GetUnificationRuleService()
 	unificationRules, err := ruleService.GetUnificationRules()
 	logger := log.GetLogger()
+	logger.Info(fmt.Sprintf("Beginning to evaluate unification for profile: %s", newProfile.ProfileId))
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to fetch unification rules for unifying profile: %s",
 			newProfile.ProfileId), log.Error(err))
@@ -290,6 +298,7 @@ func unifyProfiles(newProfile model2.Profile) {
 			}
 
 			if doesProfileMatch(existingMasterProfile, newProfile, rule) {
+				logger.Info("Profiles has matched for unification rule: " + rule.RuleId)
 
 				existingMasterProfile.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(existingMasterProfile.ProfileId)
 
@@ -407,6 +416,8 @@ func sortRulesByPriority(rules []model.UnificationRule) {
 // MergeProfiles merges two profiles based on unification rules
 func MergeProfiles(existingProfile model2.Profile, incomingProfile model2.Profile, enrichmentRules []erm.ProfileEnrichmentRule) model2.Profile {
 
+	logger := log.GetLogger()
+	logger.Info("Merging profiles, " + existingProfile.ProfileId + " and " + incomingProfile.ProfileId)
 	merged := existingProfile
 	// todo: I doubt if this is fine.. we need to run through all to build a new profile
 	for _, rule := range enrichmentRules {
@@ -453,10 +464,11 @@ func MergeProfiles(existingProfile model2.Profile, incomingProfile model2.Profil
 				merged.IdentityAttributes = map[string]interface{}{}
 			}
 			merged.IdentityAttributes[propertyName] = mergedVal
-		case "application_data":
-			merged.ApplicationData = mergeAppData(existingProfile.ApplicationData, incomingProfile.ApplicationData, enrichmentRules)
 		}
 	}
+
+	// Merge devices by default.
+	merged.ApplicationData = mergeAppData(existingProfile.ApplicationData, incomingProfile.ApplicationData, enrichmentRules)
 
 	return merged
 }
@@ -598,16 +610,19 @@ func parseValueForValueType(valueType string, raw interface{}) interface{} {
 
 // mergeDeviceLists merges devices, ensuring no duplicates based on `device_id`
 func mergeDeviceLists(existingDevices, newDevices []model2.Devices) []model2.Devices {
-	deviceMap := make(map[string]model2.Devices)
 
+	deviceMap := make(map[string]model2.Devices)
+	logger := log.GetLogger()
 	for _, device := range existingDevices {
 		if device.DeviceId != "" {
+			logger.Info("Merging existing device data for device: " + device.DeviceId)
 			deviceMap[device.DeviceId] = device
 		}
 	}
 
 	for _, device := range newDevices {
 		if device.DeviceId != "" {
+			logger.Info("Merging new device data for device: " + device.DeviceId)
 			deviceMap[device.DeviceId] = device
 		}
 	}
@@ -732,16 +747,19 @@ func combineUniqueInts(a, b []int) []int {
 
 func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rules []erm.ProfileEnrichmentRule) []model2.ApplicationData {
 
-	mergedMap := make(map[string]model2.ApplicationData)
 	logger := log.GetLogger()
+	mergedMap := make(map[string]model2.ApplicationData)
+	logger = log.GetLogger()
 
 	// Initialize with existingAppData
 	for _, app := range existingAppData {
 		mergedMap[app.AppId] = app
+		logger.Info("Merging existing application data for application: " + app.AppId)
 	}
 
 	for _, newApp := range incomingAppData {
 		existingApp, found := mergedMap[newApp.AppId]
+		logger.Info("Merging existing application data for application: " + newApp.AppId)
 		if !found {
 			mergedMap[newApp.AppId] = newApp
 			continue

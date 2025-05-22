@@ -145,7 +145,8 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.Profile, 
 
 		// building the hierarchy
 		masterProfile.ProfileHierarchy.ChildProfiles, err = profileStore.FetchChildProfiles(masterProfile.ProfileId)
-		masterProfile.ProfileHierarchy.ParentProfileID = masterProfile.ProfileId
+		masterProfile.ProfileHierarchy.ParentProfileID = profile.ProfileHierarchy.ParentProfileID
+		masterProfile.ProfileHierarchy.IsParent = false
 		masterProfile.ProfileId = profile.ProfileId
 
 		if err != nil {
@@ -401,7 +402,8 @@ func (ps *ProfilesService) GetAllProfiles() ([]profileModel.Profile, error) {
 			// building the hierarchy
 			master.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(master.ProfileId)
 			master.ProfileId = profile.ProfileId
-			master.ProfileHierarchy.ParentProfileID = master.ProfileId
+			master.ProfileHierarchy.IsParent = false
+			master.ProfileHierarchy.ParentProfileID = profile.ProfileHierarchy.ParentProfileID
 
 			result = append(result, *master)
 		}
