@@ -69,6 +69,7 @@ func Test_Consent(t *testing.T) {
 		assert.NoError(t, err, "Failed to delete consent category")
 
 		deleted, err := svc.GetConsentCategory(category.CategoryIdentifier)
+		assert.NoError(t, err)
 		assert.Nil(t, deleted, "Expected category to be nil after deletion")
 	})
 }
