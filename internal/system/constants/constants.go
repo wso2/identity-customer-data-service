@@ -11,29 +11,20 @@ const MaxRetryAttempts = 10
 const RetryDelay = 100 * time.Millisecond
 const ApiBasePath = "/api/v1"
 const Filter = "filter"
-const DEFAULT_LOG_LEVEL = "INFO"
 
 var AllowedFieldsForUnificationRulePatch = map[string]bool{
 	"is_active": true,
 	"priority":  true,
-	"rule_name": true,
 }
 
-var AllowedPropertyTypes = map[string]bool{
+var AllowedValueTypes = map[string]bool{
 	"string":        true,
 	"int":           true,
 	"boolean":       true,
 	"date":          true,
 	"arrayOfString": true,
 	"arrayOfInt":    true,
-}
-
-var GoTypeMapping = map[string]string{
-	"string":        "string",
-	"int":           "int",
-	"boolean":       "bool",
-	"arrayofstring": "[]string",
-	"arrayofint":    "[]int",
+	"object":        false,
 }
 
 var AllowedComputationMethods = map[string]bool{
@@ -61,8 +52,8 @@ var AllowedConditionOperators = map[string]bool{
 	"less_than_equals":    true,
 }
 
-var ApiKeyStates = map[string]bool{
-	"active":  true,
-	"revoked": true,
-	"expired": true,
+var AllowedEventTypes = map[string]bool{
+	"page":     true,
+	"track":    true,
+	"identify": true,
 }

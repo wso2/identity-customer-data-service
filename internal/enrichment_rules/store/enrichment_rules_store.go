@@ -132,6 +132,8 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		}, err)
 		return serverError
 	}
+	logger.Info(fmt.Sprintf("Enrichment rule: %s for property: %s added successfully.", rule.RuleId,
+		rule.PropertyName))
 	return nil
 }
 
@@ -251,9 +253,12 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		}, err)
 		return serverError
 	}
+	logger.Info(fmt.Sprintf("Enrichment rule: %s for property: %s updated successfully.", rule.RuleId,
+		rule.PropertyName))
 	return nil
 }
 
+// GetProfileEnrichmentRule fetches a specific enrichment rule by its ID.
 func GetProfileEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -271,8 +276,8 @@ func GetProfileEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, erro
 	}
 	defer dbClient.Close()
 
-	query := `SELECT rule_id, property_name, value_type, merge_strategy, value, computation_method, source_field, time_range, event_type, event_name, created_at, updated_at 
-		FROM profile_enrichment_rules WHERE rule_id = $1`
+	query := `SELECT rule_id, property_name, value_type, merge_strategy, value, computation_method, source_field, 
+       time_range, event_type, event_name, created_at, updated_at FROM profile_enrichment_rules WHERE rule_id = $1`
 
 	var rule model.ProfileEnrichmentRule
 	var createdAt, updatedAt int64
@@ -312,9 +317,11 @@ func GetProfileEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, erro
 
 	// Fetch trigger conditions
 	condResults, err := dbClient.ExecuteQuery(
-		`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
+		`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`,
+		rule.RuleId)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to fetch trigger conditions for enrichment rule with rule id: %s.", ruleId)
+		errorMsg := fmt.Sprintf("Failed to fetch trigger conditions for enrichment rule with rule id: %s.",
+			ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.FETCH_ENRICHMENT_RULES.Code,
@@ -331,9 +338,12 @@ func GetProfileEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, erro
 
 		rule.Trigger.Conditions = append(rule.Trigger.Conditions, cond)
 	}
+	logger.Info(fmt.Sprintf("Enrichment rule: %s for property: %s fetched successfully.", rule.RuleId,
+		rule.PropertyName))
 	return &rule, nil
 }
 
+// GetProfileEnrichmentRules fetches all enrichment rules.
 func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -387,7 +397,8 @@ func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 		rule.UpdatedAt = updatedAt
 
 		condResults, err := dbClient.ExecuteQuery(
-			`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`, rule.RuleId)
+			`SELECT field, operator, value FROM profile_enrichment_trigger_conditions WHERE rule_id = $1`,
+			rule.RuleId)
 		if err != nil {
 			errorMsg := "Failed to fetch trigger conditions for enrichment rule(s)."
 			logger.Debug(errorMsg, log.Error(err))
@@ -408,16 +419,18 @@ func GetProfileEnrichmentRules() ([]model.ProfileEnrichmentRule, error) {
 		}
 		rules = append(rules, rule)
 	}
-
+	logger.Info("Fetching Enrichment rules successful.")
 	return rules, nil
 }
 
+// DeleteProfileEnrichmentRule deletes an enrichment rule by its ID.
 func DeleteProfileEnrichmentRule(rule *model.ProfileEnrichmentRule) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for deleting enrichment rule with rule id: %s", rule.RuleId)
+		errorMsg := fmt.Sprintf("Failed to get database client for deleting enrichment rule with rule id: %s",
+			rule.RuleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_ENRICHMENT_RULES.Code,
@@ -430,7 +443,7 @@ func DeleteProfileEnrichmentRule(rule *model.ProfileEnrichmentRule) error {
 
 	_, err = dbClient.ExecuteQuery(`DELETE FROM profile_enrichment_rules WHERE rule_id = $1`, rule.RuleId)
 	if err != nil {
-		errorMsg := "Failed to delete enrichment rule."
+		errorMsg := fmt.Sprintf("Failed to delete enrichment rule: %s", rule.RuleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_ENRICHMENT_RULES.Code,
@@ -451,6 +464,8 @@ func DeleteProfileEnrichmentRule(rule *model.ProfileEnrichmentRule) error {
 		}, err)
 		return serverError
 	}
+	logger.Info(fmt.Sprintf("Enrichment rule: %s for property: %s deleted successfully.", rule.RuleId,
+		rule.PropertyName))
 	return nil
 }
 
@@ -635,5 +650,6 @@ Outer:
 		filtered = append(filtered, rule)
 	}
 
+	logger.Info("Enrichment rules filtered successfully.")
 	return filtered, nil
 }
