@@ -82,3 +82,11 @@ CREATE TABLE event_stream_ids (
     created_at BIGINT NOT NULL
 );
 
+CREATE TABLE consent_categories (
+    id SERIAL PRIMARY KEY , 
+    category_name TEXT NOT NULL,
+    category_identifier TEXT UNIQUE NOT NULL,
+    purpose TEXT NOT NULL CHECK (purpose IN ('profiling', 'personalization', 'destination')),
+    destinations TEXT[] -- Optional: array of strings
+);
+
