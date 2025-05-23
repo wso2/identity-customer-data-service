@@ -1148,15 +1148,15 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 	for _, child := range children {
 		_, err := tx.Exec(query, parentProfile.ProfileId, child.ChildProfileId, child.RuleName)
 		if err != nil {
-			err := tx.Rollback()
-			if err != nil {
+			errRoll := tx.Rollback()
+			if errRoll != nil {
 				errorMsg := fmt.Sprintf("Failed to rollback transaction after error: %s", err)
 				logger.Debug(errorMsg, log.Error(err))
 				serverError := errors2.NewServerError(errors2.ErrorMessage{
 					Code:        errors2.UPDATE_PROFILE.Code,
 					Message:     errors2.UPDATE_PROFILE.Message,
 					Description: errorMsg,
-				}, err)
+				}, errRoll)
 				return serverError
 			}
 			errorMsg := fmt.Sprintf("Failed to insert child profile: %s for parent profile: %s", child.ChildProfileId, parentProfile.ProfileId)

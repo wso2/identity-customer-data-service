@@ -65,7 +65,7 @@ func AddConsentCategory(category model.ConsentCategory) error {
 				Code:        errors2.ADD_CONSENT_CATEGORY.Code,
 				Message:     errors2.ADD_CONSENT_CATEGORY.Message,
 				Description: errorMsg,
-			}, err)
+			}, errRollback)
 		}
 		errorMsg := fmt.Sprintf("Failed to execute query for inserting consent category: %s", category.CategoryIdentifier)
 		logger.Debug(errorMsg, log.Error(err))
