@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS profiles;
 DROP TABLE IF EXISTS profile_enrichment_trigger_conditions;
 DROP TABLE IF EXISTS profile_enrichment_rules;
 DROP TABLE IF EXISTS unification_rules;
+DROP TABLE IF EXISTS consent_categories;
 
 CREATE TABLE unification_rules (
     rule_id VARCHAR(255) PRIMARY KEY,
@@ -92,3 +93,11 @@ CREATE TABLE event_stream_ids (
     created_at BIGINT NOT NULL
 );
 
+CREATE TABLE consent_categories (
+    id SERIAL PRIMARY KEY ,
+    org_id VARCHAR (255) NOT NULL,
+    category_name VARCHAR (255) NOT NULL,
+    category_identifier VARCHAR (255) UNIQUE NOT NULL,
+    purpose VARCHAR (255) NOT NULL,
+    destinations TEXT[]
+);

@@ -60,8 +60,8 @@ func InsertEventStreamId(eventStreamId *model.EventStreamId) error {
 	query := `INSERT INTO event_stream_ids (event_stream_id, org_id, app_id, state, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6)`
 	_, err = tx.Exec(query, eventStreamId.EventStreamId, eventStreamId.OrgID, eventStreamId.AppID, eventStreamId.State, eventStreamId.ExpiresAt, eventStreamId.CreatedAt)
 	if err != nil {
-		err := tx.Rollback()
-		if err != nil {
+		errRoll := tx.Rollback()
+		if errRoll != nil {
 			errorMsg := fmt.Sprintf("Failed to rollback adding event stream id: %s",
 				eventStreamId.EventStreamId)
 			logger.Debug(errorMsg, log.Error(err))
@@ -69,7 +69,7 @@ func InsertEventStreamId(eventStreamId *model.EventStreamId) error {
 				Code:        errors2.ADD_EVENT_STREAM_ID.Code,
 				Message:     errors2.ADD_EVENT_STREAM_ID.Message,
 				Description: errorMsg,
-			}, err)
+			}, errRoll)
 			return serverError
 		}
 		errorMsg := fmt.Sprintf("Failed to add event stream id: %s",
@@ -195,15 +195,15 @@ func UpdateState(eventStreamId string, state string) error {
 	query := `UPDATE event_stream_ids SET state = $1 WHERE event_stream_id = $2`
 	_, err = tx.Exec(query, state, eventStreamId)
 	if err != nil {
-		err := tx.Rollback()
-		if err != nil {
+		errRoll := tx.Rollback()
+		if errRoll != nil {
 			errorMsg := fmt.Sprintf("Failed to rollback updating meta data for event stream id: %s", eventStreamId)
 			logger.Debug(errorMsg, log.Error(err))
 			serverError := errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_EVENT_STREAM_ID.Code,
 				Message:     errors2.UPDATE_EVENT_STREAM_ID.Message,
 				Description: errorMsg,
-			}, err)
+			}, errRoll)
 			return serverError
 		}
 		errorMsg := fmt.Sprintf("Failed to updating meta data for event stream id: %s", eventStreamId)

@@ -69,8 +69,8 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		rule.UpdatedAt)
 
 	if err != nil {
-		err = tx.Rollback()
-		if err != nil {
+		errRoll := tx.Rollback()
+		if errRoll != nil {
 			errorMsg := fmt.Sprintf("Failed to rollback transaction for adding enrichment rule for property: %s",
 				rule.PropertyName)
 			logger.Debug(errorMsg, log.Error(err))
@@ -78,7 +78,7 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 				Code:        errors2.ADD_ENRICHMENT_RULE.Code,
 				Message:     errors2.ADD_ENRICHMENT_RULE.Message,
 				Description: errorMsg,
-			}, err)
+			}, errRoll)
 			return serverError
 		}
 		errorMsg := fmt.Sprintf("Failed on inserting enrichment rule for property: %s", rule.PropertyName)
@@ -96,8 +96,8 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		(rule_id, field, operator, value) VALUES ($1, $2, $3, $4)`,
 			rule.RuleId, cond.Field, cond.Operator, cond.Value)
 		if err != nil {
-			err = tx.Rollback()
-			if err != nil {
+			errRoll := tx.Rollback()
+			if errRoll != nil {
 				errorMsg := fmt.Sprintf("Failed to rollback transaction for trigger conditions for the"+
 					" enrichment rule for property: %s",
 					rule.PropertyName)
@@ -106,7 +106,7 @@ func AddEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 					Code:        errors2.ADD_ENRICHMENT_RULE.Code,
 					Message:     errors2.ADD_ENRICHMENT_RULE.Message,
 					Description: errorMsg,
-				}, err)
+				}, errRoll)
 				return serverError
 			}
 			errorMsg := fmt.Sprintf("Failed on inserting trigger conditions for the enrichment rule "+
@@ -176,8 +176,8 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		rule.PropertyName, rule.ValueType, rule.MergeStrategy, rule.SourceField, rule.Value, rule.ComputationMethod, rule.TimeRange,
 		rule.Trigger.EventType, rule.Trigger.EventName, timestamp, rule.RuleId)
 	if err != nil {
-		err = tx.Rollback()
-		if err != nil {
+		errRoll := tx.Rollback()
+		if errRoll != nil {
 			errorMsg := fmt.Sprintf("Failed to rollback while updating enrichment rule for property: %s.",
 				rule.PropertyName)
 			logger.Debug(errorMsg, log.Error(err))
@@ -185,7 +185,7 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 				Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
 				Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
 				Description: errorMsg,
-			}, err)
+			}, errRoll)
 			return serverError
 		}
 		errorMsg := fmt.Sprintf("Failed to update enrichment rule for property: %s.", rule.PropertyName)
@@ -216,8 +216,8 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 		(rule_id, field, operator, value) VALUES ($1, $2, $3, $4)`,
 			rule.RuleId, cond.Field, cond.Operator, cond.Value)
 		if err != nil {
-			err := tx.Rollback()
-			if err != nil {
+			errRoll := tx.Rollback()
+			if errRoll != nil {
 				errorMsg := fmt.Sprintf("Failed to rollback updating trigger conditions of enrichment rule for "+
 					"property: %s.", rule.PropertyName)
 				logger.Debug(errorMsg, log.Error(err))
@@ -225,7 +225,7 @@ func UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 					Code:        errors2.UPDATE_ENRICHMENT_RULES.Code,
 					Message:     errors2.UPDATE_ENRICHMENT_RULES.Message,
 					Description: errorMsg,
-				}, err)
+				}, errRoll)
 				return serverError
 			}
 			errorMsg := fmt.Sprintf("Failed to update trigger conditions of the enrichment rule for property: %s.",
