@@ -10,17 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
 
-      - name: Cache Go Modules
+      - name: Cache Go modules
         uses: actions/cache@v3
         with:
           path: |
@@ -30,7 +28,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Install System Dependencies
+      - name: Install system deps
         run: sudo apt-get install -y make zip
 
       - name: Build
@@ -40,17 +38,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
 
-      - name: Cache Go Modules
+      - name: Cache Go modules
         uses: actions/cache@v3
         with:
           path: |
@@ -60,7 +56,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Install System Dependencies
+      - name: Install system deps
         run: sudo apt-get install -y make zip
 
       - name: Lint
@@ -71,17 +67,15 @@ jobs:
     needs: build
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
 
-      - name: Cache Go Modules
+      - name: Cache Go modules
         uses: actions/cache@v3
         with:
           path: |
@@ -91,7 +85,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Install System Dependencies
+      - name: Install system deps
         run: sudo apt-get install -y make zip
 
       - name: Run Integration Tests
