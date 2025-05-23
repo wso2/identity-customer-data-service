@@ -5,28 +5,11 @@ on:
     branches:
       - poc-cds
 
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "Optional PR number (for manual visibility/logging)"
-        required: false
-      branch:
-        description: "Branch to check out"
-        required: true
-        default: "poc-cds"
-
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Print Trigger Context
-        run: |
-          echo "Triggered by: ${{ github.actor }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Branch (workflow_dispatch): ${{ github.event.inputs.branch }}"
-          echo "PR Number (workflow_dispatch): ${{ github.event.inputs.pr_number || 'N/A' }}"
-
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
