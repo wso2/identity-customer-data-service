@@ -227,6 +227,17 @@ func UpdateConsentCategory(category model.ConsentCategory) error {
 	}
 	defer dbClient.Close()
 	tx, err := dbClient.BeginTx()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to begin transaction for updating consent category: %s",
+			category.CategoryIdentifier)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_CONSENT_CATEGORY.Code,
+			Message:     errors2.UPDATE_CONSENT_CATEGORY.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
 
 	query := `UPDATE consent_categories SET category_name=$1, purpose=$2, destinations=$3 WHERE category_identifier=$4`
 	_, err = tx.Exec(query, category.CategoryName, category.Purpose, pq.Array(category.Destinations), category.CategoryIdentifier)
@@ -254,6 +265,16 @@ func DeleteConsentCategory(categoryId string) error {
 	defer dbClient.Close()
 
 	tx, err := dbClient.BeginTx()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to begin transaction for deleting consent category: %s", categoryId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_CONSENT_CATEGORY.Code,
+			Message:     errors2.UPDATE_CONSENT_CATEGORY.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
 
 	query := `DELETE FROM consent_categories WHERE category_identifier=$1`
 	_, err = tx.Exec(query, categoryId)
