@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	enrStore "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
@@ -36,21 +37,14 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 	existingRule, err := store.GetUnificationRules()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error occurred while checking for existing unification rule: %s", rule.RuleId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.ErrWhileFetchingUnificationRules.Code,
-			Message:     errors2.ErrWhileFetchingUnificationRules.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
+		return err
 	}
 
 	for _, existing := range existingRule {
 		if existing.Property == rule.Property {
 			return errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.ErrPropertyAlreadyExists.Code,
-				Message:     errors2.ErrPropertyAlreadyExists.Message,
+				Code:        errors2.PROP_ALREADY_EXISTS.Code,
+				Message:     errors2.PROP_ALREADY_EXISTS.Message,
 				Description: fmt.Sprintf("Unification rule with property %s already exists", rule.Property),
 			}, http.StatusConflict)
 		}
@@ -103,9 +97,9 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 	}
 	if unificationRule == nil {
 		return nil, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrResolutionRuleNotFound.Code,
-			Message:     errors2.ErrResolutionRuleNotFound.Message,
-			Description: fmt.Sprintf("Unification rule with ID %s not found", ruleId),
+			Code:        errors2.UNIFICATION_RULE_NOT_FOUND.Code,
+			Message:     errors2.UNIFICATION_RULE_NOT_FOUND.Message,
+			Description: fmt.Sprintf("Unification rule: %s not found", ruleId),
 		}, http.StatusNotFound)
 	}
 	return unificationRule, err
@@ -114,20 +108,14 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 // PatchResolutionRule Applies a partial update on a specific resolution rule.
 func (urs *UnificationRuleService) PatchResolutionRule(ruleId string, updates map[string]interface{}) error {
 
-	// Only allow patching specific fields
-	allowedFields := map[string]bool{
-		"is_active": true,
-		"priority":  true,
-		"rule_name": true,
-	}
-
 	// Validate that all update fields are allowed
 	for field := range updates {
-		if !allowedFields[field] {
+		if !constants.AllowedFieldsForUnificationRulePatch[field] {
 			return errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.ErrOnlyStatusUpdatePossible.Code,
-				Message:     errors2.ErrOnlyStatusUpdatePossible.Message,
-				Description: fmt.Sprintf("Field '%s' cannot be updated.", field),
+				Code:    errors2.UNIFICATION_UPDATE_FAILED.Code,
+				Message: errors2.UNIFICATION_UPDATE_FAILED.Message,
+				Description: fmt.Sprintf("Field '%s' cannot be updated. Rule Name, Active Status or Property"+
+					" can only be updated", field),
 			}, http.StatusBadRequest)
 		}
 	}

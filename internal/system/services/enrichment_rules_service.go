@@ -43,6 +43,6 @@ func (s *EnrichmentRulesService) RegisterRoutes(mux *http.ServeMux, apiBasePath 
 	mux.HandleFunc(fmt.Sprintf("POST %s/enrichment-rules", apiBasePath), s.enrichmentRulesHandler.CreateEnrichmentRule)
 	mux.HandleFunc(fmt.Sprintf("GET %s/enrichment-rules", apiBasePath), s.enrichmentRulesHandler.GetEnrichmentRules)
 	mux.HandleFunc(fmt.Sprintf("GET %s/enrichment-rules/", apiBasePath), s.enrichmentRulesHandler.GetEnrichmentRule)
-	mux.HandleFunc(fmt.Sprintf("PUT %s/enrichment-rules/", apiBasePath), s.enrichmentRulesHandler.PutEnrichmentRule)
+	mux.HandleFunc(fmt.Sprintf("PUT %s/enrichment-rules/", apiBasePath), s.enrichmentRulesHandler.UpdateEnrichmentRule)
 	mux.HandleFunc(fmt.Sprintf("DELETE %s/enrichment-rules/", apiBasePath), s.enrichmentRulesHandler.DeleteEnrichmentRule)
 }

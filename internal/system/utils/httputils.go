@@ -29,7 +29,7 @@ func HandleError(w http.ResponseWriter, err error) {
 	var serverError *customerrors.ServerError
 	if ok := errors.As(err, &serverError); ok {
 		logger := log.GetLogger()
-		logger.Error(err.Error(), log.Error(err))
+		logger.Error(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "Internal server error",

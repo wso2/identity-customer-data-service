@@ -86,7 +86,7 @@ func Test_EnrichmentRule(t *testing.T) {
 			}
 		}
 		// todo: Need to define what fields can be updated
-		err := svc.PutEnrichmentRule(toUpdate)
+		err := svc.UpdateEnrichmentRule(toUpdate)
 		assert.NoError(t, err, "Failed to update rule1")
 
 		updated, err := svc.GetEnrichmentRule(toUpdate.RuleId)

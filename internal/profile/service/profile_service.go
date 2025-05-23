@@ -120,9 +120,9 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.Profile, 
 	}
 	if profile == nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrProfileNotFound.Code,
-			Message:     errors2.ErrProfileNotFound.Message,
-			Description: errors2.ErrProfileNotFound.Description,
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
 		}, http.StatusNotFound)
 		return nil, clientError
 	}
@@ -378,7 +378,7 @@ func (ps *ProfilesService) GetAllProfiles() ([]profileModel.Profile, error) {
 
 	existingProfiles, err := profileStore.GetAllProfiles()
 	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
+		return nil, err
 	}
 	if existingProfiles == nil {
 		return []profileModel.Profile{}, nil
@@ -417,7 +417,7 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(filters []string) ([]profile
 	// Step 1: Fetch enrichment rules to extract value types
 	rules, err := store.GetProfileEnrichmentRules()
 	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfileEnrichmentRules, err)
+		return nil, err
 	}
 
 	// Step 2: Build field → valueType mapping
@@ -452,7 +452,7 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(filters []string) ([]profile
 	// Step 4: Fetch matching profiles with `list_profile = true`
 	filteredProfiles, err := profileStore.GetAllProfilesWithFilter(rewrittenFilters)
 	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
+		return nil, err
 	}
 	if filteredProfiles == nil {
 		filteredProfiles = []profileModel.Profile{}
@@ -519,9 +519,9 @@ func FindProfileByUserName(sub string) (interface{}, error) {
 
 	if len(profiles) == 0 {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrProfileNotFound.Code,
-			Message:     errors2.ErrProfileNotFound.Message,
-			Description: errors2.ErrProfileNotFound.Description,
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
 		}, http.StatusNotFound)
 		return nil, clientError
 	}
@@ -566,9 +566,9 @@ func FindProfileByUserName(sub string) (interface{}, error) {
 	}
 	if master == nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrProfileNotFound.Code,
-			Message:     errors2.ErrProfileNotFound.Message,
-			Description: errors2.ErrProfileNotFound.Description,
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
 		}, http.StatusNotFound)
 		return nil, clientError
 	}
