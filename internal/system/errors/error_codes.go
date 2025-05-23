@@ -164,11 +164,26 @@ var (
 		Message: "Invalid type.",
 	}
 
+	ADD_CONSENT_CATEGORY = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Adding consent category failed.",
+	}
+
+	FETCH_CONSENT_CATEGORIES = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Fetching consent category failed.",
+	}
+
+	UPDATE_CONSENT_CATEGORY = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Updating consent category failed.",
+	}
+
 	// Client error codes
 
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "11001",
-		Message: "Invalid body format.",
+		Message: "Invalid body.",
 	}
 
 	ErrUnAuthorizedRequest = ErrorMessage{
@@ -378,5 +393,10 @@ var (
 		Code:        errorPrefix + "11023",
 		Message:     "Multiple Profiles found.",
 		Description: "Multiple user profiles record found for the given user_id",
+	}
+
+	CONSENT_CAT_VALIDATION = ErrorMessage{
+		Code:    errorPrefix + "10015",
+		Message: "Consent category validation failed",
 	}
 )
