@@ -55,15 +55,19 @@ func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *ht
 		return
 	}
 
+	orgId := utils.ExtractOrgID(r.URL.Path)
+	category.OrgId = orgId
+
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()
-	if err := service.AddConsentCategory(category); err != nil {
+	consentCat, err := service.AddConsentCategory(category)
+	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(category)
+	_ = json.NewEncoder(w).Encode(consentCat)
 }
 
 // GetConsentCategory handles GET /consent-categories/{id}
@@ -128,14 +132,13 @@ func (h *ConsentCategoryHandler) DeleteConsentCategory(w http.ResponseWriter, r 
 	}
 
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()
-	if err := service.UpdateConsentCategory(category); err != nil {
+	if err := service.DeleteConsentCategory(categoryId); err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(category)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func extractLastPathSegment(path string) string {

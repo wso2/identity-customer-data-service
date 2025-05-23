@@ -31,7 +31,7 @@ import (
 type ConsentCategoryServiceInterface interface {
 	GetAllConsentCategories() ([]model.ConsentCategory, error)
 	GetConsentCategory(id string) (*model.ConsentCategory, error)
-	AddConsentCategory(category model.ConsentCategory) error
+	AddConsentCategory(category model.ConsentCategory) (*model.ConsentCategory, error)
 	UpdateConsentCategory(category model.ConsentCategory) error
 	DeleteConsentCategory(id string) error
 }
@@ -46,23 +46,78 @@ func GetConsentCategoryService() ConsentCategoryServiceInterface {
 
 // GetAllConsentCategories retrieves all categories.
 func (cs *ConsentCategoryService) GetAllConsentCategories() ([]model.ConsentCategory, error) {
-	return store.GetAllConsentCategories()
+
+	consentCat, err := store.GetAllConsentCategories()
+
+	if err != nil {
+		return nil, err
+	}
+	if len(consentCat) == 0 {
+		return []model.ConsentCategory{}, nil
+	}
+	return consentCat, nil
+
 }
 
 // GetConsentCategory retrieves a category by ID.
 func (cs *ConsentCategoryService) GetConsentCategory(id string) (*model.ConsentCategory, error) {
-	return store.GetConsentCategoryByID(id)
+
+	consentCat, err := store.GetConsentCategoryByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if consentCat == nil {
+		return nil, errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CONSENT_CAT_NOT_FOUND.Code,
+			Message:     errors2.CONSENT_CAT_NOT_FOUND.Message,
+			Description: "Consent category not found.",
+		}, http.StatusNotFound)
+	}
+	return consentCat, nil
 }
 
 // AddConsentCategory adds a new category.
-func (cs *ConsentCategoryService) AddConsentCategory(category model.ConsentCategory) error {
+func (cs *ConsentCategoryService) AddConsentCategory(category model.ConsentCategory) (*model.ConsentCategory, error) {
+
+	err, isValid := cs.validateConsentCat(category)
+
+	if !isValid || err != nil {
+		return nil, err
+	}
+
+	existingCat, err := store.GetConsentCategoryByName(category.CategoryName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if existingCat != nil && existingCat.CategoryName == category.CategoryName {
+		return nil, errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CONSENT_CAT_ALREADY_EXISTS.Code,
+			Message:     errors2.CONSENT_CAT_ALREADY_EXISTS.Message,
+			Description: "Category with the same name already exists.",
+		}, http.StatusConflict)
+	}
+
+	if category.CategoryIdentifier == "" {
+		category.CategoryIdentifier = uuid.New().String()
+	}
+
+	err = store.AddConsentCategory(category)
+	if err != nil {
+		return nil, err
+	}
+	return &category, nil
+}
+
+func (cs *ConsentCategoryService) validateConsentCat(category model.ConsentCategory) (error, bool) {
 
 	if category.CategoryName == "" || category.Purpose == "" {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CONSENT_CAT_VALIDATION.Code,
 			Message:     errors2.CONSENT_CAT_VALIDATION.Message,
 			Description: "category_name, category_identifier, and purpose are required.",
-		}, http.StatusBadRequest)
+		}, http.StatusBadRequest), false
 	}
 
 	// Loop through the purposes and check if they are allowed
@@ -71,7 +126,7 @@ func (cs *ConsentCategoryService) AddConsentCategory(category model.ConsentCateg
 			Code:        errors2.CONSENT_CAT_VALIDATION.Code,
 			Message:     errors2.CONSENT_CAT_VALIDATION.Message,
 			Description: "Purpose is required.",
-		}, http.StatusBadRequest)
+		}, http.StatusBadRequest), false
 	}
 
 	if !constants.AllowedConsentPurposes[category.Purpose] {
@@ -79,13 +134,9 @@ func (cs *ConsentCategoryService) AddConsentCategory(category model.ConsentCateg
 			Code:        errors2.CONSENT_CAT_VALIDATION.Code,
 			Message:     errors2.CONSENT_CAT_VALIDATION.Message,
 			Description: "Invalid purpose provided. Allowed values are profiling, personalization, destination.",
-		}, http.StatusBadRequest)
+		}, http.StatusBadRequest), false
 	}
-
-	if category.CategoryIdentifier == "" {
-		category.CategoryIdentifier = category.CategoryName
-	}
-	return store.AddConsentCategory(category)
+	return nil, true
 }
 
 // UpdateConsentCategory updates an existing category.
@@ -105,8 +156,8 @@ func (cs *ConsentCategoryService) UpdateConsentCategory(category model.ConsentCa
 func (cs *ConsentCategoryService) DeleteConsentCategory(categoryId string) error {
 	if categoryId == "" {
 		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_INPUT.Code,
-			Message:     errors2.INVALID_INPUT.Message,
+			Code:        errors2.BAD_REQUEST.Code,
+			Message:     errors2.BAD_REQUEST.Message,
 			Description: "Consent category ID is required for update.",
 		}, http.StatusBadRequest)
 	}

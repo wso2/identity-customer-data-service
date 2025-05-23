@@ -6,6 +6,7 @@ import (
 	customerrors "github.com/wso2/identity-customer-data-service/internal/system/errors" // Alias for the custom errors
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"net/http"
+	"strings"
 )
 
 // HandleError sends an HTTP error response based on the provided error
@@ -36,4 +37,12 @@ func HandleError(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+}
+
+func ExtractOrgID(path string) string {
+	parts := strings.Split(path, "/")
+	if len(parts) > 2 && parts[1] == "t" {
+		return parts[2] // e.g., "carbon.super"
+	}
+	return "carbon.super"
 }

@@ -19,6 +19,7 @@ package store
 
 import (
 	"fmt"
+	"github.com/lib/pq"
 	model "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -33,6 +34,7 @@ func AddConsentCategory(category model.ConsentCategory) error {
 	logger := log.GetLogger()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to get db client for inserting consent category: %s", category.CategoryIdentifier)
+		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_CONSENT_CATEGORY.Code,
 			Message:     errors2.ADD_CONSENT_CATEGORY.Message,
@@ -40,9 +42,8 @@ func AddConsentCategory(category model.ConsentCategory) error {
 		}, err)
 	}
 	defer dbClient.Close()
-
-	query := `INSERT INTO consent_categories (category_name, category_identifier, purpose, destinations)
-				VALUES ($1, $2, $3, $4)`
+	query := `INSERT INTO consent_categories (category_name, category_identifier, org_id, purpose, destinations)
+				VALUES ($1, $2, $3, $4, $5)`
 	tx, err := dbClient.BeginTx()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to begin transaction for inserting consent category: %s", category.CategoryIdentifier)
@@ -54,12 +55,12 @@ func AddConsentCategory(category model.ConsentCategory) error {
 		}, err)
 		return serverError
 	}
-	_, err = tx.Exec(query, category.CategoryName, category.CategoryIdentifier, category.Purpose, category.Destinations)
+	_, err = tx.Exec(query, category.CategoryName, category.CategoryIdentifier, category.OrgId, category.Purpose, pq.Array(category.Destinations))
 	if err != nil {
-		err := tx.Rollback()
-		if err != nil {
+		errRollback := tx.Rollback()
+		if errRollback != nil {
 			errorMsg := fmt.Sprintf("Failed to rollback inserting consent category: %s", category.CategoryIdentifier)
-			logger.Debug(errorMsg, log.Error(err))
+			logger.Debug(errorMsg, log.Error(errRollback))
 			return errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.ADD_CONSENT_CATEGORY.Code,
 				Message:     errors2.ADD_CONSENT_CATEGORY.Message,
@@ -75,7 +76,7 @@ func AddConsentCategory(category model.ConsentCategory) error {
 		}, err)
 	}
 	logger.Info(fmt.Sprintf("Successfully inserted consent category: %s", category.CategoryIdentifier))
-	return nil
+	return tx.Commit()
 }
 
 // GetAllConsentCategories retrieves all consent categories from the database.
@@ -94,7 +95,7 @@ func GetAllConsentCategories() ([]model.ConsentCategory, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT category_name, category_identifier, purpose, destinations FROM consent_categories`
+	query := `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories`
 	results, err := dbClient.ExecuteQuery(query)
 	if err != nil {
 		errorMsg := "Failed to execute query for fetching consent categories."
@@ -111,6 +112,7 @@ func GetAllConsentCategories() ([]model.ConsentCategory, error) {
 		categories = append(categories, model.ConsentCategory{
 			CategoryName:       row["category_name"].(string),
 			CategoryIdentifier: row["category_identifier"].(string),
+			OrgId:              row["org_id"].(string),
 			Purpose:            row["purpose"].(string),
 			Destinations:       parseStringArray(row["destinations"]),
 		})
@@ -139,7 +141,7 @@ func GetConsentCategoryByID(id string) (*model.ConsentCategory, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT id, category_name, category_identifier, purpose, destinations FROM consent_categories WHERE id = $1`
+	query := `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories WHERE category_identifier = $1`
 	results, err := dbClient.ExecuteQuery(query, id)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to execute query for fetching consent category: %s", id)
@@ -159,6 +161,50 @@ func GetConsentCategoryByID(id string) (*model.ConsentCategory, error) {
 	category := model.ConsentCategory{
 		CategoryName:       row["category_name"].(string),
 		CategoryIdentifier: row["category_identifier"].(string),
+		OrgId:              row["org_id"].(string),
+		Purpose:            row["purpose"].(string),
+		Destinations:       parseStringArray(row["destinations"]),
+	}
+	return &category, nil
+}
+
+// GetConsentCategoryByName retrieves a consent category by its ID.
+func GetConsentCategoryByName(name string) (*model.ConsentCategory, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client for fetching consent category: %s", name)
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FETCH_CONSENT_CATEGORIES.Code,
+			Message:     errors2.FETCH_CONSENT_CATEGORIES.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer dbClient.Close()
+
+	query := `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories WHERE category_name = $1`
+	results, err := dbClient.ExecuteQuery(query, name)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to execute query for fetching consent category: %s", name)
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FETCH_CONSENT_CATEGORIES.Code,
+			Message:     errors2.FETCH_CONSENT_CATEGORIES.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	if len(results) == 0 {
+		logger.Debug(fmt.Sprintf("Consent category not found for name: %s", name))
+		return nil, nil
+	}
+	row := results[0]
+	category := model.ConsentCategory{
+		CategoryName:       row["category_name"].(string),
+		CategoryIdentifier: row["category_identifier"].(string),
+		OrgId:              row["org_id"].(string),
 		Purpose:            row["purpose"].(string),
 		Destinations:       parseStringArray(row["destinations"]),
 	}
@@ -180,9 +226,10 @@ func UpdateConsentCategory(category model.ConsentCategory) error {
 		}, err)
 	}
 	defer dbClient.Close()
+	tx, err := dbClient.BeginTx()
 
-	query := `UPDATE consent_categories SET category_name=$1, category_identifier=$2, purpose=$3, destinations=$4 WHERE id=$5`
-	_, err = dbClient.Execute(query, category.CategoryName, category.CategoryIdentifier, category.Purpose, category.Destinations, category.ID)
+	query := `UPDATE consent_categories SET category_name=$1, purpose=$2, destinations=$3 WHERE category_identifier=$4`
+	_, err = tx.Exec(query, category.CategoryName, category.Purpose, pq.Array(category.Destinations), category.CategoryIdentifier)
 	if err != nil {
 		logger.Debug("Failed to update consent category", log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
@@ -191,7 +238,7 @@ func UpdateConsentCategory(category model.ConsentCategory) error {
 			Description: "Failed to update consent category.",
 		}, err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 func DeleteConsentCategory(categoryId string) error {
@@ -206,8 +253,10 @@ func DeleteConsentCategory(categoryId string) error {
 	}
 	defer dbClient.Close()
 
-	query := `DELETE consent_categories SET category_name=$1, purpose=$2, destinations=$3 WHERE category_identifier=$4`
-	_, err = dbClient.Execute(query, category.CategoryName, category.Purpose, category.Destinations, categoryId)
+	tx, err := dbClient.BeginTx()
+
+	query := `DELETE FROM consent_categories WHERE category_identifier=$1`
+	_, err = tx.Exec(query, categoryId)
 	if err != nil {
 		logger.Debug("Failed to update consent category", log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
@@ -216,21 +265,37 @@ func DeleteConsentCategory(categoryId string) error {
 			Description: "Failed to update consent category.",
 		}, err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 func parseStringArray(raw interface{}) []string {
 	if raw == nil {
 		return nil
 	}
+
+	var rawStr string
 	switch v := raw.(type) {
 	case []byte:
-		return strings.Split(strings.Trim(string(v), "{}"), ",")
+		rawStr = string(v)
 	case string:
-		return strings.Split(strings.Trim(v, "{}"), ",")
-	case []string:
-		return v
+		rawStr = v
 	default:
 		return nil
 	}
+
+	rawStr = strings.Trim(rawStr, "{}")
+	if rawStr == "" {
+		return nil
+	}
+
+	items := strings.Split(rawStr, ",")
+	var result []string
+	for _, item := range items {
+		// Trim spaces and surrounding double quotes
+		clean := strings.TrimSpace(item)
+		clean = strings.Trim(clean, `"`)
+		result = append(result, clean)
+	}
+
+	return result
 }

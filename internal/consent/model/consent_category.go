@@ -22,6 +22,7 @@ package models
 type ConsentCategory struct {
 	CategoryName       string   `json:"category_name" bson:"category_name"`                   // Human-readable category name
 	CategoryIdentifier string   `json:"category_identifier" bson:"category_identifier"`       // Identifier used for internal referencing
+	OrgId              string   `json:"org_id" bson:"org_id"`                                 // Identifier of the organization
 	Purpose            string   `json:"purpose" bson:"purpose"`                               // One of: profiling, personalization, destination
 	Destinations       []string `json:"destinations,omitempty" bson:"destinations,omitempty"` // Optional list of destination names
 }

@@ -399,4 +399,14 @@ var (
 		Code:    errorPrefix + "10015",
 		Message: "Consent category validation failed",
 	}
+
+	CONSENT_CAT_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "10015",
+		Message: "Consent category already exist.",
+	}
+
+	CONSENT_CAT_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "10015",
+		Message: "Consent category not found.",
+	}
 )

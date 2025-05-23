@@ -47,5 +47,6 @@ func (sm *ServiceManager) RegisterServices(apiBasePath string) error {
 	services.NewEventService(sm.mux, apiBasePath)
 	services.NewProfileService(sm.mux, apiBasePath)
 	services.NewEventStreamIdService(sm.mux, apiBasePath)
+	services.NewConsentCategoryService(sm.mux, apiBasePath)
 	return nil
 }
