@@ -24,6 +24,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"github.com/wso2/identity-customer-data-service/internal/events/store"
 	provider "github.com/wso2/identity-customer-data-service/internal/profile/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"net/http"
@@ -69,6 +70,12 @@ func (es *EventsService) AddEvents(event model.Event, queue EventQueue) error {
 		// todo: should we throw an error here - stems from CreateOrUpdateProfile - becz
 	}
 
+	isValid, err := es.validateEvent(event)
+	if err != nil || !isValid {
+		logger.Debug(fmt.Sprintf("failed to validate event with id: %s", event.EventId), log.Error(err))
+		return err
+	}
+
 	// Step 2: Store the event
 	event.EventType = strings.ToLower(event.EventType)
 	event.EventName = strings.ToLower(event.EventName)
@@ -81,6 +88,66 @@ func (es *EventsService) AddEvents(event model.Event, queue EventQueue) error {
 	queue.Enqueue(event)
 
 	return nil
+}
+
+// validateEvent validates the event before storing it
+func (es *EventsService) validateEvent(event model.Event) (bool, error) {
+
+	if event.EventId == "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_EVENT.Code,
+			Message:     errors2.INVALID_EVENT.Message,
+			Description: "Event id is required",
+		}, http.StatusBadRequest)
+		return false, clientError
+	}
+
+	if event.EventName == "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_EVENT.Code,
+			Message:     errors2.INVALID_EVENT.Message,
+			Description: "Event name is required.",
+		}, http.StatusBadRequest)
+		return false, clientError
+	}
+
+	if event.ProfileId == "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_EVENT.Code,
+			Message:     errors2.INVALID_EVENT.Message,
+			Description: "Profile id is required.",
+		}, http.StatusBadRequest)
+		return false, clientError
+	}
+
+	if event.EventType == "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_EVENT.Code,
+			Message:     errors2.INVALID_EVENT.Message,
+			Description: "Event type is required.",
+		}, http.StatusBadRequest)
+		return false, clientError
+	}
+
+	if !constants.AllowedEventTypes[event.EventType] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_EVENT.Code,
+			Message:     errors2.INVALID_EVENT.Message,
+			Description: fmt.Sprintf("'%s' is not an expected event type.", event.EventType),
+		}, http.StatusBadRequest)
+		return false, clientError
+	}
+
+	if int64(event.EventTimestamp) > time.Now().UTC().Unix() {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_EVENT.Code,
+			Message:     errors2.INVALID_EVENT.Message,
+			Description: "Event can not happen in the future. We only accept timestamps in UTC.",
+		}, http.StatusBadRequest)
+		return false, clientError
+	}
+
+	return true, nil
 }
 
 // GetEvents retrieves all events
