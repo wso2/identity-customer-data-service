@@ -146,9 +146,9 @@ func GetCachedClaims(token string) (map[string]interface{}, bool) {
 
 func unauthorizedError() error {
 	return errors2.NewClientError(errors2.ErrorMessage{
-		Code:        errors2.ErrUnAuthorizedRequest.Code,
-		Message:     errors2.ErrUnAuthorizedRequest.Message,
-		Description: errors2.ErrUnAuthorizedRequest.Description,
+		Code:        errors2.UN_AUTHORIZED.Code,
+		Message:     errors2.UN_AUTHORIZED.Message,
+		Description: errors2.UN_AUTHORIZED.Description,
 	}, http.StatusUnauthorized)
 }
 
@@ -168,9 +168,9 @@ func extractAPIKey(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return "", errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrUnAuthorizedRequest.Code,
-			Message:     errors2.ErrUnAuthorizedRequest.Message,
-			Description: errors2.ErrUnAuthorizedRequest.Description,
+			Code:        errors2.UN_AUTHORIZED.Code,
+			Message:     errors2.UN_AUTHORIZED.Message,
+			Description: errors2.UN_AUTHORIZED.Description,
 		}, http.StatusUnauthorized)
 	}
 	parts := strings.SplitN(authHeader, " ", 2)
@@ -178,9 +178,9 @@ func extractAPIKey(r *http.Request) (string, error) {
 
 		logger.Warn("Invalid Event stream id format")
 		return "", errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrUnAuthorizedRequest.Code,
-			Message:     errors2.ErrUnAuthorizedRequest.Message,
-			Description: errors2.ErrUnAuthorizedRequest.Description,
+			Code:        errors2.UN_AUTHORIZED.Code,
+			Message:     errors2.UN_AUTHORIZED.Message,
+			Description: errors2.UN_AUTHORIZED.Description,
 		}, http.StatusUnauthorized)
 	}
 	return parts[1], nil

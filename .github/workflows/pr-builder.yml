@@ -5,39 +5,20 @@ on:
     branches:
       - poc-cds
 
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "Optional PR number (for manual visibility/logging)"
-        required: false
-      branch:
-        description: "Branch to check out"
-        required: true
-        default: "poc-cds"
-
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Print Trigger Context
-        run: |
-          echo "Triggered by: ${{ github.actor }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Branch (workflow_dispatch): ${{ github.event.inputs.branch }}"
-          echo "PR Number (workflow_dispatch): ${{ github.event.inputs.pr_number || 'N/A' }}"
-
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
 
-      - name: Cache Go Modules
+      - name: Cache Go modules
         uses: actions/cache@v3
         with:
           path: |
@@ -47,7 +28,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Install System Dependencies
+      - name: Install system deps
         run: sudo apt-get install -y make zip
 
       - name: Build
@@ -57,17 +38,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
 
-      - name: Cache Go Modules
+      - name: Cache Go modules
         uses: actions/cache@v3
         with:
           path: |
@@ -77,7 +56,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Install System Dependencies
+      - name: Install system deps
         run: sudo apt-get install -y make zip
 
       - name: Lint
@@ -88,17 +67,15 @@ jobs:
     needs: build
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.event.inputs.branch }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.0'
 
-      - name: Cache Go Modules
+      - name: Cache Go modules
         uses: actions/cache@v3
         with:
           path: |
@@ -108,7 +85,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Install System Dependencies
+      - name: Install system deps
         run: sudo apt-get install -y make zip
 
       - name: Run Integration Tests
