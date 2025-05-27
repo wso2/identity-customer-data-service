@@ -30,7 +30,7 @@ import (
 func AuthnAndAuthz(r *http.Request, operation string) error {
 
 	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
+	if !strings.HasPrefix(authHeader, "Bearer ") || authHeader == "" {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
@@ -42,8 +42,8 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	//  Validate token
-	isValid, err := authn.ValidateAuthentication(r)
-	if err != nil || !isValid {
+	claims, err := authn.ValidateAuthenticationAndReturnClaims(token)
+	if err != nil {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
@@ -52,18 +52,7 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 		return clientError
 	}
 
-	//  Get claims from cache
-	claims, ok := authn.GetCachedClaims(token)
-	if !ok {
-		clientError := errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.UN_AUTHORIZED.Code,
-			Message:     errors.UN_AUTHORIZED.Message,
-			Description: "Missing or invalid Authorization header",
-		}, http.StatusUnauthorized)
-		return clientError
-	}
-
-	if !authz.ValidatePermission(claims["scope"].(string), "profile:view") {
+	if !authz.ValidatePermission(claims["scope"].(string), operation) {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.FORBIDDEN.Code,
 			Message:     errors.FORBIDDEN.Message,

@@ -39,28 +39,12 @@ var (
 	expectedAudience = "iam-cds"
 )
 
-// ValidateAuthentication validates Authorization: Bearer token from the HTTP request
-func ValidateAuthentication(r *http.Request) (bool, error) {
-	token, err := extractBearerToken(r)
-	if err != nil {
-		return false, err
-	}
-	return validateToken(token)
-}
-
-func extractBearerToken(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		return "", unauthorizedError()
-	}
-	return strings.TrimPrefix(authHeader, "Bearer "), nil
-}
-
-func validateToken(token string) (bool, error) {
+// ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
+func ValidateAuthenticationAndReturnClaims(token string) (map[string]interface{}, error) {
 	// Try cache
 	if cached, found := tokenCache.Get(token); found {
 		if claims, ok := cached.(map[string]interface{}); ok && validateClaims(claims) {
-			return true, nil
+			return claims, nil
 		}
 	}
 
@@ -71,24 +55,24 @@ func validateToken(token string) (bool, error) {
 	if strings.Count(token, ".") == 2 {
 		claims, err = ParseJWTClaims(token)
 		if err != nil {
-			return false, unauthorizedError()
+			return claims, unauthorizedError()
 		}
 	} else {
 		claims, err = IntrospectOpaqueToken(token)
 		if err != nil {
-			return false, unauthorizedError()
+			return claims, unauthorizedError()
 		}
 	}
 
 	if !validateClaims(claims) {
-		return false, unauthorizedError()
+		return claims, unauthorizedError()
 	}
 
 	tokenCache.Set(token, claims)
-	return true, nil
+	return claims, nil
 }
 
-// parseJWTClaims parses claims from a JWT without verifying the signature
+// ParseJWTClaims parses claims from a JWT without verifying the signature
 func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 
 	logger := log.GetLogger()
