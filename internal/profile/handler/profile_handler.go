@@ -23,7 +23,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
 	"github.com/wso2/identity-customer-data-service/internal/profile/service"
-	"github.com/wso2/identity-customer-data-service/internal/system/authentication"
+	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
@@ -53,9 +53,15 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
+
+	err := utils.AuthnAndAuthz(r, "profile:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	profileId := pathParts[len(pathParts)-1]
 	var profile *model.Profile
-	var err error
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 	profile, err = profilesService.GetProfile(profileId)
@@ -78,15 +84,13 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 	}
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
-	//  Validate token
-	isValid, err := authentication.ValidateAuthentication(r)
-	if err != nil || !isValid {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+	err := utils.AuthnAndAuthz(r, "profile:view")
+	if err != nil {
+		utils.HandleError(w, err)
 	}
 
 	//  Get claims from cache
-	claims, ok := authentication.GetCachedClaims(token)
+	claims, ok := authn.GetCachedClaims(token)
 	if !ok {
 		http.Error(w, "Token claims not found", http.StatusUnauthorized)
 		return
@@ -98,7 +102,6 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	//logger := log.GetLogger()
 	//  Fetch profile
 	profile, err := service.FindProfileByUserName(sub)
 	if err != nil || profile == nil {

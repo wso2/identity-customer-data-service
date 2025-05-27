@@ -539,9 +539,9 @@ func FindProfileByUserName(sub string) (interface{}, error) {
 
 	if len(parentProfileIDSet) > 1 {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrMultipleProfileFound.Code,
-			Message:     errors2.ErrMultipleProfileFound.Message,
-			Description: errors2.ErrMultipleProfileFound.Description,
+			Code:        errors2.MULTIPLE_PROFILE_FOUND.Code,
+			Message:     errors2.MULTIPLE_PROFILE_FOUND.Message,
+			Description: errors2.MULTIPLE_PROFILE_FOUND.Description,
 		}, http.StatusConflict)
 		return nil, clientError
 	}
@@ -558,9 +558,9 @@ func FindProfileByUserName(sub string) (interface{}, error) {
 		errorMsg := fmt.Sprintf("Error fetching master profile by user_id: %s", sub)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.ErrMultipleProfileFound.Code,
-			Message:     errors2.ErrMultipleProfileFound.Message,
-			Description: errors2.ErrMultipleProfileFound.Description,
+			Code:        errors2.MULTIPLE_PROFILE_FOUND.Code,
+			Message:     errors2.MULTIPLE_PROFILE_FOUND.Message,
+			Description: errors2.MULTIPLE_PROFILE_FOUND.Description,
 		}, err)
 		return nil, serverError
 	}

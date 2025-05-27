@@ -117,6 +117,16 @@ var (
 		Message: "Invalid type.",
 	}
 
+	INTROSPECTION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15020",
+		Message: "Introspection failed.",
+	}
+
+	PARSING_ERROR = ErrorMessage{
+		Code:    errorPrefix + "15021",
+		Message: "Parsing token failed.",
+	}
+
 	// Client error codes
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "11001",
@@ -231,7 +241,7 @@ var (
 		Message: "Updating trait failed.",
 	}
 
-	ErrMultipleProfileFound = ErrorMessage{
+	MULTIPLE_PROFILE_FOUND = ErrorMessage{
 		Code:        errorPrefix + "11023",
 		Message:     "Multiple Profiles found.",
 		Description: "Multiple user profiles record found for the given user_id",
@@ -240,5 +250,11 @@ var (
 	INVALID_EVENT = ErrorMessage{
 		Code:    errorPrefix + "11024",
 		Message: "Invalid event.",
+	}
+
+	FORBIDDEN = ErrorMessage{
+		Code:        errorPrefix + "11025",
+		Message:     "ForBidden",
+		Description: "You do not have permission to access this resource.",
 	}
 )
