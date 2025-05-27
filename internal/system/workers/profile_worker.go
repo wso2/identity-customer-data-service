@@ -101,29 +101,115 @@ func EnrichProfile(event model3.Event) {
 			continue
 		}
 
-		// Step 3: GetAPIKeyService value to assign
 		var value interface{}
 		if rule.ComputationMethod == "static" {
 			value = rule.Value
 		} else {
-			// Basic "copy" computation
 			switch strings.ToLower(rule.ComputationMethod) {
+
 			case "extract":
 				if rule.SourceField == "" {
 					continue
 				}
 				value = service2.GetFieldFromEvent(event, rule.SourceField)
-			case "count":
-				// Since events are per profile - going back to child profile
-				count, err := service2.CountEventsMatchingRule(event.ProfileId, rule.Trigger, rule.TimeRange)
+
+				// For all event-based computations
+			case "sum", "average", "minimum", "maximum", "first", "last", "count":
+
+				// Fetch matching events
+				matchingEvents, err := service2.GetEventsMatchingRule(event.ProfileId, rule.Trigger, rule.TimeRange)
 				if err != nil {
-					logger.Error(fmt.Sprintf("Failed to compute count for rule create for property: %s",
-						rule.PropertyName), log.Error(err))
+					logger.Error(fmt.Sprintf("Failed to fetch events for computation [%s] on property: %s",
+						rule.ComputationMethod, rule.PropertyName), log.Error(err))
 					continue
 				}
-				value = count
+				if len(matchingEvents) == 0 {
+					continue
+				}
+
+				switch rule.ComputationMethod {
+
+				case "count":
+					// Field-based count if SourceField is specified
+					if rule.SourceField != "" {
+						count := 0
+						for _, e := range matchingEvents {
+							if val := service2.GetFieldFromEvent(*e, rule.SourceField); val != nil {
+								logger.Info("incrementing..........")
+								count++
+							}
+						}
+						value = count
+					} else {
+						value = len(matchingEvents)
+					}
+
+				case "sum", "average", "minimum", "maximum":
+					var extracted []float64
+					for _, e := range matchingEvents {
+						if val := service2.GetFieldFromEvent(*e, rule.SourceField); val != nil {
+							if floatVal, ok := ToFloat64(val); ok {
+								extracted = append(extracted, floatVal)
+							}
+						}
+					}
+					if len(extracted) == 0 {
+						continue
+					}
+
+					switch rule.ComputationMethod {
+					case "sum":
+						var sum float64
+						for _, v := range extracted {
+							sum += v
+						}
+						value = sum
+
+					case "average":
+						var sum float64
+						for _, v := range extracted {
+							sum += v
+						}
+						value = sum / float64(len(extracted))
+
+					case "minimum":
+						min := extracted[0]
+						for _, v := range extracted[1:] {
+							if v < min {
+								min = v
+							}
+						}
+						value = min
+
+					case "maximum":
+						max := extracted[0]
+						for _, v := range extracted[1:] {
+							if v > max {
+								max = v
+							}
+						}
+						value = max
+					}
+
+				case "first", "last":
+					var extracted []interface{}
+					for _, e := range matchingEvents {
+						if val := service2.GetFieldFromEvent(*e, rule.SourceField); val != nil {
+							extracted = append(extracted, val)
+						}
+					}
+					if len(extracted) == 0 {
+						continue
+					}
+					if rule.ComputationMethod == "first" {
+						value = extracted[0]
+					} else {
+						value = extracted[len(extracted)-1]
+					}
+				}
 			default:
-				logger.Warn(fmt.Sprintf("Unsupported computation method: %s for enriching profile: %s", rule.ComputationMethod, event.ProfileId))
+				logger.Warn(fmt.Sprintf("Unsupported computation method: %s for enriching profile: %s",
+					rule.ComputationMethod, event.ProfileId))
 				continue
 			}
 		}
@@ -131,6 +217,8 @@ func EnrichProfile(event model3.Event) {
 		if value == nil {
 			continue // skip if value couldn't be extracted
 		}
+
+		logger.Info(fmt.Sprintf("=============== value :%s", value))
 
 		// Step 4: Apply merge strategy (existing value + new value)
 		traitPath := strings.Split(rule.PropertyName, ".")
@@ -807,4 +895,25 @@ func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rul
 
 	logger.Info(fmt.Sprintf("Application data merge completed for %d applications", len(mergedList)))
 	return mergedList
+}
+
+func ToFloat64(val interface{}) (float64, bool) {
+	switch v := val.(type) {
+	case int:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case float32:
+		return float64(v), true
+	case float64:
+		return v, true
+	case string:
+		f, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }

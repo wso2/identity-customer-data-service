@@ -20,6 +20,7 @@ var AllowedFieldsForUnificationRulePatch = map[string]bool{
 var AllowedValueTypes = map[string]bool{
 	"string":        true,
 	"int":           true,
+	"float":         true,
 	"boolean":       true,
 	"date":          true,
 	"arrayOfString": true,
@@ -31,6 +32,12 @@ var AllowedComputationMethods = map[string]bool{
 	"static":  true,
 	"extract": true,
 	"count":   true,
+	"sum":     true,
+	"average": true,
+	"minimum": true,
+	"maximum": true,
+	"first":   true,
+	"last":    true,
 }
 
 var AllowedMergeStrategies = map[string]bool{

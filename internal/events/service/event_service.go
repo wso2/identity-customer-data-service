@@ -175,8 +175,8 @@ func (es *EventsService) GetEvent(eventId string) (*model.Event, error) {
 	return event, nil
 }
 
-// CountEventsMatchingRule retrieves count of events that has occurred in a time range
-func CountEventsMatchingRule(profileId string, trigger erm.RuleTrigger, timeRange int64) (int, error) {
+// GetEventsMatchingRule retrieves count of events that has occurred in a time range
+func GetEventsMatchingRule(profileId string, trigger erm.RuleTrigger, timeRange int64) ([]*model.Event, error) {
 
 	currentTime := time.Now().UTC().Unix() // current time in seconds
 	startTime := currentTime - timeRange   // assuming value is in minutes
@@ -184,24 +184,32 @@ func CountEventsMatchingRule(profileId string, trigger erm.RuleTrigger, timeRang
 	timeFilter := map[string]int{
 		"event_timestamp_gte": int(startTime), // Use the key expected by Postgres FindEvents
 	}
+
 	rawFilters := []string{
-		fmt.Sprintf("profile_id:%s", profileId),
-		fmt.Sprintf("event_type:%s", strings.ToLower(trigger.EventType)),
-		fmt.Sprintf("event_name:%s", strings.ToLower(trigger.EventName)),
+		fmt.Sprintf("profile_id eq %s", profileId),
+	}
+
+	if trigger.EventType != "" {
+		rawFilters = append(rawFilters, fmt.Sprintf("event_type eq %s", strings.ToLower(trigger.EventType)))
+	}
+	if trigger.EventName != "" {
+		rawFilters = append(rawFilters, fmt.Sprintf("event_name eq %s", strings.ToLower(trigger.EventName)))
 	}
 
 	events, err := store.FindEvents(rawFilters, timeFilter)
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to fetch events for counting: %v", err)
+		return nil, fmt.Errorf("failed to fetch matching events: %w", err)
 	}
-	count := 0
+
+	var matched []*model.Event
 	for _, event := range events {
 		if EvaluateConditions(event, trigger.Conditions) {
-			count++
+			matched = append(matched, &event)
 		}
 	}
-	return count, nil
+
+	return matched, nil
 }
 
 // EvaluateConditions evaluates the conditions of a rule against an event

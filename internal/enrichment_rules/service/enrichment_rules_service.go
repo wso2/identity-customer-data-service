@@ -126,7 +126,7 @@ func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.ENRICHMENT_RULE_VALIDATION.Code,
 			Message:     errors2.ENRICHMENT_RULE_VALIDATION.Message,
-			Description: "Enrichment rule must include a valid value type.",
+			Description: fmt.Sprintf("'%s' is not an expected value type.", rule.ValueType),
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
@@ -167,22 +167,41 @@ func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 		}, http.StatusBadRequest), false
 	}
 
-	if rule.ComputationMethod == "count" {
+	switch rule.ComputationMethod {
+	case "sum", "average", "minimum", "maximum":
+		if rule.SourceField == "" {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ENRICHMENT_RULE_VALIDATION.Code,
+				Message:     errors2.ENRICHMENT_RULE_VALIDATION.Message,
+				Description: fmt.Sprintf("For computation method '%s', 'source_field' must be provided.", rule.ComputationMethod),
+			}, http.StatusBadRequest), false
+		}
+
+		// These methods are event-based and may benefit from time filtering
 		if rule.TimeRange < 0 || rule.TimeRange > 2592000 {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.ENRICHMENT_RULE_VALIDATION.Code,
 				Message:     errors2.ENRICHMENT_RULE_VALIDATION.Message,
-				Description: "Time range should be from least 15 minutes to 30 days.",
+				Description: "Time range should be between 0 and 30 days (in seconds) for this computation.",
 			}, http.StatusBadRequest), false
 		}
-	}
 
-	if rule.ComputationMethod != "count" && rule.TimeRange != 0 {
-		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ENRICHMENT_RULE_VALIDATION.Code,
-			Message:     errors2.ENRICHMENT_RULE_VALIDATION.Message,
-			Description: "Time range is only applicable for count computation.",
-		}, http.StatusBadRequest), false
+		if rule.ValueType != "int" && rule.ValueType != "float" {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:    errors2.ENRICHMENT_RULE_VALIDATION.Code,
+				Message: errors2.ENRICHMENT_RULE_VALIDATION.Message,
+				Description: fmt.Sprintf("value_type '%s' is not valid for computation '%s'. "+
+					"Must be 'int' or 'float'", rule.ValueType, rule.ComputationMethod),
+			}, http.StatusBadRequest), false
+		}
+	case "first", "last":
+		if rule.SourceField == "" {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.ENRICHMENT_RULE_VALIDATION.Code,
+				Message:     errors2.ENRICHMENT_RULE_VALIDATION.Message,
+				Description: fmt.Sprintf("For computation method '%s', 'source_field' must be provided.", rule.ComputationMethod),
+			}, http.StatusBadRequest), false
+		}
 	}
 
 	logger := log.GetLogger()
