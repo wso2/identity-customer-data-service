@@ -28,6 +28,33 @@ auth_server:
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
   admin_username: "admin"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
+  required_scopes:
+    profile:view:
+      - "internal_cds_profile_view"
+    profile:delete:
+      - "internal_cds_profile_delete"
+
+    unification_rules:view:
+      - "internal_cds_unification_view"
+    unification_rules:create:
+      - "internal_cds_unification_create"
+    unification_rules:update:
+      - "internal_cds_unification_update"
+    unification_rules:delete:
+      - "internal_cds_unification_delete"
+
+    enrichment_rules:view:
+      - "internal_cds_enrichment_rule_view"
+    enrichment_rules:create:
+      - "internal_cds_enrichment_rule_create"
+    enrichment_rules:update:
+      - "internal_cds_enrichment_rule_update"
+    enrichment_rules:delete:
+      - "internal_cds_enrichment_rule_delete"
+
+    events:view:
+      - "internal_cds_event_view"
+
 
 database:
   host: "localhost"
