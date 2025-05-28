@@ -20,9 +20,11 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strings"
@@ -42,8 +44,9 @@ func NewEnrichmentRulesHandler() *EnrichmentRulesHandler {
 	}
 }
 
-// CreateEnrichmentRule handles creating new profile enrichment rule
+// CreateEnrichmentRule handles POST /unification_rules
 func (erh *EnrichmentRulesHandler) CreateEnrichmentRule(w http.ResponseWriter, r *http.Request) {
+
 	var rule model.ProfileEnrichmentRule
 	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
@@ -57,12 +60,15 @@ func (erh *EnrichmentRulesHandler) CreateEnrichmentRule(w http.ResponseWriter, r
 		utils.HandleError(w, err)
 		return
 	}
+	logger := log.GetLogger()
+	logger.Info(fmt.Sprintf("Enrichment rule: %s for property: %s created successfully", rule.RuleId,
+		rule.PropertyName))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(rule)
 }
 
-// GetEnrichmentRules handles retrieve of all rules with or without filters
+// GetEnrichmentRules handles GET /unification_rules
 func (erh *EnrichmentRulesHandler) GetEnrichmentRules(w http.ResponseWriter, r *http.Request) {
 
 	filters := r.URL.Query()[constants.Filter] // Handles multiple `filter=...` parameters
@@ -87,12 +93,14 @@ func (erh *EnrichmentRulesHandler) GetEnrichmentRules(w http.ResponseWriter, r *
 		utils.HandleError(w, err)
 		return
 	}
+	logger := log.GetLogger()
+	logger.Info("Enrichment rules retrieved successfully")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(rules)
 }
 
-// GetEnrichmentRule handles retrieivng a specific rule
+// GetEnrichmentRule handles GET /unification_rules/:rule_id
 func (erh *EnrichmentRulesHandler) GetEnrichmentRule(w http.ResponseWriter, r *http.Request) {
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
@@ -108,12 +116,15 @@ func (erh *EnrichmentRulesHandler) GetEnrichmentRule(w http.ResponseWriter, r *h
 		utils.HandleError(w, err)
 		return
 	}
+	logger := log.GetLogger()
+	logger.Info(fmt.Sprintf("Enrichment rule: %s retrieved successfully", ruleId))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(rule)
 }
 
-func (erh *EnrichmentRulesHandler) PutEnrichmentRule(w http.ResponseWriter, r *http.Request) {
+// UpdateEnrichmentRule handles PUT /unification_rules/:rule_id
+func (erh *EnrichmentRulesHandler) UpdateEnrichmentRule(w http.ResponseWriter, r *http.Request) {
 
 	var rules model.ProfileEnrichmentRule
 	// fetch and validate if it exists already
@@ -125,16 +136,19 @@ func (erh *EnrichmentRulesHandler) PutEnrichmentRule(w http.ResponseWriter, r *h
 
 	ruleProvider := provider.NewEnrichmentRuleProvider()
 	ruleService := ruleProvider.GetEnrichmentRuleService()
-	err := ruleService.PutEnrichmentRule(rules)
+	err := ruleService.UpdateEnrichmentRule(rules)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+	logger := log.GetLogger()
+	logger.Info(fmt.Sprintf("Enrichment rule: %s updated successfully.", rules.RuleId))
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(rules)
 }
 
-// DeleteEnrichmentRule handles DELETE /unification_rules/:rule_name
+// DeleteEnrichmentRule handles DELETE /unification_rules/:rule_id
 func (erh *EnrichmentRulesHandler) DeleteEnrichmentRule(w http.ResponseWriter, r *http.Request) {
 
 	pathParts := strings.Split(r.URL.Path, "/")
@@ -144,7 +158,7 @@ func (erh *EnrichmentRulesHandler) DeleteEnrichmentRule(w http.ResponseWriter, r
 	}
 	ruleId := pathParts[len(pathParts)-1]
 	if ruleId == "" {
-		http.Error(w, "rule_name is required", http.StatusBadRequest)
+		http.Error(w, "rule id is required", http.StatusBadRequest)
 		return
 	}
 
@@ -155,6 +169,8 @@ func (erh *EnrichmentRulesHandler) DeleteEnrichmentRule(w http.ResponseWriter, r
 		utils.HandleError(w, err)
 		return
 	}
+	logger := log.GetLogger()
+	logger.Info(fmt.Sprintf("Enrichment rule: %s deleted successfully.", ruleId))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
 	json.NewEncoder(w)

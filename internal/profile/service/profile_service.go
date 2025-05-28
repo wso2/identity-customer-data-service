@@ -54,9 +54,8 @@ func GetProfilesService() ProfilesServiceInterface {
 	return &ProfilesService{}
 }
 
+// CreateOrUpdateProfile creates or updates a profile
 func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
-
-	// todo: should we throw an error here at all?
 
 	// Create a lock tied to this connection
 	lock := lock.NewPostgresLock()
@@ -98,6 +97,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 	}
 
 	if err := profileStore.InsertProfile(profileToUpsert); err != nil {
+		logger.Error(fmt.Sprintf("Error inserting/updating profile: %s", event.ProfileId), log.Error(err))
 		return err
 	}
 
@@ -107,7 +107,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 		// todo: should we throw an error here?
 		return nil
 	}
-
+	logger.Info("Profile available after insert/update: " + profileFetched.ProfileId)
 	return nil
 }
 
@@ -120,9 +120,9 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.Profile, 
 	}
 	if profile == nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrProfileNotFound.Code,
-			Message:     errors2.ErrProfileNotFound.Message,
-			Description: errors2.ErrProfileNotFound.Description,
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
 		}, http.StatusNotFound)
 		return nil, clientError
 	}
@@ -145,7 +145,8 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.Profile, 
 
 		// building the hierarchy
 		masterProfile.ProfileHierarchy.ChildProfiles, err = profileStore.FetchChildProfiles(masterProfile.ProfileId)
-		masterProfile.ProfileHierarchy.ParentProfileID = masterProfile.ProfileId
+		masterProfile.ProfileHierarchy.ParentProfileID = profile.ProfileHierarchy.ParentProfileID
+		masterProfile.ProfileHierarchy.IsParent = false
 		masterProfile.ProfileId = profile.ProfileId
 
 		if err != nil {
@@ -377,7 +378,7 @@ func (ps *ProfilesService) GetAllProfiles() ([]profileModel.Profile, error) {
 
 	existingProfiles, err := profileStore.GetAllProfiles()
 	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
+		return nil, err
 	}
 	if existingProfiles == nil {
 		return []profileModel.Profile{}, nil
@@ -401,7 +402,8 @@ func (ps *ProfilesService) GetAllProfiles() ([]profileModel.Profile, error) {
 			// building the hierarchy
 			master.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(master.ProfileId)
 			master.ProfileId = profile.ProfileId
-			master.ProfileHierarchy.ParentProfileID = master.ProfileId
+			master.ProfileHierarchy.IsParent = false
+			master.ProfileHierarchy.ParentProfileID = profile.ProfileHierarchy.ParentProfileID
 
 			result = append(result, *master)
 		}
@@ -415,7 +417,7 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(filters []string) ([]profile
 	// Step 1: Fetch enrichment rules to extract value types
 	rules, err := store.GetProfileEnrichmentRules()
 	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfileEnrichmentRules, err)
+		return nil, err
 	}
 
 	// Step 2: Build field → valueType mapping
@@ -450,7 +452,7 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(filters []string) ([]profile
 	// Step 4: Fetch matching profiles with `list_profile = true`
 	filteredProfiles, err := profileStore.GetAllProfilesWithFilter(rewrittenFilters)
 	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrWhileFetchingProfile, err)
+		return nil, err
 	}
 	if filteredProfiles == nil {
 		filteredProfiles = []profileModel.Profile{}
@@ -517,9 +519,9 @@ func FindProfileByUserName(sub string) (interface{}, error) {
 
 	if len(profiles) == 0 {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrProfileNotFound.Code,
-			Message:     errors2.ErrProfileNotFound.Message,
-			Description: errors2.ErrProfileNotFound.Description,
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
 		}, http.StatusNotFound)
 		return nil, clientError
 	}
@@ -537,9 +539,9 @@ func FindProfileByUserName(sub string) (interface{}, error) {
 
 	if len(parentProfileIDSet) > 1 {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrMultipleProfileFound.Code,
-			Message:     errors2.ErrMultipleProfileFound.Message,
-			Description: errors2.ErrMultipleProfileFound.Description,
+			Code:        errors2.MULTIPLE_PROFILE_FOUND.Code,
+			Message:     errors2.MULTIPLE_PROFILE_FOUND.Message,
+			Description: errors2.MULTIPLE_PROFILE_FOUND.Description,
 		}, http.StatusConflict)
 		return nil, clientError
 	}
@@ -556,17 +558,17 @@ func FindProfileByUserName(sub string) (interface{}, error) {
 		errorMsg := fmt.Sprintf("Error fetching master profile by user_id: %s", sub)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.ErrMultipleProfileFound.Code,
-			Message:     errors2.ErrMultipleProfileFound.Message,
-			Description: errors2.ErrMultipleProfileFound.Description,
+			Code:        errors2.MULTIPLE_PROFILE_FOUND.Code,
+			Message:     errors2.MULTIPLE_PROFILE_FOUND.Message,
+			Description: errors2.MULTIPLE_PROFILE_FOUND.Description,
 		}, err)
 		return nil, serverError
 	}
 	if master == nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrProfileNotFound.Code,
-			Message:     errors2.ErrProfileNotFound.Message,
-			Description: errors2.ErrProfileNotFound.Description,
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
 		}, http.StatusNotFound)
 		return nil, clientError
 	}

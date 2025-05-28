@@ -98,7 +98,7 @@ func AddEvent(event model.Event) error {
 		}, err)
 		return serverError
 	}
-	logger.Info(fmt.Sprintf("Event with event id: %s persisted successfully", event.ProfileId))
+	logger.Info(fmt.Sprintf("Event with event id: %s persisted successfully", event.EventId))
 	return nil
 }
 

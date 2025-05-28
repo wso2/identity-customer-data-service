@@ -16,16 +16,20 @@
  * under the License.
  */
 
-package authentication
+package authn
 
 import (
+	"encoding/json"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/wso2/identity-customer-data-service/internal/event_stream_ids/store"
 	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/cache"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -39,59 +43,54 @@ var (
 	expectedAudience = "iam-cds"
 )
 
-// ValidateAuthentication validates Authorization: Bearer token from the HTTP request
-func ValidateAuthentication(r *http.Request) (bool, error) {
-	token, err := extractBearerToken(r)
-	if err != nil {
-		return false, err
-	}
-	return validateToken(token)
-}
-
-func extractBearerToken(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		return "", unauthorizedError()
-	}
-	return strings.TrimPrefix(authHeader, "Bearer "), nil
-}
-
-func validateToken(token string) (bool, error) {
-	//  Try cache
+// ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
+func ValidateAuthenticationAndReturnClaims(token string) (map[string]interface{}, error) {
+	// Try cache
 	if cached, found := tokenCache.Get(token); found {
-		if claims, ok := cached.(map[string]interface{}); ok {
-			if valid := validateClaims(claims); valid {
-				return true, nil
-			}
+		if claims, ok := cached.(map[string]interface{}); ok && validateClaims(claims) {
+			return claims, nil
 		}
 	}
 
-	//  todo: For now assume JWT — parse claims. For opaque need to call introspection endpoint
-	claims, err := ParseJWTClaims(token)
-	if err != nil {
-		return false, unauthorizedError()
+	var claims map[string]interface{}
+	var err error
+
+	// Detect if token is JWT or opaque (very naive check: JWT has two dots)
+	if strings.Count(token, ".") == 2 {
+		claims, err = ParseJWTClaims(token)
+		if err != nil {
+			return claims, unauthorizedError()
+		}
+	} else {
+		claims, err = IntrospectOpaqueToken(token)
+		if err != nil {
+			return claims, unauthorizedError()
+		}
 	}
 
-	//  Validate claims
 	if !validateClaims(claims) {
-		return false, unauthorizedError()
+		return claims, unauthorizedError()
 	}
 
-	//  Store in cache
 	tokenCache.Set(token, claims)
-
-	return true, nil
+	return claims, nil
 }
 
-// parseJWTClaims parses claims from a JWT without verifying the signature
+// ParseJWTClaims parses claims from a JWT without verifying the signature
 func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 
 	logger := log.GetLogger()
-	logger.Debug("Parsing JWT claims?")
 	claims := jwt.MapClaims{}
 	_, _, err := new(jwt.Parser).ParseUnverified(tokenString, claims)
 	if err != nil {
-		return nil, err
+		errMsg := "Error occurred when parsing claims from JWT token."
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.PARSING_ERROR.Code,
+			Message:     errors2.PARSING_ERROR.Message,
+			Description: errMsg,
+		}, err)
+		return nil, serverError
 	}
 	return claims, nil
 }
@@ -150,9 +149,9 @@ func GetCachedClaims(token string) (map[string]interface{}, bool) {
 
 func unauthorizedError() error {
 	return errors2.NewClientError(errors2.ErrorMessage{
-		Code:        errors2.ErrUnAuthorizedRequest.Code,
-		Message:     errors2.ErrUnAuthorizedRequest.Message,
-		Description: errors2.ErrUnAuthorizedRequest.Description,
+		Code:        errors2.UN_AUTHORIZED.Code,
+		Message:     errors2.UN_AUTHORIZED.Message,
+		Description: errors2.UN_AUTHORIZED.Description,
 	}, http.StatusUnauthorized)
 }
 
@@ -175,9 +174,9 @@ func extractAPIKey(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return "", errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrUnAuthorizedRequest.Code,
-			Message:     errors2.ErrUnAuthorizedRequest.Message,
-			Description: errors2.ErrUnAuthorizedRequest.Description,
+			Code:        errors2.UN_AUTHORIZED.Code,
+			Message:     errors2.UN_AUTHORIZED.Message,
+			Description: errors2.UN_AUTHORIZED.Description,
 		}, http.StatusUnauthorized)
 	}
 	parts := strings.SplitN(authHeader, " ", 2)
@@ -185,9 +184,9 @@ func extractAPIKey(r *http.Request) (string, error) {
 
 		logger.Warn("Invalid Event stream id format")
 		return "", errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ErrUnAuthorizedRequest.Code,
-			Message:     errors2.ErrUnAuthorizedRequest.Message,
-			Description: errors2.ErrUnAuthorizedRequest.Description,
+			Code:        errors2.UN_AUTHORIZED.Code,
+			Message:     errors2.UN_AUTHORIZED.Message,
+			Description: errors2.UN_AUTHORIZED.Description,
 		}, http.StatusUnauthorized)
 	}
 	return parts[1], nil
@@ -260,4 +259,51 @@ func (s *AuthService) validateEventStreamId(eventStreamId, orgID, appID string) 
 	}
 
 	return true, nil
+}
+
+// IntrospectOpaqueToken introspects an opaque token t
+func IntrospectOpaqueToken(token string) (map[string]interface{}, error) {
+
+	form := url.Values{}
+	form.Set("token", token)
+
+	runtimeConfig := config.GetCDSRuntime().Config
+	authServerConfig := runtimeConfig.AuthServer
+
+	req, err := http.NewRequest("POST", authServerConfig.IntrospectionEndPoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.SetBasicAuth(authServerConfig.AdminUsername, authServerConfig.AdminPassword)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := "Failed to introspect token."
+		logger.Debug(errorMsg, log.Error(err))
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INTROSPECTION_FAILED.Code,
+			Message:     errors2.INTROSPECTION_FAILED.Description,
+			Description: errorMsg,
+		}, http.StatusUnauthorized)
+		return nil, clientError
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, unauthorizedError()
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

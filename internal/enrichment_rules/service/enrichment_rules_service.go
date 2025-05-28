@@ -35,8 +35,8 @@ type EnrichmentRuleServiceInterface interface {
 	AddEnrichmentRule(rule model.ProfileEnrichmentRule) error
 	GetEnrichmentRules() ([]model.ProfileEnrichmentRule, error)
 	GetEnrichmentRulesByFilter(filters []string) ([]model.ProfileEnrichmentRule, error)
-	GetEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error)
-	PutEnrichmentRule(rule model.ProfileEnrichmentRule) error
+	GetEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, error)
+	UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error
 	DeleteEnrichmentRule(ruleId string) error
 }
 
@@ -54,7 +54,8 @@ func (ers *EnrichmentRuleService) AddEnrichmentRule(rule model.ProfileEnrichment
 	rule.RuleId = uuid.New().String()
 
 	err, isValid := validateEnrichmentRule(rule)
-	if !isValid {
+	if !isValid || err != nil {
+		// Client bad request error is thrown
 		return err
 	}
 
@@ -75,16 +76,16 @@ func (ers *EnrichmentRuleService) GetEnrichmentRulesByFilter(filters []string) (
 	return store.GetEnrichmentRulesByFilter(filters)
 }
 
-func (ers *EnrichmentRuleService) GetEnrichmentRule(ruleId string) (model.ProfileEnrichmentRule, error) {
+func (ers *EnrichmentRuleService) GetEnrichmentRule(ruleId string) (*model.ProfileEnrichmentRule, error) {
 
 	return store.GetProfileEnrichmentRule(ruleId)
 }
 
-func (ers *EnrichmentRuleService) PutEnrichmentRule(rule model.ProfileEnrichmentRule) error {
+func (ers *EnrichmentRuleService) UpdateEnrichmentRule(rule model.ProfileEnrichmentRule) error {
 
 	err, isValid := validateEnrichmentRule(rule)
 	// todo: DEfine allowed updatable fields - it has to become a Patch then
-	if !isValid {
+	if !isValid || err != nil {
 		return err
 	}
 	return store.UpdateEnrichmentRule(rule)
@@ -92,8 +93,8 @@ func (ers *EnrichmentRuleService) PutEnrichmentRule(rule model.ProfileEnrichment
 
 func (ers *EnrichmentRuleService) DeleteEnrichmentRule(ruleId string) error {
 
-	rule, _ := store.GetProfileEnrichmentRule(ruleId)
-	if rule.RuleId == "" {
+	rule, err := store.GetProfileEnrichmentRule(ruleId)
+	if rule.RuleId == "" || err != nil {
 		return nil
 	}
 	return store.DeleteProfileEnrichmentRule(rule)
@@ -108,6 +109,24 @@ func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 			Code:        errors2.ENRICHMENT_RULE_VALIDATION.Code,
 			Message:     errors2.ENRICHMENT_RULE_VALIDATION.Message,
 			Description: "Enrichment rule must include a valid property name.",
+		}, http.StatusBadRequest)
+		return clientError, false
+	}
+
+	if rule.ValueType == "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ENRICHMENT_RULE_VALIDATION.Code,
+			Message:     errors2.ENRICHMENT_RULE_VALIDATION.Message,
+			Description: "Enrichment rule must include a valid value type.",
+		}, http.StatusBadRequest)
+		return clientError, false
+	}
+
+	if !constants.AllowedValueTypes[rule.ValueType] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ENRICHMENT_RULE_VALIDATION.Code,
+			Message:     errors2.ENRICHMENT_RULE_VALIDATION.Message,
+			Description: "Enrichment rule must include a valid value type.",
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
@@ -209,5 +228,6 @@ func validateEnrichmentRule(rule model.ProfileEnrichmentRule) (error, bool) {
 		}, http.StatusBadRequest), false
 	}
 
+	logger.Info(fmt.Sprintf("Enrichment rule: %s for property: %s is valid.", rule.RuleId, rule.PropertyName))
 	return nil, true
 }
