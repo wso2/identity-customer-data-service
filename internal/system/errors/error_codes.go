@@ -123,13 +123,23 @@ var (
 	}
 
 	FETCH_CONSENT_CATEGORIES = ErrorMessage{
-		Code:    errorPrefix + "15019",
+		Code:    errorPrefix + "15020",
 		Message: "Fetching consent category failed.",
 	}
 
 	UPDATE_CONSENT_CATEGORY = ErrorMessage{
-		Code:    errorPrefix + "15019",
+		Code:    errorPrefix + "15021",
 		Message: "Updating consent category failed.",
+	}
+
+	INTROSPECTION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15022",
+		Message: "Introspection failed.",
+	}
+
+	PARSING_ERROR = ErrorMessage{
+		Code:    errorPrefix + "15023",
+		Message: "Parsing token failed.",
 	}
 
 	// Client error codes
@@ -246,7 +256,7 @@ var (
 		Message: "Updating trait failed.",
 	}
 
-	ErrMultipleProfileFound = ErrorMessage{
+	MULTIPLE_PROFILE_FOUND = ErrorMessage{
 		Code:        errorPrefix + "11023",
 		Message:     "Multiple Profiles found.",
 		Description: "Multiple user profiles record found for the given user_id",
@@ -270,5 +280,11 @@ var (
 	CONSENT_CAT_NOT_FOUND = ErrorMessage{
 		Code:    errorPrefix + "10015",
 		Message: "Consent category not found.",
+	}
+
+	FORBIDDEN = ErrorMessage{
+		Code:        errorPrefix + "11025",
+		Message:     "ForBidden",
+		Description: "You do not have permission to access this resource.",
 	}
 )

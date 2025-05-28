@@ -129,7 +129,7 @@ func (es *EventsService) validateEvent(event model.Event) (bool, error) {
 		return false, clientError
 	}
 
-	if !constants.AllowedEventTypes[event.EventType] {
+	if !constants.AllowedEventTypes[strings.ToLower(event.EventType)] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_EVENT.Code,
 			Message:     errors2.INVALID_EVENT.Message,

@@ -32,13 +32,14 @@ type AuthConfig struct {
 }
 
 type AuthServerConfig struct {
-	IntrospectionEndPoint string `yaml:"introspectionEndpoint"`
-	TokenEndpoint         string `yaml:"tokenEndpoint"`
-	RevocationEndpoint    string `yaml:"revocationEndpoint"`
-	ClientID              string `yaml:"client_id"`
-	ClientSecret          string `yaml:"client_secret"`
-	AdminUsername         string `yaml:"admin_username"`
-	AdminPassword         string `yaml:"admin_password"`
+	IntrospectionEndPoint string              `yaml:"introspectionEndpoint"`
+	TokenEndpoint         string              `yaml:"tokenEndpoint"`
+	RevocationEndpoint    string              `yaml:"revocationEndpoint"`
+	ClientID              string              `yaml:"client_id"`
+	ClientSecret          string              `yaml:"client_secret"`
+	AdminUsername         string              `yaml:"admin_username"`
+	AdminPassword         string              `yaml:"admin_password"`
+	RequiredScopes        map[string][]string `yaml:"required_scopes"`
 }
 
 type DatabaseConfig struct {
