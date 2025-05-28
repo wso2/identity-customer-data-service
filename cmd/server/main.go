@@ -19,6 +19,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"github.com/joho/godotenv"
@@ -31,7 +32,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 )
 
 func initDatabaseFromConfig(config *config.Config) {
@@ -97,11 +101,32 @@ func main() {
 	logger.Info(fmt.Sprintf("WSO2 CDS started in server address: %s", serverAddr))
 	server1 := &http.Server{Handler: mux}
 
-	if err := server1.Serve(ln); err != nil {
-		logger.Error("Failed to serve requests. ", log.Error(err))
+	// Start serving requests in background
+	go func() {
+		if err := server1.Serve(ln); err != nil && err != http.ErrServerClosed {
+			logger.Error("Failed to serve requests.", log.Error(err))
+		}
+	}()
+
+	// Listen for termination signals
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop // Wait for shutdown signal
+
+	logger.Info("Shutdown signal received. Shutting down CDS gracefully...")
+
+	// Graceful shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // optionally use 5 * time.Second
+	defer cancel()
+	if err := server1.Shutdown(ctx); err != nil {
+		logger.Error("Graceful shutdown failed. Forcing the server to shut down.", log.Error(err))
+		_ = server1.Close()
+	} else {
+		logger.Info("Server gracefully shut down.")
 	}
 
-	logger.Info("identity-customer-data-service component has started.")
+	_ = server1.Close()
+	logger.Info("CDS service shut down completed.")
 
 }
 
