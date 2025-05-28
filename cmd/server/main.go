@@ -119,10 +119,14 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // optionally use 5 * time.Second
 	defer cancel()
 	if err := server1.Shutdown(ctx); err != nil {
-		logger.Error("CDS shutdown failed.", log.Error(err))
+		logger.Error("Graceful shutdown failed. Forcing the server to shut down.", log.Error(err))
+		_ = server1.Close()
 	} else {
-		logger.Info("CDS shut down cleanly.")
+		logger.Info("Server gracefully shut down.")
 	}
+
+	_ = server1.Close()
+	logger.Info("CDS service shut down completed.")
 
 }
 
