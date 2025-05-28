@@ -101,7 +101,7 @@ func main() {
 	logger.Info(fmt.Sprintf("WSO2 CDS started in server address: %s", serverAddr))
 	server1 := &http.Server{Handler: mux}
 
-	// Start server in background
+	// Start serving requests in background
 	go func() {
 		if err := server1.Serve(ln); err != nil && err != http.ErrServerClosed {
 			logger.Error("Failed to serve requests.", log.Error(err))
