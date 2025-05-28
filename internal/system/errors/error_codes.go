@@ -117,20 +117,35 @@ var (
 		Message: "Invalid type.",
 	}
 
-	INTROSPECTION_FAILED = ErrorMessage{
+	ADD_CONSENT_CATEGORY = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Adding consent category failed.",
+	}
+
+	FETCH_CONSENT_CATEGORIES = ErrorMessage{
 		Code:    errorPrefix + "15020",
+		Message: "Fetching consent category failed.",
+	}
+
+	UPDATE_CONSENT_CATEGORY = ErrorMessage{
+		Code:    errorPrefix + "15021",
+		Message: "Updating consent category failed.",
+	}
+
+	INTROSPECTION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15022",
 		Message: "Introspection failed.",
 	}
 
 	PARSING_ERROR = ErrorMessage{
-		Code:    errorPrefix + "15021",
+		Code:    errorPrefix + "15023",
 		Message: "Parsing token failed.",
 	}
 
 	// Client error codes
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "11001",
-		Message: "Invalid body format.",
+		Message: "Invalid body.",
 	}
 
 	UN_AUTHORIZED = ErrorMessage{
@@ -250,6 +265,21 @@ var (
 	INVALID_EVENT = ErrorMessage{
 		Code:    errorPrefix + "11024",
 		Message: "Invalid event.",
+	}
+
+	CONSENT_CAT_VALIDATION = ErrorMessage{
+		Code:    errorPrefix + "10015",
+		Message: "Consent category validation failed",
+	}
+
+	CONSENT_CAT_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "10015",
+		Message: "Consent category already exist.",
+	}
+
+	CONSENT_CAT_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "10015",
+		Message: "Consent category not found.",
 	}
 
 	FORBIDDEN = ErrorMessage{

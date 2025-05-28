@@ -121,15 +121,15 @@ func AddEvents(events []model.Event) error {
 
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		err := tx.Rollback()
-		if err != nil {
+		errRoll := tx.Rollback()
+		if errRoll != nil {
 			errorMsg := "Failed to rollback while adding events"
 			logger.Debug(errorMsg, log.Error(err))
 			serverError := errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.ADD_EVENT.Code,
 				Message:     errors2.ADD_EVENT.Message,
 				Description: errorMsg,
-			}, err)
+			}, errRoll)
 			return serverError
 		}
 		errorMsg := "Failed to begin transaction to add events"

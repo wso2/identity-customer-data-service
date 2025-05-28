@@ -57,3 +57,9 @@ var AllowedEventTypes = map[string]bool{
 	"track":    true,
 	"identify": true,
 }
+
+var AllowedConsentPurposes = map[string]bool{
+	"profiling":       true,
+	"personalization": true,
+	"destination":     true,
+}

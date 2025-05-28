@@ -82,3 +82,12 @@ CREATE TABLE event_stream_ids (
     created_at BIGINT NOT NULL
 );
 
+CREATE TABLE consent_categories (
+    id SERIAL PRIMARY KEY ,
+    org_id VARCHAR (255) NOT NULL,
+    category_name VARCHAR (255) NOT NULL,
+    category_identifier VARCHAR (255) UNIQUE NOT NULL,
+    purpose VARCHAR (255) NOT NULL,
+    destinations TEXT[]
+);
+
