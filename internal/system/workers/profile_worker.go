@@ -218,8 +218,6 @@ func EnrichProfile(event model3.Event) {
 			continue // skip if value couldn't be extracted
 		}
 
-		logger.Info(fmt.Sprintf("=============== value :%s", value))
-
 		// Step 4: Apply merge strategy (existing value + new value)
 		traitPath := strings.Split(rule.PropertyName, ".")
 		if len(traitPath) == 0 {
