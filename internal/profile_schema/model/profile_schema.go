@@ -18,11 +18,10 @@
 
 package model
 
-type EventStreamId struct {
-	EventStreamId string `db:"event_stream_id"`
-	OrgID         string `db:"org_id"`
-	AppID         string `db:"app_id"`
-	State         string `db:"state"`
-	ExpiresAt     int64  `db:"expires_at"`
-	CreatedAt     int64  `db:"created_at"`
+type ProfileSchemaAttribute struct {
+	OrgId         string `json:"org_id" bson:"org_id"`
+	AttributeId   string `json:"attribute_id" bson:"attribute_id"`
+	AttributeName string `json:"attribute_name" bson:"attribute_name" binding:"required"`
+	ValueType     string `json:"value_type" bson:"value_type" binding:"required"`
+	MergeStrategy string `json:"merge_strategy" bson:"merge_strategy" binding:"required"`
 }

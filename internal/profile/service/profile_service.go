@@ -28,8 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
-	eventModel "github.com/wso2/identity-customer-data-service/internal/events/model"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -55,11 +53,11 @@ func GetProfilesService() ProfilesServiceInterface {
 }
 
 // CreateOrUpdateProfile creates or updates a profile
-func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
+func (ps *ProfilesService) CreateOrUpdateProfile(profile profileModel.Profile) error {
 
 	// Create a lock tied to this connection
 	lock := lock.NewPostgresLock()
-	lockIdentifier := event.ProfileId
+	lockIdentifier := profile.ProfileId
 
 	//  Attempt to acquire the lock with retry
 	var acquired bool
@@ -68,7 +66,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 	for i := 0; i < constants.MaxRetryAttempts; i++ {
 		acquired, err = lock.Acquire(lockIdentifier)
 		if err != nil {
-			logger.Error(fmt.Sprintf("Error acquiring lock for %s: %v", event.ProfileId, err))
+			logger.Error(fmt.Sprintf("Error acquiring lock for %s: %v", profile.ProfileId, err))
 			// todo: should we throw an error here?
 		}
 		if acquired {
@@ -78,7 +76,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 	}
 	if !acquired {
 		// todo: should we throw an error here?
-		logger.Error(fmt.Sprintf("Failed to acquire lock for %s after %d attempts", event.ProfileId, constants.MaxRetryAttempts))
+		logger.Error(fmt.Sprintf("Failed to acquire lock for %s after %d attempts", profile.ProfileId, constants.MaxRetryAttempts))
 	}
 	defer func() {
 		_ = lock.Release(lockIdentifier) //  Always attempt to release
@@ -86,7 +84,7 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 
 	//  Insert/update using standard DB (does not have to use same conn unless needed)
 	profileToUpsert := profileModel.Profile{
-		ProfileId: event.ProfileId,
+		ProfileId: profile.ProfileId,
 		ProfileHierarchy: &profileModel.ProfileHierarchy{
 			IsParent:    true,
 			ListProfile: true,
@@ -97,13 +95,13 @@ func (ps *ProfilesService) CreateOrUpdateProfile(event eventModel.Event) error {
 	}
 
 	if err := profileStore.InsertProfile(profileToUpsert); err != nil {
-		logger.Error(fmt.Sprintf("Error inserting/updating profile: %s", event.ProfileId), log.Error(err))
+		logger.Error(fmt.Sprintf("Error inserting/updating profile: %s", profile.ProfileId), log.Error(err))
 		return err
 	}
 
-	profileFetched, errWait := ps.WaitForProfile(event.ProfileId, constants.MaxRetryAttempts, constants.RetryDelay)
+	profileFetched, errWait := ps.WaitForProfile(profile.ProfileId, constants.MaxRetryAttempts, constants.RetryDelay)
 	if errWait != nil || profileFetched == nil {
-		logger.Warn(fmt.Sprintf("Profile: %s not visible after insert/update: %v", event.ProfileId, errWait))
+		logger.Warn(fmt.Sprintf("Profile: %s not visible after insert/update: %v", profile.ProfileId, errWait))
 		// todo: should we throw an error here?
 		return nil
 	}
@@ -169,18 +167,6 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 	}
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error deleting profile with profile_id: %s", ProfileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DELETE_PROFILE.Code,
-			Message:     errors2.DELETE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
-
-	//  Delete related events
-	if err := repositories.DeleteEventsByProfileId(ProfileId); err != nil {
-		errorMsg := fmt.Sprintf("Error deleting events for the profile with profile_id: %s", ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE.Code,
@@ -415,7 +401,7 @@ func (ps *ProfilesService) GetAllProfiles() ([]profileModel.Profile, error) {
 func (ps *ProfilesService) GetAllProfilesWithFilter(filters []string) ([]profileModel.Profile, error) {
 
 	// Step 1: Fetch enrichment rules to extract value types
-	rules, err := store.GetProfileEnrichmentRules()
+	rules, err := profileSchemaStore.getprofile()
 	if err != nil {
 		return nil, err
 	}

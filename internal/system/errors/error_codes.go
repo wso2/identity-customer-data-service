@@ -142,6 +142,16 @@ var (
 		Message: "Parsing token failed.",
 	}
 
+	ADD_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15024",
+		Message: "Error while adding profile schema.",
+	}
+
+	GET_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15025",
+		Message: "Error while fetching profile schema.",
+	}
+
 	// Client error codes
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "11001",
