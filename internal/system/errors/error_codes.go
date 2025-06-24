@@ -152,6 +152,21 @@ var (
 		Message: "Error while fetching profile schema.",
 	}
 
+	EXECUTE_QUERY = ErrorMessage{
+		Code:    errorPrefix + "15026",
+		Message: "Error while executing query.",
+	}
+
+	GET_CONFIG = ErrorMessage{
+		Code:    errorPrefix + "15027",
+		Message: "Error while fetching config.",
+	}
+
+	UPDATE_CONFIG = ErrorMessage{
+		Code:    errorPrefix + "15028",
+		Message: "Error while updating config.",
+	}
+
 	// Client error codes
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "11001",
@@ -296,5 +311,30 @@ var (
 		Code:        errorPrefix + "11025",
 		Message:     "ForBidden",
 		Description: "You do not have permission to access this resource.",
+	}
+
+	INVALID_ATTRIBUTE_NAME = ErrorMessage{
+		Code:    errorPrefix + "11026",
+		Message: "Invalid attribute name.",
+	}
+
+	SCHEMA_ATTRIBUTE_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "11029",
+		Message: "Schema attribute already exists.",
+	}
+
+	INVALID_PROFILE = ErrorMessage{
+		Code:    errorPrefix + "11030",
+		Message: "Invalid profile body.",
+	}
+
+	GET_CONFIGURATION = ErrorMessage{
+		Code:    errorPrefix + "11031",
+		Message: "Error while fetching config.",
+	}
+
+	UPDATE_CONFIGURATION = ErrorMessage{
+		Code:    errorPrefix + "11032",
+		Message: "Error while updating config.",
 	}
 )

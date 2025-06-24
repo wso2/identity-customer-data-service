@@ -2,7 +2,7 @@ package service
 
 import (
 	"fmt"
-	enrStore "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/store"
+	psService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -50,12 +50,12 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		}
 	}
 
-	// Validate if the property name belongs in enrichment rules
-	filter := []string{fmt.Sprintf("property_name eq %s", rule.Property)}
-	resolutionRules, err := enrStore.GetEnrichmentRulesByFilter(filter)
+	// Validate if the property name belongs in schema attributes
+	filter := []string{fmt.Sprintf("attribute_name eq %s", rule.Property)}
+	schemaAttributes, err := psService.GetProfileSchemaAttributesWithFilter(rule.OrgId, filter)
 
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error occurred while checking for existing enrichment rule: %s", rule.Property)
+		errorMsg := fmt.Sprintf("Error occurred while checking for existing schema: %s", rule.Property)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_UNIFICATION_RULE.Code,
@@ -65,11 +65,11 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		return serverError
 	}
 
-	if len(resolutionRules) == 0 { // captures nil as well
+	if len(schemaAttributes) == 0 { // captures nil as well
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.ADD_UNIFICATION_RULE.Code,
 			Message:     errors2.ADD_UNIFICATION_RULE.Message,
-			Description: fmt.Sprintf("Unification rule with property %s not found in enrichment rules", rule.Property),
+			Description: fmt.Sprintf("Unification rule with property %s not found in schema attributes", rule.Property),
 		}, http.StatusBadRequest)
 
 	}

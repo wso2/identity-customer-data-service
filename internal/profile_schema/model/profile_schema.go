@@ -19,9 +19,65 @@
 package model
 
 type ProfileSchemaAttribute struct {
-	OrgId         string `json:"org_id" bson:"org_id"`
+	OrgId                 string           `json:"org_id,omitempty" bson:"org_id,omitempty"`
+	AttributeId           string           `json:"attribute_id" bson:"attribute_id"`
+	AttributeName         string           `json:"attribute_name" bson:"attribute_name" binding:"required"`
+	ValueType             string           `json:"value_type" bson:"value_type" binding:"required"`
+	MergeStrategy         string           `json:"merge_strategy" bson:"merge_strategy" binding:"required"`
+	Mutability            string           `json:"mutability" bson:"mutability"`
+	UpdatedAt             int              `json:"updated_at" bson:"updated_at"` // helps is merging - latest or oldest (
+	ApplicationIdentifier string           `json:"application_identifier,omitempty" bson:"application_identifier,omitempty"`
+	MultiValued           bool             `json:"multi_valued,omitempty" bson:"multi_valued,omitempty"`         // Means the data type is an array of chosen data type
+	CanonicalValues       []CanonicalValue `json:"canonical_values,omitempty" bson:"canonical_values,omitempty"` // String of options for the attribute
+	SubAttributes         []SubAttribute   `json:"sub_attributes,omitempty" bson:"sub_attributes,omitempty"`     // If the datatype is object
+	//todo : see if we need data originated from....
+}
+
+type SubAttribute struct {
 	AttributeId   string `json:"attribute_id" bson:"attribute_id"`
 	AttributeName string `json:"attribute_name" bson:"attribute_name" binding:"required"`
-	ValueType     string `json:"value_type" bson:"value_type" binding:"required"`
-	MergeStrategy string `json:"merge_strategy" bson:"merge_strategy" binding:"required"`
+}
+
+type CanonicalValue struct {
+	Value string `json:"value" bson:"value"`
+	Label string `json:"label" bson:"label"`
+}
+
+type Meta struct {
+	CreatedAt int    `json:"created_at" bson:"created_at"`
+	UpdatedAt int    `json:"updated_at" bson:"updated_at"`
+	Location  string `json:"location" bson:"location"`
+}
+
+type ProfileSchema struct {
+	ProfileId          map[string]string                   `json:"profile_id" bson:"profile_id"`
+	UserId             map[string]string                   `json:"user_id" bson:"user_id"`
+	IsAnonymous        map[string]string                   `json:"is_anonymous" bson:"is_anonymous"`
+	Meta               map[string]map[string]string        `json:"meta" bson:"meta"`
+	IdentityAttributes []ProfileSchemaAttribute            `json:"identity_attributes" bson:"identity_attributes"`
+	Traits             []ProfileSchemaAttribute            `json:"traits" bson:"traits"`
+	ApplicationData    map[string][]ProfileSchemaAttribute `json:"application_data" bson:"application_data"`
+}
+
+var CoreSchema = map[string]map[string]string{
+	"profile_id": {
+		"value_type": "string",
+		"mutability": "immutable",
+	},
+	"user_id": {
+		"value_type": "string",
+		"mutability": "writeOnce",
+	},
+	"meta.created_at": {
+		"value_type": "int",
+		"mutability": "readOnly",
+	},
+	"meta.updated_at": {
+		"value_type": "int",
+		"mutability": "readOnly",
+	},
+	"meta.location": {
+		"value_type": "string",
+		"mutability": "readOnly",
+	},
 }

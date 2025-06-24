@@ -84,6 +84,11 @@ func main() {
 	// Initialize Event queue
 	workers.StartProfileWorker()
 
+	// Initialize identity data sync worker
+	//if cdsConfig.Sync.Schema.Enabled {
+	//	schedulers.StartSchemaFetchScheduler(time.Duration(cdsConfig.Sync.Schema.Interval) * time.Second)
+	//}
+
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
 

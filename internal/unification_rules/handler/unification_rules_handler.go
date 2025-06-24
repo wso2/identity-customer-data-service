@@ -53,6 +53,8 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	if rule.RuleId == "" {
 		rule.RuleId = uuid.NewString()
 	}
+	orgId := utils.ExtractTenantIdFromPath(r)
+	rule.OrgId = orgId
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 	err := ruleService.AddUnificationRule(rule)

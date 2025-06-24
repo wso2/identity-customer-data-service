@@ -19,9 +19,9 @@
 package services
 
 import (
-	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/handler"
 	"net/http"
+	"strings"
 )
 
 type ProfileSchemaService struct {
@@ -29,18 +29,63 @@ type ProfileSchemaService struct {
 }
 
 func NewProfileSchemaService(mux *http.ServeMux, apiBasePath string) *ProfileSchemaService {
+
 	instance := &ProfileSchemaService{
 		handler: handler.NewProfileSchemaHandler(),
 	}
 	instance.RegisterRoutes(mux, apiBasePath)
+
 	return instance
 }
 
 func (s *ProfileSchemaService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
-	mux.HandleFunc(fmt.Sprintf("GET %s/profile-schema", apiBasePath), s.handler.GetProfileSchema)
-	mux.HandleFunc(fmt.Sprintf("DELETE %s/profile-schema", apiBasePath), s.handler.DeleteProfileSchema)
-	mux.HandleFunc(fmt.Sprintf("POST %s/profile-schema", apiBasePath), s.handler.AddProfileSchemaAttribute)
-	mux.HandleFunc(fmt.Sprintf("GET %s/profile-schema/", apiBasePath), s.handler.GetProfileSchemaAttribute)
-	mux.HandleFunc(fmt.Sprintf("PATCH %s/profile-schema/", apiBasePath), s.handler.PatchProfileSchemaAttribute)
-	mux.HandleFunc(fmt.Sprintf("DELETE %s/profile-schema/", apiBasePath), s.handler.DeleteProfileSchemaAttribute)
+	mux.HandleFunc(apiBasePath+"/profile-schema", s.routeSchemaCollection)
+	mux.HandleFunc(apiBasePath+"/profile-schema/", s.routeSchemaScopedOrAttribute)
+}
+
+func (s *ProfileSchemaService) routeSchemaCollection(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handler.GetProfileSchema(w, r)
+	case http.MethodDelete:
+		s.handler.DeleteProfileSchema(w, r)
+	default:
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *ProfileSchemaService) routeSchemaScopedOrAttribute(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/profile-schema/")
+	parts := strings.Split(path, "/")
+
+	switch len(parts) {
+	case 1:
+		scope := parts[0]
+		switch r.Method {
+		case http.MethodPost:
+			s.handler.AddProfileSchemaAttributes(w, r, scope)
+		case http.MethodGet:
+			s.handler.GetProfileSchemaAttributeForScope(w, r, scope)
+		case http.MethodPut:
+			s.handler.PatchProfileSchemaAttributeForScope(w, r, scope)
+		case http.MethodDelete:
+			s.handler.DeleteProfileSchemaAttributeForScope(w, r, scope)
+		default:
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+	case 2:
+		scope, attrID := parts[0], parts[1]
+		switch r.Method {
+		case http.MethodGet:
+			s.handler.GetProfileSchemaAttribute(w, r, scope, attrID)
+		case http.MethodPut:
+			s.handler.PatchProfileSchemaAttribute(w, r, scope, attrID)
+		case http.MethodDelete:
+			s.handler.DeleteProfileSchemaAttribute(w, r, scope, attrID)
+		default:
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+	default:
+		http.NotFound(w, r)
+	}
 }

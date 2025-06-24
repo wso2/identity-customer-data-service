@@ -44,7 +44,6 @@ func (sm *ServiceManager) RegisterServices(apiBasePath string) error {
 	// Register the unification rules service.
 	services.NewUnificationRulesService(sm.mux, apiBasePath)
 	services.NewProfileService(sm.mux, apiBasePath)
-	services.NewEventStreamIdService(sm.mux, apiBasePath)
 	services.NewConsentCategoryService(sm.mux, apiBasePath)
 	services.NewProfileSchemaService(sm.mux, apiBasePath)
 	return nil

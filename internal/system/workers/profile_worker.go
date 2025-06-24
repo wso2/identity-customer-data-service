@@ -3,37 +3,33 @@ package workers
 import (
 	"encoding/json"
 	"fmt"
-	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/google/uuid"
+	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
+	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
+	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
+	schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"go.mongodb.org/mongo-driver/bson"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
+	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
+	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
-	model2 "github.com/wso2/identity-customer-data-service/internal/profile/model"
-	_ "github.com/wso2/identity-customer-data-service/internal/profile/store"
-	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
-	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
-	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 )
 
-var EnrichmentQueue chan model3.Event
+var UnificationQueue chan profileModel.Profile
 
 func StartProfileWorker() {
 
-	EnrichmentQueue = make(chan model3.Event, 1000)
+	UnificationQueue = make(chan profileModel.Profile, 1000)
 
 	go func() {
-		for event := range EnrichmentQueue {
+		for profile := range UnificationQueue {
 
-			// Step 1: Enrich
-			EnrichProfile(event)
-
-			// Step 2: Unify
-			profile, err := profileStore.GetProfile(event.ProfileId)
+			// Unify
+			profile, err := profileStore.GetProfile(profile.ProfileId)
 			if err == nil && profile != nil {
 				unifyProfiles(*profile)
 			}
@@ -41,9 +37,9 @@ func StartProfileWorker() {
 	}()
 }
 
-func EnqueueEventForProcessing(event model3.Event) {
-	if EnrichmentQueue != nil {
-		EnrichmentQueue <- event
+func EnqueueProfileForProcessing(profile profileModel.Profile) {
+	if UnificationQueue != nil {
+		UnificationQueue <- profile
 	}
 }
 
@@ -51,12 +47,12 @@ func EnqueueEventForProcessing(event model3.Event) {
 type ProfileWorkerQueue struct{}
 
 // Implement the Enqueue method for ProfileWorkerQueue
-func (q *ProfileWorkerQueue) Enqueue(event model3.Event) {
-	EnqueueEventForProcessing(event)
+func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
+	EnqueueProfileForProcessing(profile)
 }
 
 // unifyProfiles unifies profiles based on unification rules
-func unifyProfiles(newProfile model2.Profile) {
+func unifyProfiles(newProfile profileModel.Profile) {
 
 	// Step 1: Fetch all unification rules
 	ruleProvider := provider.NewUnificationRuleProvider()
@@ -70,7 +66,7 @@ func unifyProfiles(newProfile model2.Profile) {
 	}
 
 	// 🔹 Step 2: Fetch all existing profiles from DB
-	existingMasterProfiles, err := profileStore.GetAllMasterProfilesExceptForCurrent(newProfile)
+	existingMasterProfiles, err := profileStore.GetAllReferenceProfilesExceptForCurrent(newProfile)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to fetch existing master profiles for unification of profile: %s",
 			newProfile.ProfileId), log.Error(err))
@@ -82,7 +78,7 @@ func unifyProfiles(newProfile model2.Profile) {
 
 		for _, existingMasterProfile := range existingMasterProfiles {
 
-			if existingMasterProfile.ProfileId == newProfile.ProfileHierarchy.ParentProfileID {
+			if existingMasterProfile.ProfileId == newProfile.ProfileStatus.ReferenceProfileId {
 				// Skip if the existing master profile is the parent of the new profile
 				return
 			}
@@ -90,28 +86,32 @@ func unifyProfiles(newProfile model2.Profile) {
 			if doesProfileMatch(existingMasterProfile, newProfile, rule) {
 				logger.Info("Profiles has matched for unification rule: " + rule.RuleId)
 
-				existingMasterProfile.ProfileHierarchy.ChildProfiles, _ = profileStore.FetchChildProfiles(existingMasterProfile.ProfileId)
+				existingMasterProfile.ProfileStatus.References, _ = profileStore.FetchProfilesThatAreReferenced(existingMasterProfile.ProfileId)
 
 				//  Merge the existing master to the old master of current
-				enrichmentRules, _ := store.GetProfileEnrichmentRules()
-				newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, enrichmentRules)
+				schemaRules, _ := schemaStore.GetProfileSchemaAttributesForOrg(newProfile.TenantId)
+				newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, schemaRules)
 
-				if len(existingMasterProfile.ProfileHierarchy.ChildProfiles) == 0 {
+				if len(existingMasterProfile.ProfileStatus.References) == 0 {
 					newMasterProfile.ProfileId = uuid.New().String()
-					childProfile1 := model2.ChildProfile{
-						ChildProfileId: newProfile.ProfileId,
-						RuleName:       rule.RuleName,
+					newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.TenantId, newMasterProfile.ProfileId)
+					childProfile1 := profileModel.Reference{
+						ProfileId: newProfile.ProfileId,
+						Reason:    rule.RuleName,
 					}
-					childProfile2 := model2.ChildProfile{
-						ChildProfileId: existingMasterProfile.ProfileId,
-						RuleName:       rule.RuleName,
+					childProfile2 := profileModel.Reference{
+						ProfileId: existingMasterProfile.ProfileId,
+						Reason:    rule.RuleName,
 					}
-					newMasterProfile.ProfileHierarchy = &model2.ProfileHierarchy{
-						IsParent:      true,
-						ListProfile:   false,
-						ChildProfiles: []model2.ChildProfile{childProfile1, childProfile2},
+					newMasterProfile.ProfileStatus = &profileModel.ProfileStatus{
+						IsReferenceProfile: true,
+						ListProfile:        false,
+						References:         []profileModel.Reference{childProfile1, childProfile2},
 					}
+
 					// creating and inserting the new master profile
+					// todo: for perm-temp - no need to insert
+
 					err := profileStore.InsertProfile(newMasterProfile)
 					if err != nil {
 						logger.Error(fmt.Sprintf("Failed to insert master profile while unifying profile: %s",
@@ -119,22 +119,9 @@ func unifyProfiles(newProfile model2.Profile) {
 						return
 					}
 
-					err = profileStore.UpdateParent(newMasterProfile, newProfile)
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to update master profile while unifying profile: %s",
-							newProfile.ProfileId), log.Error(err))
-						return
-					}
-					err = profileStore.UpdateParent(newMasterProfile, existingMasterProfile)
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to update master profile while unifying profile: %s",
-							newProfile.ProfileId), log.Error(err))
-						return
-					}
+					children := []profileModel.Reference{childProfile1, childProfile2}
 
-					children := []model2.ChildProfile{childProfile1, childProfile2}
-
-					err = profileStore.AddChildProfiles(newMasterProfile, children)
+					err = profileStore.UpdateProfileReferences(newMasterProfile, children)
 
 					if err != nil {
 						logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
@@ -142,20 +129,19 @@ func unifyProfiles(newProfile model2.Profile) {
 						return
 					}
 
-				} else if (len(existingMasterProfile.ProfileHierarchy.ChildProfiles) > 0) && existingMasterProfile.ProfileHierarchy.IsParent {
-					newChild := model2.ChildProfile{
-						ChildProfileId: newProfile.ProfileId,
-						RuleName:       rule.RuleName,
+				} else if (len(existingMasterProfile.ProfileStatus.References) > 0) && existingMasterProfile.ProfileStatus.IsReferenceProfile {
+					newChild := profileModel.Reference{
+						ProfileId: newProfile.ProfileId,
+						Reason:    rule.RuleName,
 					}
-					children := []model2.ChildProfile{newChild}
+					children := []profileModel.Reference{newChild}
 
-					err = profileStore.AddChildProfiles(newMasterProfile, children)
+					err = profileStore.UpdateProfileReferences(newMasterProfile, children)
 					if err != nil {
 						logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
 							newProfile.ProfileId), log.Error(err))
 						return
 					}
-					err = profileStore.UpdateParent(newMasterProfile, newProfile)
 					if err != nil {
 						logger.Error(fmt.Sprintf("Failed to update master profile: %s while unifying profile: %s",
 							newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
@@ -204,14 +190,14 @@ func sortRulesByPriority(rules []model.UnificationRule) {
 }
 
 // MergeProfiles merges two profiles based on unification rules
-func MergeProfiles(existingProfile model2.Profile, incomingProfile model2.Profile, enrichmentRules []erm.ProfileEnrichmentRule) model2.Profile {
+func MergeProfiles(existingProfile profileModel.Profile, incomingProfile profileModel.Profile, schemaRules []schemaModel.ProfileSchemaAttribute) profileModel.Profile {
 
 	logger := log.GetLogger()
 	logger.Info("Merging profiles, " + existingProfile.ProfileId + " and " + incomingProfile.ProfileId)
 	merged := existingProfile
 	// todo: I doubt if this is fine.. we need to run through all to build a new profile
-	for _, rule := range enrichmentRules {
-		traitPath := strings.Split(rule.PropertyName, ".")
+	for _, rule := range schemaRules {
+		traitPath := strings.Split(rule.AttributeName, ".")
 		if len(traitPath) < 2 {
 			continue
 		}
@@ -258,13 +244,24 @@ func MergeProfiles(existingProfile model2.Profile, incomingProfile model2.Profil
 	}
 
 	// Merge devices by default.
-	merged.ApplicationData = mergeAppData(existingProfile.ApplicationData, incomingProfile.ApplicationData, enrichmentRules)
+	merged.ApplicationData = mergeAppData(existingProfile.ApplicationData, incomingProfile.ApplicationData, schemaRules)
+
+	if incomingProfile.UserId != "" {
+		merged.UserId = incomingProfile.UserId // todo: need to decide on this as we are also focusing on perm-perm
+	}
+	if existingProfile.UserId != "" {
+		merged.UserId = existingProfile.UserId // todo: need to decide on this as we are also focusing on perm-perm
+	}
+
+	merged.TenantId = incomingProfile.TenantId   // todo: need to decide on this too.
+	merged.CreatedAt = existingProfile.CreatedAt // todo: need to decide on this too.
+	merged.UpdatedAt = time.Now().Unix()
 
 	return merged
 }
 
 // doesProfileMatch checks if two profiles have matching attributes based on a unification rule
-func doesProfileMatch(existingProfile model2.Profile, newProfile model2.Profile, rule model.UnificationRule) bool {
+func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileModel.Profile, rule model.UnificationRule) bool {
 
 	existingJSON, _ := json.Marshal(existingProfile)
 	newJSON, _ := json.Marshal(newProfile)
@@ -398,32 +395,6 @@ func parseValueForValueType(valueType string, raw interface{}) interface{} {
 	return raw
 }
 
-// mergeDeviceLists merges devices, ensuring no duplicates based on `device_id`
-func mergeDeviceLists(existingDevices, newDevices []model2.Devices) []model2.Devices {
-
-	deviceMap := make(map[string]model2.Devices)
-	logger := log.GetLogger()
-	for _, device := range existingDevices {
-		if device.DeviceId != "" {
-			logger.Info("Merging existing device data for device: " + device.DeviceId)
-			deviceMap[device.DeviceId] = device
-		}
-	}
-
-	for _, device := range newDevices {
-		if device.DeviceId != "" {
-			logger.Info("Merging new device data for device: " + device.DeviceId)
-			deviceMap[device.DeviceId] = device
-		}
-	}
-
-	var mergedDevices []model2.Devices
-	for _, device := range deviceMap {
-		mergedDevices = append(mergedDevices, device)
-	}
-	return mergedDevices
-}
-
 func MergeTraitValue(existing interface{}, incoming interface{}, strategy string, valueType string) interface{} {
 
 	switch strings.ToLower(strategy) {
@@ -535,10 +506,10 @@ func combineUniqueInts(a, b []int) []int {
 	return combined
 }
 
-func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rules []erm.ProfileEnrichmentRule) []model2.ApplicationData {
+func mergeAppData(existingAppData, incomingAppData []profileModel.ApplicationData, rules []schemaModel.ProfileSchemaAttribute) []profileModel.ApplicationData {
 
 	logger := log.GetLogger()
-	mergedMap := make(map[string]model2.ApplicationData)
+	mergedMap := make(map[string]profileModel.ApplicationData)
 
 	// Initialize with existingAppData
 	for _, app := range existingAppData {
@@ -554,9 +525,6 @@ func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rul
 			continue
 		}
 
-		// Merge devices
-		existingApp.Devices = mergeDeviceLists(existingApp.Devices, newApp.Devices)
-
 		// Merge app-specific data using rule-based strategies
 		if existingApp.AppSpecificData == nil {
 			existingApp.AppSpecificData = map[string]interface{}{}
@@ -570,7 +538,7 @@ func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rul
 				valueType := ""
 
 				for _, r := range rules {
-					if r.PropertyName == fmt.Sprintf("application_data.%s", key) {
+					if r.AttributeName == fmt.Sprintf("application_data.%s", key) {
 						strategy = r.MergeStrategy
 						valueType = r.ValueType
 						break
@@ -589,7 +557,7 @@ func mergeAppData(existingAppData, incomingAppData []model2.ApplicationData, rul
 		mergedMap[newApp.AppId] = existingApp
 	}
 
-	var mergedList []model2.ApplicationData
+	var mergedList []profileModel.ApplicationData
 	for appID, app := range mergedMap {
 		logger.Info(fmt.Sprintf("Merged application data for application: %s", appID))
 		mergedList = append(mergedList, app)

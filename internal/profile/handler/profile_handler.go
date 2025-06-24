@@ -20,11 +20,13 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
 	"github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
@@ -53,18 +55,18 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
-
-	err := utils.AuthnAndAuthz(r, "profile:view")
-	if err != nil {
-		utils.HandleError(w, err)
-		return
-	}
-
 	profileId := pathParts[len(pathParts)-1]
-	var profile *model.Profile
+
+	//todo: Uncomment this if you want to enforce auth
+	//err := utils.AuthnAndAuthz(r, "profile:view")
+	//if err != nil {
+	//	utils.HandleError(w, err)
+	//	return
+	//}
+	//
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	profile, err = profilesService.GetProfile(profileId)
+	profile, err := profilesService.GetProfile(profileId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -102,8 +104,10 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	tenantId := utils.ExtractTenantIdFromPath(r)
+
 	//  Fetch profile
-	profile, err := service.FindProfileByUserName(sub)
+	profile, err := service.FindProfileByUserName(tenantId, sub)
 	if err != nil || profile == nil {
 		utils.HandleError(w, err)
 		return
@@ -118,7 +122,7 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
+		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
 	profileId := pathParts[len(pathParts)-1]
@@ -137,16 +141,17 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 
 	logger := log.GetLogger()
 	logger.Info("Fetching all profiles without filters")
-	var profiles []model.Profile
+	var profiles []model.ProfileResponse
 	var err error
 	// Build the filter from query params
 	filter := r.URL.Query()[constants.Filter] // Handles multiple filters
+	tenantId := utils.ExtractTenantIdFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 	if len(filter) > 0 {
-		profiles, err = profilesService.GetAllProfilesWithFilter(filter)
+		profiles, err = profilesService.GetAllProfilesWithFilter(tenantId, filter)
 	} else {
-		profiles, err = profilesService.GetAllProfiles()
+		profiles, err = profilesService.GetAllProfiles(tenantId)
 	}
 	if err != nil {
 		utils.HandleError(w, err)
@@ -155,4 +160,80 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(profiles)
+}
+
+func (ph *ProfileHandler) CreateProfile(writer http.ResponseWriter, request *http.Request) {
+
+	// todo: Uncomment this if you want to enforce auth
+	//err := utils.AuthnAndAuthz(request, "profile:create")
+	//if err != nil {
+	//	utils.HandleError(writer, err)
+	//	return
+	//}
+
+	orgId := utils.ExtractTenantIdFromPath(request)
+
+	var profile model.ProfileRequest
+	decoder := json.NewDecoder(request.Body)
+	decoder.DisallowUnknownFields()
+	err := decoder.Decode(&profile)
+	if err != nil {
+		errMsg := fmt.Sprintf("Invalid request body. %v", err)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ADD_PROFILE.Code,
+			Message:     errors2.ADD_PROFILE.Message,
+			Description: errMsg,
+		}, http.StatusBadRequest)
+
+		utils.WriteErrorResponse(writer, clientError)
+		return
+	}
+
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+	profileResponse, err := profilesService.CreateProfile(profile, orgId)
+	if err != nil {
+		utils.HandleError(writer, err)
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(writer).Encode(profileResponse)
+}
+
+func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
+
+	pathParts := strings.Split(request.URL.Path, "/")
+	if len(pathParts) < 3 {
+		http.Error(writer, "Invalid path", http.StatusNotFound)
+		return
+	}
+	profileId := pathParts[len(pathParts)-1]
+
+	// Uncomment this if you want to enforce auth
+	// err := utils.AuthnAndAuthz(request, "profile:update")
+	// if err != nil {
+	//	utils.HandleError(writer, err)
+	//	return
+	//}
+
+	var profile model.ProfileRequest
+	err := json.NewDecoder(request.Body).Decode(&profile)
+	if err != nil {
+		http.Error(writer, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	_, err = profilesService.UpdateProfile(profileId, profile)
+	if err != nil {
+		utils.HandleError(writer, err)
+		return
+	}
+
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write([]byte(`{"status": "updated"}`))
 }
