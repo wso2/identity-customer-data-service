@@ -24,6 +24,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"sync"
@@ -102,7 +103,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttribute(w http.ResponseWriter
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := r.Context().Value(constants.TenantContextKey).(string)
+	orgId := utils.ExtractTenantIdFromPath(r)
 	attribute := model.ProfileSchemaAttribute{}
 	var err error
 	if constants.AllowedAttributesScope[scope] {
@@ -122,7 +123,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := r.Context().Value(constants.TenantContextKey).(string)
+	orgId := utils.ExtractTenantIdFromPath(r)
 	var attribute []model.ProfileSchemaAttribute
 	var err error
 	if constants.AllowedAttributesScope[scope] {
@@ -143,7 +144,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttribute(w http.ResponseWrit
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := r.Context().Value(constants.TenantContextKey).(string)
+	orgId := utils.ExtractTenantIdFromPath(r)
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
@@ -168,6 +169,15 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttribute(w http.ResponseWrit
 // PatchProfileSchemaAttribute updates a profile schema attribute.
 func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request, scope string) {
 
+	if scope == constants.IdentityAttributes {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
+		}, http.StatusMethodNotAllowed)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
 	orgId := r.Context().Value(constants.TenantContextKey).(string)
@@ -214,7 +224,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttribute(w http.ResponseWri
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := r.Context().Value(constants.TenantContextKey).(string)
+	orgId := utils.ExtractTenantIdFromPath(r)
 
 	err := schemaService.DeleteProfileSchemaAttribute(orgId, attributeId)
 
@@ -228,9 +238,18 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttribute(w http.ResponseWri
 
 func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request, scope string) {
 
+	//if scope == constants.IdentityAttributes {
+	//	clientError := errors2.NewClientError(errors2.ErrorMessage{
+	//		Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+	//		Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+	//		Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
+	//	}, http.StatusMethodNotAllowed)
+	//	utils.WriteErrorResponse(w, clientError)
+	//	return
+	//}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := r.Context().Value(constants.TenantContextKey).(string)
+	orgId := utils.ExtractTenantIdFromPath(r)
 
 	err := schemaService.DeleteProfileSchemaAttributes(orgId, scope)
 

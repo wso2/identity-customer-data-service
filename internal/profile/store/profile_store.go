@@ -107,8 +107,8 @@ func InsertProfile(profile model.Profile) error {
 
 	query := `
 		INSERT INTO profiles (
-		profile_id, user_id, tenant_id, created_at, updated_at, location, profile_status, reference_profile_id, list_profile, traits, identity_attributes
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		profile_id, user_id, tenant_id, created_at, updated_at, location, list_profile, delete_profile, traits, identity_attributes
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	ON CONFLICT (profile_id) DO NOTHING;`
 
 	_, err = dbClient.ExecuteQuery(query,
@@ -118,15 +118,37 @@ func InsertProfile(profile model.Profile) error {
 		profile.CreatedAt,
 		profile.UpdatedAt,
 		profile.Location,
-		profileStatus,
-		profile.ProfileStatus.ReferenceProfileId,
 		profile.ProfileStatus.ListProfile,
+		false, // delete_profile is not used in this context, set to false
 		traitsJSON,
 		identityJSON,
 	)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to insert profile with Id: %s", profile.ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_PROFILE.Code,
+			Message:     errors2.ADD_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	referenceQuery := `
+		INSERT INTO profile_reference (profile_id, profile_status, reference_profile_id, reference_reason)
+		VALUES ($1,$2,$3,$4)
+		ON CONFLICT (profile_id) DO NOTHING;`
+
+	_, err = dbClient.ExecuteQuery(referenceQuery,
+		profile.ProfileId,
+		profileStatus,
+		profile.ProfileStatus.ReferenceProfileId,
+		profile.ProfileStatus.ReferenceReason,
+	)
+
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to insert profile referencea with Id: %s", profile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_PROFILE.Code,
@@ -199,9 +221,14 @@ func GetProfile(profileId string) (*model.Profile, error) {
 	defer dbClient.Close()
 
 	query := `
-		SELECT profile_id, user_id, created_at, updated_at, location, tenant_id, profile_status, reference_profile_id, profile_status, reference_reason, list_profile, traits, identity_attributes
-		FROM profiles
-		WHERE profile_id = $1;`
+		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.tenant_id, p.list_profile, p.delete_profile, 
+		       p.traits, p.identity_attributes, r.profile_status, r.reference_profile_id, r.reference_reason
+		FROM 
+			profiles p
+		LEFT JOIN 
+			profile_reference r ON p.profile_id = r.profile_id
+		WHERE 
+			p.profile_id = $1;`
 
 	results, err := dbClient.ExecuteQuery(query, profileId)
 
@@ -379,19 +406,17 @@ func UpdateProfile(profile model.Profile) error {
 	query := `
 		UPDATE profiles SET
 			user_id = $1,
-			profile_status = $2,
-			reference_profile_id = $3,
-			list_profile = $4,
-			traits = $5,
-			identity_attributes = $6,
-			updated_at = $7
-		 WHERE profile_id = $8;`
+			list_profile = $2,
+			delete_profile = $3,
+			traits = $4,
+			identity_attributes = $5,
+			updated_at = $6
+		 WHERE profile_id = $7;`
 
 	_, err = dbClient.ExecuteQuery(query,
 		profile.UserId,
-		profileStatus,
-		profile.ProfileStatus.ReferenceProfileId,
 		profile.ProfileStatus.ListProfile,
+		profile.ProfileStatus.DeleteProfile,
 		traitsJSON,
 		identityJSON,
 		profile.UpdatedAt,
@@ -408,6 +433,31 @@ func UpdateProfile(profile model.Profile) error {
 		return serverError
 	}
 
+	query = `
+		UPDATE profile_reference SET
+			profile_id = $1,
+			profile_status = $2,
+			reference_profile_id = $3,
+			reference_reason = $4
+		 WHERE profile_id = $5;`
+
+	_, err = dbClient.ExecuteQuery(query,
+		profile.ProfileId,
+		profileStatus,
+		profile.ProfileStatus.ReferenceProfileId,
+		profile.ProfileStatus.ReferenceReason,
+		profile.ProfileId,
+	)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed updating the profile: %s", profile.ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
 	// Update application data
 	err = InsertApplicationData(profile.ProfileId, profile.ApplicationData)
 	if err != nil {
@@ -442,9 +492,26 @@ func GetAllProfiles(tenantId string) ([]model.Profile, error) {
 	defer dbClient.Close()
 
 	query := `
-		SELECT profile_id, tenant_id, created_at, updated_at, location, user_id, profile_status, reference_profile_id, reference_reason, list_profile, traits, identity_attributes
-		FROM profiles
-		WHERE list_profile = true AND tenant_id = $1`
+    SELECT 
+        p.profile_id, 
+        p.tenant_id, 
+        p.created_at, 
+        p.updated_at, 
+        p.location, 
+        p.user_id, 
+        r.profile_status, 
+        r.reference_profile_id, 
+        r.reference_reason, 
+        p.list_profile, 
+        p.traits, 
+        p.identity_attributes
+    FROM 
+        profiles p
+    LEFT JOIN 
+        profile_reference r ON p.profile_id = r.profile_id
+    WHERE 
+        p.list_profile = true 
+        AND p.tenant_id = $1;`
 
 	results, err := dbClient.ExecuteQuery(query, tenantId)
 	if err != nil {
@@ -512,18 +579,19 @@ func DeleteProfile(profileId string) error {
 	}
 
 	// Step 2: Delete child relationships where this is a parent (optional safety, ON DELETE CASCADE already exists)
-	_, err = dbClient.ExecuteQuery(
-		`DELETE FROM profiles WHERE reference_profile_id = $1`, profileId)
-	if err != nil {
-		errorMsg := fmt.Sprintf("failed to delete child profile links for profile: %s", profileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DELETE_PROFILE.Code,
-			Message:     errors2.DELETE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
+	//:todo: Need to decide if its needed
+	//_, err = dbClient.ExecuteQuery(
+	//	`DELETE FROM profiles WHERE reference_profile_id = $1`, profileId)
+	//if err != nil {
+	//	errorMsg := fmt.Sprintf("failed to delete child profile links for profile: %s", profileId)
+	//	logger.Debug(errorMsg, log.Error(err))
+	//	serverError := errors2.NewServerError(errors2.ErrorMessage{
+	//		Code:        errors2.DELETE_PROFILE.Code,
+	//		Message:     errors2.DELETE_PROFILE.Message,
+	//		Description: errorMsg,
+	//	}, err)
+	//	return serverError
+	//}
 
 	// Step 3: Delete the profile itself
 	result, err := dbClient.ExecuteQuery(`DELETE FROM profiles WHERE profile_id = $1`, profileId)
@@ -647,7 +715,8 @@ func DetachRefererProfileFromReference(referenceProfileId, profileId string) err
 	}
 	defer dbClient.Close()
 
-	query := `DELETE FROM profiles WHERE reference_profile_id = $1 AND profile_id = $2;`
+	// todo: decide if we need to delete the references as well.
+	query := `DELETE FROM profile_reference WHERE reference_profile_id = $1 AND profile_id = $2;`
 	result, err := dbClient.ExecuteQuery(query, referenceProfileId, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to delete child relationship of child: %s of parent: %s",
@@ -956,10 +1025,25 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 	defer dbClient.Close()
 
 	query := `
-		SELECT profile_id, user_id, profile_status, reference_profile_id, reference_reason, list_profile, traits, identity_attributes
-		FROM profiles
-		WHERE profile_status = 'REFERENCE_PROFILE' AND profile_id != $1;
-	`
+	SELECT 
+		p.profile_id, 
+		p.user_id, 
+		r.profile_status, 
+		r.reference_profile_id, 
+		r.reference_reason, 
+		p.tenant_id,
+		p.delete_profile,
+		p.list_profile, 
+		p.traits, 
+		p.identity_attributes
+	FROM 
+		profiles p
+	JOIN 
+		profile_reference r ON p.profile_id = r.profile_id
+	WHERE 
+		r.profile_status = 'REFERENCE_PROFILE'
+		AND p.profile_id != $1;
+`
 
 	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId)
 	if err != nil {
@@ -985,6 +1069,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 		profile.ProfileId = row["profile_id"].(string)
 		referenceProfileId = row["reference_profile_id"].(string)
 		listProfile = row["list_profile"].(bool)
+		deleteProfile := row["delete_profile"].(bool)
 		traitsJSON = row["traits"].([]byte)
 		identityJSON = row["identity_attributes"].([]byte)
 		profileStatus = row["profile_status"].(string) // Assuming profile_status is a boolean field
@@ -1004,6 +1089,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 			IsWaitingOnUser:    isWaitOnUser,
 			ReferenceProfileId: referenceProfileId,
 			ListProfile:        listProfile,
+			DeleteProfile:      deleteProfile,
 		}
 
 		if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
@@ -1052,7 +1138,7 @@ func UpdateProfileReferences(parentProfile model.Profile, children []model.Refer
 		return serverError
 	}
 	query := `
-		UPDATE profiles
+		UPDATE profile_reference
 		SET reference_profile_id = $1,
 			reference_reason = $2,
 			profile_status = $3
@@ -1105,8 +1191,8 @@ func FetchProfilesThatAreReferenced(referenceProfileId string) ([]model.Referenc
 	}
 	defer dbClient.Close()
 	query := `
-		SELECT profile_id, reference_reason 
-		FROM profiles 
+		SELECT profile_id, reference_reason, profile_status 
+		FROM profile_reference 
 		WHERE reference_profile_id = $1;
 	`
 
@@ -1264,3 +1350,52 @@ func toInt(val interface{}) (int, bool) {
 	}
 	return 0, false
 }
+
+//func GetProfileReference(profileId string) (*model.Reference, error) {
+//
+//	logger := log.GetLogger()
+//	logger.Info(fmt.Sprintf("Fetching referenced profiles for profile: %s", profileId))
+//
+//	dbClient, err := provider.NewDBProvider().GetDBClient()
+//	if err != nil {
+//		errorMsg := fmt.Sprintf("Failed to get database client for fetching child profiles for parent: %s",
+//			profileId)
+//		logger.Debug(errorMsg, log.Error(err))
+//		serverError := errors2.NewServerError(errors2.ErrorMessage{
+//			Code:        errors2.GET_PROFILE.Code,
+//			Message:     errors2.GET_PROFILE.Message,
+//			Description: errorMsg,
+//		}, err)
+//		return nil, serverError
+//	}
+//	defer dbClient.Close()
+//	query := `
+//		SELECT profile_id, reference_reason, reference_profile_id, profile_status
+//		FROM profile_reference
+//		WHERE profile_id = $1;
+//	`
+//
+//	results, err := dbClient.ExecuteQuery(query, profileId)
+//
+//	if err != nil {
+//		errorMsg := fmt.Sprintf("Failed fetching referenced profiles for profile: %s", profileId)
+//		logger.Debug(errorMsg, log.Error(err))
+//		serverError := errors2.NewServerError(errors2.ErrorMessage{
+//			Code:        errors2.GET_PROFILE.Code,
+//			Message:     errors2.GET_PROFILE.Message,
+//			Description: errorMsg,
+//		}, err)
+//		return nil, serverError
+//	}
+//	if len(results) == 0 {
+//		logger.Debug(fmt.Sprintf("No referenced profiles found for profile: %s", profileId))
+//		return nil, nil // No reference found
+//	}
+//	var reference model.Reference
+//
+//	reference.ProfileId = results[0]["profile_id"].(string)
+//	reference.Reason = results[0]["reference_reason"].(string)
+//	reference.ReferenceProfileId = results[0]["reference_profile_id"].(string)
+//	reference.ProfileStatus = results[0]["profile_status"].(string) // Assuming profile_status is a string field
+//
+//}

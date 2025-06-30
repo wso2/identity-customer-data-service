@@ -14,7 +14,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -83,8 +82,15 @@ func unifyProfiles(newProfile profileModel.Profile) {
 				return
 			}
 
+			// Check if the profiles match based on userId
+			if doesProfileMatchOnUserId(existingMasterProfile, newProfile) {
+				logger := log.GetLogger()
+				logger.Info(fmt.Sprintf("Profiles %s, %s has same user id. Hence proceeding to merge the profile. ",
+					existingMasterProfile.ProfileId, newProfile.ProfileId))
+				// todo: Need to do the merge here too...
+			}
+
 			if doesProfileMatch(existingMasterProfile, newProfile, rule) {
-				logger.Info("Profiles has matched for unification rule: " + rule.RuleId)
 
 				existingMasterProfile.ProfileStatus.References, _ = profileStore.FetchProfilesThatAreReferenced(existingMasterProfile.ProfileId)
 
@@ -93,94 +99,234 @@ func unifyProfiles(newProfile profileModel.Profile) {
 				newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, schemaRules)
 
 				if len(existingMasterProfile.ProfileStatus.References) == 0 {
-					newMasterProfile.ProfileId = uuid.New().String()
-					newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.TenantId, newMasterProfile.ProfileId)
-					childProfile1 := profileModel.Reference{
-						ProfileId: newProfile.ProfileId,
-						Reason:    rule.RuleName,
-					}
-					childProfile2 := profileModel.Reference{
-						ProfileId: existingMasterProfile.ProfileId,
-						Reason:    rule.RuleName,
-					}
-					newMasterProfile.ProfileStatus = &profileModel.ProfileStatus{
-						IsReferenceProfile: true,
-						ListProfile:        false,
-						References:         []profileModel.Reference{childProfile1, childProfile2},
-					}
 
-					// creating and inserting the new master profile
-					// todo: for perm-temp - no need to insert
+					hasUserID_existing := existingMasterProfile.UserId != ""
+					hasUserID_new := newProfile.UserId != ""
 
-					err := profileStore.InsertProfile(newMasterProfile)
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to insert master profile while unifying profile: %s",
-							newProfile.ProfileId), log.Error(err))
-						return
-					}
+					// Case 1: perm-temp or temp-perm
+					if hasUserID_existing != hasUserID_new {
+						logger.Info(fmt.Sprintf("Stitching Temporray profile to the permnanent profile ",
+							newProfile.ProfileId, existingMasterProfile.ProfileId))
 
-					children := []profileModel.Reference{childProfile1, childProfile2}
+						newChild := profileModel.Reference{}
+						if hasUserID_existing {
+							newMasterProfile.ProfileId = existingMasterProfile.ProfileId
+							newChild = profileModel.Reference{
+								ProfileId: newProfile.ProfileId,
+								Reason:    rule.RuleName,
+							}
+						} else {
+							newMasterProfile.ProfileId = newProfile.ProfileId
+							newChild = profileModel.Reference{
+								ProfileId: existingMasterProfile.ProfileId,
+								Reason:    rule.RuleName,
+							}
+						}
 
-					err = profileStore.UpdateProfileReferences(newMasterProfile, children)
+						children := []profileModel.Reference{newChild}
 
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
-							newMasterProfile.ProfileId), log.Error(err))
-						return
+						err = profileStore.UpdateProfileReferences(newMasterProfile, children)
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
+								newProfile.ProfileId), log.Error(err))
+							return
+						}
+
+						// Update ApplicationData
+						for _, appCtx := range newMasterProfile.ApplicationData {
+							err := profileStore.InsertMergedMasterProfileAppData(newMasterProfile.ProfileId, appCtx)
+							if err != nil {
+								logger.Error(fmt.Sprintf("Failed to update app data for master profile: %s while unifying profile: %s",
+									newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+								return
+							}
+						}
+
+						// Update Traits
+						if newMasterProfile.Traits != nil {
+							err := profileStore.InsertMergedMasterProfileTraitData(newMasterProfile.ProfileId, newMasterProfile.Traits)
+							if err != nil {
+								logger.Error(fmt.Sprintf("Failed to update traits for master profile: %s while unifying profile: %s",
+									newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+								return
+							}
+						}
+
+						// Update Identity
+						if newMasterProfile.IdentityAttributes != nil {
+							err := profileStore.MergeIdentityDataOfProfiles(newMasterProfile.ProfileId, newMasterProfile.IdentityAttributes)
+							if err != nil {
+								logger.Error(fmt.Sprintf("Failed to update IdentityData for master profile: %s while unifying profile: %s",
+									newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+								return
+							}
+						}
+
+					} else {
+						newMasterProfile.ProfileId = uuid.New().String()
+						newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.TenantId, newMasterProfile.ProfileId)
+						childProfile1 := profileModel.Reference{
+							ProfileId: newProfile.ProfileId,
+							Reason:    rule.RuleName,
+						}
+						childProfile2 := profileModel.Reference{
+							ProfileId: existingMasterProfile.ProfileId,
+							Reason:    rule.RuleName,
+						}
+						newMasterProfile.ProfileStatus = &profileModel.ProfileStatus{
+							IsReferenceProfile: true,
+							ListProfile:        false,
+							References:         []profileModel.Reference{childProfile1, childProfile2},
+						}
+
+						err := profileStore.InsertProfile(newMasterProfile)
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to insert master profile while unifying profile: %s",
+								newProfile.ProfileId), log.Error(err))
+							return
+						}
+
+						children := []profileModel.Reference{childProfile1, childProfile2}
+
+						err = profileStore.UpdateProfileReferences(newMasterProfile, children)
+
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
+								newMasterProfile.ProfileId), log.Error(err))
+							return
+						}
 					}
 
 				} else if (len(existingMasterProfile.ProfileStatus.References) > 0) && existingMasterProfile.ProfileStatus.IsReferenceProfile {
-					newChild := profileModel.Reference{
-						ProfileId: newProfile.ProfileId,
-						Reason:    rule.RuleName,
-					}
-					children := []profileModel.Reference{newChild}
 
-					err = profileStore.UpdateProfileReferences(newMasterProfile, children)
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
-							newProfile.ProfileId), log.Error(err))
-						return
-					}
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to update master profile: %s while unifying profile: %s",
-							newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
-						return
-					}
-				}
+					hasUserID_existing := existingMasterProfile.UserId != ""
+					hasUserID_new := newProfile.UserId != ""
+					children := []profileModel.Reference{}
 
-				// Update ApplicationData
-				for _, appCtx := range newMasterProfile.ApplicationData {
-					err := profileStore.InsertMergedMasterProfileAppData(newMasterProfile.ProfileId, appCtx)
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to update app data for master profile: %s while unifying profile: %s",
-							newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
-						return
-					}
-				}
+					// Case 1: perm-temp or temp-perm
+					if hasUserID_existing != hasUserID_new {
+						logger.Info(fmt.Sprintf("Stitching Temporray profile to the permnanent profile ",
+							newProfile.ProfileId, existingMasterProfile.ProfileId))
 
-				// Update Traits
-				if newMasterProfile.Traits != nil {
-					err := profileStore.InsertMergedMasterProfileTraitData(newMasterProfile.ProfileId, newMasterProfile.Traits)
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to update traits for master profile: %s while unifying profile: %s",
-							newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
-						return
-					}
-				}
+						newChild := profileModel.Reference{}
+						if hasUserID_existing {
+							newMasterProfile.ProfileId = existingMasterProfile.ProfileId
+							newChild = profileModel.Reference{
+								ProfileId: newProfile.ProfileId,
+								Reason:    rule.RuleName,
+							}
+							children = append(children, newChild)
+						} else {
+							newMasterProfile.ProfileId = newProfile.ProfileId
+							err = profileStore.UpdateProfileReferences(newMasterProfile, existingMasterProfile.ProfileStatus.References)
 
-				// Update Identity
-				if newMasterProfile.IdentityAttributes != nil {
-					err := profileStore.MergeIdentityDataOfProfiles(newMasterProfile.ProfileId, newMasterProfile.IdentityAttributes)
-					if err != nil {
-						logger.Error(fmt.Sprintf("Failed to update IdentityData for master profile: %s while unifying profile: %s",
-							newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
-						return
+							newChild = profileModel.Reference{
+								ProfileId: existingMasterProfile.ProfileId,
+								Reason:    rule.RuleName,
+							}
+							children = append(children, newChild)
+						}
+
+						err = profileStore.UpdateProfileReferences(newMasterProfile, children)
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
+								newProfile.ProfileId), log.Error(err))
+							return
+						}
+
+						// Update ApplicationData
+						for _, appCtx := range newMasterProfile.ApplicationData {
+							err := profileStore.InsertMergedMasterProfileAppData(newMasterProfile.ProfileId, appCtx)
+							if err != nil {
+								logger.Error(fmt.Sprintf("Failed to update app data for master profile: %s while unifying profile: %s",
+									newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+								return
+							}
+						}
+
+						// Update Traits
+						if newMasterProfile.Traits != nil {
+							err := profileStore.InsertMergedMasterProfileTraitData(newMasterProfile.ProfileId, newMasterProfile.Traits)
+							if err != nil {
+								logger.Error(fmt.Sprintf("Failed to update traits for master profile: %s while unifying profile: %s",
+									newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+								return
+							}
+						}
+
+						// Update Identity
+						if newMasterProfile.IdentityAttributes != nil {
+							err := profileStore.MergeIdentityDataOfProfiles(newMasterProfile.ProfileId, newMasterProfile.IdentityAttributes)
+							if err != nil {
+								logger.Error(fmt.Sprintf("Failed to update IdentityData for master profile: %s while unifying profile: %s",
+									newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+								return
+							}
+						}
+					} else {
+						newChild := profileModel.Reference{
+							ProfileId: newProfile.ProfileId,
+							Reason:    rule.RuleName,
+						}
+						children := []profileModel.Reference{newChild}
+
+						err = profileStore.UpdateProfileReferences(newMasterProfile, children)
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
+								newProfile.ProfileId), log.Error(err))
+							return
+						}
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to update master profile: %s while unifying profile: %s",
+								newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+							return
+						}
+					}
+
+					// Update ApplicationData
+					for _, appCtx := range newMasterProfile.ApplicationData {
+						err := profileStore.InsertMergedMasterProfileAppData(newMasterProfile.ProfileId, appCtx)
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to update app data for master profile: %s while unifying profile: %s",
+								newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+							return
+						}
+					}
+
+					// Update Traits
+					if newMasterProfile.Traits != nil {
+						err := profileStore.InsertMergedMasterProfileTraitData(newMasterProfile.ProfileId, newMasterProfile.Traits)
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to update traits for master profile: %s while unifying profile: %s",
+								newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+							return
+						}
+					}
+
+					// Update Identity
+					if newMasterProfile.IdentityAttributes != nil {
+						err := profileStore.MergeIdentityDataOfProfiles(newMasterProfile.ProfileId, newMasterProfile.IdentityAttributes)
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to update IdentityData for master profile: %s while unifying profile: %s",
+								newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+							return
+						}
 					}
 				}
 			}
 		}
 	}
+}
+
+func doesProfileMatchOnUserId(existingProfile profileModel.Profile, newProfile profileModel.Profile) bool {
+
+	if existingProfile.UserId == "" || newProfile.UserId == "" {
+		return false // No userId to match on
+	}
+	if existingProfile.UserId == newProfile.UserId {
+		return true
+	}
+	return false
 }
 
 func sortRulesByPriority(rules []model.UnificationRule) {
@@ -226,7 +372,7 @@ func MergeProfiles(existingProfile profileModel.Profile, incomingProfile profile
 		// todo: FOR now when over-writing,existing is considered as the base profile
 
 		// Perform merge based on strategy
-		mergedVal := MergeTraitValue(existingVal, newVal, rule.MergeStrategy, rule.ValueType)
+		mergedVal := MergeTraitValue(existingVal, newVal, rule.MergeStrategy, rule.ValueType, rule.MultiValued)
 
 		// Apply merged result
 		switch traitNamespace {
@@ -267,7 +413,10 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 	newJSON, _ := json.Marshal(newProfile)
 	existingValues := extractFieldFromJSON(existingJSON, rule.Property)
 	newValues := extractFieldFromJSON(newJSON, rule.Property)
+	logger := log.GetLogger()
 	if checkForMatch(existingValues, newValues) {
+		logger.Info(fmt.Sprintf("Profiles %s, %s has matched for unification rule: %s ", existingProfile.ProfileId,
+			newProfile.ProfileId, rule.RuleId))
 		return true //  Match found
 	}
 	return false
@@ -334,68 +483,7 @@ func checkForMatch(existingValues, newValues []interface{}) bool {
 	return false
 }
 
-func parseValueForValueType(valueType string, raw interface{}) interface{} {
-	strVal := fmt.Sprintf("%v", raw)
-
-	switch strings.ToLower(valueType) {
-	case "string":
-		return strVal
-
-	case "int":
-		if i, err := strconv.Atoi(strVal); err == nil {
-			return i
-		}
-
-	case "boolean":
-		lower := strings.ToLower(strVal)
-		return lower == "true" || lower == "1"
-
-	case "arrayofstring":
-		switch v := raw.(type) {
-		case string:
-			return []string{v}
-		case []string:
-			return v
-		case []interface{}:
-			var out []string
-			for _, item := range v {
-				out = append(out, fmt.Sprintf("%v", item))
-			}
-			return out
-		default:
-			return []string{strVal}
-		}
-
-	case "arrayofint":
-		switch v := raw.(type) {
-		case int:
-			return []int{v}
-		case []int:
-			return v
-		case string:
-			if i, err := strconv.Atoi(v); err == nil {
-				return []int{i}
-			}
-		case []interface{}:
-			var out []int
-			for _, item := range v {
-				if num, err := strconv.Atoi(fmt.Sprintf("%v", item)); err == nil {
-					out = append(out, num)
-				}
-			}
-			return out
-		default:
-			if i, err := strconv.Atoi(strVal); err == nil {
-				return []int{i}
-			}
-		}
-	}
-
-	// Fallback: return as-is
-	return raw
-}
-
-func MergeTraitValue(existing interface{}, incoming interface{}, strategy string, valueType string) interface{} {
+func MergeTraitValue(existing interface{}, incoming interface{}, strategy string, valueType string, multiValued bool) interface{} {
 
 	switch strings.ToLower(strategy) {
 	case "overwrite":
@@ -415,17 +503,51 @@ func MergeTraitValue(existing interface{}, incoming interface{}, strategy string
 		return incoming
 
 	case "combine":
+		if !multiValued {
+			log.GetLogger().Warn("Merge strategy 'combine' is used for a non-multi-valued field. ")
+			return incoming
+
+		}
 		switch strings.ToLower(valueType) {
-		case "arrayofint":
-			return combineUniqueInts(toIntSlice(existing), toIntSlice(incoming))
-		case "arrayofstring":
-			existingArr := toStringSlice(existing)
-			incomingArr := toStringSlice(incoming)
-			return combineUniqueStrings(existingArr, incomingArr)
+		case "text", "string":
+			a := toStringSlice(existing)
+			b := toStringSlice(incoming)
+			return combineUniqueStrings(a, b)
+
+		case "integer":
+			a := toIntSlice(existing)
+			b := toIntSlice(incoming)
+			return combineUniqueInts(a, b)
+
+		case "decimal":
+			a := toFloatSlice(existing)
+			b := toFloatSlice(incoming)
+			return combineUniqueFloats(a, b)
+
+		case "boolean":
+			// Usually not multi-valued, but if so, allow combining
+			a := toBoolSlice(existing)
+			b := toBoolSlice(incoming)
+			return combineUniqueBools(a, b)
+
+		case "date_time", "datetime":
+			a := toStringSlice(existing) // Assuming ISO date strings
+			b := toStringSlice(incoming)
+			return combineUniqueStrings(a, b)
+
+		case "object":
+			// Arrays of objects not merged by default: return incoming or append as-is
+			a, okA := existing.([]interface{})
+			b, okB := incoming.([]interface{})
+			if okA && okB {
+				return append(a, b...)
+			}
+			return incoming
+
 		default:
+			// Unknown or unsupported type — just return incoming
 			return incoming
 		}
-
 	default:
 		// fallback to overwrite
 		return incoming
@@ -506,6 +628,73 @@ func combineUniqueInts(a, b []int) []int {
 	return combined
 }
 
+func toFloatSlice(value interface{}) []float64 {
+	switch v := value.(type) {
+	case []float64:
+		return v
+	case []interface{}:
+		var result []float64
+		for _, item := range v {
+			switch i := item.(type) {
+			case float64:
+				result = append(result, i)
+			case int:
+				result = append(result, float64(i))
+			}
+		}
+		return result
+	case float64:
+		return []float64{v}
+	case int:
+		return []float64{float64(v)}
+	default:
+		return []float64{}
+	}
+}
+
+func toBoolSlice(value interface{}) []bool {
+	switch v := value.(type) {
+	case []bool:
+		return v
+	case []interface{}:
+		var result []bool
+		for _, item := range v {
+			if b, ok := item.(bool); ok {
+				result = append(result, b)
+			}
+		}
+		return result
+	case bool:
+		return []bool{v}
+	default:
+		return []bool{}
+	}
+}
+
+func combineUniqueFloats(a, b []float64) []float64 {
+	seen := make(map[float64]bool)
+	var combined []float64
+	for _, val := range append(a, b...) {
+		if !seen[val] {
+			seen[val] = true
+			combined = append(combined, val)
+		}
+	}
+	return combined
+}
+
+func combineUniqueBools(a, b []bool) []bool {
+	seen := make(map[bool]bool)
+	var combined []bool
+	for _, val := range append(a, b...) {
+		if !seen[val] {
+			seen[val] = true
+			combined = append(combined, val)
+		}
+	}
+	return combined
+}
+
 func mergeAppData(existingAppData, incomingAppData []profileModel.ApplicationData, rules []schemaModel.ProfileSchemaAttribute) []profileModel.ApplicationData {
 
 	logger := log.GetLogger()
@@ -536,16 +725,18 @@ func mergeAppData(existingAppData, incomingAppData []profileModel.ApplicationDat
 				// Find merge strategy from enrichment rules
 				strategy := ""
 				valueType := ""
+				multiValued := false
 
 				for _, r := range rules {
 					if r.AttributeName == fmt.Sprintf("application_data.%s", key) {
 						strategy = r.MergeStrategy
 						valueType = r.ValueType
+						multiValued = r.MultiValued
 						break
 					}
 				}
 
-				mergedVal := MergeTraitValue(existingVal, newVal, strategy, valueType)
+				mergedVal := MergeTraitValue(existingVal, newVal, strategy, valueType, multiValued)
 
 				existingApp.AppSpecificData[key] = mergedVal
 

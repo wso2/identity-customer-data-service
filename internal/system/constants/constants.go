@@ -18,13 +18,12 @@ var AllowedFieldsForUnificationRulePatch = map[string]bool{
 }
 
 const (
-	String        = "string"
-	Int           = "int"
-	Boolean       = "boolean"
-	ArrayOfString = "arrayOfString"
-	ArrayOfInt    = "arrayOfInt"
-	Date          = "date"
-	Object        = "object"
+	Text     = "text"
+	Integer  = "integer"
+	Decimal  = "decimal"
+	Boolean  = "boolean"
+	DateTime = "date_time"
+	Object   = "object"
 )
 
 var AllowedValueTypes = map[string]bool{
@@ -33,7 +32,7 @@ var AllowedValueTypes = map[string]bool{
 	"decimal":   true,
 	"boolean":   true,
 	"date_time": true,
-	"object":    false,
+	"object":    true,
 }
 
 // Mutability values define how an attribute can be created, read, or updated.

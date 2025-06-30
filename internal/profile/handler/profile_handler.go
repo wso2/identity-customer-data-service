@@ -197,6 +197,15 @@ func (ph *ProfileHandler) CreateProfile(writer http.ResponseWriter, request *htt
 		return
 	}
 
+	http.SetCookie(writer, &http.Cookie{
+		Name:     "cdm_profile_id",
+		Value:    profileResponse.ProfileId,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true, // set to false if testing on localhost without https
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(writer).Encode(profileResponse)
@@ -236,4 +245,86 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write([]byte(`{"status": "updated"}`))
+}
+
+func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.Request) {
+	var profileSync model.ProfileSync
+	err := json.NewDecoder(request.Body).Decode(&profileSync)
+	if err != nil {
+		http.Error(writer, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	profileId := profileSync.ProfileId
+	identityClaims := profileSync.Claims
+
+	if profileSync.Event == "SET_USER_ID" && profileSync.UserId == "" {
+		http.Error(writer, "User ID is required for SET_USER_ID event", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch existing profile
+	existingProfile, err := profilesService.GetProfile(profileId)
+	if err != nil {
+		utils.HandleError(writer, fmt.Errorf("failed to fetch profile: %w", err))
+		return
+	}
+
+	// Update identity attributes based on claim URIs
+	if existingProfile.IdentityAttributes == nil {
+		existingProfile.IdentityAttributes = make(map[string]interface{})
+	}
+
+	for claimURI, value := range identityClaims {
+		attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+		setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
+	}
+
+	if profileSync.Event == "POST_ADD_USER" {
+		if existingProfile.UserId == "" {
+			existingProfile.UserId = profileSync.UserId
+		}
+	}
+	profileRequest := model.ProfileRequest{
+		UserId:             existingProfile.UserId,
+		IdentityAttributes: existingProfile.IdentityAttributes,
+		Traits:             existingProfile.Traits,
+		ApplicationData:    existingProfile.ApplicationData,
+	}
+
+	// Save updated profile
+	_, err = profilesService.UpdateProfile(profileId, profileRequest)
+	if err != nil {
+		utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+		return
+	}
+
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write([]byte(`{"status": "updated"}`))
+}
+
+func setNestedMapValue(m map[string]interface{}, path string, value interface{}) {
+	parts := strings.Split(path, ".")
+	current := m
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			current[part] = value
+		} else {
+			if next, ok := current[part].(map[string]interface{}); ok {
+				current = next
+			} else {
+				next := make(map[string]interface{})
+				current[part] = next
+				current = next
+			}
+		}
+	}
+}
+
+func extractClaimKeyFromLocalURI(localURI string) string {
+	parts := strings.Split(localURI, "/")
+	return parts[len(parts)-1]
 }

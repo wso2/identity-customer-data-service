@@ -337,4 +337,9 @@ var (
 		Code:    errorPrefix + "11032",
 		Message: "Error while updating config.",
 	}
+
+	INVALID_OPERATION = ErrorMessage{
+		Code:    errorPrefix + "1133",
+		Message: "Invalid Operation.",
+	}
 )

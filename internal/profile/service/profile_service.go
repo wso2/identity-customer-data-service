@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
-	//schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
@@ -146,6 +145,8 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
 		queue.Enqueue(profile)
 	}
+	//todo: handler admin/user workflows
+
 	logger.Info("Profile available after insert/update: " + profileFetched.ProfileId)
 	return *profileFetched, nil
 }
@@ -166,19 +167,31 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 			return clientError
 		}
 		if isUpdate && existingProfile.IdentityAttributes != nil {
-			if err := validateMutability(attr.Mutability, isUpdate, existingProfile.IdentityAttributes[key], val); err != nil {
-				return err
+			if !(attr.AttributeName == "identity_attributes.modified" || attr.AttributeName == "identity_attributes.created" || attr.AttributeName == "identity_attributes.userid") {
+				if err := validateMutability(attr.Mutability, isUpdate, existingProfile.IdentityAttributes[key], val); err != nil {
+					return err
+				}
 			}
 		} else {
-			if err := validateMutability(attr.Mutability, isUpdate, nil, val); err != nil {
-				return err
+			if !(attr.AttributeName == "identity_attributes.modified" || attr.AttributeName == "identity_attributes.created" || attr.AttributeName == "identity_attributes.userid") {
+				if err := validateMutability(attr.Mutability, isUpdate, nil, val); err != nil {
+					return err
+				}
 			}
 		}
-		if !isValidType(val, attr.ValueType) {
+		if !isValidType(val, attr.ValueType, attr.MultiValued) {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
 				Message:     errors2.UPDATE_PROFILE.Message,
 				Description: fmt.Sprintf("identity attribute '%s': type mismatch", key),
+			}, http.StatusBadRequest)
+			return clientError
+		}
+		if !isValidCanonicalValue(val, attr.CanonicalValues) {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: fmt.Sprintf("identity attribute '%s': value not in canonical values", key),
 			}, http.StatusBadRequest)
 			return clientError
 		}
@@ -205,11 +218,19 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 				return err
 			}
 		}
-		if !isValidType(val, attr.ValueType) {
+		if !isValidType(val, attr.ValueType, attr.MultiValued) {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
 				Message:     errors2.UPDATE_PROFILE.Message,
 				Description: fmt.Sprintf("trait '%s': type mismatch", key),
+			}, http.StatusBadRequest)
+			return clientError
+		}
+		if !isValidCanonicalValue(val, attr.CanonicalValues) {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: fmt.Sprintf("trait '%s': value not in canonical values", key),
 			}, http.StatusBadRequest)
 			return clientError
 		}
@@ -238,7 +259,7 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 				return err
 			}
 
-			if !isValidType(val, attr.ValueType) {
+			if !isValidType(val, attr.ValueType, attr.MultiValued) {
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
 					Code:        errors2.UPDATE_PROFILE.Code,
 					Message:     errors2.UPDATE_PROFILE.Message,
@@ -246,10 +267,46 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 				}, http.StatusBadRequest)
 				return clientError
 			}
+			if !isValidCanonicalValue(val, attr.CanonicalValues) {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.UPDATE_PROFILE.Code,
+					Message:     errors2.UPDATE_PROFILE.Message,
+					Description: fmt.Sprintf("application data '%s': value not in canonical values", key),
+				}, http.StatusBadRequest)
+				return clientError
+			}
 		}
 	}
 
 	return nil
+}
+
+// isValidCanonicalValue checks if the value is valid against the canonical values defined in the schema.
+func isValidCanonicalValue(val interface{}, values []model.CanonicalValue) bool {
+	if len(values) == 0 {
+		return true // no restriction
+	}
+
+	// Build a lookup set
+	allowed := make(map[string]bool)
+	for _, v := range values {
+		allowed[v.Value] = true
+	}
+
+	switch v := val.(type) {
+	case string:
+		return allowed[v]
+	case []interface{}:
+		for _, item := range v {
+			str, ok := item.(string)
+			if !ok || !allowed[str] {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 func getAppDataValue(appDataList []profileModel.ApplicationData, appID, key string) (interface{}, bool) {
@@ -320,43 +377,98 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 	return nil
 }
 
-func isValidType(value interface{}, expected string) bool {
+func isValidType(value interface{}, expected string, multiValued bool) bool {
 	switch expected {
-	case "string":
+	case "text":
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if _, ok := v.(string); !ok {
+					return false
+				}
+			}
+			return true
+		}
 		_, ok := value.(string)
 		return ok
-	case "int":
-		_, ok1 := value.(int)
-		_, ok2 := value.(float64)
-		return ok1 || ok2
+
+	case "decimal":
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if _, ok := v.(float64); !ok {
+					return false
+				}
+			}
+			return true
+		}
+		_, ok := value.(float64)
+		return ok
+
+	case "integer":
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if num, ok := v.(float64); !ok || num != float64(int(num)) {
+					return false
+				}
+			}
+			return true
+		}
+		switch v := value.(type) {
+		case float64:
+			return v == float64(int(v)) // JSON numbers are float64
+		case int:
+			return true
+		default:
+			return false
+		}
+
 	case "boolean":
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if _, ok := v.(bool); !ok {
+					return false
+				}
+			}
+			return true
+		}
 		_, ok := value.(bool)
 		return ok
-	case "date":
-		_, ok := value.(string) // optionally parse date
+
+	case "date_time":
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if _, ok := v.(string); !ok {
+					return false
+				}
+			}
+			return true
+		}
+		_, ok := value.(string) // optionally: validate ISO 8601
 		return ok
-	case "arrayOfString":
-		arr, ok := value.([]interface{})
-		if !ok {
-			return false
-		}
-		for _, v := range arr {
-			if _, ok := v.(string); !ok {
-				return false
-			}
-		}
-		return true
-	case "arrayOfInt":
-		arr, ok := value.([]interface{})
-		if !ok {
-			return false
-		}
-		for _, v := range arr {
-			if _, ok := v.(float64); !ok {
-				return false
-			}
-		}
-		return true
+
+	case "object":
+		_, ok := value.(map[string]interface{})
+		return ok
+
 	default:
 		return false
 	}
@@ -523,6 +635,19 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		if len(alias) == 0 {
 			alias = nil
 		}
+		//
+		//if profile.UserId != "" {
+		//	scimData, err := client.GetSCIMUser(profile.UserId)
+		//	if err != nil {
+		//		log.GetLogger().Warn("Failed to fetch SCIM data", log.Error(err))
+		//	} else {
+		//		schemaAttrs, err := dbClient.GetSchemaAttributes(profile.TenantId, "identity_attributes")
+		//		if err != nil {
+		//			return nil, err
+		//		}
+		//		profile.IdentityAttributes = mergeSCIMWithSchema(scimData, profile.IdentityAttributes, schemaAttrs)
+		//	}
+		//}
 
 		profileResponse := &profileModel.ProfileResponse{
 			ProfileId:          profile.ProfileId,
@@ -572,6 +697,26 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		}
 		return nil, err
 	}
+}
+
+func mergeSCIMWithSchema(
+	scim map[string]interface{},
+	existing map[string]interface{},
+	schema []model.ProfileSchemaAttribute,
+) map[string]interface{} {
+	merged := make(map[string]interface{})
+
+	for _, attr := range schema {
+		attrKey := strings.TrimPrefix(attr.AttributeName, "identity_attributes.")
+
+		if val, ok := scim[attrKey]; ok {
+			merged[attrKey] = val
+		} else if val, ok := existing[attrKey]; ok {
+			merged[attrKey] = val
+		}
+	}
+
+	return merged
 }
 
 // DeleteProfile removes a profile from MongoDB by `perma_id`
@@ -708,6 +853,8 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 				}, err)
 				return serverError
 			}
+			//todo: Ensure the need to detach the referer profile from the reference
+			//err = profileStore.DetachRefererProfileFromReference(profile.ProfileStatus.ReferenceProfileId, ProfileId)
 			err = profileStore.DeleteProfile(ProfileId)
 			if err != nil {
 				errorMsg := fmt.Sprintf("Error while deleting the  profile: %s ", ProfileId)
@@ -770,6 +917,21 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 
 	var result []profileModel.ProfileResponse
 	for _, profile := range existingProfiles {
+		alias, err := profileStore.FetchProfilesThatAreReferenced(profile.ProfileId)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Error fetching references for profile: %s", profile.ProfileId)
+			logger := log.GetLogger()
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE.Code,
+				Message:     errors2.GET_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return nil, serverError
+		}
+		if len(alias) == 0 {
+			alias = nil
+		}
 		if profile.ProfileStatus.IsReferenceProfile {
 			profileResponse := &profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
@@ -782,6 +944,7 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 					UpdatedAt: profile.UpdatedAt,
 					Location:  profile.Location,
 				},
+				MergedFrom: alias,
 			}
 			result = append(result, *profileResponse)
 		} else {
@@ -796,6 +959,11 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 			// building the hierarchy
 			masterProfile.ProfileStatus.References, _ = profileStore.FetchProfilesThatAreReferenced(masterProfile.ProfileId)
 
+			alias := &profileModel.Reference{
+				ProfileId: profile.ProfileStatus.ReferenceProfileId,
+				Reason:    profile.ProfileStatus.ReferenceReason,
+			}
+
 			profileResponse := &profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
 				UserId:             masterProfile.UserId,
@@ -807,10 +975,7 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 					UpdatedAt: masterProfile.UpdatedAt,
 					Location:  masterProfile.Location,
 				},
-				MergedTo: profileModel.Reference{
-					ProfileId: masterProfile.ProfileId,
-					Reason:    profile.ProfileStatus.ReferenceReason,
-				},
+				MergedTo: *alias,
 			}
 
 			result = append(result, *profileResponse)

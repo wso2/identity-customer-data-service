@@ -19,6 +19,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
@@ -47,16 +48,34 @@ func AddProfileSchemaAttributes(attrs []model.ProfileSchemaAttribute) error {
 	}
 
 	// Build query
-	baseQuery := `INSERT INTO profile_schema (tenant_id, attribute_id, attribute_name, value_type, merge_strategy, application_identifier, mutability) VALUES `
+	baseQuery := `INSERT INTO profile_schema (tenant_id, attribute_id, attribute_name, value_type, merge_strategy, application_identifier, mutability, multi_valued, sub_attributes, canonical_values) VALUES `
 	valueStrings := make([]string, 0, len(attrs))
-	valueArgs := make([]interface{}, 0, len(attrs)*7)
+	valueArgs := make([]interface{}, 0, len(attrs)*10)
 
 	for i, attr := range attrs {
-		idx := i * 7
+		idx := i * 10
 		log.GetLogger().Info("Adding profile schema attribute: " + attr.AttributeId)
-		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d,  $%d) ", idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7))
+		subAttrsJSON, err := json.Marshal(attr.SubAttributes)
+		if err != nil {
+			return errors.NewServerError(errors.ErrorMessage{
+				Code:        errors.MARSHAL_JSON.Code,
+				Message:     errors.MARSHAL_JSON.Message,
+				Description: fmt.Sprintf("Failed to marshal sub attributes for attribute %s", attr.AttributeId),
+			}, err)
+		}
+		canonicalJSON, err := json.Marshal(attr.CanonicalValues)
+
+		if err != nil {
+			return errors.NewServerError(errors.ErrorMessage{
+				Code:        errors.MARSHAL_JSON.Code,
+				Message:     errors.MARSHAL_JSON.Message,
+				Description: fmt.Sprintf("Failed to marshal canonical values for attribute %s", attr.AttributeId),
+			}, err)
+		}
+
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d,  $%d, $%d,  $%d, $%d) ", idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10))
 		valueArgs = append(valueArgs, attr.OrgId, attr.AttributeId, attr.AttributeName, attr.ValueType,
-			attr.MergeStrategy, attr.ApplicationIdentifier, attr.Mutability)
+			attr.MergeStrategy, attr.ApplicationIdentifier, attr.Mutability, attr.MultiValued, subAttrsJSON, canonicalJSON)
 
 	}
 
@@ -92,7 +111,8 @@ func GetProfileSchemaAttribute(orgId, attributeId string) (model.ProfileSchemaAt
 	}
 	defer dbClient.Close()
 
-	query := `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability 
+	query := `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability , application_identifier, multi_valued,   sub_attributes::text,
+  canonical_values::text
 	          FROM profile_schema WHERE tenant_id = $1 AND attribute_id = $2`
 
 	results, err := dbClient.ExecuteQuery(query, orgId, attributeId)
@@ -134,7 +154,8 @@ func GetProfileSchemaAttributes(orgId, scope string) ([]model.ProfileSchemaAttri
 	defer dbClient.Close()
 
 	query := `
-		SELECT attribute_id, tenant_id, attribute_name, value_type, merge_strategy, mutability, application_identifier
+		SELECT attribute_id, tenant_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued,   sub_attributes::text,
+  canonical_values::text
 		FROM profile_schema
 		WHERE tenant_id = $1 AND attribute_name LIKE $2`
 	scopePrefix := scope + ".%" // e.g., identity_attributes.%
@@ -151,11 +172,8 @@ func GetProfileSchemaAttributes(orgId, scope string) ([]model.ProfileSchemaAttri
 	}
 
 	if len(results) == 0 {
-		return nil, errors.NewClientError(errors.ErrorMessage{
-			Code:        errors.GET_PROFILE_SCHEMA.Code,
-			Message:     errors.GET_PROFILE_SCHEMA.Message,
-			Description: fmt.Sprintf("No profile schema attributes found for org: %s and scope: %s", orgId, scope),
-		}, http.StatusNotFound)
+		logger.Debug(fmt.Sprintf("No profile schema attributes found for org: %s and scope: %s", orgId, scope))
+		return []model.ProfileSchemaAttribute{}, nil
 	}
 
 	attributes := make([]model.ProfileSchemaAttribute, 0, len(results))
@@ -182,7 +200,8 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 	}
 	defer dbClient.Close()
 
-	query := `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability 
+	query := `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability , application_identifier, multi_valued,   sub_attributes::text,
+  canonical_values::text
 	          FROM profile_schema 
 	          WHERE tenant_id = $1 AND attribute_name = $2 LIMIT 1`
 
@@ -209,12 +228,30 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 	}
 
 	row := results[0]
+	var subAttrs []model.SubAttribute
+	if raw, ok := row["sub_attributes"].(string); ok && raw != "" {
+		if err := json.Unmarshal([]byte(raw), &subAttrs); err != nil {
+			log.GetLogger().Debug("Failed to unmarshal sub_attributes", log.Error(err))
+		}
+	}
+
+	var canonicalValues []model.CanonicalValue
+	if raw, ok := row["canonical_values"].(string); ok && raw != "" {
+		if err := json.Unmarshal([]byte(raw), &canonicalValues); err != nil {
+			log.GetLogger().Debug("Failed to unmarshal canonical_values", log.Error(err))
+		}
+	}
+
 	attr := &model.ProfileSchemaAttribute{
-		OrgId:         orgId,
-		AttributeName: row["attribute_name"].(string),
-		ValueType:     row["value_type"].(string),
-		MergeStrategy: row["merge_strategy"].(string),
-		Mutability:    row["mutability"].(string),
+		OrgId:                 orgId,
+		AttributeName:         row["attribute_name"].(string),
+		ValueType:             row["value_type"].(string),
+		MergeStrategy:         row["merge_strategy"].(string),
+		Mutability:            row["mutability"].(string),
+		ApplicationIdentifier: row["application_identifier"].(string),
+		MultiValued:           row["multi_valued"].(bool),
+		SubAttributes:         subAttrs,
+		CanonicalValues:       canonicalValues,
 	}
 
 	logger.Info(fmt.Sprintf("Successfully fetched profile schema attribute '%s' for org '%s'", attributeName, orgId))
@@ -237,7 +274,8 @@ func GetProfileSchemaAttributesForOrg(orgId string) ([]model.ProfileSchemaAttrib
 	}
 	defer dbClient.Close()
 
-	query := `SELECT attribute_id, attribute_name, value_type, merge_strategy , application_identifier, mutability
+	query := `SELECT attribute_id, attribute_name, value_type, merge_strategy , application_identifier, mutability, multi_valued, sub_attributes::text,
+  canonical_values::text
 	          FROM profile_schema WHERE tenant_id = $1`
 
 	results, err := dbClient.ExecuteQuery(query, orgId)
@@ -352,7 +390,7 @@ func DeleteProfileSchemaAttributes(orgId, scope string) error {
 
 	scope = scope + ".%" // e.g., identity_attributes.%
 
-	query := `DELETE FROM profile_schema WHERE tenant_id = $1 AND attribute_name LIKE = $2`
+	query := `DELETE FROM profile_schema WHERE tenant_id = $1 AND attribute_name LIKE  $2`
 	_, err = dbClient.ExecuteQuery(query, orgId, scope)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while deleting profile schema attribute with scope: %s", scope)
@@ -397,17 +435,40 @@ func PatchProfileSchemaAttributes(orgId string, updates []model.ProfileSchemaAtt
 			value_type = $2,
 			merge_strategy = $3,
 			mutability = $4,
-			application_identifier = $5
-		WHERE tenant_id = $6 AND attribute_id = $7
+			application_identifier = $5,
+			multi_valued = $6,
+			canonical_values = $7,
+			sub_attributes = $8
+		WHERE tenant_id = $9 AND attribute_id = $10
 	`
 
 	for _, attr := range updates {
+		subAttrsJSON, err := json.Marshal(attr.SubAttributes)
+		if err != nil {
+			return errors.NewServerError(errors.ErrorMessage{
+				Code:        errors.MARSHAL_JSON.Code,
+				Message:     errors.MARSHAL_JSON.Message,
+				Description: fmt.Sprintf("Failed to marshal sub attributes for attribute %s", attr.AttributeId),
+			}, err)
+		}
+		canonicalJSON, err := json.Marshal(attr.CanonicalValues)
+
+		if err != nil {
+			return errors.NewServerError(errors.ErrorMessage{
+				Code:        errors.MARSHAL_JSON.Code,
+				Message:     errors.MARSHAL_JSON.Message,
+				Description: fmt.Sprintf("Failed to marshal canonical values for attribute %s", attr.AttributeId),
+			}, err)
+		}
 		args := []interface{}{
 			attr.AttributeName,
 			attr.ValueType,
 			attr.MergeStrategy,
 			attr.Mutability,
 			attr.ApplicationIdentifier,
+			attr.MultiValued,
+			canonicalJSON,
+			subAttrsJSON,
 			orgId,
 			attr.AttributeId,
 		}
@@ -468,13 +529,95 @@ func DeleteProfileSchema(orgId string) error {
 
 // helper: convert DB row to model
 func mapRowToProfileAttribute(row map[string]interface{}) model.ProfileSchemaAttribute {
+
+	var subAttrs []model.SubAttribute
+	if raw, ok := row["sub_attributes"].(string); ok && raw != "" {
+		if err := json.Unmarshal([]byte(raw), &subAttrs); err != nil {
+			log.GetLogger().Debug("Failed to unmarshal sub_attributes", log.Error(err))
+		}
+	}
+
+	var canonicalValues []model.CanonicalValue
+	if raw, ok := row["canonical_values"].(string); ok && raw != "" {
+		if err := json.Unmarshal([]byte(raw), &canonicalValues); err != nil {
+			log.GetLogger().Debug("Failed to unmarshal canonical_values", log.Error(err))
+		}
+	}
+
 	return model.ProfileSchemaAttribute{
-		AttributeId: fmt.Sprint(row["attribute_id"]),
-		//OrgId:                 row["tenant_id"].(string),
+		AttributeId:           fmt.Sprint(row["attribute_id"]),
 		AttributeName:         row["attribute_name"].(string),
 		ValueType:             row["value_type"].(string),
 		MergeStrategy:         row["merge_strategy"].(string),
 		Mutability:            row["mutability"].(string),
 		ApplicationIdentifier: row["application_identifier"].(string),
+		MultiValued:           row["multi_valued"].(bool),
+		SubAttributes:         subAttrs,
+		CanonicalValues:       canonicalValues,
 	}
+}
+
+func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute) error {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	//logger := log.GetLogger()
+	if err != nil {
+		return fmt.Errorf("failed to get DB client: %w", err)
+	}
+	defer dbClient.Close()
+
+	// Step 1: Delete existing identity_attributes for this org
+	deleteQuery := `DELETE FROM profile_schema WHERE tenant_id = $1 AND attribute_name LIKE 'identity_attributes.%'`
+	if _, err := dbClient.ExecuteQuery(deleteQuery, orgID); err != nil {
+		return fmt.Errorf("failed to delete existing identity_attributes: %w", err)
+	}
+
+	// Step 2: Insert new attributes
+	insertQuery := `INSERT INTO profile_schema 
+	(tenant_id, attribute_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued, canonical_values, sub_attributes, scim_dialect) 
+	VALUES `
+
+	var valueStrings []string
+	var valueArgs []interface{}
+	argIndex := 1
+
+	for _, attr := range attrs {
+		canonicalJSON, _ := json.Marshal(attr.CanonicalValues)
+		subAttrJSON, _ := json.Marshal(attr.SubAttributes)
+		attrKey := extractClaimKeyFromURI(attr.AttributeName)
+		attr.AttributeName = attrKey
+
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			argIndex, argIndex+1, argIndex+2, argIndex+3, argIndex+4, argIndex+5, argIndex+6,
+			argIndex+7, argIndex+8, argIndex+9, argIndex+10))
+		valueArgs = append(valueArgs,
+			orgID,
+			attr.AttributeId,
+			attr.AttributeName,
+			attr.ValueType,
+			attr.MergeStrategy,
+			attr.Mutability,
+			attr.ApplicationIdentifier,
+			attr.MultiValued,
+			string(canonicalJSON),
+			string(subAttrJSON),
+			attr.SCIMDialect,
+		)
+		argIndex += 11
+	}
+
+	insertQuery += strings.Join(valueStrings, ",")
+	if _, err := dbClient.ExecuteQuery(insertQuery, valueArgs...); err != nil {
+		return fmt.Errorf("failed to insert profile schema attributes: %w", err)
+	}
+
+	return nil
+}
+
+func extractClaimKeyFromURI(uri string) string {
+	parts := strings.Split(strings.TrimRight(uri, "/"), "/")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
 }

@@ -30,7 +30,7 @@ type ProfileSchemaAttribute struct {
 	MultiValued           bool             `json:"multi_valued,omitempty" bson:"multi_valued,omitempty"`         // Means the data type is an array of chosen data type
 	CanonicalValues       []CanonicalValue `json:"canonical_values,omitempty" bson:"canonical_values,omitempty"` // String of options for the attribute
 	SubAttributes         []SubAttribute   `json:"sub_attributes,omitempty" bson:"sub_attributes,omitempty"`     // If the datatype is object
-	//todo : see if we need data originated from....
+	SCIMDialect           string           `json:"scim_dialect,omitempty" bson:"scim_dialect,omitempty"`         // Need to skip this in the response
 }
 
 type SubAttribute struct {
@@ -52,7 +52,6 @@ type Meta struct {
 type ProfileSchema struct {
 	ProfileId          map[string]string                   `json:"profile_id" bson:"profile_id"`
 	UserId             map[string]string                   `json:"user_id" bson:"user_id"`
-	IsAnonymous        map[string]string                   `json:"is_anonymous" bson:"is_anonymous"`
 	Meta               map[string]map[string]string        `json:"meta" bson:"meta"`
 	IdentityAttributes []ProfileSchemaAttribute            `json:"identity_attributes" bson:"identity_attributes"`
 	Traits             []ProfileSchemaAttribute            `json:"traits" bson:"traits"`

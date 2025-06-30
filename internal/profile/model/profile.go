@@ -23,6 +23,7 @@ type ProfileStatus struct {
 	IsReferenceProfile bool        `json:"is_reference_profile,omitempty" bson:"is_reference_profile,omitempty"`
 	IsWaitingOnAdmin   bool        `json:"is_waiting_on_admin,omitempty" bson:"is_waiting_on_admin,omitempty"`
 	IsWaitingOnUser    bool        `json:"is_waiting_on_user,omitempty" bson:"is_waiting_on_user,omitempty"`
+	DeleteProfile      bool        `json:"delete_profile,omitempty" bson:"delete_profile,omitempty"`
 	ListProfile        bool        `json:"list_profile,omitempty" bson:"list_profile,omitempty"`
 	ReferenceReason    string      `json:"reference_reason,omitempty" bson:"reference_reason,omitempty"`
 	References         []Reference `json:"references,omitempty" bson:"references,omitempty"`

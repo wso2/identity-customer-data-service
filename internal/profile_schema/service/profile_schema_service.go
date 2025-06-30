@@ -85,7 +85,7 @@ func (s *ProfileSchemaService) AddProfileSchemaAttribute(attrs []model.ProfileSc
 func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaAttribute) (error, bool) {
 
 	parts := strings.Split(attr.AttributeName, ".")
-	if len(parts) != 2 {
+	if len(parts) < 2 {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
@@ -103,6 +103,15 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
+
+	//if scope == constants.IdentityAttributes {
+	//	clientError := errors2.NewClientError(errors2.ErrorMessage{
+	//		Code:        errors2.INVALID_OPERATION.Code,
+	//		Message:     errors2.INVALID_OPERATION.Message,
+	//		Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
+	//	}, http.StatusMethodNotAllowed)
+	//	return clientError, false
+	//}
 
 	if scope == constants.ApplicationData {
 		if attr.ApplicationIdentifier == "" {
@@ -122,6 +131,29 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 			Description: fmt.Sprintf("Invalid value_type: %s. Must be one of: %v", attr.ValueType, keysOf(constants.AllowedValueTypes)),
 		}, http.StatusBadRequest)
 		return clientError, false
+	}
+
+	if attr.ValueType == constants.Object {
+		if attr.SubAttributes == nil || len(attr.SubAttributes) == 0 {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Description: fmt.Sprintf("SubAttributes are required for value_type: %s", constants.Object),
+			}, http.StatusBadRequest)
+			return clientError, false
+		}
+
+		for _, subAttr := range attr.SubAttributes {
+			if !strings.HasPrefix(subAttr.AttributeName, attr.AttributeName+".") {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Description: fmt.Sprintf("Invalid sub-attribute name: %s. It must start with parent attribute name '%s' followed by a dot and sub-key.", subAttr.AttributeName, attr.AttributeName),
+				}, http.StatusBadRequest)
+				return clientError, false
+			}
+
+		}
 	}
 
 	if !constants.AllowedMutabilityValues[attr.Mutability] {
@@ -180,6 +212,7 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttribute(orgId, attributeId st
 }
 
 func (s *ProfileSchemaService) PatchProfileSchemaAttributes(orgId string, updates []map[string]interface{}) error {
+
 	if len(updates) == 0 {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
@@ -236,10 +269,31 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributes(orgId string, update
 }
 
 func (s *ProfileSchemaService) DeleteProfileSchemaAttribute(orgId, attributeId string) error {
+
+	//// Validate the attributeId format
+	//parts := strings.Split(attributeId, ".")
+	//scope := parts[0]
+	//if scope == constants.IdentityAttributes {
+	//	clientError := errors2.NewClientError(errors2.ErrorMessage{
+	//		Code:        errors2.INVALID_OPERATION.Code,
+	//		Message:     errors2.INVALID_OPERATION.Message,
+	//		Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
+	//	}, http.StatusMethodNotAllowed)
+	//	return clientError
+	//}
 	return psstr.DeleteProfileSchemaAttribute(orgId, attributeId)
 }
 
 func (s *ProfileSchemaService) DeleteProfileSchemaAttributes(orgId, scope string) error {
+
+	//if scope == constants.IdentityAttributes {
+	//	clientError := errors2.NewClientError(errors2.ErrorMessage{
+	//		Code:        errors2.INVALID_OPERATION.Code,
+	//		Message:     errors2.INVALID_OPERATION.Message,
+	//		Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
+	//	}, http.StatusMethodNotAllowed)
+	//	return clientError
+	//}
 	return psstr.DeleteProfileSchemaAttributes(orgId, scope)
 }
 

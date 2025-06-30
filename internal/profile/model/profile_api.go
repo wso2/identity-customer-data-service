@@ -41,3 +41,10 @@ type ProfileRequest struct {
 	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
 	ApplicationData    map[string]map[string]interface{} `json:"application_data"`
 }
+
+type ProfileSync struct {
+	UserId    string                 `json:"userId" bson:"userId"`
+	ProfileId string                 `json:"profileId" bson:"profileId"`
+	Event     string                 `json:"event" bson:"event"`
+	Claims    map[string]interface{} `json:"claims,omitempty" bson:"claims,omitempty"`
+}

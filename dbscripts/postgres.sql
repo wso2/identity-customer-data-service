@@ -34,12 +34,17 @@ CREATE TABLE profiles (
     updated_at BIGINT,
     location VARCHAR(255),
     origin_country VARCHAR(255),
-    profile_status VARCHAR(255),
-    reference_profile_id VARCHAR(255),
-    reference_reason VARCHAR(255),
     list_profile BOOLEAN DEFAULT TRUE,
+    delete_profile BOOLEAN DEFAULT FALSE,
     traits JSONB DEFAULT '{}'::jsonb,
     identity_attributes JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE profile_reference (
+    profile_id VARCHAR(255) PRIMARY KEY,
+    profile_status VARCHAR(255),
+    reference_profile_id VARCHAR(255),
+    reference_reason VARCHAR(255)
 );
 
 CREATE TABLE profile_schema (
@@ -47,8 +52,12 @@ CREATE TABLE profile_schema (
     tenant_id VARCHAR(255) NOT NULL,
     attribute_name VARCHAR(255) NOT NULL,
     value_type VARCHAR(255) NOT NULL,
-    merge_strategy VARCHAR(255) NOT NULL
-    mutability VARCHAR(255) NOT NULL
+    merge_strategy VARCHAR(255) NOT NULL,
+    application_identifier VARCHAR(255) NOT NULL,
+    mutability VARCHAR(255) NOT NULL,
+    multi_valued BOOLEAN DEFAULT FALSE,
+    canonical_values JSONB DEFAULT '[]'::jsonb,
+    sub_attributes JSONB DEFAULT '[]'::jsonb
 );
 
 -- Application Data Table

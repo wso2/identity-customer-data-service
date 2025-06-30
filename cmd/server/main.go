@@ -23,15 +23,18 @@ import (
 	"fmt"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
+	"github.com/wso2/identity-customer-data-service/internal/system/schedulers"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func initDatabaseFromConfig(config *config.Config) {
@@ -85,9 +88,10 @@ func main() {
 	workers.StartProfileWorker()
 
 	// Initialize identity data sync worker
-	//if cdsConfig.Sync.Schema.Enabled {
-	//	schedulers.StartSchemaFetchScheduler(time.Duration(cdsConfig.Sync.Schema.Interval) * time.Second)
-	//}
+	if cdsConfig.Sync.Schema.Enabled {
+		idClient := client.NewIdentityClient(*cdsConfig)
+		go schedulers.StartSchemaFetchScheduler(idClient, time.Duration(cdsConfig.Sync.Schema.Interval)*time.Second)
+	}
 
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
