@@ -1399,3 +1399,57 @@ func toInt(val interface{}) (int, bool) {
 //	reference.ProfileStatus = results[0]["profile_status"].(string) // Assuming profile_status is a string field
 //
 //}
+
+func GetProfileWithUserId(userId string) (*model.Profile, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while fetching profile with userId: %s", userId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	defer dbClient.Close()
+
+	query := `
+		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.tenant_id, p.list_profile, p.delete_profile, 
+		       p.traits, p.identity_attributes, r.profile_status, r.reference_profile_id, r.reference_reason
+		FROM 
+			profiles p
+		LEFT JOIN 
+			profile_reference r ON p.profile_id = r.profile_id
+		WHERE 
+			p.user_id = $1
+			AND r.profile_status = 'REFERENCE_PROFILE';`
+
+	results, err := dbClient.ExecuteQuery(query, userId)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		logger.Debug(fmt.Sprintf("No profile found with the given userId: %s", userId))
+		// todo: should we return a client error with 404 here?
+		return nil, nil
+	}
+	if len(results) == 0 {
+		logger.Debug(fmt.Sprintf("No profile found with the given userId: %s", userId))
+		// todo: should we return a client error with 404 here?
+		return nil, nil
+	}
+	profile, err := scanProfileRow(results[0])
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed fetching profile with Id: %s", userId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	profile.ApplicationData, _ = FetchApplicationData(profile.ProfileId)
+	return &profile, nil
+}

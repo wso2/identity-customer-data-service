@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	psstr "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/client"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -39,6 +41,7 @@ type ProfileSchemaServiceInterface interface {
 	DeleteProfileSchemaAttributes(orgId, scope string) error
 	GetProfileSchema(orgId string) (map[string]interface{}, error)
 	DeleteProfileSchema(orgId string) error
+	SyncProfileSchema(orgId string) error
 	//GetProfileSchemaScope(id string, scope string) (string, error)
 }
 
@@ -133,12 +136,12 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		return clientError, false
 	}
 
-	if attr.ValueType == constants.Object {
+	if attr.ValueType == constants.ComplexDataType {
 		if attr.SubAttributes == nil || len(attr.SubAttributes) == 0 {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-				Description: fmt.Sprintf("SubAttributes are required for value_type: %s", constants.Object),
+				Description: fmt.Sprintf("SubAttributes are required for value_type: %s", constants.ComplexDataType),
 			}, http.StatusBadRequest)
 			return clientError, false
 		}
@@ -187,15 +190,15 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttribute(orgId, attributeId st
 	//attribute, err := s.GetProfileSchemaAttribute(orgId, attributeId)
 	// attribute id cannot be there and also org id. attribute name only can be updated not the scope.
 
-	// todo: ensure validation
+	// todo: ensure NPE - see if u need to update application identifier also...its PUT as well. So yeah.
 	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
-		OrgId:                 orgId,
-		AttributeId:           attributeId,
-		AttributeName:         updates["attribute_name"].(string),
-		ValueType:             updates["value_type"].(string),
-		MergeStrategy:         updates["merge_strategy"].(string),
-		Mutability:            updates["mutability"].(string),
-		ApplicationIdentifier: updates["application_identifier"].(string),
+		OrgId:         orgId,
+		AttributeId:   attributeId,
+		AttributeName: updates["attribute_name"].(string),
+		ValueType:     updates["value_type"].(string),
+		MergeStrategy: updates["merge_strategy"].(string),
+		Mutability:    updates["mutability"].(string),
+		//ApplicationIdentifier: updates["application_identifier"].(string),
 	})
 	if !isValid {
 		if err != nil {
@@ -439,4 +442,27 @@ func matches(attr model.ProfileSchemaAttribute, field, op, val string) bool {
 		}
 	}
 	return false
+}
+
+func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
+
+	cfg := config.GetCDSRuntime().Config
+	identityClient := client.NewIdentityClient(cfg)
+
+	claims, err := identityClient.GetProfileSchema(orgId)
+	logger := log.GetLogger()
+	if err != nil {
+		return fmt.Errorf("failed to fetch profile schema for org %s: %w", orgId, err)
+	}
+
+	if len(claims) > 0 {
+		logger.Info("Logging for =====")
+		err := psstr.UpsertIdentityAttributes(orgId, claims)
+		if err != nil {
+			logger.Error("Failed to store fetched profile schema", log.Error(err))
+		} else {
+			logger.Info("Profile schema successfully updated for org: " + orgId)
+		}
+	}
+	return nil
 }

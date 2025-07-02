@@ -260,46 +260,171 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 	profileId := profileSync.ProfileId
 	identityClaims := profileSync.Claims
+	tenantId := profileSync.TenantId
 
-	if profileSync.Event == "SET_USER_ID" && profileSync.UserId == "" {
-		http.Error(writer, "User ID is required for SET_USER_ID event", http.StatusBadRequest)
+	if tenantId == "" {
+		//tenantId = utils.ExtractTenantIdFromPath(request)
+		//todo: should we expect tenant id in the path or as body param
+		utils.HandleError(writer, fmt.Errorf("Tenant id cannot be empty: %w", err))
 		return
 	}
 
-	// Fetch existing profile
-	existingProfile, err := profilesService.GetProfile(profileId)
-	if err != nil {
-		utils.HandleError(writer, fmt.Errorf("failed to fetch profile: %w", err))
-		return
-	}
-
-	// Update identity attributes based on claim URIs
-	if existingProfile.IdentityAttributes == nil {
-		existingProfile.IdentityAttributes = make(map[string]interface{})
-	}
-
-	for claimURI, value := range identityClaims {
-		attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
-		setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
-	}
+	var existingProfile *model.ProfileResponse
 
 	if profileSync.Event == "POST_ADD_USER" {
-		if existingProfile.UserId == "" {
-			existingProfile.UserId = profileSync.UserId
+		if profileSync.ProfileId != "" && profileSync.UserId != "" {
+			log.GetLogger().Info("wewwdscfdsvgf????")
+
+			// This sceario is when the user anonymously tried and then trying to signup or login. So profile with profile id exists
+			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
+			if existingProfile != nil {
+				// Update identity attributes based on claim URIs
+				if existingProfile.IdentityAttributes == nil {
+					existingProfile.IdentityAttributes = make(map[string]interface{})
+				}
+
+				for claimURI, value := range identityClaims {
+					attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+					setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
+				}
+
+				profileRequest := model.ProfileRequest{
+					UserId:             profileSync.UserId,
+					IdentityAttributes: existingProfile.IdentityAttributes,
+					Traits:             existingProfile.Traits,
+					ApplicationData:    existingProfile.ApplicationData,
+				}
+
+				// Save updated profile
+				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
+				if err != nil {
+					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					return
+				}
+				return
+			}
+			return
+		} else if profileSync.ProfileId == "" {
+			log.GetLogger().Info("am i herere????")
+			// this is when we create a profile for a new user created in IS
+			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
+			if existingProfile == nil {
+				identityAttributes := make(map[string]interface{})
+				for claimURI, value := range identityClaims {
+					attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+					setNestedMapValue(identityAttributes, attributeKeyPath, value)
+				}
+
+				profileRequest := model.ProfileRequest{
+					UserId:             profileSync.UserId,
+					IdentityAttributes: identityAttributes,
+				}
+				_, err := profilesService.CreateProfile(profileRequest, tenantId)
+				if err != nil {
+					utils.HandleError(writer, fmt.Errorf("failed to create profile: %w", err))
+					return
+				}
+			}
+			return
 		}
-	}
-	profileRequest := model.ProfileRequest{
-		UserId:             existingProfile.UserId,
-		IdentityAttributes: existingProfile.IdentityAttributes,
-		Traits:             existingProfile.Traits,
-		ApplicationData:    existingProfile.ApplicationData,
+		return
+		// if needed can ensure if profile got created
 	}
 
-	// Save updated profile
-	_, err = profilesService.UpdateProfile(profileId, profileRequest)
-	if err != nil {
-		utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+	if profileSync.Event == "POST_DELETE_USER_WITH_ID" {
+		existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
+		if existingProfile == nil {
+			utils.HandleError(writer, fmt.Errorf("profile not found for user: %s", profileSync.UserId))
+			return
+		}
+		err := profilesService.DeleteProfile(existingProfile.ProfileId)
+		if err != nil {
+			utils.HandleError(writer, fmt.Errorf("failed to delete profile: %w", err))
+			return
+		}
 		return
+		// if needed can ensure if profile got created
+	}
+
+	if profileSync.Event == "POST_SET_USER_CLAIM_VALUES_WITH_ID" {
+
+		if profileSync.ProfileId == "" && profileSync.UserId != "" {
+			log.GetLogger().Info("updatee----")
+
+			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
+			if existingProfile == nil {
+				log.GetLogger().Info("creating new profile for user: " + profileSync.UserId)
+				identityAttributes := make(map[string]interface{})
+
+				for claimURI, value := range identityClaims {
+					attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+					setNestedMapValue(identityAttributes, attributeKeyPath, value)
+				}
+
+				profileRequest := model.ProfileRequest{
+					UserId:             profileSync.UserId,
+					IdentityAttributes: identityAttributes,
+				}
+				_, err := profilesService.CreateProfile(profileRequest, tenantId)
+
+				if err != nil {
+					return
+				}
+				return
+
+			} else {
+				log.GetLogger().Info("sdfgvf----")
+				//existingProfile, err = profilesService.GetProfile(existingProfile.ProfileId)
+				// Update identity attributes based on claim URIs
+				if existingProfile.IdentityAttributes == nil {
+					existingProfile.IdentityAttributes = make(map[string]interface{})
+				}
+
+				for claimURI, value := range identityClaims {
+					attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+					setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
+				}
+
+				profileRequest := model.ProfileRequest{
+					UserId:             existingProfile.UserId,
+					IdentityAttributes: existingProfile.IdentityAttributes,
+					Traits:             existingProfile.Traits,
+					ApplicationData:    existingProfile.ApplicationData,
+				}
+
+				// Save updated profile
+				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
+				if err != nil {
+					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					return
+				}
+			}
+		} else {
+			existingProfile, err = profilesService.GetProfile(profileId)
+			// Update identity attributes based on claim URIs
+			if existingProfile.IdentityAttributes == nil {
+				existingProfile.IdentityAttributes = make(map[string]interface{})
+			}
+
+			for claimURI, value := range identityClaims {
+				attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+				setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
+			}
+
+			profileRequest := model.ProfileRequest{
+				UserId:             existingProfile.UserId,
+				IdentityAttributes: existingProfile.IdentityAttributes,
+				Traits:             existingProfile.Traits,
+				ApplicationData:    existingProfile.ApplicationData,
+			}
+
+			// Save updated profile
+			_, err = profilesService.UpdateProfile(profileId, profileRequest)
+			if err != nil {
+				utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+				return
+			}
+		}
 	}
 
 	writer.WriteHeader(http.StatusOK)
@@ -322,6 +447,7 @@ func setNestedMapValue(m map[string]interface{}, path string, value interface{})
 			}
 		}
 	}
+	// todo: ensure the value type and also try how we merge the values here.
 }
 
 func extractClaimKeyFromLocalURI(localURI string) string {

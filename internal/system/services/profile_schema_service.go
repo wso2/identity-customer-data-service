@@ -58,6 +58,16 @@ func (s *ProfileSchemaService) routeSchemaScopedOrAttribute(w http.ResponseWrite
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/profile-schema/")
 	parts := strings.Split(path, "/")
 
+	// Handle /profile-schema/sync as a separate route
+	if path == "sync" {
+		if r.Method == http.MethodPost {
+			s.handler.SyncProfileSchema(w, r) // Call your sync handler method
+			return
+		}
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	switch len(parts) {
 	case 1:
 		scope := parts[0]

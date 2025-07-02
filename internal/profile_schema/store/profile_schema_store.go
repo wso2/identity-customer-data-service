@@ -299,30 +299,46 @@ func GetProfileSchemaAttributesForOrg(orgId string) ([]model.ProfileSchemaAttrib
 }
 
 func PatchProfileSchemaAttribute(orgId, attributeId string, updates map[string]interface{}) error {
-
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error occurred while patching profile schema for org: %s and attribute: %s", orgId,
-			attributeId)
+		errorMsg := fmt.Sprintf("Error occurred while patching profile schema for org: %s and attribute: %s", orgId, attributeId)
 		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors.NewServerError(errors.ErrorMessage{
+		return errors.NewServerError(errors.ErrorMessage{
 			Code:        errors.DB_CLIENT_INIT.Code,
 			Message:     errors.DB_CLIENT_INIT.Message,
 			Description: errorMsg,
 		}, err)
-		return serverError
 	}
 	defer dbClient.Close()
 
 	setClauses := []string{}
 	args := []interface{}{}
 	argIndex := 1
+
 	for key, value := range updates {
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", key, argIndex))
-		args = append(args, value)
+		switch v := value.(type) {
+		case []interface{}, map[string]interface{}:
+			// Marshal slices/maps to JSON
+			jsonBytes, err := json.Marshal(v)
+			if err != nil {
+				return fmt.Errorf("failed to marshal %s to JSON: %w", key, err)
+			}
+			setClauses = append(setClauses, fmt.Sprintf("%s = $%d", key, argIndex))
+			args = append(args, string(jsonBytes))
+
+		case nil:
+			// Skip nil values to avoid null pointer issues
+			continue
+
+		default:
+			setClauses = append(setClauses, fmt.Sprintf("%s = $%d", key, argIndex))
+			args = append(args, v)
+		}
 		argIndex++
 	}
+
+	// Append WHERE clause parameters
 	args = append(args, orgId, attributeId)
 
 	query := `UPDATE profile_schema SET ` + strings.Join(setClauses, ", ") +
@@ -330,15 +346,15 @@ func PatchProfileSchemaAttribute(orgId, attributeId string, updates map[string]i
 
 	_, err = dbClient.ExecuteQuery(query, args...)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error occurred while fetching profile schema for org: %s", orgId)
+		errorMsg := fmt.Sprintf("Error occurred while executing update for org: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors.NewServerError(errors.ErrorMessage{
+		return errors.NewServerError(errors.ErrorMessage{
 			Code:        errors.EXECUTE_QUERY.Code,
 			Message:     errors.EXECUTE_QUERY.Message,
 			Description: errorMsg,
 		}, err)
-		return serverError
 	}
+
 	return nil
 }
 

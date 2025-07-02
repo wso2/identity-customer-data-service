@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"io"
 	"net/http"
 	"net/url"
@@ -124,8 +125,8 @@ func (c *IdentityClient) fetchClientCredentialsToken() (map[string]interface{}, 
 	return result, nil
 }
 
-func (c *IdentityClient) GetProfileSchema() ([]model.ProfileSchemaAttribute, error) {
-	orgId := "carbon.super"
+func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAttribute, error) {
+
 	logger := log.GetLogger()
 
 	localClaimsMap, err := c.GetLocalClaimsMap()
@@ -198,9 +199,9 @@ func (c *IdentityClient) GetProfileSchema() ([]model.ProfileSchemaAttribute, err
 					OrgId:         orgId,
 					AttributeId:   uuid.New().String(),
 					AttributeName: parent,
-					ValueType:     "object",
-					MergeStrategy: "overwrite",
-					Mutability:    "readWrite",
+					ValueType:     constants.ComplexDataType,
+					MergeStrategy: constants.MergeStrategyOverwrite,
+					Mutability:    constants.MutabilityReadWrite,
 					SubAttributes: subs,
 					UpdatedAt:     0,
 					SCIMDialect:   dialect, // mark as generated

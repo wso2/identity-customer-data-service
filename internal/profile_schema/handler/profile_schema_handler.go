@@ -20,11 +20,13 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"sync"
@@ -130,6 +132,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 		attribute, err = schemaService.GetProfileSchemaAttributes(orgId, scope)
 	}
 
+	//todo: ensure it works for app data
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -180,7 +183,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeForScope(w http.Resp
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := r.Context().Value(constants.TenantContextKey).(string)
+	orgId := utils.ExtractTenantIdFromPath(r)
 	var updates []map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
@@ -259,4 +262,37 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *http.Request) {
+
+	var schemaAtt model.ProfileSchemaSync
+	if err := json.NewDecoder(r.Body).Decode(&schemaAtt); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	schemaProvider := provider.NewProfileSchemaProvider()
+	schemaService := schemaProvider.GetProfileSchemaService()
+
+	log.GetLogger().Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaAtt.Event, schemaAtt.OrgId))
+
+	if schemaAtt.Event == "schema-initialization" {
+		orgId := schemaAtt.OrgId
+
+		err := schemaService.SyncProfileSchema(orgId)
+		if err != nil {
+			utils.HandleError(w, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Profile schema synced successfully"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Unknown sync event."})
+
 }

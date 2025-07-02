@@ -32,20 +32,19 @@ func StartSchemaFetchScheduler(idClient *client.IdentityClient, interval time.Du
 	defer ticker.Stop()
 
 	// Run once at startup
-	fetchSchemas(idClient)
+	//todo: check if we need this and ofcz we cant hardcode "carbon.super"
+	fetchSchemas(idClient, "carbon.super")
 
 	for range ticker.C {
-		fetchSchemas(idClient)
+		fetchSchemas(idClient, "carbon.super")
 	}
 }
 
 // fetchSchemas gets the schema from the identity server and updates local schema
-func fetchSchemas(idClient *client.IdentityClient) {
+func fetchSchemas(idClient *client.IdentityClient, orgID string) {
 	logger := log.GetLogger()
 
-	orgID := "carbon.super" // TODO: replace with dynamic org list if needed
-
-	claims, err := idClient.GetProfileSchema()
+	claims, err := idClient.GetProfileSchema(orgID)
 	if err != nil {
 		logger.Error("Failed to fetch profile schema from identity server", log.Error(err))
 		return

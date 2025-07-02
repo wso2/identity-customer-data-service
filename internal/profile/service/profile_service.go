@@ -45,6 +45,7 @@ type ProfilesServiceInterface interface {
 	CreateProfile(profile profileModel.ProfileRequest, tenantId string) (profileModel.ProfileResponse, error)
 	UpdateProfile(profileId string, update profileModel.ProfileRequest) (profileModel.ProfileResponse, error)
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
+	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
 }
 
@@ -368,6 +369,7 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 	case constants.MutabilityReadWrite, constants.MutabilityWriteOnly:
 		return nil
 	default:
+		log.GetLogger().Warn("Unknown mutability type: " + mutability)
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
 			Message:     errors2.UPDATE_PROFILE.Message,
@@ -378,8 +380,9 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 }
 
 func isValidType(value interface{}, expected string, multiValued bool) bool {
+	log.GetLogger().Info("Validating value type", log.String("expected", expected), log.Any("value", value))
 	switch expected {
-	case "text":
+	case constants.StringDataType:
 		if multiValued {
 			arr, ok := value.([]interface{})
 			if !ok {
@@ -395,7 +398,7 @@ func isValidType(value interface{}, expected string, multiValued bool) bool {
 		_, ok := value.(string)
 		return ok
 
-	case "decimal":
+	case constants.DecimalDataType:
 		if multiValued {
 			arr, ok := value.([]interface{})
 			if !ok {
@@ -411,7 +414,7 @@ func isValidType(value interface{}, expected string, multiValued bool) bool {
 		_, ok := value.(float64)
 		return ok
 
-	case "integer":
+	case constants.IntegerDataType:
 		if multiValued {
 			arr, ok := value.([]interface{})
 			if !ok {
@@ -433,7 +436,7 @@ func isValidType(value interface{}, expected string, multiValued bool) bool {
 			return false
 		}
 
-	case "boolean":
+	case constants.BooleanDataType:
 		if multiValued {
 			arr, ok := value.([]interface{})
 			if !ok {
@@ -449,7 +452,7 @@ func isValidType(value interface{}, expected string, multiValued bool) bool {
 		_, ok := value.(bool)
 		return ok
 
-	case "date_time":
+	case constants.DateTimeDataType:
 		if multiValued {
 			arr, ok := value.([]interface{})
 			if !ok {
@@ -465,10 +468,10 @@ func isValidType(value interface{}, expected string, multiValued bool) bool {
 		_, ok := value.(string) // optionally: validate ISO 8601
 		return ok
 
-	case "object":
+	case constants.ComplexDataType:
 		_, ok := value.(map[string]interface{})
 		return ok
-
+		// todo: dont we need to validate the data within complex data
 	default:
 		return false
 	}
@@ -1177,4 +1180,55 @@ func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
 	master.ProfileStatus = &profileModel.ProfileStatus{}
 
 	return master, nil
+}
+
+// FindProfileByUserId retrieves a profile by user_id
+func (ps ProfilesService) FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error) {
+
+	profile, err := profileStore.GetProfileWithUserId(userId)
+	logger := log.GetLogger()
+	if err != nil {
+		logger.Debug(fmt.Sprintf("Error fetching profile by user_id:%s ", userId), log.Error(err))
+		return nil, fmt.Errorf("failed to query profiles: %w", err)
+	}
+	if profile == nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
+
+	alias, err := profileStore.FetchProfilesThatAreReferenced(profile.ProfileId)
+
+	if err != nil {
+		errorMsg := fmt.Sprintf("Error fetching references for profile: %s", profile.ProfileId)
+		logger := log.GetLogger()
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	if len(alias) == 0 {
+		alias = nil
+	}
+	profileResponse := &profileModel.ProfileResponse{
+		ProfileId:          profile.ProfileId,
+		UserId:             profile.UserId,
+		ApplicationData:    ConvertAppDataToMap(profile.ApplicationData),
+		Traits:             profile.Traits,
+		IdentityAttributes: profile.IdentityAttributes,
+		Meta: profileModel.Meta{
+			CreatedAt: profile.CreatedAt,
+			UpdatedAt: profile.UpdatedAt,
+			Location:  profile.Location,
+		},
+		MergedFrom: alias,
+	}
+
+	return profileResponse, nil
 }

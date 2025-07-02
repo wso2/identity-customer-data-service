@@ -47,4 +47,5 @@ type ProfileSync struct {
 	ProfileId string                 `json:"profileId" bson:"profileId"`
 	Event     string                 `json:"event" bson:"event"`
 	Claims    map[string]interface{} `json:"claims,omitempty" bson:"claims,omitempty"`
+	TenantId  string                 `json:"tenantId,omitempty" bson:"tenantId,omitempty"`
 }

@@ -18,16 +18,22 @@ var AllowedFieldsForUnificationRulePatch = map[string]bool{
 }
 
 const (
-	Text     = "text"
-	Integer  = "integer"
-	Decimal  = "decimal"
-	Boolean  = "boolean"
-	DateTime = "date_time"
-	Object   = "object"
+	StringDataType   = "string"
+	IntegerDataType  = "integer"
+	DecimalDataType  = "decimal"
+	BooleanDataType  = "boolean"
+	DateTimeDataType = "date_time"
+	ComplexDataType  = "complex"
+)
+
+const (
+	update = "update" // Update an existing profile with new data.
+	create = "create" // Create a new profile with the provided data.
+	sync   = "sync"
 )
 
 var AllowedValueTypes = map[string]bool{
-	"text":      true,
+	"string":    true,
 	"integer":   true,
 	"decimal":   true,
 	"boolean":   true,
@@ -43,6 +49,13 @@ const (
 	MutabilityImmutable = "immutable" // Must be set at creation and cannot be changed later.
 	MutabilityWriteOnce = "writeOnce" // Can be empty initially, but once set, cannot be updated.
 	MutabilityComputed  = "computed"  // Value is derived or calculated, not directly stored.
+)
+
+const (
+	MergeStrategyOverwrite = "overwrite" // Overwrite the existing value with the new one.
+	MergeStrategyLatest    = "latest"
+	MergeStrategyCombine   = "combine" // Combine values from both profiles (e.g., arrays).
+	MergeStrategyOldest    = "oldest"  // Use the oldest value from the profiles being merged.
 )
 
 // AllowedMutabilityValues defines the valid set of mutability types.
