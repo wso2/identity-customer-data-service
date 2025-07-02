@@ -136,8 +136,8 @@ func InsertProfile(profile model.Profile) error {
 	}
 
 	referenceQuery := `
-		INSERT INTO profile_reference (profile_id, profile_status, reference_profile_id, reference_reason)
-		VALUES ($1,$2,$3,$4)
+		INSERT INTO profile_reference (profile_id, profile_status, reference_profile_id, reference_reason, tenant_id, reference_profile_tenant_id)
+		VALUES ($1,$2,$3,$4, $5,$6)
 		ON CONFLICT (profile_id) DO NOTHING;`
 
 	_, err = dbClient.ExecuteQuery(referenceQuery,
@@ -145,6 +145,8 @@ func InsertProfile(profile model.Profile) error {
 		profileStatus,
 		profile.ProfileStatus.ReferenceProfileId,
 		profile.ProfileStatus.ReferenceReason,
+		profile.TenantId,
+		profile.TenantId,
 	)
 
 	if err != nil {
@@ -637,6 +639,7 @@ func UpsertAppDatum(profileId string, appId string, updates map[string]interface
 		actualKey := strings.TrimPrefix(key, "application_data.")
 		// Merge into app_specific_data
 		existingVal := appData.AppSpecificData[actualKey]
+		log.GetLogger().Info("Merging key: " + actualKey)
 		appData.AppSpecificData[actualKey] = enrichFieldValues(existingVal, incomingVal)
 
 	}
@@ -878,11 +881,29 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 	argID := 1
 	joinedAppIDs := map[string]bool{}
 
-	baseSQL := `
-		SELECT DISTINCT p.profile_id, p.origin_country, p.profile_staus, p.reference_profile_id, p.reference_reason,
-						p.list_profile, p.traits, p.identity_attributes
-		FROM profiles p
-	`
+	baseSQL := `SELECT DISTINCT p.profile_id,
+                p.user_id,
+                p.tenant_id,
+                p.created_at,
+                p.updated_at,
+                p.location,
+                r.profile_status,
+                r.reference_profile_id,
+                r.reference_reason,
+                p.list_profile,
+                p.traits,
+                p.identity_attributes
+FROM profiles p
+LEFT JOIN profile_reference r
+    ON p.profile_id = r.profile_id`
+
+	// Always ensure tenant_id condition first
+	conditions = append(conditions, fmt.Sprintf("p.tenant_id = $%d", argID))
+	args = append(args, tenantId)
+	argID++
+
+	// Always ensure list_profile = true
+	conditions = append(conditions, "p.list_profile = true")
 
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
@@ -891,11 +912,17 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 		}
 		field, operator, value := parts[0], parts[1], parts[2]
 
-		scopeKey := strings.SplitN(field, ".", 2)
-		if len(scopeKey) != 2 {
-			continue
+		var scope, key string
+		if field == "user_id" {
+			scope = "user_id"
+			key = ""
+		} else {
+			scopeKey := strings.SplitN(field, ".", 2)
+			if len(scopeKey) != 2 {
+				continue
+			}
+			scope, key = scopeKey[0], scopeKey[1]
 		}
-		scope, key := scopeKey[0], scopeKey[1]
 
 		var clause string
 
@@ -911,6 +938,23 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 				args = append(args, "%"+value+"%")
 			case "sw":
 				clause = fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID)
+				args = append(args, value+"%")
+			default:
+				continue
+			}
+			conditions = append(conditions, clause)
+			argID++
+
+		case "user_id":
+			switch operator {
+			case "eq":
+				clause = fmt.Sprintf("p.user_id = $%d", argID)
+				args = append(args, value)
+			case "co":
+				clause = fmt.Sprintf("p.user_id ILIKE $%d", argID)
+				args = append(args, "%"+value+"%")
+			case "sw":
+				clause = fmt.Sprintf("p.user_id ILIKE $%d", argID)
 				args = append(args, value+"%")
 			default:
 				continue
@@ -1001,6 +1045,17 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 			}, err)
 			return nil, serverError
 		}
+		profile.ApplicationData, err = FetchApplicationData(profile.ProfileId)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Failed to fetch application data: %s", err)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_PROFILE.Code,
+				Message:     errors2.FILTER_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return nil, serverError
+		}
 		profiles = append(profiles, profile)
 	}
 
@@ -1066,6 +1121,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 			referenceProfileId, profileStatus                            string
 		)
 
+		profile.UserId = row["user_id"].(string)
 		profile.ProfileId = row["profile_id"].(string)
 		referenceProfileId = row["reference_profile_id"].(string)
 		listProfile = row["list_profile"].(bool)
@@ -1225,7 +1281,6 @@ func FetchProfilesThatAreReferenced(referenceProfileId string) ([]model.Referenc
 }
 
 func enrichFieldValues(existingVal, incomingVal interface{}) interface{} {
-
 	logger := log.GetLogger()
 	switch incoming := incomingVal.(type) {
 	case []string:
@@ -1251,6 +1306,7 @@ func enrichFieldValues(existingVal, incomingVal interface{}) interface{} {
 
 	default:
 		logger.Warn(fmt.Sprintf("EnrichFieldValues encountered unhandled type for incomingVal: %T", incomingVal))
+		logger.Warn(fmt.Sprintf("EnrichFieldValues encountered unhandled type for existing: %T", existingVal))
 		return incoming
 	}
 }

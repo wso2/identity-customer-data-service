@@ -144,12 +144,24 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	var profiles []model.ProfileResponse
 	var err error
 	// Build the filter from query params
-	filter := r.URL.Query()[constants.Filter] // Handles multiple filters
+	queryFilters := r.URL.Query()[constants.Filter] // Slice of filter params
+
+	var filters []string
+	for _, f := range queryFilters {
+		// Split by " and " to support multiple conditions in a single filter param
+		splitFilters := strings.Split(f, " and ")
+		for _, sf := range splitFilters {
+			sf = strings.TrimSpace(sf)
+			if sf != "" {
+				filters = append(filters, sf)
+			}
+		}
+	}
 	tenantId := utils.ExtractTenantIdFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	if len(filter) > 0 {
-		profiles, err = profilesService.GetAllProfilesWithFilter(tenantId, filter)
+	if len(queryFilters) > 0 {
+		profiles, err = profilesService.GetAllProfilesWithFilter(tenantId, filters)
 	} else {
 		profiles, err = profilesService.GetAllProfiles(tenantId)
 	}
@@ -349,7 +361,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if profileSync.Event == "POST_SET_USER_CLAIM_VALUES_WITH_ID" {
 
 		if profileSync.ProfileId == "" && profileSync.UserId != "" {
-			log.GetLogger().Info("updatee----")
 
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if existingProfile == nil {

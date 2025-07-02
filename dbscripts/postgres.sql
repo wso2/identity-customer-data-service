@@ -42,8 +42,10 @@ CREATE TABLE profiles (
 
 CREATE TABLE profile_reference (
     profile_id VARCHAR(255) PRIMARY KEY,
+    tenant_id VARCHAR(255) NOT NULL,
     profile_status VARCHAR(255),
     reference_profile_id VARCHAR(255),
+    reference_profile_tenant_id VARCHAR(255),
     reference_reason VARCHAR(255)
 );
 

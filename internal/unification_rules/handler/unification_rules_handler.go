@@ -54,10 +54,10 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		rule.RuleId = uuid.NewString()
 	}
 	orgId := utils.ExtractTenantIdFromPath(r)
-	rule.OrgId = orgId
+	rule.TenantId = orgId
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	err := ruleService.AddUnificationRule(rule)
+	err := ruleService.AddUnificationRule(rule, orgId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -71,7 +71,8 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r *http.Request) {
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	rules, err := ruleService.GetUnificationRules()
+	tenantId := utils.ExtractTenantIdFromPath(r)
+	rules, err := ruleService.GetUnificationRules(tenantId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

@@ -67,7 +67,7 @@ func AddUnificationRule(rule model.UnificationRule) error {
 }
 
 // GetUnificationRules fetches all unification rules from the database
-func GetUnificationRules() ([]model.UnificationRule, error) {
+func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -83,8 +83,9 @@ func GetUnificationRules() ([]model.UnificationRule, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT rule_id, rule_name, property_name, priority, is_active, created_at, updated_at FROM unification_rules`
-	results, err := dbClient.ExecuteQuery(query)
+	query := `SELECT rule_id, rule_name, property_name, priority, is_active, created_at, updated_at 
+FROM unification_rules WHERE tenant_id = $1`
+	results, err := dbClient.ExecuteQuery(query, tenantId)
 	if err != nil {
 		errorMsg := "Failed in fetching all unification rules. "
 		logger.Debug(errorMsg, log.Error(err))

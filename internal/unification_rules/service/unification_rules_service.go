@@ -14,8 +14,8 @@ import (
 )
 
 type UnificationRuleServiceInterface interface {
-	AddUnificationRule(rule model.UnificationRule) error
-	GetUnificationRules() ([]model.UnificationRule, error)
+	AddUnificationRule(rule model.UnificationRule, tenantId string) error
+	GetUnificationRules(tenantId string) ([]model.UnificationRule, error)
 	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
 	PatchResolutionRule(ruleId string, updates map[string]interface{}) error
 	DeleteUnificationRule(ruleId string) error
@@ -31,10 +31,10 @@ func GetUnificationRuleService() UnificationRuleServiceInterface {
 }
 
 // AddUnificationRule Adds a new unification rule.
-func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule) error {
+func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule, tenantId string) error {
 
 	// Check if a similar unification rule already exists
-	existingRule, err := store.GetUnificationRules()
+	existingRule, err := store.GetUnificationRules(tenantId)
 	logger := log.GetLogger()
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 
 	// Validate if the property name belongs in schema attributes
 	filter := []string{fmt.Sprintf("attribute_name eq %s", rule.Property)}
-	schemaAttributes, err := psService.GetProfileSchemaAttributesWithFilter(rule.OrgId, filter)
+	schemaAttributes, err := psService.GetProfileSchemaAttributesWithFilter(rule.TenantId, filter)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while checking for existing schema: %s", rule.Property)
@@ -83,9 +83,9 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 }
 
 // GetUnificationRules Fetches all resolution rules.
-func (urs *UnificationRuleService) GetUnificationRules() ([]model.UnificationRule, error) {
+func (urs *UnificationRuleService) GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 
-	return store.GetUnificationRules()
+	return store.GetUnificationRules(tenantId)
 }
 
 // GetUnificationRule Fetches a specific resolution rule.
