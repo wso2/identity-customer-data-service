@@ -167,8 +167,6 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 		for _, scimClaim := range claims {
 			localURI := fmt.Sprintf("%v", scimClaim["mappedLocalClaimURI"])
 			localClaim, ok := localClaimsMap[localURI]
-			log.GetLogger().Info("Processing SCIM claim", log.String("claimURI", fmt.Sprintf("%v", scimClaim["claimURI"])))
-			log.GetLogger().Info("Processing local claim", log.String("localURI", localURI))
 			if !ok {
 				continue
 			}
@@ -203,7 +201,6 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 					MergeStrategy: constants.MergeStrategyOverwrite,
 					Mutability:    constants.MutabilityReadWrite,
 					SubAttributes: subs,
-					UpdatedAt:     0,
 					SCIMDialect:   dialect, // mark as generated
 				})
 			}
@@ -366,7 +363,6 @@ func ConvertSCIMClaimWithLocal(
 			MultiValued:     multiValued,
 			CanonicalValues: canonicalValues,
 			SubAttributes:   nil,
-			UpdatedAt:       0,
 			SCIMDialect:     dialectURI,
 		}, &subAttr, parentAttrName
 	}
@@ -382,7 +378,6 @@ func ConvertSCIMClaimWithLocal(
 		MultiValued:     multiValued,
 		CanonicalValues: canonicalValues,
 		SubAttributes:   subAttrs,
-		UpdatedAt:       0,
 		SCIMDialect:     dialectURI,
 	}, nil, ""
 }

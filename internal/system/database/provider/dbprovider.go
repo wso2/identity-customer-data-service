@@ -40,6 +40,7 @@ func SetTestDB(db *sql.DB) {
 // DBProviderInterface defines the interface for getting database clients.
 type DBProviderInterface interface {
 	GetDBClient() (client.DBClientInterface, error)
+	GetDBType() string
 }
 
 // DBProvider is the implementation of DBProviderInterface.
@@ -79,10 +80,18 @@ func getDBConfig(dataSource config.Config) DBConfig {
 
 	var dbConfig DBConfig
 
-	dbConfig.driverName = "postgres"
+	dbConfig.driverName = dataSource.DataSource.Type
 	dbConfig.dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		dataSource.DataSource.Hostname, dataSource.DataSource.Port, dataSource.DataSource.Username, dataSource.DataSource.Password,
 		dataSource.DataSource.Name, dataSource.DataSource.SSLMode)
 
 	return dbConfig
+}
+
+// GetDBType returns the database configuration based on the provided data source.
+func (d *DBProvider) GetDBType() string {
+
+	runtimeConfig := config.GetCDSRuntime().Config
+	dbConfig := getDBConfig(runtimeConfig)
+	return dbConfig.driverName
 }

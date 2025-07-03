@@ -88,6 +88,16 @@ var (
 		Message: "Unable to initialize database client.",
 	}
 
+	DB_BEGN_TRANSACTION = ErrorMessage{
+		Code:    errorPrefix + "15013",
+		Message: "Error while beginning transaction.",
+	}
+
+	DB_COMMIT_TRANSACTION = ErrorMessage{
+		Code:    errorPrefix + "15013",
+		Message: "Error while commiting transaction.",
+	}
+
 	LOCK_RELEASE = ErrorMessage{
 		Code:    errorPrefix + "15014",
 		Message: "Error while releasing the lock.",
@@ -152,6 +162,11 @@ var (
 		Message: "Error while fetching profile schema.",
 	}
 
+	SYNC_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15025",
+		Message: "Error while syncing identity attributes of profile schema.",
+	}
+
 	EXECUTE_QUERY = ErrorMessage{
 		Code:    errorPrefix + "15026",
 		Message: "Error while executing query.",
@@ -199,36 +214,6 @@ var (
 	PROP_ALREADY_EXISTS = ErrorMessage{
 		Code:    errorPrefix + "11006",
 		Message: "Property already exist.",
-	}
-
-	ENRICHMENT_RULE_VALIDATION = ErrorMessage{
-		Code:    errorPrefix + "10007",
-		Message: "Enrichment rule validation failed",
-	}
-
-	INVALID_ENRICHMENT_RULE_FILTERING = ErrorMessage{
-		Code:    errorPrefix + "11008",
-		Message: "Enrichment rules filtering failed.",
-	}
-
-	ADD_EVENT = ErrorMessage{
-		Code:    errorPrefix + "11009",
-		Message: "Error while adding event.",
-	}
-
-	GET_EVENT = ErrorMessage{
-		Code:    errorPrefix + "11010",
-		Message: "Error while fetching event.",
-	}
-
-	DELETE_EVENT = ErrorMessage{
-		Code:    errorPrefix + "11011",
-		Message: "Error while deleting event.",
-	}
-
-	EVENT_NOT_FOUND = ErrorMessage{
-		Code:    errorPrefix + "11012",
-		Message: "Event not found.",
 	}
 
 	ADD_PROFILE = ErrorMessage{
@@ -313,16 +298,6 @@ var (
 		Description: "You do not have permission to access this resource.",
 	}
 
-	INVALID_ATTRIBUTE_NAME = ErrorMessage{
-		Code:    errorPrefix + "11026",
-		Message: "Invalid attribute name.",
-	}
-
-	SCHEMA_ATTRIBUTE_ALREADY_EXISTS = ErrorMessage{
-		Code:    errorPrefix + "11029",
-		Message: "Schema attribute already exists.",
-	}
-
 	INVALID_PROFILE = ErrorMessage{
 		Code:    errorPrefix + "11030",
 		Message: "Invalid profile body.",
@@ -341,5 +316,30 @@ var (
 	INVALID_OPERATION = ErrorMessage{
 		Code:    errorPrefix + "1133",
 		Message: "Invalid Operation.",
+	}
+
+	PROFILE_SCHEMA_ADD_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "12001",
+		Message: "Invalid request payload.",
+	}
+
+	INVALID_ATTRIBUTE_NAME = ErrorMessage{
+		Code:    errorPrefix + "12002",
+		Message: "Invalid attribute name.",
+	}
+
+	SCHEMA_ATTRIBUTE_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "12003",
+		Message: "Schema attribute already exists.",
+	}
+
+	PROFILE_SCHEMA_UPDATE_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "12004",
+		Message: "Invalid schema update.",
+	}
+
+	ATTRIBUTE_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "12005",
+		Message: "Attribute not found.",
 	}
 )

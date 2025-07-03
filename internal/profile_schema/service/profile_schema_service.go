@@ -32,17 +32,16 @@ import (
 )
 
 type ProfileSchemaServiceInterface interface {
-	AddProfileSchemaAttribute(attrs []model.ProfileSchemaAttribute) error
-	GetProfileSchemaAttribute(orgId, attributeId string) (model.ProfileSchemaAttribute, error)
-	GetProfileSchemaAttributes(orgId, scope string) ([]model.ProfileSchemaAttribute, error)
-	PatchProfileSchemaAttribute(orgId, attributeId string, updates map[string]interface{}) error
-	PatchProfileSchemaAttributes(orgId string, updates []map[string]interface{}) error
-	DeleteProfileSchemaAttribute(orgId, attributeId string) error
-	DeleteProfileSchemaAttributes(orgId, scope string) error
 	GetProfileSchema(orgId string) (map[string]interface{}, error)
 	DeleteProfileSchema(orgId string) error
+	AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope string) error
+	GetProfileSchemaAttributesByScope(orgId, scope string) (interface{}, error)
+	PatchProfileSchemaAttributesByScope(orgId, scope string, updates []map[string]interface{}) error
+	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
+	GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error)
+	PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}) error
+	DeleteProfileSchemaAttributeById(orgId, attributeId string) error
 	SyncProfileSchema(orgId string) error
-	//GetProfileSchemaScope(id string, scope string) (string, error)
 }
 
 // ProfileSchemaService is the default implementation of the ProfileSchemaServiceInterface.
@@ -54,35 +53,46 @@ func GetProfileSchemaService() ProfileSchemaServiceInterface {
 	return &ProfileSchemaService{}
 }
 
-func (s *ProfileSchemaService) AddProfileSchemaAttribute(attrs []model.ProfileSchemaAttribute) error {
+// AddProfileSchemaAttributesForScope adds profile schema attributes to the specific scope.
+func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttributes []model.ProfileSchemaAttribute, scope string) error {
 
-	validAttrs := make([]model.ProfileSchemaAttribute, 0, len(attrs))
-
-	for _, attr := range attrs {
+	validAttrs := make([]model.ProfileSchemaAttribute, 0, len(schemaAttributes))
+	for _, attr := range schemaAttributes {
 		if err, isValid := s.validateSchemaAttribute(attr); isValid {
 			validAttrs = append(validAttrs, attr)
 		} else {
-			return fmt.Errorf("validation failed for attribute '%s': %w", attr.AttributeName, err)
+			return err
+		}
+
+		// Ensure the scope is valid
+		parts := strings.SplitN(attr.AttributeName, ".", 2)
+		scopeOfAttr := parts[0]
+		if scope != scopeOfAttr {
+			errorMsg := fmt.Sprintf("Attribute '%s' does not match the api scope '%s'", attr.AttributeName, scope)
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Description: errorMsg,
+			}, http.StatusBadRequest)
+			return clientError
 		}
 
 		existing, err := psstr.GetProfileSchemaAttributeByName(attr.OrgId, attr.AttributeName)
 		if err != nil {
-			return fmt.Errorf("error checking existing attribute '%s': %w", attr.AttributeName, err)
+			return err
 		}
 		if existing != nil {
-			logger := log.GetLogger()
 			errorMsg := fmt.Sprintf("Attribute '%s' already exists for org '%s'", attr.AttributeName, attr.OrgId)
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
 				Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
 				Description: errorMsg,
 			}, http.StatusConflict)
-			logger.Info(errorMsg)
 			return clientError
 		}
 	}
 
-	return psstr.AddProfileSchemaAttributes(validAttrs)
+	return psstr.AddProfileSchemaAttributesForScope(validAttrs, scope)
 }
 
 func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaAttribute) (error, bool) {
@@ -100,21 +110,13 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	scope := parts[0]
 	if !constants.AllowedAttributesScope[scope] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-			Description: fmt.Sprintf("Invalid scope: %s. Must be one of identity_attributes, traits, application_data", scope),
+			Code:    errors2.INVALID_ATTRIBUTE_NAME.Code,
+			Message: errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Description: fmt.Sprintf("Invalid scope: %s. Must be one of identity_attributes, traits, "+
+				"application_data", scope),
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
-
-	//if scope == constants.IdentityAttributes {
-	//	clientError := errors2.NewClientError(errors2.ErrorMessage{
-	//		Code:        errors2.INVALID_OPERATION.Code,
-	//		Message:     errors2.INVALID_OPERATION.Message,
-	//		Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
-	//	}, http.StatusMethodNotAllowed)
-	//	return clientError, false
-	//}
 
 	if scope == constants.ApplicationData {
 		if attr.ApplicationIdentifier == "" {
@@ -131,11 +133,21 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-			Description: fmt.Sprintf("Invalid value_type: %s. Must be one of: %v", attr.ValueType, keysOf(constants.AllowedValueTypes)),
+			Description: fmt.Sprintf("Invalid value_type: %s. Must be one of %v", attr.ValueType, keysOf(constants.AllowedValueTypes)),
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
 
+	if attr.SubAttributes != nil || len(attr.SubAttributes) > 0 {
+		if attr.ValueType != constants.ComplexDataType {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Description: fmt.Sprintf("SubAttributes are meant for for value_type: %s", constants.ComplexDataType),
+			}, http.StatusBadRequest)
+			return clientError, false
+		}
+	}
 	if attr.ValueType == constants.ComplexDataType {
 		if attr.SubAttributes == nil || len(attr.SubAttributes) == 0 {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -156,6 +168,31 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 				return clientError, false
 			}
 
+			subAttribute, err := s.GetProfileSchemaAttributeById(attr.OrgId, subAttr.AttributeId)
+			if err != nil {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Description: fmt.Sprintf("Sub-attribute with Id '%s' does not exist.", subAttr.AttributeId),
+				}, http.StatusBadRequest)
+				return clientError, false
+			}
+			if subAttribute.AttributeName != subAttr.AttributeName {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Description: fmt.Sprintf("Sub-attribute name '%s' does not match the expected name.", subAttr.AttributeName),
+				}, http.StatusBadRequest)
+				return clientError, false
+			}
+			if subAttribute.ApplicationIdentifier != attr.ApplicationIdentifier {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Description: fmt.Sprintf("Sub-attribute '%s' must have the same application identifier as the parent attribute '%s'.", subAttr.AttributeName, attr.AttributeName),
+				}, http.StatusBadRequest)
+				return clientError, false
+			}
 		}
 	}
 
@@ -163,22 +200,52 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-			Description: fmt.Sprintf("Invalid mutability: %s. Must be one of: %v", attr.ValueType, keysOf(constants.AllowedMutabilityValues)),
+			Description: fmt.Sprintf("Invalid mutability: %s. Must be one of %v", attr.ValueType, keysOf(constants.AllowedMutabilityValues)),
+		}, http.StatusBadRequest)
+		return clientError, false
+	}
+
+	if !constants.AllowedMergeStrategies[attr.MergeStrategy] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Description: fmt.Sprintf("Invalid merge strategy: %s. Must be one of %v", attr.MergeStrategy, keysOf(constants.AllowedMergeStrategies)),
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
 	return nil, true
 }
 
-func (s *ProfileSchemaService) GetProfileSchemaAttribute(orgId, attributeId string) (model.ProfileSchemaAttribute, error) {
-	return psstr.GetProfileSchemaAttribute(orgId, attributeId)
+func (s *ProfileSchemaService) GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error) {
+	return psstr.GetProfileSchemaAttributeById(orgId, attributeId)
 }
 
-func (s *ProfileSchemaService) GetProfileSchemaAttributes(orgId, scope string) ([]model.ProfileSchemaAttribute, error) {
-	return psstr.GetProfileSchemaAttributes(orgId, scope)
+// GetProfileSchemaAttributesByScope retrieves profile schema attributes for a specific scope.
+func (s *ProfileSchemaService) GetProfileSchemaAttributesByScope(orgId, scope string) (interface{}, error) {
+
+	schemaAttributes, err := psstr.GetProfileSchemaAttributesByScope(orgId, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	//todo: decide if we are retuning grouped app response
+	//if scope == constants.ApplicationData {
+	//	grouped := make(map[string][]model.ProfileSchemaAttribute)
+	//	for _, attr := range schemaAttributes {
+	//		appID := attr.ApplicationIdentifier
+	//		if appID == "" {
+	//			log.GetLogger().Warn(fmt.Sprintf("Missing application identifier for application data: %s", attr.AttributeName))
+	//			continue
+	//		}
+	//		// Keep application_identifier in the attribute as required
+	//		grouped[appID] = append(grouped[appID], attr)
+	//	}
+	//	return grouped, err
+	//}
+	return schemaAttributes, nil
 }
 
-func (s *ProfileSchemaService) PatchProfileSchemaAttribute(orgId, attributeId string, updates map[string]interface{}) error {
+func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}) error {
 
 	if len(updates) == 0 {
 		return errors2.NewClientError(errors2.ErrorMessage{
@@ -187,18 +254,32 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttribute(orgId, attributeId st
 			Description: "No updates provided for the profile schema attribute",
 		}, http.StatusBadRequest)
 	}
-	//attribute, err := s.GetProfileSchemaAttribute(orgId, attributeId)
+	attribute, err := s.GetProfileSchemaAttributeById(orgId, attributeId)
+	if err != nil {
+		return err
+	}
+	if attribute.AttributeId == "" {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Description: fmt.Sprintf("Attribute with Id '%s' does not exist", attributeId),
+		}, http.StatusNotFound)
+	}
+
 	// attribute id cannot be there and also org id. attribute name only can be updated not the scope.
 
 	// todo: ensure NPE - see if u need to update application identifier also...its PUT as well. So yeah.
 	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
-		OrgId:         orgId,
-		AttributeId:   attributeId,
-		AttributeName: updates["attribute_name"].(string),
-		ValueType:     updates["value_type"].(string),
-		MergeStrategy: updates["merge_strategy"].(string),
-		Mutability:    updates["mutability"].(string),
-		//ApplicationIdentifier: updates["application_identifier"].(string),
+		OrgId:                 orgId,
+		AttributeId:           attributeId,
+		AttributeName:         updates["attribute_name"].(string),
+		ValueType:             updates["value_type"].(string),
+		MergeStrategy:         updates["merge_strategy"].(string),
+		Mutability:            updates["mutability"].(string),
+		MultiValued:           updates["multi_valued"].(bool),
+		CanonicalValues:       updates["canonical_values"].([]model.CanonicalValue),
+		SubAttributes:         updates["sub_attributes"].([]model.SubAttribute),
+		ApplicationIdentifier: updates["application_identifier"].(string),
 	})
 	if !isValid {
 		if err != nil {
@@ -211,19 +292,19 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttribute(orgId, attributeId st
 			Description: "Invalid updates provided for the profile schema attribute",
 		}, http.StatusBadRequest)
 	}
-	return psstr.PatchProfileSchemaAttribute(orgId, attributeId, updates)
+	return psstr.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
 }
 
-func (s *ProfileSchemaService) PatchProfileSchemaAttributes(orgId string, updates []map[string]interface{}) error {
+// PatchProfileSchemaAttributesByScope updates multiple profile schema attributes for a specific scope.
+func (s *ProfileSchemaService) PatchProfileSchemaAttributesByScope(orgId string, scope string, updates []map[string]interface{}) error {
 
 	if len(updates) == 0 {
 		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.PROFILE_SCHEMA_UPDATE_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_UPDATE_BAD_REQUEST.Message,
 			Description: "No updates provided for the profile schema attributes",
 		}, http.StatusBadRequest)
 	}
-
 	validatedAttributes := make([]model.ProfileSchemaAttribute, 0)
 
 	for _, upd := range updates {
@@ -234,15 +315,19 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributes(orgId string, update
 		mergeStrategy, ok4 := upd["merge_strategy"].(string)
 		mutability, ok5 := upd["mutability"].(string)
 		appId, ok6 := upd["application_identifier"].(string)
+		multiValued, ok7 := upd["multi_valued"].(bool)
 
-		if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 {
+		if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 {
 			return errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Code:        errors2.PROFILE_SCHEMA_UPDATE_BAD_REQUEST.Code,
+				Message:     errors2.PROFILE_SCHEMA_UPDATE_BAD_REQUEST.Message,
 				Description: fmt.Sprintf("Missing or invalid fields in attribute update: %v", upd),
 			}, http.StatusBadRequest)
 		}
 
+		// Optional fields
+		canonicalValues, _ := upd["canonical_values"].([]model.CanonicalValue)
+		subAttributes, _ := upd["sub_attributes"].([]model.SubAttribute)
 		attr := model.ProfileSchemaAttribute{
 			OrgId:                 orgId,
 			AttributeId:           attributeId,
@@ -251,6 +336,9 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributes(orgId string, update
 			MergeStrategy:         mergeStrategy,
 			Mutability:            mutability,
 			ApplicationIdentifier: appId,
+			CanonicalValues:       canonicalValues,
+			SubAttributes:         subAttributes,
+			MultiValued:           multiValued,
 		}
 
 		if err, isValid := s.validateSchemaAttribute(attr); !isValid {
@@ -268,10 +356,11 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributes(orgId string, update
 	}
 
 	// Perform the actual patch
-	return psstr.PatchProfileSchemaAttributes(orgId, validatedAttributes)
+	return psstr.PatchProfileSchemaAttributesForScope(orgId, scope, validatedAttributes)
 }
 
-func (s *ProfileSchemaService) DeleteProfileSchemaAttribute(orgId, attributeId string) error {
+// DeleteProfileSchemaAttributeById deletes a profile schema attribute by its Id.
+func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(orgId, attributeId string) error {
 
 	//// Validate the attributeId format
 	//parts := strings.Split(attributeId, ".")
@@ -284,25 +373,17 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttribute(orgId, attributeId s
 	//	}, http.StatusMethodNotAllowed)
 	//	return clientError
 	//}
-	return psstr.DeleteProfileSchemaAttribute(orgId, attributeId)
+	return psstr.DeleteProfileSchemaAttributeById(orgId, attributeId)
 }
 
-func (s *ProfileSchemaService) DeleteProfileSchemaAttributes(orgId, scope string) error {
-
-	//if scope == constants.IdentityAttributes {
-	//	clientError := errors2.NewClientError(errors2.ErrorMessage{
-	//		Code:        errors2.INVALID_OPERATION.Code,
-	//		Message:     errors2.INVALID_OPERATION.Message,
-	//		Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
-	//	}, http.StatusMethodNotAllowed)
-	//	return clientError
-	//}
+func (s *ProfileSchemaService) DeleteProfileSchemaAttributesByScope(orgId, scope string) error {
 	return psstr.DeleteProfileSchemaAttributes(orgId, scope)
 }
 
+// GetProfileSchema retrieves the complete profile schema for the given organization Id.
 func (s *ProfileSchemaService) GetProfileSchema(orgId string) (map[string]interface{}, error) {
-	logger := log.GetLogger()
 
+	logger := log.GetLogger()
 	// Step 1: Flatten core schema fields from model.CoreSchema
 	profileSchema := make(map[string]interface{})
 	meta := map[string]map[string]string{}
@@ -327,17 +408,18 @@ func (s *ProfileSchemaService) GetProfileSchema(orgId string) (map[string]interf
 	// Step 2: Fetch schema attributes from DB
 	schemaAttributes, err := psstr.GetProfileSchemaAttributesForOrg(orgId)
 	if err != nil {
-		logger.Debug("Error retrieving profile schema attributes")
+		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for org %s: %v", orgId)
+		logger.Debug(errMsg, log.Error(err))
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE_SCHEMA.Code,
 			Message:     errors2.GET_PROFILE_SCHEMA.Message,
-			Description: "Error retrieving profile schema attributes",
+			Description: errMsg,
 		}, err)
 	}
 
 	// Step 3: Group them by scope
 	identityAttrs := make([]model.ProfileSchemaAttribute, 0)
-	appDataAttrs := make(map[string][]model.ProfileSchemaAttribute) // app_id → attributes
+	appDataAttrs := make(map[string][]model.ProfileSchemaAttribute)
 	traitsAttrs := make([]model.ProfileSchemaAttribute, 0)
 
 	for _, attr := range schemaAttributes {
@@ -452,17 +534,27 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
 	claims, err := identityClient.GetProfileSchema(orgId)
 	logger := log.GetLogger()
 	if err != nil {
-		return fmt.Errorf("failed to fetch profile schema for org %s: %w", orgId, err)
+		errMsg := fmt.Sprintf("failed to fetch profile schema from identity server for organization %s:", orgId)
+		logger.Debug(errMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
+			Message:     errors2.SYNC_PROFILE_SCHEMA.Message,
+			Description: errMsg,
+		}, err)
 	}
 
 	if len(claims) > 0 {
-		logger.Info("Logging for =====")
 		err := psstr.UpsertIdentityAttributes(orgId, claims)
 		if err != nil {
-			logger.Error("Failed to store fetched profile schema", log.Error(err))
-		} else {
-			logger.Info("Profile schema successfully updated for org: " + orgId)
+			errMsg := fmt.Sprintf("failed to persist profile schema for organization %s:", orgId)
+			logger.Debug(errMsg, log.Error(err))
+			return errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
+				Message:     errors2.SYNC_PROFILE_SCHEMA.Message,
+				Description: errMsg,
+			}, err)
 		}
+		logger.Info("Profile schema successfully updated for org: " + orgId)
 	}
 	return nil
 }

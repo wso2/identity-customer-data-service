@@ -25,7 +25,6 @@ type ProfileSchemaAttribute struct {
 	ValueType             string           `json:"value_type" bson:"value_type" binding:"required"`
 	MergeStrategy         string           `json:"merge_strategy" bson:"merge_strategy" binding:"required"`
 	Mutability            string           `json:"mutability" bson:"mutability"`
-	UpdatedAt             int              `json:"updated_at" bson:"updated_at"` // helps is merging - latest or oldest (
 	ApplicationIdentifier string           `json:"application_identifier,omitempty" bson:"application_identifier,omitempty"`
 	MultiValued           bool             `json:"multi_valued,omitempty" bson:"multi_valued,omitempty"`         // Means the data type is an array of chosen data type
 	CanonicalValues       []CanonicalValue `json:"canonical_values,omitempty" bson:"canonical_values,omitempty"` // String of options for the attribute

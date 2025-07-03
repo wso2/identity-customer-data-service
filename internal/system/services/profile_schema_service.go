@@ -73,11 +73,11 @@ func (s *ProfileSchemaService) routeSchemaScopedOrAttribute(w http.ResponseWrite
 		scope := parts[0]
 		switch r.Method {
 		case http.MethodPost:
-			s.handler.AddProfileSchemaAttributes(w, r, scope)
+			s.handler.AddProfileSchemaAttributesForScope(w, r, scope)
 		case http.MethodGet:
 			s.handler.GetProfileSchemaAttributeForScope(w, r, scope)
 		case http.MethodPut:
-			s.handler.PatchProfileSchemaAttributeForScope(w, r, scope)
+			s.handler.PatchProfileSchemaAttributesForScope(w, r, scope)
 		case http.MethodDelete:
 			s.handler.DeleteProfileSchemaAttributeForScope(w, r, scope)
 		default:
@@ -87,11 +87,11 @@ func (s *ProfileSchemaService) routeSchemaScopedOrAttribute(w http.ResponseWrite
 		scope, attrID := parts[0], parts[1]
 		switch r.Method {
 		case http.MethodGet:
-			s.handler.GetProfileSchemaAttribute(w, r, scope, attrID)
+			s.handler.GetProfileSchemaAttributeById(w, r, scope, attrID)
 		case http.MethodPut:
-			s.handler.PatchProfileSchemaAttribute(w, r, scope, attrID)
+			s.handler.PatchProfileSchemaAttributeById(w, r, scope, attrID)
 		case http.MethodDelete:
-			s.handler.DeleteProfileSchemaAttribute(w, r, scope, attrID)
+			s.handler.DeleteProfileSchemaAttributeById(w, r, scope, attrID)
 		default:
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		}

@@ -51,7 +51,6 @@ func fetchSchemas(idClient *client.IdentityClient, orgID string) {
 	}
 
 	if len(claims) > 0 {
-		logger.Info("Logging for =====")
 		err := store.UpsertIdentityAttributes(orgID, claims)
 		if err != nil {
 			logger.Error("Failed to store fetched profile schema", log.Error(err))

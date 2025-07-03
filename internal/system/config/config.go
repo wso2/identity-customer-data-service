@@ -54,6 +54,7 @@ type DatabaseConfig struct {
 }
 
 type DataSourceConfig struct {
+	Type     string `yaml:"type"` // e.g., "postgres", "mysql"
 	Hostname string `yaml:"hostname"`
 	Port     int    `yaml:"port"`
 	Name     string `yaml:"name"`

@@ -27,18 +27,22 @@ const (
 )
 
 const (
+	SchemaInitEvent = "schema-initialization"
+)
+
+const (
 	update = "update" // Update an existing profile with new data.
 	create = "create" // Create a new profile with the provided data.
 	sync   = "sync"
 )
 
 var AllowedValueTypes = map[string]bool{
-	"string":    true,
-	"integer":   true,
-	"decimal":   true,
-	"boolean":   true,
-	"date_time": true,
-	"object":    true,
+	StringDataType:   true,
+	IntegerDataType:  true,
+	DecimalDataType:  true,
+	BooleanDataType:  true,
+	DateTimeDataType: true,
+	ComplexDataType:  true,
 }
 
 // Mutability values define how an attribute can be created, read, or updated.

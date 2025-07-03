@@ -84,3 +84,11 @@ func WriteErrorResponse(w http.ResponseWriter, err *error2.ClientError) {
 
 	_ = json.NewEncoder(w).Encode(err.ErrorMessage)
 }
+
+func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError) {
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+
+	_ = json.NewEncoder(w).Encode("Invalid erquest format")
+}

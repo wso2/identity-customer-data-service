@@ -45,42 +45,74 @@ func NewProfileSchemaHandler() *ProfileSchemaHandler {
 	}
 }
 
-// AddProfileSchemaAttributes handles adding a new profile schema attribute.
-func (psh *ProfileSchemaHandler) AddProfileSchemaAttributes(w http.ResponseWriter, r *http.Request, scope string) {
+// AddProfileSchemaAttributesForScope handles adding a new profile schema attribute.
+func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.ResponseWriter, r *http.Request, scope string) {
 
-	var schemaAtt []model.ProfileSchemaAttribute
-	if err := json.NewDecoder(r.Body).Decode(&schemaAtt); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	var schemaAttributes []model.ProfileSchemaAttribute
+	orgId := utils.ExtractTenantIdFromPath(r)
+	if err := json.NewDecoder(r.Body).Decode(&schemaAttributes); err != nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: utils.HandleDecodeError(err, "profile schema attributes", "array"),
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
+	// Validate the scope
+	if scope == constants.IdentityAttributes {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "Identity attributes cannot be created via this endpoint. Use the user management instead.",
+		}, http.StatusBadRequest)
+		//todo: decide on the status code
+		utils.WriteErrorResponse(w, clientError)
 		return
 	}
 	if !constants.AllowedAttributesScope[scope] {
-		http.Error(w, "Invalid scope", http.StatusBadRequest)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "Invalid scope for profile schema attribute: " + scope,
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
 		return
 	}
-	if len(schemaAtt) == 0 {
-		http.Error(w, "No attributes provided", http.StatusBadRequest)
+	if len(schemaAttributes) == 0 {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "No attributes provided in the request body.",
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
 		return
 	}
 	// Generate a new UUID for each attribute if not provided
-	for i := range schemaAtt {
-		if schemaAtt[i].AttributeId == "" {
-			schemaAtt[i].AttributeId = uuid.New().String()
+	for i := range schemaAttributes {
+		if schemaAttributes[i].AttributeId == "" {
+			schemaAttributes[i].AttributeId = uuid.New().String()
 		}
-		if schemaAtt[i].Mutability == "" {
-			schemaAtt[i].Mutability = constants.MutabilityReadWrite
+		if schemaAttributes[i].Mutability == "" {
+			schemaAttributes[i].Mutability = constants.MutabilityReadWrite
 		}
-		schemaAtt[i].OrgId = utils.ExtractTenantIdFromPath(r)
+		schemaAttributes[i].OrgId = orgId
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	err := schemaService.AddProfileSchemaAttribute(schemaAtt)
+	err := schemaService.AddProfileSchemaAttributesForScope(schemaAttributes, scope)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+	schemaAttributesNew := schemaAttributes
+	for i := range schemaAttributesNew {
+		schemaAttributesNew[i].OrgId = ""
+		//todo: See if we need responseObject and covert to that
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(schemaAtt)
+	_ = json.NewEncoder(w).Encode(schemaAttributes)
 }
 
 // GetProfileSchema handles fetching the entire profile schema.
@@ -100,8 +132,8 @@ func (psh *ProfileSchemaHandler) GetProfileSchema(w http.ResponseWriter, r *http
 	_ = json.NewEncoder(w).Encode(profileSchema)
 }
 
-// GetProfileSchemaAttribute handles fetching the entire profile schema.
-func (psh *ProfileSchemaHandler) GetProfileSchemaAttribute(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
+// GetProfileSchemaAttributeById handles fetching the entire profile schema.
+func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
@@ -109,7 +141,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttribute(w http.ResponseWriter
 	attribute := model.ProfileSchemaAttribute{}
 	var err error
 	if constants.AllowedAttributesScope[scope] {
-		attribute, err = schemaService.GetProfileSchemaAttribute(orgId, attributeId)
+		attribute, err = schemaService.GetProfileSchemaAttributeById(orgId, attributeId)
 	}
 	if err != nil {
 		utils.HandleError(w, err)
@@ -120,16 +152,16 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttribute(w http.ResponseWriter
 	_ = json.NewEncoder(w).Encode(attribute)
 }
 
-// GetProfileSchemaAttribute handles fetching the entire profile schema.
+// GetProfileSchemaAttributeForScope handles fetching the entire profile schema for the scope.
 func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request, scope string) {
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
 	orgId := utils.ExtractTenantIdFromPath(r)
-	var attribute []model.ProfileSchemaAttribute
+	var attributes interface{}
 	var err error
 	if constants.AllowedAttributesScope[scope] {
-		attribute, err = schemaService.GetProfileSchemaAttributes(orgId, scope)
+		attributes, err = schemaService.GetProfileSchemaAttributesByScope(orgId, scope)
 	}
 
 	//todo: ensure it works for app data
@@ -139,11 +171,11 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(attribute)
+	_ = json.NewEncoder(w).Encode(attributes)
 }
 
-// PatchProfileSchemaAttribute updates a profile schema attribute.
-func (psh *ProfileSchemaHandler) PatchProfileSchemaAttribute(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
+// PatchProfileSchemaAttributeById updates a profile schema attribute.
+func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
@@ -153,13 +185,13 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttribute(w http.ResponseWrit
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	err := schemaService.PatchProfileSchemaAttribute(orgId, attributeId, updates)
+	err := schemaService.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
-	attribute, err := schemaService.GetProfileSchemaAttribute(orgId, attributeId)
+	attribute, err := schemaService.GetProfileSchemaAttributeById(orgId, attributeId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -169,14 +201,14 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttribute(w http.ResponseWrit
 	_ = json.NewEncoder(w).Encode(attribute)
 }
 
-// PatchProfileSchemaAttribute updates a profile schema attribute.
-func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request, scope string) {
+// PatchProfileSchemaAttributesForScope updates a profile schema attribute.
+func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributesForScope(w http.ResponseWriter, r *http.Request, scope string) {
 
 	if scope == constants.IdentityAttributes {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-			Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
+			Description: "Identity attributes cannot be modified via this endpoint.",
 		}, http.StatusMethodNotAllowed)
 		utils.WriteErrorResponse(w, clientError)
 		return
@@ -189,13 +221,13 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeForScope(w http.Resp
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	err := schemaService.PatchProfileSchemaAttributes(orgId, updates)
+	err := schemaService.PatchProfileSchemaAttributesByScope(orgId, scope, updates)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
-	attribute, err := schemaService.GetProfileSchemaAttributes(orgId, scope)
+	attribute, err := schemaService.GetProfileSchemaAttributesByScope(orgId, scope)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -210,7 +242,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchema(w http.ResponseWriter, r *h
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := r.Context().Value(constants.TenantContextKey).(string)
+	orgId := utils.ExtractTenantIdFromPath(r)
 	err := schemaService.DeleteProfileSchema(orgId)
 
 	if err != nil {
@@ -222,14 +254,14 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchema(w http.ResponseWriter, r *h
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// DeleteProfileSchemaAttribute removes a profile schema attribute.
-func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttribute(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
+// DeleteProfileSchemaAttributeById removes a profile schema attribute.
+func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
 
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
 	orgId := utils.ExtractTenantIdFromPath(r)
 
-	err := schemaService.DeleteProfileSchemaAttribute(orgId, attributeId)
+	err := schemaService.DeleteProfileSchemaAttributeById(orgId, attributeId)
 
 	if err != nil {
 		utils.HandleError(w, err)
@@ -241,20 +273,20 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttribute(w http.ResponseWri
 
 func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request, scope string) {
 
-	//if scope == constants.IdentityAttributes {
-	//	clientError := errors2.NewClientError(errors2.ErrorMessage{
-	//		Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-	//		Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-	//		Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
-	//	}, http.StatusMethodNotAllowed)
-	//	utils.WriteErrorResponse(w, clientError)
-	//	return
-	//}
+	if scope == constants.IdentityAttributes {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Description: "Identity attributes cannot be created or modified via this endpoint.",
+		}, http.StatusMethodNotAllowed)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
 	orgId := utils.ExtractTenantIdFromPath(r)
 
-	err := schemaService.DeleteProfileSchemaAttributes(orgId, scope)
+	err := schemaService.DeleteProfileSchemaAttributesByScope(orgId, scope)
 
 	if err != nil {
 		utils.HandleError(w, err)
@@ -268,7 +300,7 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 
 	var schemaAtt model.ProfileSchemaSync
 	if err := json.NewDecoder(r.Body).Decode(&schemaAtt); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		http.Error(w, "Invalid request.", http.StatusBadRequest)
 		return
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
@@ -276,15 +308,13 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 
 	log.GetLogger().Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaAtt.Event, schemaAtt.OrgId))
 
-	if schemaAtt.Event == "schema-initialization" {
+	if schemaAtt.Event == constants.SchemaInitEvent {
 		orgId := schemaAtt.OrgId
-
 		err := schemaService.SyncProfileSchema(orgId)
 		if err != nil {
 			utils.HandleError(w, err)
 			return
 		}
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Profile schema synced successfully"})
