@@ -194,26 +194,10 @@ var (
 		Description: "Authorization failure. Authorization information was invalid or missing from your request.",
 	}
 
-	UNIFICATION_RULE_NOT_FOUND = ErrorMessage{
-		Code:        errorPrefix + "11003",
-		Message:     "No resolution rule found.",
-		Description: "No resolution rule defined for this organization for the provided rule_id..",
-	}
-
-	UNIFICATION_UPDATE_FAILED = ErrorMessage{
-		Code:    errorPrefix + "11004",
-		Message: "Validation failed for unification rule update.",
-	}
-
 	PROFILE_NOT_FOUND = ErrorMessage{
 		Code:        errorPrefix + "11005",
 		Message:     "Profile not found.",
 		Description: "No user profile record found for the given profile_id",
-	}
-
-	PROP_ALREADY_EXISTS = ErrorMessage{
-		Code:    errorPrefix + "11006",
-		Message: "Property already exist.",
 	}
 
 	ADD_PROFILE = ErrorMessage{
@@ -341,5 +325,25 @@ var (
 	ATTRIBUTE_NOT_FOUND = ErrorMessage{
 		Code:    errorPrefix + "12005",
 		Message: "Attribute not found.",
+	}
+
+	UNIFICATION_RULE_NOT_FOUND = ErrorMessage{
+		Code:        errorPrefix + "12201",
+		Message:     "No unification rule found.",
+		Description: "No unification rule defined for this organization for the provided rule_id..",
+	}
+
+	UNIFICATION_UPDATE_FAILED = ErrorMessage{
+		Code:    errorPrefix + "12202",
+		Message: "Validation failed for unification rule update.",
+	}
+
+	UNIFICATION_RULE_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "12203",
+		Message: "Unification already exist.",
+	}
+	UNIFICATION_RULE_PRIORITY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "12204",
+		Message: "Unification priority already taken.",
 	}
 )

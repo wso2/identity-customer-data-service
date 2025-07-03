@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-func HandleDecodeError(err error, resourceName, expectedType string) string {
+func HandleDecodeError(err error, resourceName string) string {
 
 	var message string
 	switch {
@@ -25,7 +25,7 @@ func HandleDecodeError(err error, resourceName, expectedType string) string {
 			message = fmt.Sprintf("Malformed JSON in %s request body.", resourceName)
 		}
 	default:
-		message = fmt.Sprintf("Invalid JSON payload for %s. Expected %s at top-level.", resourceName, expectedType)
+		message = fmt.Sprintf("Invalid JSON payload for %s.", resourceName)
 	}
 	return message
 }

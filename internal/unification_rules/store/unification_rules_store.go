@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
@@ -30,7 +31,8 @@ import (
 	"time"
 )
 
-func AddUnificationRule(rule model.UnificationRule) error {
+// AddUnificationRule adds a new unification rule to the database
+func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -38,31 +40,30 @@ func AddUnificationRule(rule model.UnificationRule) error {
 		errorMsg := fmt.Sprintf("Failed to get database client for adding unification rule: %s", rule.RuleName)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.ADD_UNIFICATION_RULE.Code,
-			Message:     errors2.ADD_UNIFICATION_RULE.Message,
+			Code:        errors2.DB_CLIENT_INIT.Code,
+			Message:     errors2.DB_CLIENT_INIT.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
 	}
 	defer dbClient.Close()
 
-	query := `INSERT INTO unification_rules (rule_id, rule_name, property_name, priority, is_active, created_at, updated_at) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	query := scripts.InsertUnificationRule[provider.NewDBProvider().GetDBType()]
 
-	_, err = dbClient.ExecuteQuery(query, rule.RuleId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive,
+	_, err = dbClient.ExecuteQuery(query, rule.RuleId, orgId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive,
 		rule.CreatedAt, rule.UpdatedAt)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while adding unification rule: %s", rule.RuleName)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.ADD_UNIFICATION_RULE.Code,
-			Message:     errors2.ADD_UNIFICATION_RULE.Message,
+			Code:        errors2.EXECUTE_QUERY.Code,
+			Message:     errors2.EXECUTE_QUERY.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
 	}
 
-	logger.Info("Unification rule added successfully: " + rule.RuleName)
+	logger.Info(fmt.Sprintf("Unification rule : %s added successfully", rule.RuleName))
 	return nil
 }
 
@@ -72,26 +73,25 @@ func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := "Failed to get database client for fetching unification rules"
+		errorMsg := fmt.Sprintf("Failed to get database client for fetching unification rules for organization: %s", tenantId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_UNIFICATION_RULE.Code,
-			Message:     errors2.GET_UNIFICATION_RULE.Message,
+			Code:        errors2.DB_CLIENT_INIT.Code,
+			Message:     errors2.DB_CLIENT_INIT.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
 	}
 	defer dbClient.Close()
 
-	query := `SELECT rule_id, rule_name, property_name, priority, is_active, created_at, updated_at 
-FROM unification_rules WHERE tenant_id = $1`
+	query := scripts.GetUnificationRules[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, tenantId)
 	if err != nil {
-		errorMsg := "Failed in fetching all unification rules. "
+		errorMsg := fmt.Sprintf("Failed in fetching all unification rules for organization: %s", tenantId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_UNIFICATION_RULE.Code,
-			Message:     errors2.GET_UNIFICATION_RULE.Message,
+			Code:        errors2.EXECUTE_QUERY.Code,
+			Message:     errors2.EXECUTE_QUERY.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -111,7 +111,7 @@ FROM unification_rules WHERE tenant_id = $1`
 		rules = append(rules, rule)
 	}
 
-	logger.Info("Successfully fetched all unification rules")
+	logger.Info(fmt.Sprintf("Successfully fetched all unification rules for organization: %s", tenantId))
 	return rules, nil
 }
 
@@ -124,15 +124,15 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 		errorMsg := fmt.Sprintf("Failed to get database client for fetching unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_UNIFICATION_RULE.Code,
-			Message:     errors2.GET_UNIFICATION_RULE.Message,
+			Code:        errors2.DB_CLIENT_INIT.Code,
+			Message:     errors2.DB_CLIENT_INIT.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
 	}
 	defer dbClient.Close()
 
-	query := `SELECT rule_id, rule_name, property_name, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`
+	query := scripts.GetUnificationRule[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, ruleId)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -142,8 +142,8 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 		errorMsg := fmt.Sprintf("Failed in fetching unification rule with rule_id: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_UNIFICATION_RULE.Code,
-			Message:     errors2.GET_UNIFICATION_RULE.Message,
+			Code:        errors2.EXECUTE_QUERY.Code,
+			Message:     errors2.EXECUTE_QUERY.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -177,8 +177,8 @@ func PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
 		errorMsg := fmt.Sprintf("Failed to get database client for updating unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_UNIFICATION_RULE.Code,
-			Message:     errors2.UPDATE_UNIFICATION_RULE.Message,
+			Code:        errors2.DB_CLIENT_INIT.Code,
+			Message:     errors2.DB_CLIENT_INIT.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -201,8 +201,8 @@ func PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
 		errorMsg := fmt.Sprintf("Error occurred while updating unification rule for rule_id: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_UNIFICATION_RULE.Code,
-			Message:     errors2.UPDATE_UNIFICATION_RULE.Message,
+			Code:        errors2.EXECUTE_QUERY.Code,
+			Message:     errors2.EXECUTE_QUERY.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -221,22 +221,22 @@ func DeleteUnificationRule(ruleId string) error {
 		errorMsg := fmt.Sprintf("Failed to get database client for updating unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_UNIFICATION_RULE.Code,
-			Message:     errors2.UPDATE_UNIFICATION_RULE.Message,
+			Code:        errors2.DB_CLIENT_INIT.Code,
+			Message:     errors2.DB_CLIENT_INIT.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
 	}
 	defer dbClient.Close()
 
-	query := `DELETE FROM unification_rules WHERE rule_id = $1`
+	query := scripts.DeleteUnificationRule[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query, ruleId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to delete unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_UNIFICATION_RULE.Code,
-			Message:     errors2.UPDATE_UNIFICATION_RULE.Message,
+			Code:        errors2.EXECUTE_QUERY.Code,
+			Message:     errors2.EXECUTE_QUERY.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError

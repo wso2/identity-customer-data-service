@@ -54,7 +54,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
 			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
-			Description: utils.HandleDecodeError(err, "profile schema attributes", "array"),
+			Description: utils.HandleDecodeError(err, "profile schema attributes"),
 		}, http.StatusBadRequest)
 		utils.WriteErrorResponse(w, clientError)
 		return
