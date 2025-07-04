@@ -98,3 +98,194 @@ var InsertUnificationRule = map[string]string{
 	"postgres": `INSERT INTO unification_rules (rule_id, tenant_id, rule_name, property_name, priority, is_active, created_at, updated_at) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 }
+
+var InsertProfile = map[string]string{
+	"postgres": `
+		INSERT INTO profiles (
+		profile_id, user_id, tenant_id, created_at, updated_at, location, list_profile, delete_profile, traits, identity_attributes
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	ON CONFLICT (profile_id) DO NOTHING;`,
+}
+
+var InsertProfileReference = map[string]string{
+	"postgres": `
+		INSERT INTO profile_reference (profile_id, profile_status, reference_profile_id, reference_reason, tenant_id, reference_profile_tenant_id)
+		VALUES ($1,$2,$3,$4, $5,$6)
+		ON CONFLICT (profile_id) DO NOTHING;`,
+}
+
+var GetProfileById = map[string]string{
+	"postgres": `
+		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.tenant_id, p.list_profile, p.delete_profile, 
+		       p.traits, p.identity_attributes, r.profile_status, r.reference_profile_id, r.reference_reason
+		FROM 
+			profiles p
+		LEFT JOIN 
+			profile_reference r ON p.profile_id = r.profile_id
+		WHERE 
+			p.profile_id = $1;`,
+}
+
+var GetAppDataByProfileId = map[string]string{
+	"postgres": `SELECT app_id, application_data FROM application_data WHERE profile_id = $1;`,
+}
+
+var GetAppDataByAppId = map[string]string{
+	"postgres": `SELECT app_id, application_data FROM application_data WHERE profile_id = $1 AND app_id = $2;`,
+}
+
+var UpdateProfile = map[string]string{
+	"postgres": `
+		UPDATE profiles SET
+			user_id = $1,
+			list_profile = $2,
+			delete_profile = $3,
+			traits = $4,
+			identity_attributes = $5,
+			updated_at = $6
+		 WHERE profile_id = $7;`,
+}
+
+var UpsertProfileReference = map[string]string{
+	"postgres": `
+		UPDATE profile_reference SET
+			profile_id = $1,
+			profile_status = $2,
+			reference_profile_id = $3,
+			reference_reason = $4
+		 WHERE profile_id = $5;`,
+}
+var UpdateProfileReference = map[string]string{
+	"postgres": `
+		UPDATE profile_reference
+		SET reference_profile_id = $1,
+			reference_reason = $2,
+			profile_status = $3
+		WHERE profile_id = $4`,
+}
+
+var GetProfilesByOrgId = map[string]string{
+	"postgres": `
+    SELECT 
+        p.profile_id, 
+        p.tenant_id, 
+        p.created_at, 
+        p.updated_at, 
+        p.location, 
+        p.user_id, 
+        r.profile_status, 
+        r.reference_profile_id, 
+        r.reference_reason, 
+        p.list_profile, 
+        p.traits, 
+        p.identity_attributes
+    FROM 
+        profiles p
+    LEFT JOIN 
+        profile_reference r ON p.profile_id = r.profile_id
+    WHERE 
+        p.list_profile = true 
+        AND p.tenant_id = $1;`,
+}
+
+var DeleteProfileByProfileId = map[string]string{
+	"postgres": `DELETE FROM application_data WHERE profile_id = $1`,
+}
+
+var InsertApplicationData = map[string]string{
+	"postgres": `
+		INSERT INTO application_data (profile_id, app_id, application_data)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (profile_id, app_id)
+		DO UPDATE SET application_data = EXCLUDED.application_data;
+	`,
+}
+
+var DeleteProfileReference = map[string]string{
+	"postgres": `DELETE FROM profile_reference WHERE reference_profile_id = $1 AND profile_id = $2;`,
+}
+
+var GetAllProfilesWithFilter = map[string]string{
+	"postgres": `SELECT DISTINCT p.profile_id,
+                p.user_id,
+                p.tenant_id,
+                p.created_at,
+                p.updated_at,
+                p.location,
+                r.profile_status,
+                r.reference_profile_id,
+                r.reference_reason,
+                p.list_profile,
+                p.traits,
+                p.identity_attributes
+FROM profiles p
+LEFT JOIN profile_reference r
+    ON p.profile_id = r.profile_id`,
+}
+
+var GetAllReferenceProfileExceptCurrent = map[string]string{
+	"postgres": `
+	SELECT 
+		p.profile_id, 
+		p.user_id, 
+		r.profile_status, 
+		r.reference_profile_id, 
+		r.reference_reason, 
+		p.tenant_id,
+		p.delete_profile,
+		p.list_profile, 
+		p.traits, 
+		p.identity_attributes
+	FROM 
+		profiles p
+	JOIN 
+		profile_reference r ON p.profile_id = r.profile_id
+	WHERE 
+		r.profile_status = 'REFERENCE_PROFILE'
+		AND p.profile_id != $1;`,
+}
+
+var FetchReferencedProfiles = map[string]string{
+	"postgres": `
+		SELECT profile_id, reference_reason, profile_status 
+		FROM profile_reference 
+		WHERE reference_profile_id = $1;`,
+}
+
+var GetProfileByUserId = map[string]string{
+	"postgres": `
+		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.tenant_id, p.list_profile, p.delete_profile, 
+		       p.traits, p.identity_attributes, r.profile_status, r.reference_profile_id, r.reference_reason
+		FROM 
+			profiles p
+		LEFT JOIN 
+			profile_reference r ON p.profile_id = r.profile_id
+		WHERE 
+			p.user_id = $1
+			AND r.profile_status = 'REFERENCE_PROFILE';`,
+}
+
+var InsertConsentCategory = map[string]string{
+	"postgres": `INSERT INTO consent_categories (category_name, category_identifier, org_id, purpose, destinations)
+				VALUES ($1, $2, $3, $4, $5)`,
+}
+
+var GetAllConsentCategories = map[string]string{
+	"postgres": `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories`,
+}
+
+var GetConsentCategoryById = map[string]string{
+	"postgres": `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories WHERE category_identifier = $1`,
+}
+
+var GetConsentCategoryByName = map[string]string{
+	"postgres": `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories WHERE category_name = $1`,
+}
+
+var UpdateConsentCategory = map[string]string{
+	"postgres": `UPDATE consent_categories SET category_name=$1, purpose=$2, destinations=$3 WHERE category_identifier=$4`,
+}
+
+var DeleteConsentCategory = map[string]string{
+	"postgres": `DELETE FROM consent_categories WHERE category_identifier=$1`,
+}

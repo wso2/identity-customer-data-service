@@ -88,7 +88,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 
 			if doesProfileMatch(existingMasterProfile, newProfile, rule) {
 
-				existingMasterProfile.ProfileStatus.References, _ = profileStore.FetchProfilesThatAreReferenced(existingMasterProfile.ProfileId)
+				existingMasterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(existingMasterProfile.ProfileId)
 
 				//  Merge the existing master to the old master of current
 				schemaRules, _ := schemaStore.GetProfileSchemaAttributesForOrg(newProfile.TenantId)

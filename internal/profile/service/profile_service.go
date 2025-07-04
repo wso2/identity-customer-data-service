@@ -622,7 +622,7 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 
 	if profile.ProfileStatus.IsReferenceProfile {
 
-		alias, err := profileStore.FetchProfilesThatAreReferenced(ProfileId)
+		alias, err := profileStore.FetchReferencedProfiles(ProfileId)
 
 		if err != nil {
 			errorMsg := fmt.Sprintf("Error fetching references for profile: %s", ProfileId)
@@ -746,7 +746,7 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 
 	if profile.ProfileStatus.IsReferenceProfile {
 		// fetching the child if its parent
-		profile.ProfileStatus.References, _ = profileStore.FetchProfilesThatAreReferenced(profile.ProfileId)
+		profile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(profile.ProfileId)
 	}
 
 	if profile.ProfileStatus.IsReferenceProfile && len(profile.ProfileStatus.References) == 0 {
@@ -839,7 +839,7 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 			}, err)
 			return serverError
 		}
-		parentProfile.ProfileStatus.References, _ = profileStore.FetchProfilesThatAreReferenced(parentProfile.ProfileId)
+		parentProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(parentProfile.ProfileId)
 
 		if len(parentProfile.ProfileStatus.References) == 1 {
 			// delete the parent as this is the only child
@@ -920,7 +920,7 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 
 	var result []profileModel.ProfileResponse
 	for _, profile := range existingProfiles {
-		alias, err := profileStore.FetchProfilesThatAreReferenced(profile.ProfileId)
+		alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Error fetching references for profile: %s", profile.ProfileId)
 			logger := log.GetLogger()
@@ -960,7 +960,7 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 			masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
 
 			// building the hierarchy
-			masterProfile.ProfileStatus.References, _ = profileStore.FetchProfilesThatAreReferenced(masterProfile.ProfileId)
+			masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
 
 			alias := &profileModel.Reference{
 				ProfileId: profile.ProfileStatus.ReferenceProfileId,
@@ -1058,7 +1058,7 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []s
 			}
 
 			masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
-			masterProfile.ProfileStatus.References, _ = profileStore.FetchProfilesThatAreReferenced(masterProfile.ProfileId)
+			masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
 
 			// Override for visual reference to the child
 			masterProfile.ProfileId = profile.ProfileId
@@ -1200,7 +1200,7 @@ func (ps ProfilesService) FindProfileByUserId(userId string) (*profileModel.Prof
 		return nil, clientError
 	}
 
-	alias, err := profileStore.FetchProfilesThatAreReferenced(profile.ProfileId)
+	alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error fetching references for profile: %s", profile.ProfileId)

@@ -8,6 +8,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"strconv"
@@ -105,11 +106,7 @@ func InsertProfile(profile model.Profile) error {
 		profileStatus = constants.MergedTo
 	}
 
-	query := `
-		INSERT INTO profiles (
-		profile_id, user_id, tenant_id, created_at, updated_at, location, list_profile, delete_profile, traits, identity_attributes
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	ON CONFLICT (profile_id) DO NOTHING;`
+	query := scripts.InsertProfile[provider.NewDBProvider().GetDBType()]
 
 	_, err = dbClient.ExecuteQuery(query,
 		profile.ProfileId,
@@ -135,10 +132,7 @@ func InsertProfile(profile model.Profile) error {
 		return serverError
 	}
 
-	referenceQuery := `
-		INSERT INTO profile_reference (profile_id, profile_status, reference_profile_id, reference_reason, tenant_id, reference_profile_tenant_id)
-		VALUES ($1,$2,$3,$4, $5,$6)
-		ON CONFLICT (profile_id) DO NOTHING;`
+	referenceQuery := scripts.InsertProfileReference[provider.NewDBProvider().GetDBType()]
 
 	_, err = dbClient.ExecuteQuery(referenceQuery,
 		profile.ProfileId,
@@ -222,15 +216,7 @@ func GetProfile(profileId string) (*model.Profile, error) {
 	}
 	defer dbClient.Close()
 
-	query := `
-		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.tenant_id, p.list_profile, p.delete_profile, 
-		       p.traits, p.identity_attributes, r.profile_status, r.reference_profile_id, r.reference_reason
-		FROM 
-			profiles p
-		LEFT JOIN 
-			profile_reference r ON p.profile_id = r.profile_id
-		WHERE 
-			p.profile_id = $1;`
+	query := scripts.GetProfileById[provider.NewDBProvider().GetDBType()]
 
 	results, err := dbClient.ExecuteQuery(query, profileId)
 
@@ -275,7 +261,7 @@ func FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
 		return nil, serverError
 	}
 	defer dbClient.Close()
-	query := `SELECT app_id, application_data FROM application_data WHERE profile_id = $1;`
+	query := scripts.GetAppDataByProfileId[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed fetching application data for profile with Id: %s", profileId)
@@ -333,7 +319,7 @@ func FetchApplicationDataWithAppId(profileId string, appId string) (model.Applic
 		return model.ApplicationData{}, serverError
 	}
 	defer dbClient.Close()
-	query := `SELECT app_id, application_data FROM application_data WHERE profile_id = $1 AND app_id = $2;`
+	query := scripts.GetAppDataByAppId[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, profileId, appId)
 	var app model.ApplicationData
 	if err != nil {
@@ -405,15 +391,7 @@ func UpdateProfile(profile model.Profile) error {
 		profileStatus = constants.MergedTo
 	}
 
-	query := `
-		UPDATE profiles SET
-			user_id = $1,
-			list_profile = $2,
-			delete_profile = $3,
-			traits = $4,
-			identity_attributes = $5,
-			updated_at = $6
-		 WHERE profile_id = $7;`
+	query := scripts.UpdateProfile[provider.NewDBProvider().GetDBType()]
 
 	_, err = dbClient.ExecuteQuery(query,
 		profile.UserId,
@@ -435,13 +413,7 @@ func UpdateProfile(profile model.Profile) error {
 		return serverError
 	}
 
-	query = `
-		UPDATE profile_reference SET
-			profile_id = $1,
-			profile_status = $2,
-			reference_profile_id = $3,
-			reference_reason = $4
-		 WHERE profile_id = $5;`
+	query = scripts.UpsertProfileReference[provider.NewDBProvider().GetDBType()]
 
 	_, err = dbClient.ExecuteQuery(query,
 		profile.ProfileId,
@@ -493,27 +465,7 @@ func GetAllProfiles(tenantId string) ([]model.Profile, error) {
 	}
 	defer dbClient.Close()
 
-	query := `
-    SELECT 
-        p.profile_id, 
-        p.tenant_id, 
-        p.created_at, 
-        p.updated_at, 
-        p.location, 
-        p.user_id, 
-        r.profile_status, 
-        r.reference_profile_id, 
-        r.reference_reason, 
-        p.list_profile, 
-        p.traits, 
-        p.identity_attributes
-    FROM 
-        profiles p
-    LEFT JOIN 
-        profile_reference r ON p.profile_id = r.profile_id
-    WHERE 
-        p.list_profile = true 
-        AND p.tenant_id = $1;`
+	query := scripts.GetProfilesByOrgId[provider.NewDBProvider().GetDBType()]
 
 	results, err := dbClient.ExecuteQuery(query, tenantId)
 	if err != nil {
@@ -568,7 +520,7 @@ func DeleteProfile(profileId string) error {
 	defer dbClient.Close()
 
 	// Step 1: Delete application_data explicitly (optional if ON DELETE CASCADE not enabled)
-	_, err = dbClient.ExecuteQuery(`DELETE FROM application_data WHERE profile_id = $1`, profileId)
+	_, err = dbClient.ExecuteQuery(scripts.DeleteProfileByProfileId[provider.NewDBProvider().GetDBType()], profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("failed to delete application data for profile: %s", profileId)
 		logger.Debug(errorMsg, log.Error(err))
@@ -666,12 +618,7 @@ func UpsertAppDatum(profileId string, appId string, updates map[string]interface
 	}
 
 	// Upsert into application_data table
-	query := `
-		INSERT INTO application_data (profile_id, app_id, application_data)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (profile_id, app_id)
-		DO UPDATE SET application_data = EXCLUDED.application_data;
-	`
+	query := scripts.InsertApplicationData[provider.NewDBProvider().GetDBType()]
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -719,7 +666,7 @@ func DetachRefererProfileFromReference(referenceProfileId, profileId string) err
 	defer dbClient.Close()
 
 	// todo: decide if we need to delete the references as well.
-	query := `DELETE FROM profile_reference WHERE reference_profile_id = $1 AND profile_id = $2;`
+	query := scripts.DeleteProfileReference[provider.NewDBProvider().GetDBType()]
 	result, err := dbClient.ExecuteQuery(query, referenceProfileId, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to delete child relationship of child: %s of parent: %s",
@@ -881,21 +828,7 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 	argID := 1
 	joinedAppIDs := map[string]bool{}
 
-	baseSQL := `SELECT DISTINCT p.profile_id,
-                p.user_id,
-                p.tenant_id,
-                p.created_at,
-                p.updated_at,
-                p.location,
-                r.profile_status,
-                r.reference_profile_id,
-                r.reference_reason,
-                p.list_profile,
-                p.traits,
-                p.identity_attributes
-FROM profiles p
-LEFT JOIN profile_reference r
-    ON p.profile_id = r.profile_id`
+	baseSQL := scripts.GetAllProfilesWithFilter[provider.NewDBProvider().GetDBType()]
 
 	// Always ensure tenant_id condition first
 	conditions = append(conditions, fmt.Sprintf("p.tenant_id = $%d", argID))
@@ -1079,26 +1012,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 	}
 	defer dbClient.Close()
 
-	query := `
-	SELECT 
-		p.profile_id, 
-		p.user_id, 
-		r.profile_status, 
-		r.reference_profile_id, 
-		r.reference_reason, 
-		p.tenant_id,
-		p.delete_profile,
-		p.list_profile, 
-		p.traits, 
-		p.identity_attributes
-	FROM 
-		profiles p
-	JOIN 
-		profile_reference r ON p.profile_id = r.profile_id
-	WHERE 
-		r.profile_status = 'REFERENCE_PROFILE'
-		AND p.profile_id != $1;
-`
+	query := scripts.GetAllReferenceProfileExceptCurrent[provider.NewDBProvider().GetDBType()]
 
 	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId)
 	if err != nil {
@@ -1163,7 +1077,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 	return profiles, nil
 }
 
-// AddChildProfiles adds child profiles to a parent profile
+// UpdateProfileReferences updates the references of a parent profile with the provided child profiles.
 func UpdateProfileReferences(parentProfile model.Profile, children []model.Reference) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -1193,12 +1107,7 @@ func UpdateProfileReferences(parentProfile model.Profile, children []model.Refer
 		}, err)
 		return serverError
 	}
-	query := `
-		UPDATE profile_reference
-		SET reference_profile_id = $1,
-			reference_reason = $2,
-			profile_status = $3
-		WHERE profile_id = $4`
+	query := scripts.UpdateProfileReference[provider.NewDBProvider().GetDBType()]
 
 	for _, child := range children {
 		_, err := tx.Exec(query, parentProfile.ProfileId, child.Reason, constants.MergedTo, child.ProfileId)
@@ -1228,7 +1137,7 @@ func UpdateProfileReferences(parentProfile model.Profile, children []model.Refer
 	return tx.Commit()
 }
 
-func FetchProfilesThatAreReferenced(referenceProfileId string) ([]model.Reference, error) {
+func FetchReferencedProfiles(referenceProfileId string) ([]model.Reference, error) {
 
 	logger := log.GetLogger()
 	logger.Info(fmt.Sprintf("Fetching referenced profiles for profile: %s", referenceProfileId))
@@ -1246,11 +1155,7 @@ func FetchProfilesThatAreReferenced(referenceProfileId string) ([]model.Referenc
 		return nil, serverError
 	}
 	defer dbClient.Close()
-	query := `
-		SELECT profile_id, reference_reason, profile_status 
-		FROM profile_reference 
-		WHERE reference_profile_id = $1;
-	`
+	query := scripts.FetchReferencedProfiles[provider.NewDBProvider().GetDBType()]
 
 	results, err := dbClient.ExecuteQuery(query, referenceProfileId)
 	if err != nil {
@@ -1407,55 +1312,6 @@ func toInt(val interface{}) (int, bool) {
 	return 0, false
 }
 
-//func GetProfileReference(profileId string) (*model.Reference, error) {
-//
-//	logger := log.GetLogger()
-//	logger.Info(fmt.Sprintf("Fetching referenced profiles for profile: %s", profileId))
-//
-//	dbClient, err := provider.NewDBProvider().GetDBClient()
-//	if err != nil {
-//		errorMsg := fmt.Sprintf("Failed to get database client for fetching child profiles for parent: %s",
-//			profileId)
-//		logger.Debug(errorMsg, log.Error(err))
-//		serverError := errors2.NewServerError(errors2.ErrorMessage{
-//			Code:        errors2.GET_PROFILE.Code,
-//			Message:     errors2.GET_PROFILE.Message,
-//			Description: errorMsg,
-//		}, err)
-//		return nil, serverError
-//	}
-//	defer dbClient.Close()
-//	query := `
-//		SELECT profile_id, reference_reason, reference_profile_id, profile_status
-//		FROM profile_reference
-//		WHERE profile_id = $1;
-//	`
-//
-//	results, err := dbClient.ExecuteQuery(query, profileId)
-//
-//	if err != nil {
-//		errorMsg := fmt.Sprintf("Failed fetching referenced profiles for profile: %s", profileId)
-//		logger.Debug(errorMsg, log.Error(err))
-//		serverError := errors2.NewServerError(errors2.ErrorMessage{
-//			Code:        errors2.GET_PROFILE.Code,
-//			Message:     errors2.GET_PROFILE.Message,
-//			Description: errorMsg,
-//		}, err)
-//		return nil, serverError
-//	}
-//	if len(results) == 0 {
-//		logger.Debug(fmt.Sprintf("No referenced profiles found for profile: %s", profileId))
-//		return nil, nil // No reference found
-//	}
-//	var reference model.Reference
-//
-//	reference.ProfileId = results[0]["profile_id"].(string)
-//	reference.Reason = results[0]["reference_reason"].(string)
-//	reference.ReferenceProfileId = results[0]["reference_profile_id"].(string)
-//	reference.ProfileStatus = results[0]["profile_status"].(string) // Assuming profile_status is a string field
-//
-//}
-
 func GetProfileWithUserId(userId string) (*model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -1472,16 +1328,7 @@ func GetProfileWithUserId(userId string) (*model.Profile, error) {
 	}
 	defer dbClient.Close()
 
-	query := `
-		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.tenant_id, p.list_profile, p.delete_profile, 
-		       p.traits, p.identity_attributes, r.profile_status, r.reference_profile_id, r.reference_reason
-		FROM 
-			profiles p
-		LEFT JOIN 
-			profile_reference r ON p.profile_id = r.profile_id
-		WHERE 
-			p.user_id = $1
-			AND r.profile_status = 'REFERENCE_PROFILE';`
+	query := scripts.GetProfileByUserId[provider.NewDBProvider().GetDBType()]
 
 	results, err := dbClient.ExecuteQuery(query, userId)
 

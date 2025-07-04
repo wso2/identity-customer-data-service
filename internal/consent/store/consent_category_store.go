@@ -22,6 +22,7 @@ import (
 	"github.com/lib/pq"
 	model "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"strings"
@@ -42,8 +43,7 @@ func AddConsentCategory(category model.ConsentCategory) error {
 		}, err)
 	}
 	defer dbClient.Close()
-	query := `INSERT INTO consent_categories (category_name, category_identifier, org_id, purpose, destinations)
-				VALUES ($1, $2, $3, $4, $5)`
+	query := scripts.InsertConsentCategory[provider.NewDBProvider().GetDBType()]
 	tx, err := dbClient.BeginTx()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to begin transaction for inserting consent category: %s", category.CategoryIdentifier)
@@ -95,7 +95,7 @@ func GetAllConsentCategories() ([]model.ConsentCategory, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories`
+	query := scripts.GetAllConsentCategories[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query)
 	if err != nil {
 		errorMsg := "Failed to execute query for fetching consent categories."
@@ -141,7 +141,7 @@ func GetConsentCategoryByID(id string) (*model.ConsentCategory, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories WHERE category_identifier = $1`
+	query := scripts.GetConsentCategoryById[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, id)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to execute query for fetching consent category: %s", id)
@@ -184,7 +184,7 @@ func GetConsentCategoryByName(name string) (*model.ConsentCategory, error) {
 	}
 	defer dbClient.Close()
 
-	query := `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories WHERE category_name = $1`
+	query := scripts.GetConsentCategoryByName[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, name)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to execute query for fetching consent category: %s", name)
@@ -239,7 +239,7 @@ func UpdateConsentCategory(category model.ConsentCategory) error {
 		return serverError
 	}
 
-	query := `UPDATE consent_categories SET category_name=$1, purpose=$2, destinations=$3 WHERE category_identifier=$4`
+	query := scripts.UpdateConsentCategory[provider.NewDBProvider().GetDBType()]
 	_, err = tx.Exec(query, category.CategoryName, category.Purpose, pq.Array(category.Destinations), category.CategoryIdentifier)
 	if err != nil {
 		logger.Debug("Failed to update consent category", log.Error(err))
@@ -276,7 +276,7 @@ func DeleteConsentCategory(categoryId string) error {
 		return serverError
 	}
 
-	query := `DELETE FROM consent_categories WHERE category_identifier=$1`
+	query := scripts.DeleteConsentCategory[provider.NewDBProvider().GetDBType()]
 	_, err = tx.Exec(query, categoryId)
 	if err != nil {
 		logger.Debug("Failed to update consent category", log.Error(err))
