@@ -290,7 +290,7 @@ func ConvertSCIMClaimWithLocal(
 	if val, ok := local["readOnly"].(bool); ok {
 		readOnly = val
 	}
-	valueType := "text" // Default
+	valueType := "string" // Default
 	if val, ok := local["dataType"].(string); ok {
 		valueType = val
 	}
@@ -342,6 +342,11 @@ func ConvertSCIMClaimWithLocal(
 				})
 			}
 		}
+	}
+
+	// Override to complex if it has sub-attributes
+	if len(subAttrs) > 0 {
+		valueType = "complex"
 	}
 
 	fullAttrName := "identity_attributes." + attrKey
