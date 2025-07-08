@@ -1,20 +1,18 @@
 package store
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/profile/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"net/http"
-
-	"github.com/wso2/identity-customer-data-service/internal/profile/model"
-	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // Unmarshal JSONB fields separately
@@ -24,13 +22,32 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 		traitsJSON, identityAttrsJSON []byte
 	)
 
-	profile.ProfileHierarchy = &model.ProfileHierarchy{}
+	profile.ProfileStatus = &model.ProfileStatus{}
 
 	profile.ProfileId = row["profile_id"].(string)
-	profile.OriginCountry = row["origin_country"].(string)
-	profile.ProfileHierarchy.IsParent = row["is_parent"].(bool)
-	profile.ProfileHierarchy.ParentProfileID = row["parent_profile_id"].(string)
-	profile.ProfileHierarchy.ListProfile = row["list_profile"].(bool)
+	profile.UserId = row["user_id"].(string)
+	profile.TenantId = row["tenant_id"].(string)
+	profile.CreatedAt = row["created_at"].(int64)
+	profile.UpdatedAt = row["updated_at"].(int64)
+	profile.Location = row["location"].(string)
+	profileStatus := row["profile_status"].(string)
+	if profileStatus != "" && profileStatus != "null" {
+		if profileStatus == constants.WaitOnAdmin {
+			profile.ProfileStatus.IsWaitingOnAdmin = true
+		}
+		if profileStatus == constants.WaitOnUser {
+			profile.ProfileStatus.IsWaitingOnUser = true
+		}
+		if profileStatus == constants.ReferenceProfile {
+			profile.ProfileStatus.IsReferenceProfile = true
+		}
+		if profileStatus == constants.MergedTo {
+			profile.ProfileStatus.ReferenceReason = row["reference_reason"].(string)
+			profile.ProfileStatus.ReferenceProfileId = row["reference_profile_id"].(string)
+		}
+	}
+
+	profile.ProfileStatus.ListProfile = row["list_profile"].(bool)
 	traitsJSON = row["traits"].([]byte)
 	identityAttrsJSON = row["identity_attributes"].([]byte)
 
@@ -78,19 +95,28 @@ func InsertProfile(profile model.Profile) error {
 
 	traitsJSON, _ := json.Marshal(profile.Traits)
 	identityJSON, _ := json.Marshal(profile.IdentityAttributes)
+	var profileStatus string
+	if profile.ProfileStatus.IsReferenceProfile {
+		profileStatus = constants.ReferenceProfile
+	} else if profile.ProfileStatus.IsWaitingOnUser {
+		profileStatus = constants.WaitOnUser
+	} else if profile.ProfileStatus.IsWaitingOnAdmin {
+		profileStatus = constants.WaitOnAdmin
+	} else {
+		profileStatus = constants.MergedTo
+	}
 
-	query := `
-		INSERT INTO profiles (
-		profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
-	) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	ON CONFLICT (profile_id) DO NOTHING;`
+	query := scripts.InsertProfile[provider.NewDBProvider().GetDBType()]
 
 	_, err = dbClient.ExecuteQuery(query,
 		profile.ProfileId,
-		profile.OriginCountry,
-		profile.ProfileHierarchy.IsParent,
-		profile.ProfileHierarchy.ParentProfileID,
-		profile.ProfileHierarchy.ListProfile,
+		profile.UserId,
+		profile.TenantId,
+		profile.CreatedAt,
+		profile.UpdatedAt,
+		profile.Location,
+		profile.ProfileStatus.ListProfile,
+		false, // delete_profile is not used in this context, set to false
 		traitsJSON,
 		identityJSON,
 	)
@@ -105,6 +131,41 @@ func InsertProfile(profile model.Profile) error {
 		}, err)
 		return serverError
 	}
+
+	referenceQuery := scripts.InsertProfileReference[provider.NewDBProvider().GetDBType()]
+
+	_, err = dbClient.ExecuteQuery(referenceQuery,
+		profile.ProfileId,
+		profileStatus,
+		profile.ProfileStatus.ReferenceProfileId,
+		profile.ProfileStatus.ReferenceReason,
+		profile.TenantId,
+		profile.TenantId,
+	)
+
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to insert profile referencea with Id: %s", profile.ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_PROFILE.Code,
+			Message:     errors2.ADD_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	err = InsertApplicationData(profile.ProfileId, profile.ApplicationData)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to insert profile with Id: %s", profile.ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_PROFILE.Code,
+			Message:     errors2.ADD_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
 	logger.Info("Profile added successfully: " + profile.ProfileId)
 	return nil
 }
@@ -114,11 +175,6 @@ func InsertApplicationData(profileId string, apps []model.ApplicationData) error
 	for _, app := range apps {
 		// Construct the update map
 		updateMap := make(map[string]interface{})
-
-		// Inject devices under top-level key
-		if len(app.Devices) > 0 {
-			updateMap["application_data.devices"] = app.Devices
-		}
 
 		// Flatten app-specific fields
 		for k, v := range app.AppSpecificData {
@@ -160,10 +216,7 @@ func GetProfile(profileId string) (*model.Profile, error) {
 	}
 	defer dbClient.Close()
 
-	query := `
-		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
-		FROM profiles
-		WHERE profile_id = $1;`
+	query := scripts.GetProfileById[provider.NewDBProvider().GetDBType()]
 
 	results, err := dbClient.ExecuteQuery(query, profileId)
 
@@ -208,7 +261,7 @@ func FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
 		return nil, serverError
 	}
 	defer dbClient.Close()
-	query := `SELECT app_id, application_data FROM application_data WHERE profile_id = $1;`
+	query := scripts.GetAppDataByProfileId[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed fetching application data for profile with Id: %s", profileId)
@@ -245,7 +298,6 @@ func FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
 
 		apps = append(apps, model.ApplicationData{
 			AppId:           appId,
-			Devices:         appParsed.Devices,
 			AppSpecificData: appParsed.AppSpecificData,
 		})
 	}
@@ -267,7 +319,7 @@ func FetchApplicationDataWithAppId(profileId string, appId string) (model.Applic
 		return model.ApplicationData{}, serverError
 	}
 	defer dbClient.Close()
-	query := `SELECT app_id, application_data FROM application_data WHERE profile_id = $1 AND app_id = $2;`
+	query := scripts.GetAppDataByAppId[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, profileId, appId)
 	var app model.ApplicationData
 	if err != nil {
@@ -303,7 +355,6 @@ func FetchApplicationDataWithAppId(profileId string, appId string) (model.Applic
 		}
 
 		app.AppId = appId
-		app.Devices = appParsed.Devices
 		app.AppSpecificData = appParsed.AppSpecificData
 	}
 	return app, nil
@@ -329,23 +380,26 @@ func UpdateProfile(profile model.Profile) error {
 	traitsJSON, _ := json.Marshal(profile.Traits)
 	identityJSON, _ := json.Marshal(profile.IdentityAttributes)
 
-	query := `
-		UPDATE profiles SET
-			origin_country = $1,
-			is_parent = $2,
-			parent_profile_id = $3,
-			list_profile = $4,
-			traits = $5,
-			identity_attributes = $6
-		WHERE profile_id = $7;`
+	var profileStatus string
+	if profile.ProfileStatus.IsReferenceProfile {
+		profileStatus = constants.ReferenceProfile
+	} else if profile.ProfileStatus.IsWaitingOnUser {
+		profileStatus = constants.WaitOnUser
+	} else if profile.ProfileStatus.IsWaitingOnAdmin {
+		profileStatus = constants.WaitOnAdmin
+	} else {
+		profileStatus = constants.MergedTo
+	}
+
+	query := scripts.UpdateProfile[provider.NewDBProvider().GetDBType()]
 
 	_, err = dbClient.ExecuteQuery(query,
-		profile.OriginCountry,
-		profile.ProfileHierarchy.IsParent,
-		profile.ProfileHierarchy.ParentProfileID,
-		profile.ProfileHierarchy.ListProfile,
+		profile.UserId,
+		profile.ProfileStatus.ListProfile,
+		profile.ProfileStatus.DeleteProfile,
 		traitsJSON,
 		identityJSON,
+		profile.UpdatedAt,
 		profile.ProfileId,
 	)
 	if err != nil {
@@ -358,11 +412,44 @@ func UpdateProfile(profile model.Profile) error {
 		}, err)
 		return serverError
 	}
+
+	query = scripts.UpsertProfileReference[provider.NewDBProvider().GetDBType()]
+
+	_, err = dbClient.ExecuteQuery(query,
+		profile.ProfileId,
+		profileStatus,
+		profile.ProfileStatus.ReferenceProfileId,
+		profile.ProfileStatus.ReferenceReason,
+		profile.ProfileId,
+	)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed updating the profile: %s", profile.ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+	// Update application data
+	err = InsertApplicationData(profile.ProfileId, profile.ApplicationData)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to insert profile with Id: %s", profile.ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.ADD_PROFILE.Code,
+			Message:     errors2.ADD_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
 	return nil
 }
 
 // GetAllProfiles retrieves all profiles
-func GetAllProfiles() ([]model.Profile, error) {
+func GetAllProfiles(tenantId string) ([]model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -378,12 +465,9 @@ func GetAllProfiles() ([]model.Profile, error) {
 	}
 	defer dbClient.Close()
 
-	query := `
-		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
-		FROM profiles
-		WHERE list_profile = true;`
+	query := scripts.GetProfilesByOrgId[provider.NewDBProvider().GetDBType()]
 
-	results, err := dbClient.ExecuteQuery(query)
+	results, err := dbClient.ExecuteQuery(query, tenantId)
 	if err != nil {
 		errorMsg := "Failed fetching all profiles"
 		logger.Debug(errorMsg, log.Error(err))
@@ -436,7 +520,7 @@ func DeleteProfile(profileId string) error {
 	defer dbClient.Close()
 
 	// Step 1: Delete application_data explicitly (optional if ON DELETE CASCADE not enabled)
-	_, err = dbClient.ExecuteQuery(`DELETE FROM application_data WHERE profile_id = $1`, profileId)
+	_, err = dbClient.ExecuteQuery(scripts.DeleteProfileByProfileId[provider.NewDBProvider().GetDBType()], profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("failed to delete application data for profile: %s", profileId)
 		logger.Debug(errorMsg, log.Error(err))
@@ -449,18 +533,19 @@ func DeleteProfile(profileId string) error {
 	}
 
 	// Step 2: Delete child relationships where this is a parent (optional safety, ON DELETE CASCADE already exists)
-	_, err = dbClient.ExecuteQuery(
-		`DELETE FROM child_profiles WHERE parent_profile_id = $1 OR child_profile_id = $1`, profileId)
-	if err != nil {
-		errorMsg := fmt.Sprintf("failed to delete child profile links for profile: %s", profileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DELETE_PROFILE.Code,
-			Message:     errors2.DELETE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
+	//:todo: Need to decide if its needed
+	//_, err = dbClient.ExecuteQuery(
+	//	`DELETE FROM profiles WHERE reference_profile_id = $1`, profileId)
+	//if err != nil {
+	//	errorMsg := fmt.Sprintf("failed to delete child profile links for profile: %s", profileId)
+	//	logger.Debug(errorMsg, log.Error(err))
+	//	serverError := errors2.NewServerError(errors2.ErrorMessage{
+	//		Code:        errors2.DELETE_PROFILE.Code,
+	//		Message:     errors2.DELETE_PROFILE.Message,
+	//		Description: errorMsg,
+	//	}, err)
+	//	return serverError
+	//}
 
 	// Step 3: Delete the profile itself
 	result, err := dbClient.ExecuteQuery(`DELETE FROM profiles WHERE profile_id = $1`, profileId)
@@ -488,84 +573,6 @@ func DeleteProfile(profileId string) error {
 	return nil
 }
 
-// UpsertIdentityAttribute updates or inserts attributes, enriching array values.
-func UpsertIdentityAttribute(profileId string, updates map[string]interface{}) error {
-
-	profile, err := GetProfile(profileId)
-	logger := log.GetLogger()
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to fetch profile: %s for identity attribute upsert", profileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_IDENTITY_ATT.Code,
-			Message:     errors2.UPDATE_IDENTITY_ATT.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
-	if profile == nil {
-		errorMsg := fmt.Sprintf("Profile doesn't exist for profile id %s", profileId)
-		logger.Debug(errorMsg, log.Error(err))
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_IDENTITY_ATT.Code,
-			Message:     errors2.UPDATE_IDENTITY_ATT.Message,
-			Description: errorMsg,
-		}, http.StatusNotFound)
-		// todo: should we return a client error or server ?
-		return clientError
-	}
-
-	if profile.IdentityAttributes == nil {
-		profile.IdentityAttributes = make(map[string]interface{})
-	}
-
-	for field, incomingVal := range updates {
-		attrName := strings.TrimPrefix(field, "identity_attributes.")
-		existingVal := profile.IdentityAttributes[attrName]
-		profile.IdentityAttributes[attrName] = enrichFieldValues(existingVal, incomingVal)
-	}
-
-	return UpdateProfile(*profile)
-}
-func UpsertTrait(profileId string, updates map[string]interface{}) error {
-
-	profile, err := GetProfile(profileId)
-	logger := log.GetLogger()
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to fetch profile: %s for traits upsert", profileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_TRAIT.Code,
-			Message:     errors2.UPDATE_TRAIT.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
-	if profile == nil {
-		errorMsg := fmt.Sprintf("profile doesn't exist for profile id:  %s", profileId)
-		logger.Debug(errorMsg, log.Error(err))
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_TRAIT.Code,
-			Message:     errors2.UPDATE_TRAIT.Message,
-			Description: errorMsg,
-		}, http.StatusNotFound)
-		// todo: should we return a client error or server ?
-		return clientError
-	}
-
-	if profile.Traits == nil {
-		profile.Traits = make(map[string]interface{})
-	}
-
-	for field, incomingVal := range updates {
-		traitName := strings.TrimPrefix(field, "traits.")
-		existingVal := profile.Traits[traitName]
-		profile.Traits[traitName] = enrichFieldValues(existingVal, incomingVal)
-	}
-
-	return UpdateProfile(*profile)
-}
-
 func UpsertAppDatum(profileId string, appId string, updates map[string]interface{}) error {
 
 	// Fetch existing application_data for the given app
@@ -582,37 +589,19 @@ func UpsertAppDatum(profileId string, appId string, updates map[string]interface
 	// Separate handling for "devices" key (top-level)
 	for key, incomingVal := range updates {
 		actualKey := strings.TrimPrefix(key, "application_data.")
+		// Merge into app_specific_data
+		existingVal := appData.AppSpecificData[actualKey]
+		log.GetLogger().Info("Merging key: " + actualKey)
+		appData.AppSpecificData[actualKey] = enrichFieldValues(existingVal, incomingVal)
 
-		if actualKey == "devices" {
-			// Convert to []model.Devices
-			devicesJSON, _ := json.Marshal(incomingVal)
-			var newDevices []model.Devices
-			if err := json.Unmarshal(devicesJSON, &newDevices); err != nil {
-				errorMsg := fmt.Sprintf("Failed to unmarshal devices for application data for profile: %s", profileId)
-				logger.Debug(errorMsg, log.Error(err))
-				serverError := errors2.NewServerError(errors2.ErrorMessage{
-					Code:        errors2.UPDATE_APP_DATA.Code,
-					Message:     errors2.UPDATE_APP_DATA.Message,
-					Description: errorMsg,
-				}, err)
-				return serverError
-			}
-			appData.Devices = mergeDeviceLists(appData.Devices, newDevices)
-		} else {
-			// Merge into app_specific_data
-			existingVal := appData.AppSpecificData[actualKey]
-			appData.AppSpecificData[actualKey] = enrichFieldValues(existingVal, incomingVal)
-		}
 	}
 
 	// Final wrapper for marshaling
 	type ApplicationDataJSON struct {
-		Devices         []model.Devices        `json:"devices,omitempty"`
 		AppSpecificData map[string]interface{} `json:"app_specific_data,omitempty"`
 	}
 
 	wrapper := ApplicationDataJSON{
-		Devices:         appData.Devices,
 		AppSpecificData: appData.AppSpecificData,
 	}
 
@@ -629,12 +618,7 @@ func UpsertAppDatum(profileId string, appId string, updates map[string]interface
 	}
 
 	// Upsert into application_data table
-	query := `
-		INSERT INTO application_data (profile_id, app_id, application_data)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (profile_id, app_id)
-		DO UPDATE SET application_data = EXCLUDED.application_data;
-	`
+	query := scripts.InsertApplicationData[provider.NewDBProvider().GetDBType()]
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -664,13 +648,13 @@ func UpsertAppDatum(profileId string, appId string, updates map[string]interface
 	return nil
 }
 
-// DetachChildProfileFromParent removes a child from a parent's child_profile_ids list
-func DetachChildProfileFromParent(parentID, childID string) error {
+// DetachRefererProfileFromReference removes a child from a parent's child_profile_ids list
+func DetachRefererProfileFromReference(referenceProfileId, profileId string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for deleting child relationship of child: %s of parent: %s", parentID, childID)
+		errorMsg := fmt.Sprintf("Failed to get database client for deleting child relationship of child: %s of parent: %s", referenceProfileId, profileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE.Code,
@@ -681,11 +665,12 @@ func DetachChildProfileFromParent(parentID, childID string) error {
 	}
 	defer dbClient.Close()
 
-	query := `DELETE FROM child_profiles WHERE parent_profile_id = $1 AND child_profile_id = $2;`
-	result, err := dbClient.ExecuteQuery(query, parentID, childID)
+	// todo: decide if we need to delete the references as well.
+	query := scripts.DeleteProfileReference[provider.NewDBProvider().GetDBType()]
+	result, err := dbClient.ExecuteQuery(query, referenceProfileId, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to delete child relationship of child: %s of parent: %s",
-			parentID, childID)
+			referenceProfileId, profileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE.Code,
@@ -697,7 +682,7 @@ func DetachChildProfileFromParent(parentID, childID string) error {
 
 	rowsAffected := len(result)
 	if rowsAffected == 0 {
-		logger.Info(fmt.Sprintf("No child profile %s found under parent %s to remove.", childID, parentID))
+		logger.Info(fmt.Sprintf("No child profile %s found under parent %s to remove.", profileId, referenceProfileId))
 	}
 	return nil
 }
@@ -733,9 +718,6 @@ func InsertMergedMasterProfileAppData(profileId string, newAppCtx model.Applicat
 
 	for _, existing := range profile.ApplicationData {
 		if existing.AppId == newAppCtx.AppId {
-			// Merge devices
-			existing.Devices = mergeDeviceLists(existing.Devices, newAppCtx.Devices) // Uses your helper
-
 			// Merge app-specific fields
 			if existing.AppSpecificData == nil {
 				existing.AppSpecificData = make(map[string]interface{})
@@ -757,28 +739,6 @@ func InsertMergedMasterProfileAppData(profileId string, newAppCtx model.Applicat
 	profile.ApplicationData = resultAppData
 	// this inserts the entire application_data blob with the update.
 	return InsertApplicationData(profile.ProfileId, profile.ApplicationData)
-}
-
-// mergeDeviceLists helper (from original code, assumed correct)
-func mergeDeviceLists(existing, incoming []model.Devices) []model.Devices {
-	deviceMap := make(map[string]model.Devices)
-	for _, d := range existing {
-		if d.DeviceId == "" { // Ensure DeviceId is present for map key
-			continue
-		}
-		deviceMap[d.DeviceId] = d
-	}
-	for _, d := range incoming {
-		if d.DeviceId == "" {
-			continue
-		}
-		deviceMap[d.DeviceId] = d
-	}
-	var merged []model.Devices
-	for _, d := range deviceMap {
-		merged = append(merged, d)
-	}
-	return merged
 }
 
 // InsertMergedMasterProfileTraitData replaces (PUT) the traits data inside Profile
@@ -847,7 +807,7 @@ func MergeIdentityDataOfProfiles(profileId string, identityData map[string]inter
 	return UpdateProfile(*profile)
 }
 
-func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
+func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -868,11 +828,15 @@ func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
 	argID := 1
 	joinedAppIDs := map[string]bool{}
 
-	baseSQL := `
-		SELECT DISTINCT p.profile_id, p.origin_country, p.is_parent, p.parent_profile_id,
-						p.list_profile, p.traits, p.identity_attributes
-		FROM profiles p
-	`
+	baseSQL := scripts.GetAllProfilesWithFilter[provider.NewDBProvider().GetDBType()]
+
+	// Always ensure tenant_id condition first
+	conditions = append(conditions, fmt.Sprintf("p.tenant_id = $%d", argID))
+	args = append(args, tenantId)
+	argID++
+
+	// Always ensure list_profile = true
+	conditions = append(conditions, "p.list_profile = true")
 
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
@@ -881,11 +845,17 @@ func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
 		}
 		field, operator, value := parts[0], parts[1], parts[2]
 
-		scopeKey := strings.SplitN(field, ".", 2)
-		if len(scopeKey) != 2 {
-			continue
+		var scope, key string
+		if field == "user_id" {
+			scope = "user_id"
+			key = ""
+		} else {
+			scopeKey := strings.SplitN(field, ".", 2)
+			if len(scopeKey) != 2 {
+				continue
+			}
+			scope, key = scopeKey[0], scopeKey[1]
 		}
-		scope, key := scopeKey[0], scopeKey[1]
 
 		var clause string
 
@@ -901,6 +871,23 @@ func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
 				args = append(args, "%"+value+"%")
 			case "sw":
 				clause = fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID)
+				args = append(args, value+"%")
+			default:
+				continue
+			}
+			conditions = append(conditions, clause)
+			argID++
+
+		case "user_id":
+			switch operator {
+			case "eq":
+				clause = fmt.Sprintf("p.user_id = $%d", argID)
+				args = append(args, value)
+			case "co":
+				clause = fmt.Sprintf("p.user_id ILIKE $%d", argID)
+				args = append(args, "%"+value+"%")
+			case "sw":
+				clause = fmt.Sprintf("p.user_id ILIKE $%d", argID)
 				args = append(args, value+"%")
 			default:
 				continue
@@ -962,6 +949,7 @@ func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
 	if len(conditions) > 0 {
 		whereClause = "WHERE " + strings.Join(conditions, " AND ")
 	}
+	// todo: need to add tenant id
 
 	finalSQL := baseSQL + "\n" + whereClause
 
@@ -990,13 +978,24 @@ func GetAllProfilesWithFilter(filters []string) ([]model.Profile, error) {
 			}, err)
 			return nil, serverError
 		}
+		profile.ApplicationData, err = FetchApplicationData(profile.ProfileId)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Failed to fetch application data: %s", err)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_PROFILE.Code,
+				Message:     errors2.FILTER_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return nil, serverError
+		}
 		profiles = append(profiles, profile)
 	}
 
 	return profiles, nil
 }
 
-func GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {
+func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -1013,11 +1012,7 @@ func GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model
 	}
 	defer dbClient.Close()
 
-	query := `
-		SELECT profile_id, origin_country, is_parent, parent_profile_id, list_profile, traits, identity_attributes
-		FROM profiles
-		WHERE is_parent = true AND profile_id != $1;
-	`
+	query := scripts.GetAllReferenceProfileExceptCurrent[provider.NewDBProvider().GetDBType()]
 
 	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId)
 	if err != nil {
@@ -1034,25 +1029,37 @@ func GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model
 	var profiles []model.Profile
 	for _, row := range results {
 		var (
-			profile                        model.Profile
-			traitsJSON, identityJSON       []byte
-			isParent, listProfile          bool
-			parentProfileID, originCountry string
+			profile                                                      model.Profile
+			traitsJSON, identityJSON                                     []byte
+			isReferenceProfile, isWaitOnUser, isWaitOnAdmin, listProfile bool
+			referenceProfileId, profileStatus                            string
 		)
 
+		profile.UserId = row["user_id"].(string)
 		profile.ProfileId = row["profile_id"].(string)
-		originCountry = row["origin_country"].(string)
-		isParent = row["is_parent"].(bool)
-		parentProfileID = row["parent_profile_id"].(string)
+		referenceProfileId = row["reference_profile_id"].(string)
 		listProfile = row["list_profile"].(bool)
+		deleteProfile := row["delete_profile"].(bool)
 		traitsJSON = row["traits"].([]byte)
 		identityJSON = row["identity_attributes"].([]byte)
+		profileStatus = row["profile_status"].(string) // Assuming profile_status is a boolean field
+		if profileStatus == constants.ReferenceProfile {
+			isReferenceProfile = true
+		}
+		if profileStatus == constants.WaitOnUser {
+			isWaitOnUser = true
+		}
+		if profileStatus == constants.WaitOnAdmin {
+			isWaitOnAdmin = true
+		}
 
-		profile.OriginCountry = originCountry
-		profile.ProfileHierarchy = &model.ProfileHierarchy{
-			IsParent:        isParent,
-			ParentProfileID: parentProfileID,
-			ListProfile:     listProfile,
+		profile.ProfileStatus = &model.ProfileStatus{
+			IsReferenceProfile: isReferenceProfile,
+			IsWaitingOnAdmin:   isWaitOnAdmin,
+			IsWaitingOnUser:    isWaitOnUser,
+			ReferenceProfileId: referenceProfileId,
+			ListProfile:        listProfile,
+			DeleteProfile:      deleteProfile,
 		}
 
 		if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
@@ -1070,46 +1077,8 @@ func GetAllMasterProfilesExceptForCurrent(currentProfile model.Profile) ([]model
 	return profiles, nil
 }
 
-// UpdateParent sets parent_profile_id and is_parent=false for a profile.
-func UpdateParent(master model.Profile, targetProfile model.Profile) error {
-
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	profileToUpdate, err := GetProfile(targetProfile.ProfileId)
-	logger := log.GetLogger()
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for updating parent profile: %s", targetProfile.ProfileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
-	if profileToUpdate == nil {
-		errorMsg := fmt.Sprintf("Profile not found for updating parent profile: %s", targetProfile.ProfileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return serverError
-	}
-
-	if profileToUpdate.ProfileHierarchy == nil {
-		profileToUpdate.ProfileHierarchy = &model.ProfileHierarchy{}
-	}
-	profileToUpdate.ProfileHierarchy.ParentProfileID = master.ProfileId
-	profileToUpdate.ProfileHierarchy.IsParent = false // Explicitly setting child not to be a parent
-
-	return UpdateProfile(*profileToUpdate)
-}
-
-// AddChildProfiles adds child profiles to a parent profile
-func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile) error {
+// UpdateProfileReferences updates the references of a parent profile with the provided child profiles.
+func UpdateProfileReferences(parentProfile model.Profile, children []model.Reference) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -1138,15 +1107,10 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 		}, err)
 		return serverError
 	}
-
-	query := `
-		INSERT INTO child_profiles (parent_profile_id, child_profile_id, rule_name)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (parent_profile_id, child_profile_id) DO NOTHING;
-	`
+	query := scripts.UpdateProfileReference[provider.NewDBProvider().GetDBType()]
 
 	for _, child := range children {
-		_, err := tx.Exec(query, parentProfile.ProfileId, child.ChildProfileId, child.RuleName)
+		_, err := tx.Exec(query, parentProfile.ProfileId, child.Reason, constants.MergedTo, child.ProfileId)
 		if err != nil {
 			errRoll := tx.Rollback()
 			if errRoll != nil {
@@ -1159,7 +1123,7 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 				}, errRoll)
 				return serverError
 			}
-			errorMsg := fmt.Sprintf("Failed to insert child profile: %s for parent profile: %s", child.ChildProfileId, parentProfile.ProfileId)
+			errorMsg := fmt.Sprintf("Failed to insert referenced profile: %s for parent profile: %s", child.ProfileId, parentProfile.ProfileId)
 			logger.Debug(errorMsg, log.Error(err))
 			serverError := errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
@@ -1173,15 +1137,15 @@ func AddChildProfiles(parentProfile model.Profile, children []model.ChildProfile
 	return tx.Commit()
 }
 
-func FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
+func FetchReferencedProfiles(referenceProfileId string) ([]model.Reference, error) {
 
 	logger := log.GetLogger()
-	logger.Info(fmt.Sprintf("Fetching child profiles for parent: %s", parentProfileId))
+	logger.Info(fmt.Sprintf("Fetching referenced profiles for profile: %s", referenceProfileId))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to get database client for fetching child profiles for parent: %s",
-			parentProfileId)
+			referenceProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE.Code,
@@ -1191,15 +1155,11 @@ func FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
 		return nil, serverError
 	}
 	defer dbClient.Close()
-	query := `
-		SELECT child_profile_id, rule_name 
-		FROM child_profiles 
-		WHERE parent_profile_id = $1;
-	`
+	query := scripts.FetchReferencedProfiles[provider.NewDBProvider().GetDBType()]
 
-	results, err := dbClient.ExecuteQuery(query, parentProfileId)
+	results, err := dbClient.ExecuteQuery(query, referenceProfileId)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed fetching child profiles for parent: %s", parentProfileId)
+		errorMsg := fmt.Sprintf("Failed fetching referenced profiles for profile: %s", referenceProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE.Code,
@@ -1209,24 +1169,23 @@ func FetchChildProfiles(parentProfileId string) ([]model.ChildProfile, error) {
 		return nil, serverError
 	}
 
-	var children []model.ChildProfile
+	var children []model.Reference
 	for _, row := range results {
-		var child model.ChildProfile
-		child.ChildProfileId = row["child_profile_id"].(string)
-		child.RuleName = row["rule_name"].(string)
-		children = append(children, child)
+		var reference model.Reference
+		reference.ProfileId = row["profile_id"].(string)
+		reference.Reason = row["reference_reason"].(string)
+		children = append(children, reference)
 	}
 
 	if len(children) == 0 {
-		logger.Info(fmt.Sprintf("No child profiles found for parent profile: %s", parentProfileId))
+		logger.Info(fmt.Sprintf("No referenced profiles found for parent profile: %s", referenceProfileId))
 	} else {
-		logger.Info(fmt.Sprintf("Successfully fetched child profiles for parent profile: %s", parentProfileId))
+		logger.Info(fmt.Sprintf("Successfully fetched child profiles for parent profile: %s", referenceProfileId))
 	}
 	return children, nil
 }
 
 func enrichFieldValues(existingVal, incomingVal interface{}) interface{} {
-
 	logger := log.GetLogger()
 	switch incoming := incomingVal.(type) {
 	case []string:
@@ -1252,6 +1211,7 @@ func enrichFieldValues(existingVal, incomingVal interface{}) interface{} {
 
 	default:
 		logger.Warn(fmt.Sprintf("EnrichFieldValues encountered unhandled type for incomingVal: %T", incomingVal))
+		logger.Warn(fmt.Sprintf("EnrichFieldValues encountered unhandled type for existing: %T", existingVal))
 		return incoming
 	}
 }
@@ -1350,4 +1310,49 @@ func toInt(val interface{}) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func GetProfileWithUserId(userId string) (*model.Profile, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while fetching profile with userId: %s", userId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.GetProfileByUserId[provider.NewDBProvider().GetDBType()]
+
+	results, err := dbClient.ExecuteQuery(query, userId)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		logger.Debug(fmt.Sprintf("No profile found with the given userId: %s", userId))
+		// todo: should we return a client error with 404 here?
+		return nil, nil
+	}
+	if len(results) == 0 {
+		logger.Debug(fmt.Sprintf("No profile found with the given userId: %s", userId))
+		// todo: should we return a client error with 404 here?
+		return nil, nil
+	}
+	profile, err := scanProfileRow(results[0])
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed fetching profile with Id: %s", userId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	profile.ApplicationData, _ = FetchApplicationData(profile.ProfileId)
+	return &profile, nil
 }

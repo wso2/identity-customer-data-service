@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -45,42 +46,82 @@ func NewUnificationRulesHandler() *UnificationRulesHandler {
 
 // AddUnificationRule handles adding a new rule
 func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r *http.Request) {
-	var rule model.UnificationRule
-	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+
+	var ruleInRequest model.UnificationRuleAPIRequest
+	if err := json.NewDecoder(r.Body).Decode(&ruleInRequest); err != nil {
+		utils.HandleDecodeError(err, "unification rule")
 		return
 	}
-	if rule.RuleId == "" {
-		rule.RuleId = uuid.NewString()
+
+	orgId := utils.ExtractTenantIdFromPath(r)
+	// Set timestamps
+	now := time.Now().UTC().Unix()
+	rule := model.UnificationRule{
+		RuleId:    uuid.New().String(),
+		TenantId:  orgId,
+		RuleName:  ruleInRequest.RuleName,
+		Property:  ruleInRequest.Property,
+		Priority:  ruleInRequest.Priority,
+		IsActive:  ruleInRequest.IsActive,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
+
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	err := ruleService.AddUnificationRule(rule)
+	err := ruleService.AddUnificationRule(rule, orgId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	addedRule, err := ruleService.GetUnificationRule(rule.RuleId)
+	addedRuleResponse := model.UnificationRuleAPIResponse{
+		RuleId:   addedRule.RuleId,
+		RuleName: addedRule.RuleName,
+		Property: addedRule.Property,
+		Priority: addedRule.Priority,
+		IsActive: addedRule.IsActive,
+	}
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(rule)
+	_ = json.NewEncoder(w).Encode(addedRuleResponse)
 }
 
 // GetUnificationRules handles fetching all rules
 func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r *http.Request) {
+
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	rules, err := ruleService.GetUnificationRules()
+	tenantId := utils.ExtractTenantIdFromPath(r)
+	rules, err := ruleService.GetUnificationRules(tenantId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+	// Convert rules to API response format
+	var rulesResponse []model.UnificationRuleAPIResponse
+	for _, rule := range rules {
+		tempRule := model.UnificationRuleAPIResponse{
+			RuleId:   rule.RuleId,
+			RuleName: rule.RuleName,
+			Property: rule.Property,
+			Priority: rule.Priority,
+			IsActive: rule.IsActive,
+		}
+		rulesResponse = append(rulesResponse, tempRule)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(rules)
+	_ = json.NewEncoder(w).Encode(rulesResponse)
 }
 
 // GetUnificationRule Fetches a specific resolution rule.
 func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r *http.Request) {
+
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -94,13 +135,21 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		utils.HandleError(w, err)
 		return
 	}
+	ruleResponse := model.UnificationRuleAPIResponse{
+		RuleId:   rule.RuleId,
+		RuleName: rule.RuleName,
+		Property: rule.Property,
+		Priority: rule.Priority,
+		IsActive: rule.IsActive,
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(rule)
+	_ = json.NewEncoder(w).Encode(ruleResponse)
 }
 
 // PatchUnificationRule applies partial updates to a unification rule.
 func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, r *http.Request) {
+
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -110,10 +159,9 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		utils.HandleDecodeError(err, "unification rule")
 		return
 	}
-
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 	err := ruleService.PatchResolutionRule(ruleId, updates)
@@ -123,17 +171,25 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 
 	rule, err := ruleService.GetUnificationRule(ruleId)
+	ruleResponse := model.UnificationRuleAPIResponse{
+		RuleId:   rule.RuleId,
+		RuleName: rule.RuleName,
+		Property: rule.Property,
+		Priority: rule.Priority,
+		IsActive: rule.IsActive,
+	}
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(rule)
+	_ = json.NewEncoder(w).Encode(ruleResponse)
 }
 
 // DeleteUnificationRule removes a resolution rule.
 func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter, r *http.Request) {
+
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)

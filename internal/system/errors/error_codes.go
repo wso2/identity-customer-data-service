@@ -88,6 +88,16 @@ var (
 		Message: "Unable to initialize database client.",
 	}
 
+	DB_BEGN_TRANSACTION = ErrorMessage{
+		Code:    errorPrefix + "15013",
+		Message: "Error while beginning transaction.",
+	}
+
+	DB_COMMIT_TRANSACTION = ErrorMessage{
+		Code:    errorPrefix + "15013",
+		Message: "Error while commiting transaction.",
+	}
+
 	LOCK_RELEASE = ErrorMessage{
 		Code:    errorPrefix + "15014",
 		Message: "Error while releasing the lock.",
@@ -142,6 +152,36 @@ var (
 		Message: "Parsing token failed.",
 	}
 
+	ADD_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15024",
+		Message: "Error while adding profile schema.",
+	}
+
+	GET_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15025",
+		Message: "Error while fetching profile schema.",
+	}
+
+	SYNC_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15025",
+		Message: "Error while syncing identity attributes of profile schema.",
+	}
+
+	EXECUTE_QUERY = ErrorMessage{
+		Code:    errorPrefix + "15026",
+		Message: "Error while executing query.",
+	}
+
+	GET_CONFIG = ErrorMessage{
+		Code:    errorPrefix + "15027",
+		Message: "Error while fetching config.",
+	}
+
+	UPDATE_CONFIG = ErrorMessage{
+		Code:    errorPrefix + "15028",
+		Message: "Error while updating config.",
+	}
+
 	// Client error codes
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "11001",
@@ -154,56 +194,10 @@ var (
 		Description: "Authorization failure. Authorization information was invalid or missing from your request.",
 	}
 
-	UNIFICATION_RULE_NOT_FOUND = ErrorMessage{
-		Code:        errorPrefix + "11003",
-		Message:     "No resolution rule found.",
-		Description: "No resolution rule defined for this organization for the provided rule_id..",
-	}
-
-	UNIFICATION_UPDATE_FAILED = ErrorMessage{
-		Code:    errorPrefix + "11004",
-		Message: "Validation failed for unification rule update.",
-	}
-
 	PROFILE_NOT_FOUND = ErrorMessage{
 		Code:        errorPrefix + "11005",
 		Message:     "Profile not found.",
 		Description: "No user profile record found for the given profile_id",
-	}
-
-	PROP_ALREADY_EXISTS = ErrorMessage{
-		Code:    errorPrefix + "11006",
-		Message: "Property already exist.",
-	}
-
-	ENRICHMENT_RULE_VALIDATION = ErrorMessage{
-		Code:    errorPrefix + "10007",
-		Message: "Enrichment rule validation failed",
-	}
-
-	INVALID_ENRICHMENT_RULE_FILTERING = ErrorMessage{
-		Code:    errorPrefix + "11008",
-		Message: "Enrichment rules filtering failed.",
-	}
-
-	ADD_EVENT = ErrorMessage{
-		Code:    errorPrefix + "11009",
-		Message: "Error while adding event.",
-	}
-
-	GET_EVENT = ErrorMessage{
-		Code:    errorPrefix + "11010",
-		Message: "Error while fetching event.",
-	}
-
-	DELETE_EVENT = ErrorMessage{
-		Code:    errorPrefix + "11011",
-		Message: "Error while deleting event.",
-	}
-
-	EVENT_NOT_FOUND = ErrorMessage{
-		Code:    errorPrefix + "11012",
-		Message: "Event not found.",
 	}
 
 	ADD_PROFILE = ErrorMessage{
@@ -286,5 +280,70 @@ var (
 		Code:        errorPrefix + "11025",
 		Message:     "ForBidden",
 		Description: "You do not have permission to access this resource.",
+	}
+
+	INVALID_PROFILE = ErrorMessage{
+		Code:    errorPrefix + "11030",
+		Message: "Invalid profile body.",
+	}
+
+	GET_CONFIGURATION = ErrorMessage{
+		Code:    errorPrefix + "11031",
+		Message: "Error while fetching config.",
+	}
+
+	UPDATE_CONFIGURATION = ErrorMessage{
+		Code:    errorPrefix + "11032",
+		Message: "Error while updating config.",
+	}
+
+	INVALID_OPERATION = ErrorMessage{
+		Code:    errorPrefix + "1133",
+		Message: "Invalid Operation.",
+	}
+
+	PROFILE_SCHEMA_ADD_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "12001",
+		Message: "Invalid request payload.",
+	}
+
+	INVALID_ATTRIBUTE_NAME = ErrorMessage{
+		Code:    errorPrefix + "12002",
+		Message: "Invalid attribute name.",
+	}
+
+	SCHEMA_ATTRIBUTE_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "12003",
+		Message: "Schema attribute already exists.",
+	}
+
+	PROFILE_SCHEMA_UPDATE_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "12004",
+		Message: "Invalid schema update.",
+	}
+
+	ATTRIBUTE_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "12005",
+		Message: "Attribute not found.",
+	}
+
+	UNIFICATION_RULE_NOT_FOUND = ErrorMessage{
+		Code:        errorPrefix + "12201",
+		Message:     "No unification rule found.",
+		Description: "No unification rule defined for this organization for the provided rule_id..",
+	}
+
+	UNIFICATION_UPDATE_FAILED = ErrorMessage{
+		Code:    errorPrefix + "12202",
+		Message: "Validation failed for unification rule update.",
+	}
+
+	UNIFICATION_RULE_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "12203",
+		Message: "Unification already exist.",
+	}
+	UNIFICATION_RULE_PRIORITY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "12204",
+		Message: "Unification priority already taken.",
 	}
 )

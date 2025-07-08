@@ -21,8 +21,6 @@ package authn
 import (
 	"encoding/json"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/wso2/identity-customer-data-service/internal/event_stream_ids/store"
-	"github.com/wso2/identity-customer-data-service/internal/events/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/cache"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -149,109 +147,6 @@ func unauthorizedError() error {
 		Message:     errors2.UN_AUTHORIZED.Message,
 		Description: errors2.UN_AUTHORIZED.Description,
 	}, http.StatusUnauthorized)
-}
-
-// ValidateAuthenticationForEvent validates Authorization: ApiKey header from the HTTP request
-func ValidateAuthenticationForEvent(r *http.Request, event model.Event) (valid bool, error error) {
-	token, err := extractAPIKey(r)
-	if err != nil {
-		return false, err
-	}
-	orgID, appID := fetchOrgAndApp(event)
-	return validateEventStreamId(token, orgID, appID)
-}
-
-func extractAPIKey(r *http.Request) (string, error) {
-
-	logger := log.GetLogger()
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return "", errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.UN_AUTHORIZED.Code,
-			Message:     errors2.UN_AUTHORIZED.Message,
-			Description: errors2.UN_AUTHORIZED.Description,
-		}, http.StatusUnauthorized)
-	}
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "eventStreamId" {
-
-		logger.Warn("Invalid Event stream id format")
-		return "", errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.UN_AUTHORIZED.Code,
-			Message:     errors2.UN_AUTHORIZED.Message,
-			Description: errors2.UN_AUTHORIZED.Description,
-		}, http.StatusUnauthorized)
-	}
-	return parts[1], nil
-}
-
-func fetchOrgAndApp(event model.Event) (orgID, appID string) {
-	// Extract values safely
-	orgID = event.OrgId
-	appID = event.AppId
-
-	// Normalize default tenant
-	if orgID == "carbon.super" {
-		orgID = "-1234"
-	}
-
-	return orgID, appID
-}
-
-func validateEventStreamId(eventStreamId, orgID, appID string) (valid bool, error error) {
-	if eventStreamId == "" || appID == "" || orgID == "" {
-		return false, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        "missing_fields",
-			Message:     "Missing required fields",
-			Description: "event_stream_id, application_id, or org_id is missing",
-		}, http.StatusBadRequest)
-	}
-
-	dbKey, err := store.GetEventStreamId(eventStreamId)
-	if err != nil || dbKey == nil {
-		return false, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        "invalid_api_key",
-			Message:     "API key not found",
-			Description: "Provided API key is not valid",
-		}, http.StatusUnauthorized)
-	}
-
-	if dbKey.AppID != appID {
-		return false, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        "mismatch_app_id",
-			Message:     "App ID does not match",
-			Description: "API key does not belong to this application",
-		}, http.StatusUnauthorized)
-	}
-
-	if dbKey.OrgID != orgID {
-		if !(orgID == "carbon.super" && dbKey.OrgID == "-1234") && !(dbKey.OrgID == "carbon.super" && orgID == "-1234") {
-			return false, errors2.NewClientError(errors2.ErrorMessage{
-				Code:        "mismatch_org_id",
-				Message:     "Org ID does not match",
-				Description: "API key does not belong to this organization",
-			}, http.StatusUnauthorized)
-		}
-	}
-
-	if dbKey.State != "active" {
-		return false, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        "revoked",
-			Message:     "API key is not active",
-			Description: "API key is revoked or inactive",
-		}, http.StatusUnauthorized)
-	}
-
-	now := time.Now().UTC().Unix()
-	if dbKey.ExpiresAt < now {
-		return false, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        "expired",
-			Message:     "API key has expired",
-			Description: "API key expiration time has passed",
-		}, http.StatusUnauthorized)
-	}
-
-	return true, nil
 }
 
 // IntrospectOpaqueToken introspects an opaque token t

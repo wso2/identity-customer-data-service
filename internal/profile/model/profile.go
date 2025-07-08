@@ -18,23 +18,31 @@
 
 package model
 
-type ProfileHierarchy struct {
-	ParentProfileID string         `json:"parent_profile_id,omitempty" bson:"parent_profile_id,omitempty"`
-	IsParent        bool           `json:"is_parent,omitempty" bson:"is_parent,omitempty"`
-	ListProfile     bool           `json:"list_profile,omitempty" bson:"list_profile,omitempty"`
-	ChildProfiles   []ChildProfile `json:"child_profile_ids,omitempty" bson:"child_profile_ids,omitempty"`
+type ProfileStatus struct {
+	ReferenceProfileId string      `json:"reference_profile_id,omitempty" bson:"reference_profile_id,omitempty"`
+	IsReferenceProfile bool        `json:"is_reference_profile,omitempty" bson:"is_reference_profile,omitempty"`
+	IsWaitingOnAdmin   bool        `json:"is_waiting_on_admin,omitempty" bson:"is_waiting_on_admin,omitempty"`
+	IsWaitingOnUser    bool        `json:"is_waiting_on_user,omitempty" bson:"is_waiting_on_user,omitempty"`
+	DeleteProfile      bool        `json:"delete_profile,omitempty" bson:"delete_profile,omitempty"`
+	ListProfile        bool        `json:"list_profile,omitempty" bson:"list_profile,omitempty"`
+	ReferenceReason    string      `json:"reference_reason,omitempty" bson:"reference_reason,omitempty"`
+	References         []Reference `json:"references,omitempty" bson:"references,omitempty"`
 }
 
-type ChildProfile struct {
-	ChildProfileId string `json:"child_profile_id,omitempty" bson:"child_profile_id,omitempty"`
-	RuleName       string `json:"rule_name,omitempty" bson:"rule_name,omitempty"`
+type Reference struct {
+	ProfileId string `json:"profile_id,omitempty" bson:"profile_id,omitempty"`
+	Reason    string `json:"reason,omitempty" bson:"rule_name,omitempty"`
 }
 
 type Profile struct {
 	ProfileId          string                 `json:"profile_id" bson:"profile_id"`
-	OriginCountry      string                 `json:"origin_country" bson:"origin_country"`
+	UserId             string                 `json:"user_id" bson:"user_id"`
+	TenantId           string                 `json:"tenant_id" bson:"tenant_id"`
+	CreatedAt          int64                  `json:"created_at" bson:"created_at"`
+	UpdatedAt          int64                  `json:"updated_at" bson:"updated_at"`
+	Location           string                 `json:"location" bson:"location"`
 	IdentityAttributes map[string]interface{} `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
 	Traits             map[string]interface{} `json:"traits,omitempty" bson:"traits,omitempty"`
 	ApplicationData    []ApplicationData      `json:"application_data,omitempty" bson:"application_data,omitempty"`
-	ProfileHierarchy   *ProfileHierarchy      `json:"profile_hierarchy,omitempty" bson:"profile_hierarchy,omitempty"`
+	ProfileStatus      *ProfileStatus         `json:"profile_status,omitempty" bson:"profile_status,omitempty"`
 }

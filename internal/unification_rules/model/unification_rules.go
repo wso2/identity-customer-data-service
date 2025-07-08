@@ -21,6 +21,7 @@ package model
 // UnificationRule represents rules for merging user profiles
 type UnificationRule struct {
 	RuleId    string `json:"rule_id" bson:"rule_id" binding:"required"`
+	TenantId  string `json:"tenant_id" bson:"tenant_id" binding:"required"`
 	RuleName  string `json:"rule_name" bson:"rule_name" binding:"required"`
 	Property  string `json:"property_name" bson:"property_name" binding:"required"`
 	Priority  int    `json:"priority" bson:"priority" binding:"required"`

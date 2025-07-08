@@ -16,22 +16,8 @@
  * under the License.
  */
 
-package model
+package utils
 
-import "encoding/json"
-
-// ApplicationData represents contextual data for an application
-type ApplicationData struct {
-	AppId           string                 `json:"application_id" bson:"application_id"`
-	AppSpecificData map[string]interface{} `json:"app_specific_data,omitempty" bson:"app_specific_data,omitempty"`
-}
-
-func (a ApplicationData) MarshalJSON() ([]byte, error) {
-	base := map[string]interface{}{
-		"application_id": a.AppId,
-	}
-	for k, v := range a.AppSpecificData {
-		base[k] = v
-	}
-	return json.Marshal(base)
+func BuildProfileLocation(orgId, profileId string) string {
+	return "/api/v1/profiles/" + orgId + "/" + profileId
 }

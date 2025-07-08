@@ -18,11 +18,7 @@
 
 package model
 
-type EventStreamId struct {
-	EventStreamId string `db:"event_stream_id"`
-	OrgID         string `db:"org_id"`
-	AppID         string `db:"app_id"`
-	State         string `db:"state"`
-	ExpiresAt     int64  `db:"expires_at"`
-	CreatedAt     int64  `db:"created_at"`
+type ProfileSchemaSync struct {
+	OrgId string `json:"tenantDomain" bson:"tenantDomain"`
+	Event string `json:"event" bson:"event"`
 }

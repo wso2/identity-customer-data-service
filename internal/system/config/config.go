@@ -32,9 +32,12 @@ type AuthConfig struct {
 }
 
 type AuthServerConfig struct {
+	Host                  string              `yaml:"host"`
+	Port                  string              `yaml:"port"`
 	IntrospectionEndPoint string              `yaml:"introspectionEndpoint"`
 	TokenEndpoint         string              `yaml:"tokenEndpoint"`
 	RevocationEndpoint    string              `yaml:"revocationEndpoint"`
+	ClaimEndpoint         string              `yaml:"claim_endpoint"`
 	ClientID              string              `yaml:"client_id"`
 	ClientSecret          string              `yaml:"client_secret"`
 	AdminUsername         string              `yaml:"admin_username"`
@@ -51,12 +54,22 @@ type DatabaseConfig struct {
 }
 
 type DataSourceConfig struct {
+	Type     string `yaml:"type"` // e.g., "postgres", "mysql"
 	Hostname string `yaml:"hostname"`
 	Port     int    `yaml:"port"`
 	Name     string `yaml:"name"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	SSLMode  string `yaml:"sslmode"`
+}
+
+type Sync struct {
+	Schema Schema `yaml:"schema"`
+}
+
+type Schema struct {
+	Enabled  bool `yaml:"enabled"`
+	Interval int  `yaml:"interval"` // in seconds
 }
 
 type Config struct {
@@ -66,4 +79,5 @@ type Config struct {
 	AuthServer     AuthServerConfig `yaml:"auth_server"`
 	DatabaseConfig DatabaseConfig   `yaml:"database"`
 	DataSource     DataSourceConfig `yaml:"datasource"`
+	Sync           Sync             `yaml:"sync"`
 }

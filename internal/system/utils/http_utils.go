@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"                                                                             // Standard Go errors package
 	customerrors "github.com/wso2/identity-customer-data-service/internal/system/errors" // Alias for the custom errors
+	error2 "github.com/wso2/identity-customer-data-service/internal/system/errors"       // Importing custom error types
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"net/http"
 	"strings"
@@ -57,10 +58,37 @@ func HandleError(w http.ResponseWriter, err error) {
 	}
 }
 
-func ExtractOrgID(path string) string {
+func ExtractTenantIdFromPath(r *http.Request) string {
+	path := r.URL.Path
 	parts := strings.Split(path, "/")
-	if len(parts) > 2 && parts[1] == "t" {
-		return parts[2] // e.g., "carbon.super"
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "t" {
+			return parts[i+1]
+		}
 	}
-	return "carbon.super"
+	return "carbon.super" // fallback default
+}
+
+func StripTenantPrefix(path string) string {
+	parts := strings.SplitN(path, "/", 4)
+	if len(parts) < 4 {
+		return "/"
+	}
+	return "/" + parts[3]
+}
+
+func WriteErrorResponse(w http.ResponseWriter, err *error2.ClientError) {
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(err.StatusCode)
+
+	_ = json.NewEncoder(w).Encode(err.ErrorMessage)
+}
+
+func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError) {
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+
+	_ = json.NewEncoder(w).Encode("Invalid erquest format")
 }
