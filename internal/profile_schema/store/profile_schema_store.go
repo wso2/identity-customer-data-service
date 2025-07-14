@@ -54,10 +54,10 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 
 	baseQuery := scripts.InsertProfileSchemaAttributesForScope[provider.NewDBProvider().GetDBType()]
 	valueStrings := make([]string, 0, len(attrs))
-	valueArgs := make([]interface{}, 0, len(attrs)*10)
+	valueArgs := make([]interface{}, 0, len(attrs)*11)
 
 	for i, attr := range attrs {
-		idx := i * 10
+		idx := i * 11
 		subAttrsJSON, err := json.Marshal(attr.SubAttributes)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Failed to marshal sub attributes for attribute %s", attr.AttributeId)
@@ -675,4 +675,73 @@ func extractClaimKeyFromURI(uri string) string {
 		return ""
 	}
 	return parts[len(parts)-1]
+}
+
+func GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []string) ([]model.ProfileSchemaAttribute, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Error occurred while initializing DB client for filtering profile schema attributes for org: %s and scope: %s", orgId, scope)
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors.NewServerError(errors.ErrorMessage{
+			Code:        errors.DB_CLIENT_INIT.Code,
+			Message:     errors.DB_CLIENT_INIT.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer dbClient.Close()
+
+	baseSQL := scripts.FilterProfileSchemaAttributes[provider.NewDBProvider().GetDBType()]
+	conditions := []string{}
+	args := []interface{}{orgId}
+	argID := 2
+
+	for _, f := range filters {
+		parts := strings.SplitN(f, " ", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		field, operator, value := parts[0], parts[1], parts[2]
+
+		var clause string
+		switch operator {
+		case "eq":
+			clause = fmt.Sprintf("%s = $%d", field, argID)
+			args = append(args, value)
+		case "co":
+			clause = fmt.Sprintf("%s ILIKE $%d", field, argID)
+			args = append(args, "%"+value+"%")
+		case "sw":
+			clause = fmt.Sprintf("%s ILIKE $%d", field, argID)
+			args = append(args, value+"%")
+		default:
+			continue
+		}
+		conditions = append(conditions, clause)
+		argID++
+	}
+
+	if len(conditions) > 0 {
+		baseSQL += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	results, err := dbClient.ExecuteQuery(baseSQL, args...)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to execute profile schema filter query for org: %s and scope: %s", orgId, scope)
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors.NewServerError(errors.ErrorMessage{
+			Code:        errors.EXECUTE_QUERY.Code,
+			Message:     errors.EXECUTE_QUERY.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	var attributes []model.ProfileSchemaAttribute
+	for _, row := range results {
+		attr := mapRowToProfileAttribute(row)
+		attributes = append(attributes, attr)
+	}
+
+	return attributes, nil
 }

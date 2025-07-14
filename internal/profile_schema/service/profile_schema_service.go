@@ -36,7 +36,7 @@ type ProfileSchemaServiceInterface interface {
 	DeleteProfileSchema(orgId string) error
 	AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope string) error
 	GetProfileSchemaAttributesByScope(orgId, scope string) (interface{}, error)
-	PatchProfileSchemaAttributesByScope(orgId, scope string, updates []map[string]interface{}) error
+	GetProfileSchemaAttributesByScopeAndFilter(id, scope string, filters []string) (interface{}, error)
 	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
 	GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error)
 	PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}) error
@@ -228,20 +228,20 @@ func (s *ProfileSchemaService) GetProfileSchemaAttributesByScope(orgId, scope st
 		return nil, err
 	}
 
-	//todo: decide if we are retuning grouped app response
-	//if scope == constants.ApplicationData {
-	//	grouped := make(map[string][]model.ProfileSchemaAttribute)
-	//	for _, attr := range schemaAttributes {
-	//		appID := attr.ApplicationIdentifier
-	//		if appID == "" {
-	//			log.GetLogger().Warn(fmt.Sprintf("Missing application identifier for application data: %s", attr.AttributeName))
-	//			continue
-	//		}
-	//		// Keep application_identifier in the attribute as required
-	//		grouped[appID] = append(grouped[appID], attr)
-	//	}
-	//	return grouped, err
-	//}
+	// todo: ensure to have the addition also in same format
+	if scope == constants.ApplicationData {
+		grouped := make(map[string][]model.ProfileSchemaAttribute)
+		for _, attr := range schemaAttributes {
+			appID := attr.ApplicationIdentifier
+			if appID == "" {
+				log.GetLogger().Warn(fmt.Sprintf("Missing application identifier for application data: %s", attr.AttributeName))
+				continue
+			}
+			// Keep application_identifier in the attribute as required
+			grouped[appID] = append(grouped[appID], attr)
+		}
+		return grouped, err
+	}
 	return schemaAttributes, nil
 }
 
@@ -267,6 +267,35 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 	}
 
 	// attribute id cannot be there and also org id. attribute name only can be updated not the scope.
+	var canonicalValues []model.CanonicalValue
+	if cv, ok := updates["canonical_values"]; ok && cv != nil {
+		if cvSlice, ok := cv.([]model.CanonicalValue); ok {
+			canonicalValues = cvSlice
+		}
+	} else {
+		canonicalValues = attribute.CanonicalValues // Keep existing canonical values if not updated
+	}
+
+	var subAttributes []model.SubAttribute
+	if sa, ok := updates["sub_attributes"]; ok && sa != nil {
+		if saSlice, ok := sa.([]model.SubAttribute); ok {
+			subAttributes = saSlice
+		}
+	} else {
+		subAttributes = attribute.SubAttributes // Keep existing sub attributes if not updated
+	}
+
+	var applicationIdentifier string
+	if appID, ok := updates["application_identifier"]; ok && appID != nil {
+		if appIDStr, ok := appID.(string); ok && appIDStr != "" {
+			applicationIdentifier = appIDStr
+		} else {
+			// If application_identifier is not provided or is empty, keep the existing one
+			applicationIdentifier = attribute.ApplicationIdentifier
+		}
+	} else {
+		applicationIdentifier = attribute.ApplicationIdentifier // Keep existing application identifier if not updated
+	}
 
 	// todo: ensure NPE - see if u need to update application identifier also...its PUT as well. So yeah.
 	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
@@ -277,9 +306,9 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 		MergeStrategy:         updates["merge_strategy"].(string),
 		Mutability:            updates["mutability"].(string),
 		MultiValued:           updates["multi_valued"].(bool),
-		CanonicalValues:       updates["canonical_values"].([]model.CanonicalValue),
-		SubAttributes:         updates["sub_attributes"].([]model.SubAttribute),
-		ApplicationIdentifier: updates["application_identifier"].(string),
+		CanonicalValues:       canonicalValues,
+		SubAttributes:         subAttributes,
+		ApplicationIdentifier: applicationIdentifier,
 	})
 	if !isValid {
 		if err != nil {
@@ -293,70 +322,6 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 		}, http.StatusBadRequest)
 	}
 	return psstr.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
-}
-
-// PatchProfileSchemaAttributesByScope updates multiple profile schema attributes for a specific scope.
-func (s *ProfileSchemaService) PatchProfileSchemaAttributesByScope(orgId string, scope string, updates []map[string]interface{}) error {
-
-	if len(updates) == 0 {
-		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.PROFILE_SCHEMA_UPDATE_BAD_REQUEST.Code,
-			Message:     errors2.PROFILE_SCHEMA_UPDATE_BAD_REQUEST.Message,
-			Description: "No updates provided for the profile schema attributes",
-		}, http.StatusBadRequest)
-	}
-	validatedAttributes := make([]model.ProfileSchemaAttribute, 0)
-
-	for _, upd := range updates {
-		// Ensure required fields are present
-		attributeId, ok1 := upd["attribute_id"].(string)
-		attrName, ok2 := upd["attribute_name"].(string)
-		valueType, ok3 := upd["value_type"].(string)
-		mergeStrategy, ok4 := upd["merge_strategy"].(string)
-		mutability, ok5 := upd["mutability"].(string)
-		appId, ok6 := upd["application_identifier"].(string)
-		multiValued, ok7 := upd["multi_valued"].(bool)
-
-		if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 {
-			return errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.PROFILE_SCHEMA_UPDATE_BAD_REQUEST.Code,
-				Message:     errors2.PROFILE_SCHEMA_UPDATE_BAD_REQUEST.Message,
-				Description: fmt.Sprintf("Missing or invalid fields in attribute update: %v", upd),
-			}, http.StatusBadRequest)
-		}
-
-		// Optional fields
-		canonicalValues, _ := upd["canonical_values"].([]model.CanonicalValue)
-		subAttributes, _ := upd["sub_attributes"].([]model.SubAttribute)
-		attr := model.ProfileSchemaAttribute{
-			OrgId:                 orgId,
-			AttributeId:           attributeId,
-			AttributeName:         attrName,
-			ValueType:             valueType,
-			MergeStrategy:         mergeStrategy,
-			Mutability:            mutability,
-			ApplicationIdentifier: appId,
-			CanonicalValues:       canonicalValues,
-			SubAttributes:         subAttributes,
-			MultiValued:           multiValued,
-		}
-
-		if err, isValid := s.validateSchemaAttribute(attr); !isValid {
-			if err != nil {
-				return err
-			}
-			return errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-				Description: fmt.Sprintf("Invalid attribute: %s", attr.AttributeName),
-			}, http.StatusBadRequest)
-		}
-
-		validatedAttributes = append(validatedAttributes, attr)
-	}
-
-	// Perform the actual patch
-	return psstr.PatchProfileSchemaAttributesForScope(orgId, scope, validatedAttributes)
 }
 
 // DeleteProfileSchemaAttributeById deletes a profile schema attribute by its Id.
@@ -557,4 +522,26 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
 		logger.Info("Profile schema successfully updated for org: " + orgId)
 	}
 	return nil
+}
+
+func (s *ProfileSchemaService) GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []string) (interface{}, error) {
+
+	schemaAttributes, err := psstr.GetProfileSchemaAttributesByScopeAndFilter(orgId, scope, filters)
+	if err != nil {
+		return nil, err
+	}
+
+	if scope == constants.ApplicationData {
+		grouped := make(map[string][]model.ProfileSchemaAttribute)
+		for _, attr := range schemaAttributes {
+			appID := attr.ApplicationIdentifier
+			if appID == "" {
+				log.GetLogger().Warn(fmt.Sprintf("Missing application identifier for application data: %s", attr.AttributeName))
+				continue
+			}
+			grouped[appID] = append(grouped[appID], attr)
+		}
+		return grouped, nil
+	}
+	return schemaAttributes, nil
 }

@@ -51,6 +51,7 @@ CREATE TABLE profile_reference (
 
 CREATE TABLE profile_schema (
     attribute_id VARCHAR(255) NOT NULL PRIMARY KEY,
+    scope VARCHAR(255),
     tenant_id VARCHAR(255) NOT NULL,
     attribute_name VARCHAR(255) NOT NULL,
     value_type VARCHAR(255) NOT NULL,
