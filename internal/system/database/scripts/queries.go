@@ -78,6 +78,11 @@ var GetProfileSchemaAttributeById = map[string]string{
 	          FROM profile_schema WHERE tenant_id = $1 AND attribute_id = $2`,
 }
 
+var FilterProfileSchemaAttributes = map[string]string{
+	"postgres": `SELECT attribute_id, tenant_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued, sub_attributes::text,
+  canonical_values::text FROM profile_schema WHERE tenant_id = $1`,
+}
+
 var DeleteProfileSchemaAttributeById = map[string]string{
 	"postgres": `DELETE FROM profile_schema WHERE tenant_id = $1 AND attribute_id = $2`,
 }

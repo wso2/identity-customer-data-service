@@ -76,8 +76,6 @@ func (s *ProfileSchemaService) routeSchemaScopedOrAttribute(w http.ResponseWrite
 			s.handler.AddProfileSchemaAttributesForScope(w, r, scope)
 		case http.MethodGet:
 			s.handler.GetProfileSchemaAttributeForScope(w, r, scope)
-		case http.MethodPut:
-			s.handler.PatchProfileSchemaAttributesForScope(w, r, scope)
 		case http.MethodDelete:
 			s.handler.DeleteProfileSchemaAttributeForScope(w, r, scope)
 		default:

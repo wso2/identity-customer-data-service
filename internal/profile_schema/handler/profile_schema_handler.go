@@ -29,6 +29,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -160,8 +161,28 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 	orgId := utils.ExtractTenantIdFromPath(r)
 	var attributes interface{}
 	var err error
-	if constants.AllowedAttributesScope[scope] {
-		attributes, err = schemaService.GetProfileSchemaAttributesByScope(orgId, scope)
+
+	// Build the filter from query params
+	queryFilters := r.URL.Query()[constants.Filter] // Slice of filter params
+
+	var filters []string
+	for _, f := range queryFilters {
+		// Split by " and " to support multiple conditions in a single filter param
+		splitFilters := strings.Split(f, " and ")
+		for _, sf := range splitFilters {
+			sf = strings.TrimSpace(sf)
+			if sf != "" {
+				filters = append(filters, sf)
+			}
+		}
+	}
+	tenantId := utils.ExtractTenantIdFromPath(r)
+	if len(queryFilters) > 0 {
+		attributes, err = schemaService.GetProfileSchemaAttributesByScopeAndFilter(tenantId, scope, filters)
+	} else {
+		if constants.AllowedAttributesScope[scope] {
+			attributes, err = schemaService.GetProfileSchemaAttributesByScope(orgId, scope)
+		}
 	}
 
 	//todo: ensure it works for app data
@@ -183,6 +204,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		// todo: validate whats there in updates.
 		return
 	}
 	err := schemaService.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
@@ -192,42 +214,6 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 	}
 
 	attribute, err := schemaService.GetProfileSchemaAttributeById(orgId, attributeId)
-	if err != nil {
-		utils.HandleError(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(attribute)
-}
-
-// PatchProfileSchemaAttributesForScope updates a profile schema attribute.
-func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributesForScope(w http.ResponseWriter, r *http.Request, scope string) {
-
-	if scope == constants.IdentityAttributes {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-			Description: "Identity attributes cannot be modified via this endpoint.",
-		}, http.StatusMethodNotAllowed)
-		utils.WriteErrorResponse(w, clientError)
-		return
-	}
-	schemaProvider := provider.NewProfileSchemaProvider()
-	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := utils.ExtractTenantIdFromPath(r)
-	var updates []map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-	err := schemaService.PatchProfileSchemaAttributesByScope(orgId, scope, updates)
-	if err != nil {
-		utils.HandleError(w, err)
-		return
-	}
-
-	attribute, err := schemaService.GetProfileSchemaAttributesByScope(orgId, scope)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

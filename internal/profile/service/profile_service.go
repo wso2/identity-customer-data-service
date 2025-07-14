@@ -47,6 +47,7 @@ type ProfilesServiceInterface interface {
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
+	PatchProfile(id string, data map[string]interface{}) (profileModel.ProfileResponse, error)
 }
 
 // ProfilesService is the default implementation of the ProfilesServiceInterface.
@@ -1231,4 +1232,58 @@ func (ps ProfilesService) FindProfileByUserId(userId string) (*profileModel.Prof
 	}
 
 	return profileResponse, nil
+}
+
+// PatchProfile applies a partial update to an existing profile
+func (ps ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (profileModel.ProfileResponse, error) {
+
+	existingProfile, err := profileStore.GetProfile(profileId)
+	if err != nil || existingProfile == nil {
+		return profileModel.ProfileResponse{}, errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     "Profile not found",
+			Description: fmt.Sprintf("Profile %s not found", profileId),
+		}, http.StatusNotFound)
+	}
+
+	// Convert the full profile to map to allow patching
+	fullData, _ := json.Marshal(existingProfile)
+	var merged map[string]interface{}
+	_ = json.Unmarshal(fullData, &merged)
+
+	// Apply patch
+	for k, v := range patch {
+		merged[k] = v
+	}
+
+	if appDataPatch, ok := patch["application_data"].(map[string]interface{}); ok {
+		if existingAppData, ok := merged["application_data"].(map[string]interface{}); ok {
+			merged["application_data"] = DeepMerge(existingAppData, appDataPatch)
+		}
+	}
+
+	// Convert merged data back to ProfileRequest
+	mergedBytes, _ := json.Marshal(merged)
+	var updatedProfileReq profileModel.ProfileRequest
+	if err := json.Unmarshal(mergedBytes, &updatedProfileReq); err != nil {
+		return profileModel.ProfileResponse{}, fmt.Errorf("invalid patch structure: %w", err)
+	}
+
+	// Reuse the PUT logic to update the profile
+	return ps.UpdateProfile(profileId, updatedProfileReq)
+}
+
+func DeepMerge(dst, src map[string]interface{}) map[string]interface{} {
+	for k, v := range src {
+		if vMap, ok := v.(map[string]interface{}); ok {
+			if dstMap, ok := dst[k].(map[string]interface{}); ok {
+				dst[k] = DeepMerge(dstMap, vMap)
+			} else {
+				dst[k] = vMap
+			}
+		} else {
+			dst[k] = v
+		}
+	}
+	return dst
 }

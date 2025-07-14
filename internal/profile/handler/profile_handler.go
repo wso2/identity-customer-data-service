@@ -218,6 +218,18 @@ func (ph *ProfileHandler) CreateProfile(writer http.ResponseWriter, request *htt
 		SameSite: http.SameSiteLaxMode,
 	})
 
+	scheme := "https"
+	if strings.HasPrefix(request.Host, "localhost") {
+		scheme = "http"
+	}
+
+	location := fmt.Sprintf("%s://%s%s/profiles/%s",
+		scheme, //todo: request.URL.Scheme // always empty in Go’s standard `net/http`
+		request.Host,
+		constants.ApiBasePath,
+		profileResponse.ProfileId,
+	)
+	writer.Header().Set("Location", location)
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(writer).Encode(profileResponse)
@@ -257,6 +269,33 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write([]byte(`{"status": "updated"}`))
+}
+
+func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 3 {
+		http.Error(w, "Invalid path", http.StatusNotFound)
+		return
+	}
+	profileId := pathParts[len(pathParts)-1]
+
+	var patchData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updatedProfile)
 }
 
 func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.Request) {
