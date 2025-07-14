@@ -271,6 +271,7 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	_, _ = writer.Write([]byte(`{"status": "updated"}`))
 }
 
+// PatchProfile handles partial updates to a profile
 func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
