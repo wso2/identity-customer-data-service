@@ -1251,17 +1251,38 @@ func (ps ProfilesService) PatchProfile(profileId string, patch map[string]interf
 	var merged map[string]interface{}
 	_ = json.Unmarshal(fullData, &merged)
 
-	// Apply patch
-	for k, v := range patch {
-		merged[k] = v
+	// Handle deep merge for nested objects first
+	if traitsPatch, ok := patch["traits"].(map[string]interface{}); ok {
+		if existingTraits, ok := merged["traits"].(map[string]interface{}); ok {
+			merged["traits"] = DeepMerge(existingTraits, traitsPatch)
+		} else {
+			merged["traits"] = traitsPatch
+		}
+	}
+
+	if identityPatch, ok := patch["identity_attributes"].(map[string]interface{}); ok {
+		if existingIdentity, ok := merged["identity_attributes"].(map[string]interface{}); ok {
+			merged["identity_attributes"] = DeepMerge(existingIdentity, identityPatch)
+		} else {
+			merged["identity_attributes"] = identityPatch
+		}
 	}
 
 	if appDataPatch, ok := patch["application_data"].(map[string]interface{}); ok {
 		if existingAppData, ok := merged["application_data"].(map[string]interface{}); ok {
 			merged["application_data"] = DeepMerge(existingAppData, appDataPatch)
+		} else {
+			merged["application_data"] = appDataPatch
 		}
 	}
 
+	// Now apply top-level scalar fields
+	for k, v := range patch {
+		if k == "traits" || k == "identity_attributes" || k == "application_data" {
+			continue // already handled
+		}
+		merged[k] = v
+	}
 	// Convert merged data back to ProfileRequest
 	mergedBytes, _ := json.Marshal(merged)
 	var updatedProfileReq profileModel.ProfileRequest
@@ -1273,6 +1294,7 @@ func (ps ProfilesService) PatchProfile(profileId string, patch map[string]interf
 	return ps.UpdateProfile(profileId, updatedProfileReq)
 }
 
+// DeepMerge merges two maps recursively, with src overwriting dst
 func DeepMerge(dst, src map[string]interface{}) map[string]interface{} {
 	for k, v := range src {
 		if vMap, ok := v.(map[string]interface{}); ok {

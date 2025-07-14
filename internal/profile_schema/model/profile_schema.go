@@ -33,7 +33,7 @@ type ProfileSchemaAttribute struct {
 }
 
 type SubAttribute struct {
-	AttributeId   string `json:"attribute_id" bson:"attribute_id"`
+	AttributeId   string `json:"attribute_id" bson:"attribute_id" binding:"required"`
 	AttributeName string `json:"attribute_name" bson:"attribute_name" binding:"required"`
 }
 

@@ -19,6 +19,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	psstr "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
@@ -277,12 +278,29 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 	}
 
 	var subAttributes []model.SubAttribute
-	if sa, ok := updates["sub_attributes"]; ok && sa != nil {
-		if saSlice, ok := sa.([]model.SubAttribute); ok {
-			subAttributes = saSlice
+	if saRaw, ok := updates["sub_attributes"]; ok && saRaw != nil {
+		saSlice, ok := saRaw.([]interface{})
+		if ok {
+			for _, item := range saSlice {
+				itemMap, ok := item.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				// Convert map to JSON, then to SubAttribute
+				itemBytes, err := json.Marshal(itemMap)
+				if err != nil {
+					continue
+				}
+
+				var subAttr model.SubAttribute
+				if err := json.Unmarshal(itemBytes, &subAttr); err == nil {
+					subAttributes = append(subAttributes, subAttr)
+				}
+			}
 		}
 	} else {
-		subAttributes = attribute.SubAttributes // Keep existing sub attributes if not updated
+		subAttributes = attribute.SubAttributes // fallback to existing
 	}
 
 	var applicationIdentifier string
@@ -297,6 +315,21 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 		applicationIdentifier = attribute.ApplicationIdentifier // Keep existing application identifier if not updated
 	}
 
+	multiValued := false // Default to false if not provided
+	if mv, ok := updates["multi_valued"]; ok && mv != nil {
+		if mvBool, ok := mv.(bool); ok {
+			multiValued = mvBool
+		} else {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Message:     "Invalid value for multi_valued",
+				Description: "multi_valued must be a boolean",
+			}, http.StatusBadRequest)
+		}
+	} else {
+		log.GetLogger().Debug(fmt.Sprintf("multi_valued not provided in patch; defaulting to false for attribute: %s", attributeId))
+	}
+
 	// todo: ensure NPE - see if u need to update application identifier also...its PUT as well. So yeah.
 	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
 		OrgId:                 orgId,
@@ -305,7 +338,7 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 		ValueType:             updates["value_type"].(string),
 		MergeStrategy:         updates["merge_strategy"].(string),
 		Mutability:            updates["mutability"].(string),
-		MultiValued:           updates["multi_valued"].(bool),
+		MultiValued:           multiValued,
 		CanonicalValues:       canonicalValues,
 		SubAttributes:         subAttributes,
 		ApplicationIdentifier: applicationIdentifier,
