@@ -61,6 +61,7 @@ CREATE TABLE profile_schema (
     multi_valued BOOLEAN DEFAULT FALSE,
     canonical_values JSONB DEFAULT '[]'::jsonb,
     sub_attributes JSONB DEFAULT '[]'::jsonb
+    scim_dialect VARCHAR(255) ,
 );
 
 -- Application Data Table
