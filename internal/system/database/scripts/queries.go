@@ -271,20 +271,20 @@ var GetProfileByUserId = map[string]string{
 }
 
 var InsertConsentCategory = map[string]string{
-	"postgres": `INSERT INTO consent_categories (category_name, category_identifier, org_id, purpose, destinations)
+	"postgres": `INSERT INTO consent_categories (category_name, category_identifier, tenant_id, purpose, destinations)
 				VALUES ($1, $2, $3, $4, $5)`,
 }
 
 var GetAllConsentCategories = map[string]string{
-	"postgres": `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories`,
+	"postgres": `SELECT category_name, category_identifier, tenant_id, purpose, destinations FROM consent_categories`,
 }
 
 var GetConsentCategoryById = map[string]string{
-	"postgres": `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories WHERE category_identifier = $1`,
+	"postgres": `SELECT category_name, category_identifier, tenant_id, purpose, destinations FROM consent_categories WHERE category_identifier = $1`,
 }
 
 var GetConsentCategoryByName = map[string]string{
-	"postgres": `SELECT category_name, category_identifier, org_id, purpose, destinations FROM consent_categories WHERE category_name = $1`,
+	"postgres": `SELECT category_name, category_identifier, tenant_id, purpose, destinations FROM consent_categories WHERE category_name = $1`,
 }
 
 var UpdateConsentCategory = map[string]string{

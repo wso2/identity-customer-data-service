@@ -37,9 +37,9 @@ func NewConsentCategoryService(mux *http.ServeMux, apiBasePath string) *ConsentC
 }
 
 func (s *ConsentCategoryService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
-	mux.HandleFunc(fmt.Sprintf("GET %sconsent-categories", apiBasePath), s.handler.GetAllConsentCategories)
-	mux.HandleFunc(fmt.Sprintf("POST %sconsent-categories", apiBasePath), s.handler.AddConsentCategory)
-	mux.HandleFunc(fmt.Sprintf("GET %sconsent-categories/", apiBasePath), s.handler.GetConsentCategory)
-	mux.HandleFunc(fmt.Sprintf("PUT %sconsent-categories/", apiBasePath), s.handler.UpdateConsentCategory)
-	mux.HandleFunc(fmt.Sprintf("DELETE %sconsent-categories/", apiBasePath), s.handler.DeleteConsentCategory)
+	mux.HandleFunc(fmt.Sprintf("GET %s/consent-categories", apiBasePath), s.handler.GetAllConsentCategories)
+	mux.HandleFunc(fmt.Sprintf("POST %s/consent-categories", apiBasePath), s.handler.AddConsentCategory)
+	mux.HandleFunc(fmt.Sprintf("GET %s/consent-categories/", apiBasePath), s.handler.GetConsentCategory)
+	mux.HandleFunc(fmt.Sprintf("PUT %s/consent-categories/", apiBasePath), s.handler.UpdateConsentCategory)
+	mux.HandleFunc(fmt.Sprintf("DELETE %s/consent-categories/", apiBasePath), s.handler.DeleteConsentCategory)
 }
