@@ -635,9 +635,9 @@ func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute
 		attrKey := extractClaimKeyFromURI(attr.AttributeName)
 		attr.AttributeName = attrKey
 
-		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d, $%d)",
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d, $%d,$%d)",
 			argIndex, argIndex+1, argIndex+2, argIndex+3, argIndex+4, argIndex+5, argIndex+6,
-			argIndex+7, argIndex+8, argIndex+9, argIndex+10, argIndex+11))
+			argIndex+7, argIndex+8, argIndex+9, argIndex+10, argIndex+11, argIndex+12))
 		valueArgs = append(valueArgs,
 			orgID,
 			attr.AttributeId,
@@ -650,9 +650,10 @@ func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute
 			string(canonicalJSON),
 			string(subAttrJSON),
 			attr.SCIMDialect,
+			attr.MappedLocalClaim,
 			constants.IdentityAttributes,
 		)
-		argIndex += 12
+		argIndex += 13
 	}
 
 	insertQuery += strings.Join(valueStrings, ",")
@@ -744,4 +745,46 @@ func GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []s
 	}
 
 	return attributes, nil
+}
+
+func GetProfileSchemaAttributeByMappedLocalClaim(orgId string, claim string) (model.ProfileSchemaAttribute, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Error occurred while fetching profile schema for org: %s and mapped claim: %s",
+			orgId, claim)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors.NewServerError(errors.ErrorMessage{
+			Code:        errors.DB_CLIENT_INIT.Code,
+			Message:     errors.DB_CLIENT_INIT.Message,
+			Description: errorMsg,
+		}, err)
+		return model.ProfileSchemaAttribute{}, serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.GetProfileSchemaAttributeByMappedLocalClaim[provider.NewDBProvider().GetDBType()]
+
+	results, err := dbClient.ExecuteQuery(query, orgId, claim)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Error occurred while fetching profile schema for the org:%s", orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors.NewServerError(errors.ErrorMessage{
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
+			Description: errorMsg,
+		}, err)
+		return model.ProfileSchemaAttribute{}, serverError
+	}
+	if len(results) == 0 {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.ATTRIBUTE_NOT_FOUND.Code,
+			Message:     errors.ATTRIBUTE_NOT_FOUND.Message,
+			Description: "Profile schema attribute not found for org: " + orgId + " and mapped claim : " + claim,
+		}, http.StatusNotFound)
+		return model.ProfileSchemaAttribute{}, clientError
+	}
+	row := results[0]
+	return mapRowToProfileAttribute(row), nil
 }

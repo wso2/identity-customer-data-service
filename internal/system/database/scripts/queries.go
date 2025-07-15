@@ -35,7 +35,7 @@ var DeleteIdentityClaimsOfProfileSchema = map[string]string{
 var InsertIdentityClaimsForProfileSchema = map[string]string{
 	"postgres": `INSERT INTO profile_schema 
 	(tenant_id, attribute_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, 
-	 multi_valued, canonical_values, sub_attributes, scim_dialect, scope) VALUES `,
+	 multi_valued, canonical_values, sub_attributes, scim_dialect, mapped_local_claim, scope) VALUES `,
 }
 
 var GetProfileSchemaAttributeByName = map[string]string{
@@ -76,6 +76,12 @@ var GetProfileSchemaAttributeById = map[string]string{
 	"postgres": `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability , application_identifier, multi_valued,   sub_attributes::text,
   canonical_values::text
 	          FROM profile_schema WHERE tenant_id = $1 AND attribute_id = $2`,
+}
+
+var GetProfileSchemaAttributeByMappedLocalClaim = map[string]string{
+	"postgres": `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability , application_identifier, multi_valued,   sub_attributes::text,
+  canonical_values::text
+	          FROM profile_schema WHERE tenant_id = $1 AND mapped_local_claim = $2`,
 }
 
 var FilterProfileSchemaAttributes = map[string]string{

@@ -24,6 +24,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
 	"github.com/wso2/identity-customer-data-service/internal/profile/service"
+	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -325,7 +326,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 	if profileSync.Event == "POST_ADD_USER" {
 		if profileSync.ProfileId != "" && profileSync.UserId != "" {
-			log.GetLogger().Info("wewwdscfdsvgf????")
 
 			// This sceario is when the user anonymously tried and then trying to signup or login. So profile with profile id exists
 			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
@@ -336,7 +336,11 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 
 				for claimURI, value := range identityClaims {
-					attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+					attributeKeyPath, err := extractAttributePathFromLocalURI(tenantId, claimURI)
+					if err != nil {
+						utils.HandleError(writer, fmt.Errorf("failed to extract attribute path from local URI: %w", err))
+						return
+					}
 					setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
 				}
 
@@ -357,13 +361,16 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			}
 			return
 		} else if profileSync.ProfileId == "" {
-			log.GetLogger().Info("am i herere????")
 			// this is when we create a profile for a new user created in IS
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if existingProfile == nil {
 				identityAttributes := make(map[string]interface{})
 				for claimURI, value := range identityClaims {
-					attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+					attributeKeyPath, err := extractAttributePathFromLocalURI(tenantId, claimURI)
+					if err != nil {
+						utils.HandleError(writer, fmt.Errorf("failed to extract attribute path from local URI: %w", err))
+						return
+					}
 					setNestedMapValue(identityAttributes, attributeKeyPath, value)
 				}
 
@@ -408,7 +415,11 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				identityAttributes := make(map[string]interface{})
 
 				for claimURI, value := range identityClaims {
-					attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+					attributeKeyPath, err := extractAttributePathFromLocalURI(tenantId, claimURI)
+					if err != nil {
+						utils.HandleError(writer, fmt.Errorf("failed to extract attribute path from local URI: %w", err))
+						return
+					}
 					setNestedMapValue(identityAttributes, attributeKeyPath, value)
 				}
 
@@ -432,7 +443,11 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 
 				for claimURI, value := range identityClaims {
-					attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+					attributeKeyPath, err := extractAttributePathFromLocalURI(tenantId, claimURI)
+					if err != nil {
+						utils.HandleError(writer, fmt.Errorf("failed to extract attribute path from local URI: %w", err))
+						return
+					}
 					setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
 				}
 
@@ -458,7 +473,11 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			}
 
 			for claimURI, value := range identityClaims {
-				attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
+				attributeKeyPath, err := extractAttributePathFromLocalURI(tenantId, claimURI)
+				if err != nil {
+					utils.HandleError(writer, fmt.Errorf("failed to extract attribute path from local URI: %w", err))
+					return
+				}
 				setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
 			}
 
@@ -501,7 +520,17 @@ func setNestedMapValue(m map[string]interface{}, path string, value interface{})
 	// todo: ensure the value type and also try how we merge the values here.
 }
 
-func extractClaimKeyFromLocalURI(localURI string) string {
-	parts := strings.Split(localURI, "/")
-	return parts[len(parts)-1]
+// extractAttributePathFromLocalURI extracts the claim key from a local URI.
+func extractAttributePathFromLocalURI(tenantId, localURI string) (string, error) {
+
+	profileSchemaService := schemaService.GetProfileSchemaService()
+	claim, err := profileSchemaService.GetProfileSchemaAttributeByMappedLocalClaim(tenantId, localURI)
+	if err != nil {
+		return "", err
+	}
+	if claim.AttributeId == "" {
+		return "", fmt.Errorf("claim not found for local URI: %s", localURI)
+	}
+	key := strings.TrimPrefix(claim.AttributeName, "identity_attributes.")
+	return key, nil
 }
