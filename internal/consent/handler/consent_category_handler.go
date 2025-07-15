@@ -56,7 +56,7 @@ func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *ht
 	}
 
 	orgId := utils.ExtractTenantIdFromPath(r)
-	category.OrgId = orgId
+	category.TenantId = orgId
 
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()
 	consentCat, err := service.AddConsentCategory(category)
