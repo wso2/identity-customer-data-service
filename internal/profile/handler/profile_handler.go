@@ -325,7 +325,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 	if profileSync.Event == "POST_ADD_USER" {
 		if profileSync.ProfileId != "" && profileSync.UserId != "" {
-			log.GetLogger().Info("wewwdscfdsvgf????")
 
 			// This sceario is when the user anonymously tried and then trying to signup or login. So profile with profile id exists
 			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
@@ -357,7 +356,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			}
 			return
 		} else if profileSync.ProfileId == "" {
-			log.GetLogger().Info("am i herere????")
 			// this is when we create a profile for a new user created in IS
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if existingProfile == nil {
@@ -381,6 +379,38 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		}
 		return
 		// if needed can ensure if profile got created
+	}
+
+	if profileSync.Event == "AUTHENTICATION_SUCCESS" {
+		log.GetLogger().Info("Authentication success event received for user: " + profileSync.UserId)
+		if profileSync.ProfileId != "" && profileSync.UserId != "" {
+			// This scenario is when the user logs in with a profileId existing.
+			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
+			if existingProfile != nil {
+				// Update identity attributes based on claim URIs
+				if existingProfile.IdentityAttributes == nil {
+					existingProfile.IdentityAttributes = make(map[string]interface{})
+				}
+
+				// This is to update userId
+				//todo: See if we need to fetch the identity data as well.
+
+				profileRequest := model.ProfileRequest{
+					UserId:             profileSync.UserId,
+					IdentityAttributes: existingProfile.IdentityAttributes,
+					Traits:             existingProfile.Traits,
+					ApplicationData:    existingProfile.ApplicationData,
+				}
+				// Save updated profile
+				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
+				if err != nil {
+					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					return
+				}
+				return
+			}
+			return
+		}
 	}
 
 	if profileSync.Event == "POST_DELETE_USER_WITH_ID" {
