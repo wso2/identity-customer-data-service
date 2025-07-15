@@ -26,10 +26,11 @@ type ProfileSchemaAttribute struct {
 	MergeStrategy         string           `json:"merge_strategy" bson:"merge_strategy" binding:"required"`
 	Mutability            string           `json:"mutability" bson:"mutability"`
 	ApplicationIdentifier string           `json:"application_identifier,omitempty" bson:"application_identifier,omitempty"`
-	MultiValued           bool             `json:"multi_valued,omitempty" bson:"multi_valued,omitempty"`         // Means the data type is an array of chosen data type
-	CanonicalValues       []CanonicalValue `json:"canonical_values,omitempty" bson:"canonical_values,omitempty"` // String of options for the attribute
-	SubAttributes         []SubAttribute   `json:"sub_attributes,omitempty" bson:"sub_attributes,omitempty"`     // If the datatype is object
-	SCIMDialect           string           `json:"scim_dialect,omitempty" bson:"scim_dialect,omitempty"`         // Need to skip this in the response
+	MultiValued           bool             `json:"multi_valued,omitempty" bson:"multi_valued,omitempty"`             // Means the data type is an array of chosen data type
+	CanonicalValues       []CanonicalValue `json:"canonical_values,omitempty" bson:"canonical_values,omitempty"`     // String of options for the attribute
+	SubAttributes         []SubAttribute   `json:"sub_attributes,omitempty" bson:"sub_attributes,omitempty"`         // If the datatype is object
+	SCIMDialect           string           `json:"scim_dialect,omitempty" bson:"scim_dialect,omitempty"`             // Need to skip this in the response
+	MappedLocalClaim      string           `json:"mapped_local_claim,omitempty" bson:"mapped_local_claim,omitempty"` // Local claims mapped to this attribute
 }
 
 type SubAttribute struct {

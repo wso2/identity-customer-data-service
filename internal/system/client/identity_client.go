@@ -125,6 +125,7 @@ func (c *IdentityClient) fetchClientCredentialsToken() (map[string]interface{}, 
 	return result, nil
 }
 
+// GetProfileSchema fetches the profile schema attributes from the identity server
 func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAttribute, error) {
 
 	logger := log.GetLogger()
@@ -171,7 +172,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 				continue
 			}
 
-			attr, subAttr, parent := ConvertSCIMClaimWithLocal(scimClaim, localClaim, claims, orgId, dialectURI)
+			attr, subAttr, parent := ConvertSCIMClaimWithLocal(scimClaim, localClaim, claims, orgId)
 			result = append(result, attr)
 			existingAttrs[attr.AttributeName] = true
 
@@ -194,14 +195,15 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 					dialect = "urn:synthetic" // fallback
 				}
 				result = append(result, model.ProfileSchemaAttribute{
-					OrgId:         orgId,
-					AttributeId:   uuid.New().String(),
-					AttributeName: parent,
-					ValueType:     constants.ComplexDataType,
-					MergeStrategy: constants.MergeStrategyOverwrite,
-					Mutability:    constants.MutabilityReadWrite,
-					SubAttributes: subs,
-					SCIMDialect:   dialect, // mark as generated
+					OrgId:            orgId,
+					AttributeId:      uuid.New().String(),
+					AttributeName:    parent,
+					ValueType:        constants.ComplexDataType,
+					MergeStrategy:    constants.MergeStrategyOverwrite,
+					Mutability:       constants.MutabilityReadWrite,
+					SubAttributes:    subs,
+					SCIMDialect:      dialect, // mark as generated
+					MappedLocalClaim: "",      // synthetic, no local mapping
 				})
 			}
 		}
@@ -278,12 +280,12 @@ func ConvertSCIMClaimWithLocal(
 	scim map[string]interface{},
 	local map[string]interface{},
 	allClaims []map[string]interface{},
-	orgId, dialectURI string,
+	orgId string,
 ) (model.ProfileSchemaAttribute, *model.SubAttribute, string) {
 
-	claimURI := fmt.Sprintf("%v", scim["claimURI"])
 	localURI := fmt.Sprintf("%v", scim["mappedLocalClaimURI"])
-	attrKey := extractClaimKeyFromLocalURI(localURI)
+	claimURI := fmt.Sprintf("%v", scim["claimURI"])
+	attrKey := extractClaimKeyFromSCIMURI(claimURI)
 
 	readOnly := false
 	multiValued := false
@@ -324,23 +326,11 @@ func ConvertSCIMClaimWithLocal(
 	var subAttrs []model.SubAttribute
 	for _, otherClaim := range allClaims {
 		otherURI := fmt.Sprintf("%v", otherClaim["claimURI"])
-
 		if strings.HasPrefix(otherURI, claimURI+".") {
-			mappedLocalURI := fmt.Sprintf("%v", otherClaim["mappedLocalClaimURI"])
-
-			// Ensure mapped local URI is truly nested under the current local URI
-			if strings.HasPrefix(mappedLocalURI, localURI+".") {
-				subAttrKey := extractClaimKeyFromLocalURI(mappedLocalURI)
-
-				if strings.HasPrefix(subAttrKey, attrKey+".") {
-					subAttrKey = strings.TrimPrefix(subAttrKey, attrKey+".")
-				}
-
-				subAttrs = append(subAttrs, model.SubAttribute{
-					AttributeId:   fmt.Sprintf("%v", uuid.New().String()),
-					AttributeName: "identity_attributes." + attrKey + "." + subAttrKey,
-				})
-			}
+			subAttrs = append(subAttrs, model.SubAttribute{
+				AttributeId:   uuid.New().String(),
+				AttributeName: "identity_attributes." + extractClaimKeyFromSCIMURI(otherURI),
+			})
 		}
 	}
 
@@ -349,7 +339,7 @@ func ConvertSCIMClaimWithLocal(
 		valueType = "complex"
 	}
 
-	fullAttrName := "identity_attributes." + attrKey
+	fullAttrName := "identity_attributes." + convertSCIMURIToAttributeName(claimURI)
 
 	// Check if this is a sub-attribute (i.e., contains a dot after the prefix)
 	if strings.Contains(attrKey, ".") {
@@ -359,31 +349,33 @@ func ConvertSCIMClaimWithLocal(
 			AttributeName: fullAttrName,
 		}
 		return model.ProfileSchemaAttribute{
-			OrgId:           orgId,
-			AttributeId:     subAttr.AttributeId,
-			AttributeName:   fullAttrName,
-			ValueType:       valueType,
-			MergeStrategy:   "overwrite",
-			Mutability:      ifThenElse(readOnly, "readOnly", "readWrite"),
-			MultiValued:     multiValued,
-			CanonicalValues: canonicalValues,
-			SubAttributes:   nil,
-			SCIMDialect:     dialectURI,
+			OrgId:            orgId,
+			AttributeId:      subAttr.AttributeId,
+			AttributeName:    fullAttrName,
+			ValueType:        valueType,
+			MergeStrategy:    "overwrite",
+			Mutability:       ifThenElse(readOnly, "readOnly", "readWrite"),
+			MultiValued:      multiValued,
+			CanonicalValues:  canonicalValues,
+			SubAttributes:    nil,
+			SCIMDialect:      claimURI,
+			MappedLocalClaim: localURI,
 		}, &subAttr, parentAttrName
 	}
 
 	// It's a top-level or parent attribute
 	return model.ProfileSchemaAttribute{
-		OrgId:           orgId,
-		AttributeId:     fmt.Sprintf("%v", uuid.New().String()),
-		AttributeName:   fullAttrName,
-		ValueType:       valueType,
-		MergeStrategy:   "overwrite",
-		Mutability:      ifThenElse(readOnly, "readOnly", "readWrite"),
-		MultiValued:     multiValued,
-		CanonicalValues: canonicalValues,
-		SubAttributes:   subAttrs,
-		SCIMDialect:     dialectURI,
+		OrgId:            orgId,
+		AttributeId:      fmt.Sprintf("%v", uuid.New().String()),
+		AttributeName:    fullAttrName,
+		ValueType:        valueType,
+		MergeStrategy:    "overwrite",
+		Mutability:       ifThenElse(readOnly, "readOnly", "readWrite"),
+		MultiValued:      multiValued,
+		CanonicalValues:  canonicalValues,
+		SubAttributes:    subAttrs,
+		SCIMDialect:      claimURI,
+		MappedLocalClaim: localURI,
 	}, nil, ""
 }
 
@@ -431,4 +423,17 @@ func flattenSCIMClaims(user map[string]interface{}) map[string]interface{} {
 	}
 
 	return flat
+}
+
+func extractClaimKeyFromSCIMURI(scimURI string) string {
+	parts := strings.Split(scimURI, ":")
+	lastPart := parts[len(parts)-1]
+	return strings.TrimPrefix(lastPart, "schemas:") // removes redundant prefixes if present
+}
+
+func convertSCIMURIToAttributeName(uri string) string {
+	// E.g., "urn:scim:schemas:core:2.0:name.givenName" → "name.givenName"
+	parts := strings.Split(uri, ":")
+	last := parts[len(parts)-1]
+	return last
 }

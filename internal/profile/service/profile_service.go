@@ -169,13 +169,13 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 			return clientError
 		}
 		if isUpdate && existingProfile.IdentityAttributes != nil {
-			if !(attr.AttributeName == "identity_attributes.modified" || attr.AttributeName == "identity_attributes.created" || attr.AttributeName == "identity_attributes.userid") {
+			if !(attr.AttributeName == "identity_attributes.meta.lastModified" || attr.AttributeName == "identity_attributes.meta.created" || attr.AttributeName == "identity_attributes.id") {
 				if err := validateMutability(attr.Mutability, isUpdate, existingProfile.IdentityAttributes[key], val); err != nil {
 					return err
 				}
 			}
 		} else {
-			if !(attr.AttributeName == "identity_attributes.modified" || attr.AttributeName == "identity_attributes.created" || attr.AttributeName == "identity_attributes.userid") {
+			if !(attr.AttributeName == "identity_attributes.meta.lastModified" || attr.AttributeName == "identity_attributes.meta.created" || attr.AttributeName == "identity_attributes.id") {
 				if err := validateMutability(attr.Mutability, isUpdate, nil, val); err != nil {
 					return err
 				}

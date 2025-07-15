@@ -40,6 +40,7 @@ type ProfileSchemaServiceInterface interface {
 	GetProfileSchemaAttributesByScopeAndFilter(id, scope string, filters []string) (interface{}, error)
 	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
 	GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error)
+	GetProfileSchemaAttributeByMappedLocalClaim(orgId, mappedLocalClaim string) (model.ProfileSchemaAttribute, error)
 	PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}) error
 	DeleteProfileSchemaAttributeById(orgId, attributeId string) error
 	SyncProfileSchema(orgId string) error
@@ -577,4 +578,10 @@ func (s *ProfileSchemaService) GetProfileSchemaAttributesByScopeAndFilter(orgId,
 		return grouped, nil
 	}
 	return schemaAttributes, nil
+}
+
+func (s *ProfileSchemaService) GetProfileSchemaAttributeByMappedLocalClaim(orgId, mappedLocalClaim string) (model.ProfileSchemaAttribute, error) {
+
+	return psstr.GetProfileSchemaAttributeByMappedLocalClaim(orgId, mappedLocalClaim)
+
 }
