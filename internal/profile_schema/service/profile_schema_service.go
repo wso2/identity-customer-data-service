@@ -139,7 +139,7 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		return clientError, false
 	}
 
-	if attr.SubAttributes != nil || len(attr.SubAttributes) > 0 {
+	if len(attr.SubAttributes) > 0 {
 		if attr.ValueType != constants.ComplexDataType {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,

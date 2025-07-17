@@ -142,6 +142,13 @@ func (urs *UnificationRuleService) PatchResolutionRule(ruleId string, updates ma
 	// Validate that the priority is not already in use
 	existingRules, _ := store.GetUnificationRules("")
 	for _, existingRule := range existingRules {
+		if existingRule.Property == "user_id" {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.UNIFICATION_RULE_ALREADY_EXISTS.Code,
+				Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
+				Description: fmt.Sprintf("user_id based unification rule can not be updated."),
+			}, http.StatusConflict)
+		}
 		if existingRule.RuleId != ruleId && existingRule.Priority == updates["priority"] {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UNIFICATION_RULE_PRIORITY_EXISTS.Code,
