@@ -45,8 +45,12 @@ type IdentityClient struct {
 // Create new client and fetch token
 func NewIdentityClient(cfg config.Config) *IdentityClient {
 
+	baseUrl := cfg.AuthServer.Host
+	if cfg.AuthServer.Port != "" {
+		baseUrl = cfg.AuthServer.Host + ":" + cfg.AuthServer.Port
+	}
 	client := &IdentityClient{
-		BaseURL: cfg.AuthServer.Host + ":" + cfg.AuthServer.Port,
+		BaseURL: baseUrl,
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
@@ -129,7 +133,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 
 	logger := log.GetLogger()
 
-	localClaimsMap, err := c.GetLocalClaimsMap()
+	localClaimsMap, err := c.GetLocalClaimsMap(orgId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch local claims: %w", err)
 	}
@@ -245,8 +249,8 @@ func (c *IdentityClient) GetClaimsByDialect(dialectID string) ([]map[string]inte
 	return claims, err
 }
 
-func (c *IdentityClient) GetLocalClaimsMap() (map[string]map[string]interface{}, error) {
-	endpoint := fmt.Sprintf("https://%s/api/server/v1/claim-dialects/local/claims", c.BaseURL)
+func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]interface{}, error) {
+	endpoint := fmt.Sprintf("https://%s/%s/api/server/v1/claim-dialects/local/claims", c.BaseURL, orgId)
 	req, _ := http.NewRequest("GET", endpoint, nil)
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 
