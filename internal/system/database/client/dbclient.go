@@ -20,6 +20,8 @@ package client
 
 import (
 	"database/sql"
+	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"os"
 	"strings"
 
@@ -40,7 +42,18 @@ type DBClient struct {
 }
 
 func (client *DBClient) CreateTablesFromConfig() error {
-	client.ExecuteQuery()
+
+	sqlBytes, err := os.ReadFile("/dbscripts/postgres.sql")
+	if err != nil {
+		return fmt.Errorf("failed to read schema file: %w", err)
+	}
+
+	_, err = client.db.Exec(string(sqlBytes))
+	if err != nil {
+		return fmt.Errorf("failed to execute schema: %w", err)
+	}
+	log.GetLogger().Info("Database schema created successfully")
+	return nil
 }
 
 // NewDBClient creates a new instance of DBClient with the provided database connection.

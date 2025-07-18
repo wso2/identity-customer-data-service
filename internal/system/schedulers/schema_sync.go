@@ -32,11 +32,11 @@ func StartSchemaFetchScheduler(idClient *client.IdentityClient, interval time.Du
 	defer ticker.Stop()
 
 	// Run once at startup
-	//todo: check if we need this and ofcz we cant hardcode "carbon.super" or "wso2conasia" -
-	fetchSchemas(idClient, "wso2conasia")
+	//todo: check if we need this and ofcz we cant hardcode "carbon.super" or "wso2conasia"
+	fetchSchemas(idClient, "carbon.super")
 
 	for range ticker.C {
-		fetchSchemas(idClient, "wso2conasia")
+		fetchSchemas(idClient, "carbon.super")
 	}
 }
 

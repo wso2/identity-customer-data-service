@@ -55,14 +55,14 @@ func initDatabaseFromConfig(config *config.Config) {
 		"db port:%s", dbname, host, port))
 }
 
-func createTablesFromConfig(config *config.Config) {
+func createTablesFromConfig() {
 	logger := log.GetLogger()
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		logger.Error("Failed to get database client.", log.Error(err))
 		return
 	}
-	if err := dbClient.CreateTablesFromConfig(config); err != nil {
+	if err := dbClient.CreateTablesFromConfig(); err != nil {
 		logger.Error("Failed to create tables from configuration.", log.Error(err))
 		return
 	}
@@ -98,6 +98,8 @@ func main() {
 
 	// Initialize database
 	initDatabaseFromConfig(cdsConfig)
+
+	createTablesFromConfig()
 
 	// Initialize Event queue
 	workers.StartProfileWorker()
