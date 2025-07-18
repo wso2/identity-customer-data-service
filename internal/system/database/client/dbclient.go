@@ -31,11 +31,16 @@ type DBClientInterface interface {
 	ExecuteQuery(query string, args ...interface{}) ([]map[string]interface{}, error)
 	BeginTx() (*sql.Tx, error)
 	Close() error
+	CreateTablesFromConfig() error
 }
 
 // DBClient is the implementation of DBClientInterface.
 type DBClient struct {
 	db *sql.DB
+}
+
+func (client *DBClient) CreateTablesFromConfig() error {
+	client.ExecuteQuery()
 }
 
 // NewDBClient creates a new instance of DBClient with the provided database connection.

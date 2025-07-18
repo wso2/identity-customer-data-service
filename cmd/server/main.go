@@ -26,6 +26,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/schedulers"
@@ -52,6 +53,20 @@ func initDatabaseFromConfig(config *config.Config) {
 
 	logger.Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, db host:%s, "+
 		"db port:%s", dbname, host, port))
+}
+
+func createTablesFromConfig(config *config.Config) {
+	logger := log.GetLogger()
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		logger.Error("Failed to get database client.", log.Error(err))
+		return
+	}
+	if err := dbClient.CreateTablesFromConfig(config); err != nil {
+		logger.Error("Failed to create tables from configuration.", log.Error(err))
+		return
+	}
+
 }
 
 func main() {

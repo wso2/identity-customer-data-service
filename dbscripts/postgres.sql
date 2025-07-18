@@ -9,21 +9,21 @@ CREATE TABLE unification_rules (
     updated_at BIGINT NOT NULL
 );
 
-CREATE TABLE profile_unification_modes (
-    id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL,
-    merge_type VARCHAR(255) NOT NULL,
-    rule VARCHAR(255) NOT NULL,
-    UNIQUE (tenant_id, merge_type, rule)
-);
+-- CREATE TABLE profile_unification_modes (
+--     id SERIAL PRIMARY KEY,
+--     tenant_id VARCHAR(255) NOT NULL,
+--     merge_type VARCHAR(255) NOT NULL,
+--     rule VARCHAR(255) NOT NULL,
+--     UNIQUE (tenant_id, merge_type, rule)
+-- );
 
-CREATE TABLE profile_unification_triggers (
-    id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(255) NOT NULL UNIQUE,
-    trigger_type VARCHAR(255) NOT NULL,
-    last_trigger BIGINT DEFAULT 0,
-    duration BIGINT DEFAULT 0
-);
+-- CREATE TABLE profile_unification_triggers (
+--     id SERIAL PRIMARY KEY,
+--     tenant_id VARCHAR(255) NOT NULL UNIQUE,
+--     trigger_type VARCHAR(255) NOT NULL,
+--     last_trigger BIGINT DEFAULT 0,
+--     duration BIGINT DEFAULT 0
+-- );
 
 -- Profiles Table
 CREATE TABLE profiles (
