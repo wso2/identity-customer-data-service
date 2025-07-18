@@ -49,8 +49,8 @@ CREATE TABLE profile_reference (
     reference_reason VARCHAR(255)
 );
 
-CREATE TABLE profile_schema (
-    attribute_id VARCHAR(255) NOT NULL PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS profile_schema (
+                                              attribute_id VARCHAR(255) NOT NULL PRIMARY KEY,
     scope VARCHAR(255),
     tenant_id VARCHAR(255) NOT NULL,
     attribute_name VARCHAR(255) NOT NULL,
