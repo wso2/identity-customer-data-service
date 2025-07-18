@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"os"
+	"path"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -33,7 +34,7 @@ type DBClientInterface interface {
 	ExecuteQuery(query string, args ...interface{}) ([]map[string]interface{}, error)
 	BeginTx() (*sql.Tx, error)
 	Close() error
-	CreateTablesFromConfig() error
+	CreateTablesFromConfig(cdsHome, file string) error
 }
 
 // DBClient is the implementation of DBClientInterface.
@@ -41,9 +42,9 @@ type DBClient struct {
 	db *sql.DB
 }
 
-func (client *DBClient) CreateTablesFromConfig() error {
+func (client *DBClient) CreateTablesFromConfig(cdsHome, file string) error {
 
-	sqlBytes, err := os.ReadFile("/dbscripts/postgres.sql")
+	sqlBytes, err := os.ReadFile(path.Join(cdsHome, file))
 	if err != nil {
 		return fmt.Errorf("failed to read schema file: %w", err)
 	}

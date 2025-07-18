@@ -55,14 +55,14 @@ func initDatabaseFromConfig(config *config.Config) {
 		"db port:%s", dbname, host, port))
 }
 
-func createTablesFromConfig() {
+func createTablesFromConfig(cdsHome string, schemaFile string) {
 	logger := log.GetLogger()
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		logger.Error("Failed to get database client.", log.Error(err))
 		return
 	}
-	if err := dbClient.CreateTablesFromConfig(); err != nil {
+	if err := dbClient.CreateTablesFromConfig(cdsHome, schemaFile); err != nil {
 		logger.Error("Failed to create tables from configuration.", log.Error(err))
 		return
 	}
@@ -99,7 +99,8 @@ func main() {
 	// Initialize database
 	initDatabaseFromConfig(cdsConfig)
 
-	createTablesFromConfig()
+	const schemaFile = "/dbscripts/postgres.sql"
+	createTablesFromConfig(cdsHome, schemaFile)
 
 	// Initialize Event queue
 	workers.StartProfileWorker()
