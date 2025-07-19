@@ -8,6 +8,22 @@ servers:
 
 paths:
   /profiles:
+    post:
+      tags: [ Profile ]
+      summary: Create profile
+      operationId: createProfile
+      security:
+        - bearerAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Profile'
+      responses:
+        '201':
+          description: Profile created successfully
+
     get:
       tags: [Profile]
       summary: Get all profiles
@@ -23,24 +39,6 @@ paths:
                   $ref: '#/components/schemas/Profile'
 
   /profiles/{profile_id}:
-    post:
-        tags: [Profile]
-        summary: Create profile
-        operationId: createProfile
-        security:
-            - bearerAuth: [ ]
-        requestBody:
-            required: true
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/Profile'
-        responses:
-          '201':
-            description: Profile created successfully
-          '400':
-            description: Bad request, invalid profile data
-
     get:
       tags: [Profile]
       summary: Retrieve profile by Id
@@ -206,12 +204,60 @@ paths:
                 items:
                   $ref: '#/components/schemas/ProfileSchema'
 
-  /profile-schema/{attribute_id}:
+  /profile-schema/{scope}:
+    post:
+      tags: [ Profile Schema ]
+      summary: Add profile schema attribute
+      operationId: addProfileSchemaAttribute
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [ identity_attributes, traits, application_data ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileSchema'
+      responses:
+        '201':
+          description: Attribute created successfully
+
     get:
-      tags: [Profile Schema]
-      summary: Get profile schema attribute rule by ID
+      tags: [ Profile Schema ]
+      summary: Get all profile schema attributes by scope
+      operationId: getProfileSchemaByScope
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [ identity_attributes, traits, application_data ]
+      responses:
+        '200':
+          description: Attributes retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProfileSchema'
+
+  /profile-schema/{scope}/{attribute_id}:
+    get:
+      tags: [ Profile Schema ]
+      summary: Get profile schema attribute by ID and scope
       operationId: getProfileSchemaAttribute
       parameters:
+        - name: scope
+          in: path
+          required: true
+          schema:
+            type: string
         - name: attribute_id
           in: path
           required: true
@@ -219,16 +265,22 @@ paths:
             type: string
       responses:
         '200':
-          description: Trait retrieved successfully
+          description: Attribute retrieved successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProfileSchema'
+
     put:
-      tags: [Profile Schema]
-      summary: Update profile Schema Attribute
-      operationId: putProfileSchemaAttribute
+      tags: [ Profile Schema ]
+      summary: Update profile schema attribute
+      operationId: updateProfileSchemaAttribute
       parameters:
+        - name: scope
+          in: path
+          required: true
+          schema:
+            type: string
         - name: attribute_id
           in: path
           required: true
@@ -242,12 +294,22 @@ paths:
               $ref: '#/components/schemas/ProfileSchema'
       responses:
         '200':
-          description: Rule updated successfully
+          description: Attribute updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileSchema'
+
     delete:
-      tags: [Profile Schema]
+      tags: [ Profile Schema ]
       summary: Delete profile schema attribute
       operationId: deleteProfileSchemaAttribute
       parameters:
+        - name: scope
+          in: path
+          required: true
+          schema:
+            type: string
         - name: attribute_id
           in: path
           required: true
@@ -255,7 +317,7 @@ paths:
             type: string
       responses:
         '204':
-          description: Rule deleted successfully
+          description: Attribute deleted successfully
 
   /consents:
     post:
@@ -414,7 +476,6 @@ components:
         application_id:
           type: string
           example: "40497337-e8bf-4d92-9545-711894ab2af3"
-
 
     ProfileSchema:
       type: object
