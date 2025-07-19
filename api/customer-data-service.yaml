@@ -177,19 +177,7 @@ paths:
           description: Rule deleted successfully
 
   /profile-schema:
-    post:
-      tags: [Profile Schema]
-      summary: Add profile schema attribute
-      operationId: addProfileSchemaAttribute
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProfileSchema'
-      responses:
-        '201':
-          description: Rule created successfully
+
     get:
       tags: [Profile Schema]
       summary: Get all profile enrichment rules
@@ -258,6 +246,7 @@ paths:
           required: true
           schema:
             type: string
+            enum: [ identity_attributes, traits, application_data ]
         - name: attribute_id
           in: path
           required: true
