@@ -6,7 +6,7 @@
  * in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -28,50 +28,48 @@ type ProfileSchemaService struct {
 	handler *handler.ProfileSchemaHandler
 }
 
-func NewProfileSchemaService(mux *http.ServeMux, apiBasePath string) *ProfileSchemaService {
-
-	instance := &ProfileSchemaService{
+func NewProfileSchemaService() *ProfileSchemaService {
+	return &ProfileSchemaService{
 		handler: handler.NewProfileSchemaHandler(),
 	}
-	instance.RegisterRoutes(mux, apiBasePath)
-
-	return instance
 }
 
-func (s *ProfileSchemaService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
-	mux.HandleFunc(apiBasePath+"/profile-schema", s.routeSchemaCollection)
-	mux.HandleFunc(apiBasePath+"/profile-schema/", s.routeSchemaScopedOrAttribute)
-}
+// Route handles tenant-aware profile-schema endpoints
+func (s *ProfileSchemaService) Route(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSuffix(r.URL.Path, "/")
+	method := r.Method
 
-func (s *ProfileSchemaService) routeSchemaCollection(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		s.handler.GetProfileSchema(w, r)
-	case http.MethodDelete:
-		s.handler.DeleteProfileSchema(w, r)
-	default:
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	// Handle collection-level operations
+	if path == "/profile-schema" {
+		switch method {
+		case http.MethodGet:
+			s.handler.GetProfileSchema(w, r)
+		case http.MethodDelete:
+			s.handler.DeleteProfileSchema(w, r)
+		default:
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+		return
 	}
-}
 
-func (s *ProfileSchemaService) routeSchemaScopedOrAttribute(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/profile-schema/")
-	parts := strings.Split(path, "/")
-
-	// Handle /profile-schema/sync as a separate route
-	if path == "sync" {
-		if r.Method == http.MethodPost {
-			s.handler.SyncProfileSchema(w, r) // Call your sync handler method
+	// Handle /profile-schema/sync
+	if path == "/profile-schema/sync" {
+		if method == http.MethodPost {
+			s.handler.SyncProfileSchema(w, r)
 			return
 		}
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Handle /profile-schema/{scope} and /profile-schema/{scope}/{attrID}
+	trimmed := strings.TrimPrefix(path, "/profile-schema/")
+	parts := strings.Split(trimmed, "/")
+
 	switch len(parts) {
 	case 1:
 		scope := parts[0]
-		switch r.Method {
+		switch method {
 		case http.MethodPost:
 			s.handler.AddProfileSchemaAttributesForScope(w, r, scope)
 		case http.MethodGet:
@@ -83,7 +81,7 @@ func (s *ProfileSchemaService) routeSchemaScopedOrAttribute(w http.ResponseWrite
 		}
 	case 2:
 		scope, attrID := parts[0], parts[1]
-		switch r.Method {
+		switch method {
 		case http.MethodGet:
 			s.handler.GetProfileSchemaAttributeById(w, r, scope, attrID)
 		case http.MethodPut:

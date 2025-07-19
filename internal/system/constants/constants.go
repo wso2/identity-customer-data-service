@@ -10,7 +10,7 @@ const Filter = "filter"
 
 type contextKey string
 
-const TenantContextKey contextKey = "tenant"
+const TenantContextKey contextKey = "tenant_id"
 
 var AllowedFieldsForUnificationRulePatch = map[string]bool{
 	"is_active": true,

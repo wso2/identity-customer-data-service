@@ -6,7 +6,7 @@
  * in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -19,30 +19,43 @@
 package services
 
 import (
-	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/handler"
 	"net/http"
+	"strings"
 )
 
 type UnificationRulesService struct {
 	unificationRulesHandler *handler.UnificationRulesHandler
 }
 
-func NewUnificationRulesService(mux *http.ServeMux, apiBasePath string) *UnificationRulesService {
-
-	instance := &UnificationRulesService{
+func NewUnificationRulesService() *UnificationRulesService {
+	return &UnificationRulesService{
 		unificationRulesHandler: handler.NewUnificationRulesHandler(),
 	}
-	instance.RegisterRoutes(mux, apiBasePath)
-
-	return instance
 }
 
-func (s *UnificationRulesService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
+// Route handles all tenant-aware unification rules endpoints
+func (s *UnificationRulesService) Route(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSuffix(r.URL.Path, "/")
+	method := r.Method
 
-	mux.HandleFunc(fmt.Sprintf("POST %s/unification-rules", apiBasePath), s.unificationRulesHandler.AddUnificationRule)
-	mux.HandleFunc(fmt.Sprintf("GET %s/unification-rules", apiBasePath), s.unificationRulesHandler.GetUnificationRules)
-	mux.HandleFunc(fmt.Sprintf("GET %s/unification-rules/", apiBasePath), s.unificationRulesHandler.GetUnificationRule)
-	mux.HandleFunc(fmt.Sprintf("PATCH %s/unification-rules/", apiBasePath), s.unificationRulesHandler.PatchUnificationRule)
-	mux.HandleFunc(fmt.Sprintf("DELETE %s/unification-rules/", apiBasePath), s.unificationRulesHandler.DeleteUnificationRule)
+	switch {
+	case method == http.MethodPost && path == "/unification-rules":
+		s.unificationRulesHandler.AddUnificationRule(w, r)
+
+	case method == http.MethodGet && path == "/unification-rules":
+		s.unificationRulesHandler.GetUnificationRules(w, r)
+
+	case method == http.MethodGet && strings.HasPrefix(path, "/unification-rules/"):
+		s.unificationRulesHandler.GetUnificationRule(w, r)
+
+	case method == http.MethodPatch && strings.HasPrefix(path, "/unification-rules/"):
+		s.unificationRulesHandler.PatchUnificationRule(w, r)
+
+	case method == http.MethodDelete && strings.HasPrefix(path, "/unification-rules/"):
+		s.unificationRulesHandler.DeleteUnificationRule(w, r)
+
+	default:
+		http.NotFound(w, r)
+	}
 }

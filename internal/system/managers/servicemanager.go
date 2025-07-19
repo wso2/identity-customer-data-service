@@ -20,7 +20,9 @@ package managers
 
 import (
 	"github.com/wso2/identity-customer-data-service/internal/system/services"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
+	"strings"
 )
 
 type ServiceManagerInterface interface {
@@ -41,10 +43,32 @@ func NewServiceManager(mux *http.ServeMux) ServiceManagerInterface {
 
 func (sm *ServiceManager) RegisterServices(apiBasePath string) error {
 
+	utils.RewriteToDefaultTenant(apiBasePath, sm.mux, "carbon.super")
+
 	// Register the unification rules service.
-	services.NewUnificationRulesService(sm.mux, apiBasePath)
-	services.NewProfileService(sm.mux, apiBasePath)
-	services.NewConsentCategoryService(sm.mux, apiBasePath)
-	services.NewProfileSchemaService(sm.mux, apiBasePath)
+	profileService := services.NewProfileService()
+	schemaService := services.NewProfileSchemaService()
+	unificationService := services.NewUnificationRulesService()
+	consentService := services.NewConsentCategoryService()
+
+	// Single tenant dispatcher for all services
+	utils.MountTenantDispatcher(sm.mux, apiBasePath, func(w http.ResponseWriter, r *http.Request) {
+		// Internal path after tenant and base path stripping
+		path := strings.TrimSuffix(r.URL.Path, "/")
+
+		// Dispatch to correct service based on path
+		switch {
+		case strings.HasPrefix(path, "/profiles"):
+			profileService.Route(w, r)
+		case strings.HasPrefix(path, "/profile-schema"):
+			schemaService.Route(w, r)
+		case strings.HasPrefix(path, "/unification-rules"):
+			unificationService.Route(w, r)
+		case strings.HasPrefix(path, "/consent-categories"):
+			consentService.Route(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
 	return nil
 }
