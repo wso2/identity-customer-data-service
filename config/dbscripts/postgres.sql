@@ -86,3 +86,6 @@ CREATE TABLE consent_categories (
 ALTER TABLE application_data
 ADD CONSTRAINT unique_profile_app UNIQUE (profile_id, app_id);
 
+INSERT INTO unification_rules (rule_id, tenant_id, rule_name, property_name, priority, is_active, created_at, updated_at)
+VALUES
+('uuid-1', 'wso2conasia', 'UserId based', 'user_id', 1, TRUE, EXTRACT(EPOCH FROM NOW())::BIGINT, EXTRACT(EPOCH FROM NOW())::BIGINT),
