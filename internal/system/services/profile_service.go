@@ -20,6 +20,7 @@ package services
 
 import (
 	"github.com/wso2/identity-customer-data-service/internal/profile/handler"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"net/http"
 	"strings"
 )
@@ -37,6 +38,7 @@ func NewProfileService() *ProfileService {
 // Route handles all tenant-aware profile-related endpoints
 func (s *ProfileService) Route(w http.ResponseWriter, r *http.Request) {
 
+	log.GetLogger().Info("Registering services with base path: " + r.URL.Path)
 	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing /
 	method := r.Method
 
