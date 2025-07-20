@@ -37,8 +37,7 @@ func NewUnificationRulesService() *UnificationRulesService {
 // Route handles all tenant-aware unification rules endpoints
 func (s *UnificationRulesService) Route(w http.ResponseWriter, r *http.Request) {
 
-	path := strings.TrimPrefix(r.URL.Path, "/default/iam-cdm/v1.0") // Trim fixed base path
-	path = strings.TrimSuffix(path, "/")
+	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing /
 	method := r.Method
 
 	switch {
