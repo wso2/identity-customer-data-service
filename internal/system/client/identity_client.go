@@ -48,6 +48,7 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 	if cfg.AuthServer.Port != "" {
 		baseUrl = cfg.AuthServer.Host + ":" + cfg.AuthServer.Port
 	}
+	log.GetLogger().Info("Creating IdentityClient with base URL: " + baseUrl)
 	client := &IdentityClient{
 		BaseURL: baseUrl,
 		HTTPClient: &http.Client{

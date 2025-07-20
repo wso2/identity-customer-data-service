@@ -20,6 +20,7 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
@@ -97,6 +98,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 	tenantId := utils.ExtractTenantIdFromPath(r)
+	log.GetLogger().Info("Fetching unification rules for tenant: " + tenantId)
 	rules, err := ruleService.GetUnificationRules(tenantId)
 	if err != nil {
 		utils.HandleError(w, err)
