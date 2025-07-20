@@ -1,6 +1,6 @@
 package constants
 
-const ApiBasePath = "/default/iam-cdm/v1.0"
+const ApiBasePath = ""
 const ProfileApiPath = "profiles"
 const UnificationRulesApiPath = "unification-rules"
 const ConsentApiPath = "consent"
