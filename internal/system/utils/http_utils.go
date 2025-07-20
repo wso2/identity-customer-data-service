@@ -69,7 +69,9 @@ func ExtractTenantIdFromPath(r *http.Request) string {
 	//	}
 	//}
 	//return "carbon.super" // fallback default
-	return r.Context().Value(constants.TenantContextKey).(string)
+	//return r.Context().Value(constants.TenantContextKey).(string)
+	// todo: Implement a more robust tenant extraction logic. Hardcoding for Choreo
+	return "wso2conasia"
 }
 
 func StripTenantPrefix(path string) string {

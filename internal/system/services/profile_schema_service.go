@@ -36,7 +36,8 @@ func NewProfileSchemaService() *ProfileSchemaService {
 
 // Route handles tenant-aware profile-schema endpoints
 func (s *ProfileSchemaService) Route(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimSuffix(r.URL.Path, "/")
+	path := strings.TrimPrefix(r.URL.Path, "/default/iam-cdm/v1.0") // Trim fixed base path
+	path = strings.TrimSuffix(path, "/")
 	method := r.Method
 
 	// Handle collection-level operations
