@@ -181,7 +181,7 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 				}
 			}
 		}
-		if !isValidType(val, attr.ValueType, attr.MultiValued) {
+		if !isValidType(val, attr.ValueType, attr.MultiValued, nil) {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
 				Message:     errors2.UPDATE_PROFILE.Message,
@@ -220,7 +220,7 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 				return err
 			}
 		}
-		if !isValidType(val, attr.ValueType, attr.MultiValued) {
+		if !isValidType(val, attr.ValueType, attr.MultiValued, nil) {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
 				Message:     errors2.UPDATE_PROFILE.Message,
@@ -261,7 +261,7 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 				return err
 			}
 
-			if !isValidType(val, attr.ValueType, attr.MultiValued) {
+			if !isValidType(val, attr.ValueType, attr.MultiValued, nil) {
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
 					Code:        errors2.UPDATE_PROFILE.Code,
 					Message:     errors2.UPDATE_PROFILE.Message,
@@ -380,7 +380,7 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 	return nil
 }
 
-func isValidType(value interface{}, expected string, multiValued bool) bool {
+func isValidType(value interface{}, expected string, multiValued bool, subAttrs []model.ProfileSchemaAttribute) bool {
 	log.GetLogger().Info("Validating value type", log.String("expected", expected), log.Any("value", value))
 	switch expected {
 	case constants.StringDataType:
@@ -470,8 +470,22 @@ func isValidType(value interface{}, expected string, multiValued bool) bool {
 		return ok
 
 	case constants.ComplexDataType:
-		_, ok := value.(map[string]interface{})
-		return ok
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, item := range arr {
+				_, ok := item.(map[string]interface{})
+				if !ok {
+					return false
+				}
+			}
+			return true
+		} else {
+			_, ok := value.(map[string]interface{})
+			return ok
+		}
 		// todo: dont we need to validate the data within complex data
 	default:
 		return false
