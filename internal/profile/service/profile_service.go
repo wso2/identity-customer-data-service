@@ -470,8 +470,22 @@ func isValidType(value interface{}, expected string, multiValued bool) bool {
 		return ok
 
 	case constants.ComplexDataType:
-		_, ok := value.(map[string]interface{})
-		return ok
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, item := range arr {
+				_, ok := item.(map[string]interface{})
+				if !ok {
+					return false
+				}
+			}
+			return true
+		} else {
+			_, ok := value.(map[string]interface{})
+			return ok
+		}
 		// todo: dont we need to validate the data within complex data
 	default:
 		return false
