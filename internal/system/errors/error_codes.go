@@ -162,6 +162,11 @@ var (
 		Message: "Error while fetching profile schema.",
 	}
 
+	DELETE_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15025",
+		Message: "Error while deleting profile schema attribute.",
+	}
+
 	SYNC_PROFILE_SCHEMA = ErrorMessage{
 		Code:    errorPrefix + "15025",
 		Message: "Error while syncing identity attributes of profile schema.",
