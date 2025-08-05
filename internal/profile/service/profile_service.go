@@ -47,6 +47,9 @@ type ProfilesServiceInterface interface {
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
+	PatchProfile(id string, data map[string]interface{}) (profileModel.ProfileResponse, error)
+	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
+	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
 	PatchProfile(id string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
 	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
 	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
@@ -720,6 +723,48 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		}
 		return nil, err
 	}
+}
+
+// GetProfileConsents retrieves a profile
+func (ps *ProfilesService) GetProfileConsents(ProfileId string) ([]profileModel.ConsentRecord, error) {
+
+	consentRecords, err := profileStore.GetProfileConsents(ProfileId)
+	if err != nil {
+		return nil, err
+	}
+	if consentRecords == nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
+
+	return consentRecords, nil
+}
+
+// UpdateProfileConsents updates the consent records for a profile
+func (ps *ProfilesService) UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error {
+	logger := log.GetLogger()
+
+	// Set the consent timestamp if not already set
+	currentTime := time.Now().UTC().Unix()
+	for i := range consents {
+		if consents[i].ConsentedAt == 0 {
+			consents[i].ConsentedAt = currentTime
+		}
+	}
+
+	// Update the consents in the database
+	err := profileStore.UpdateProfileConsents(profileId, consents)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to update consents for profile: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		return err
+	}
+
+	return nil
 }
 
 func mergeSCIMWithSchema(
