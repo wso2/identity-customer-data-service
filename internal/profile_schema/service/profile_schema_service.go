@@ -139,7 +139,7 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		return clientError, false
 	}
 
-	if attr.SubAttributes != nil || len(attr.SubAttributes) > 0 {
+	if len(attr.SubAttributes) > 0 {
 		if attr.ValueType != constants.ComplexDataType {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
@@ -360,17 +360,22 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 // DeleteProfileSchemaAttributeById deletes a profile schema attribute by its Id.
 func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(orgId, attributeId string) error {
 
-	//// Validate the attributeId format
-	//parts := strings.Split(attributeId, ".")
-	//scope := parts[0]
-	//if scope == constants.IdentityAttributes {
-	//	clientError := errors2.NewClientError(errors2.ErrorMessage{
-	//		Code:        errors2.INVALID_OPERATION.Code,
-	//		Message:     errors2.INVALID_OPERATION.Message,
-	//		Description: "Identity attributes cannot be created or modified via this endpoint. Use the user management instead.",
-	//	}, http.StatusMethodNotAllowed)
-	//	return clientError
-	//}
+	attribute, err := s.GetProfileSchemaAttributeById(orgId, attributeId)
+	logger := log.GetLogger()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for attribute id %s: %v", orgId)
+		logger.Debug(errMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE_SCHEMA.Code,
+			Message:     errors2.DELETE_PROFILE_SCHEMA.Message,
+			Description: errMsg,
+		}, err)
+	}
+
+	if attribute.AttributeId == "" {
+		logger.Debug(fmt.Sprintf("Attribute with Id '%s' does not exist", attributeId))
+		return nil
+	}
 	return psstr.DeleteProfileSchemaAttributeById(orgId, attributeId)
 }
 
