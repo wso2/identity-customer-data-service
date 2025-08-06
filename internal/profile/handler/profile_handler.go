@@ -26,7 +26,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
-	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
@@ -158,6 +157,12 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	// Add ?userId= filter if present
+	userID := r.URL.Query().Get("userId")
+	if userID != "" {
+		filters = append(filters, fmt.Sprintf("identity_attributes.userid eq %s", userID))
+	}
+
 	// Parse selective attributes (e.g., ?attributes=identity_attributes.username,application_data.cart_items)
 	requestedAttrs := parseRequestedAttributes(r)
 
@@ -173,18 +178,20 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		profiles, err = profilesService.GetAllProfiles(tenantId)
 	}
 
-	listResponse, err := buildProfileListResponse(profiles, requestedAttrs), nil
+	listResponse := buildProfileListResponse(profiles, requestedAttrs)
 
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(listResponse)
 }
 
 func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs map[string][]string) []model.ProfileListResponse {
+
 	var result []model.ProfileListResponse
 
 	for _, profile := range profiles {
@@ -192,6 +199,12 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 			ProfileId: profile.ProfileId,
 			Meta:      profile.Meta,
 			UserId:    profile.UserId,
+		}
+
+		if requestedAttrs == nil {
+			// If no specific attributes requested, return only meta data.
+			result = append(result, profileRes)
+			continue
 		}
 
 		// Identity Attributes
@@ -239,17 +252,21 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 			} else {
 				fields := requestedAttrs["application_data"]
 				for appKey, appFields := range appData {
-					filteredAppData[appKey] = make(map[string]interface{})
+					temp := make(map[string]interface{})
 					for _, f := range fields {
 						if f == "*" {
-							filteredAppData[appKey] = appFields
+							temp = appFields
 							break
 						}
 						if val, ok := appFields[f]; ok {
-							filteredAppData[appKey][f] = val
+							temp[f] = val
 						}
 					}
+					if len(temp) > 0 {
+						filteredAppData[appKey] = temp
+					}
 				}
+
 			}
 
 			if len(filteredAppData) > 0 {
@@ -258,23 +275,6 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 		}
 
 		result = append(result, profileRes)
-	}
-
-	return result
-}
-
-func ConvertAppDataToMap(appDataList []model.ApplicationData) map[string]map[string]interface{} {
-	result := make(map[string]map[string]interface{})
-
-	for _, appData := range appDataList {
-		appMap := make(map[string]interface{})
-
-		// Add all app-specific key-values
-		for k, v := range appData.AppSpecificData {
-			appMap[k] = v
-		}
-
-		result[appData.AppId] = appMap
 	}
 
 	return result
@@ -300,123 +300,17 @@ func parseRequestedAttributes(r *http.Request) map[string][]string {
 	return result
 }
 
-// GetProfileWithUserId handles profile retrieval with userId as the filter.
-func (ph *ProfileHandler) GetProfileWithUserId(w http.ResponseWriter, r *http.Request) {
-
-	tenantId := utils.ExtractTenantIdFromPath(r)
-
-	profilesProvider := provider.NewProfilesProvider()
-	profilesService := profilesProvider.GetProfilesService()
-
-	// Check if userID query param is present
-	userID := r.URL.Query().Get("userID")
-
-	var (
-		profiles []model.ProfileResponse
-		err      error
-	)
-
-	if userID != "" {
-		// Build filter for userID
-		filter := fmt.Sprintf("identity_attributes.user_id eq %s", userID)
-		profiles, err = profilesService.GetAllProfilesWithFilter(tenantId, []string{filter})
-	}
-
-	if err != nil {
-		utils.HandleError(w, err)
-		return
-	}
-
-	if len(profiles) == 0 {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.PROFILE_NOT_FOUND.Code,
-			Message:     errors2.PROFILE_NOT_FOUND.Message,
-			Description: fmt.Sprintf("No profiles found for userID: %s", userID),
-		}, http.StatusNotFound)
-		utils.HandleError(w, clientError)
-		return
-	}
-	if len(profiles) > 1 {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.MULTIPLE_PROFILES_FOUND.Code,
-			Message:     errors2.MULTIPLE_PROFILES_FOUND.Message,
-			Description: fmt.Sprintf("Multiple profiles found for userID: %s", userID),
-		}, http.StatusConflict)
-		utils.HandleError(w, clientError)
-		return
-	}
-	profile := profiles[0] // Assuming we want the first profile found
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(profile)
-}
-
-func (ph *ProfileHandler) CreateProfile(writer http.ResponseWriter, request *http.Request) {
-
-	// todo: Uncomment this if you want to enforce auth
-	//err := utils.AuthnAndAuthz(request, "profile:create")
-	//if err != nil {
-	//	utils.HandleError(writer, err)
-	//	return
-	//}
-
-	orgId := utils.ExtractTenantIdFromPath(request)
-
-	var profile model.ProfileRequest
-	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
-	err := decoder.Decode(&profile)
-	if err != nil {
-		errMsg := fmt.Sprintf("Invalid request body. %v", err)
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ADD_PROFILE.Code,
-			Message:     errors2.ADD_PROFILE.Message,
-			Description: errMsg,
-		}, http.StatusBadRequest)
-
-		utils.WriteErrorResponse(writer, clientError)
-		return
-	}
-
-	profilesProvider := provider.NewProfilesProvider()
-	profilesService := profilesProvider.GetProfilesService()
-	profileResponse, err := profilesService.CreateProfile(profile, orgId)
-	if err != nil {
-		utils.HandleError(writer, err)
-		return
-	}
-
-	http.SetCookie(writer, &http.Cookie{
-		Name:     constants.ProfileCookie,
-		Value:    profileResponse.ProfileId,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true, // set to false if testing on localhost without https
-		SameSite: http.SameSiteLaxMode,
-	})
-
-	scheme := "https"
-	if strings.HasPrefix(request.Host, "localhost") {
-		scheme = "http"
-	}
-
-	location := fmt.Sprintf("%s://%s%s/profiles/%s",
-		scheme, //todo: request.URL.Scheme // always empty in Go’s standard `net/http`
-		request.Host,
-		constants.ApiBasePath,
-		profileResponse.ProfileId,
-	)
-	writer.Header().Set("Location", location)
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(writer).Encode(profileResponse)
-}
-
+// InitProfile initializes a new profile based on the request body and sets a cookie
 func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 
 	orgId := utils.ExtractTenantIdFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
+
+	var profile model.ProfileRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	err := decoder.Decode(&profile)
 
 	// Check if a valid cookie exists
 	profileCookie, err := r.Cookie(constants.ProfileCookie)
@@ -427,7 +321,6 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If no valid cookie, create a new profile and cookie
-	profile := model.ProfileRequest{}
 	profileResponse, err := profilesService.CreateProfile(profile, orgId)
 	if err != nil {
 		utils.HandleError(w, err)
