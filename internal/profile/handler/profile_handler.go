@@ -48,20 +48,18 @@ func NewProfileHandler() *ProfileHandler {
 // GetProfile handles profile retrieval requests
 func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "profile:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
 	profileId := pathParts[len(pathParts)-1]
-
-	//todo: Uncomment this if you want to enforce auth
-	//err := utils.AuthnAndAuthz(r, "profile:view")
-	//if err != nil {
-	//	utils.HandleError(w, err)
-	//	return
-	//}
-	//
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 	profile, err := profilesService.GetProfile(profileId)
@@ -78,66 +76,82 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
 	logger := log.GetLogger()
+	if err := utils.AuthnAndAuthz(r, "profile:view"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	var profileId string
-	var err error
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	authHeader := r.Header.Get("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		// Token-based auth
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-
-		// Authn + Authz
-		if err = utils.AuthnAndAuthz(r, "profile:view"); err != nil {
-			utils.HandleError(w, err)
-			return
-		}
-
-		claims, ok := authn.GetCachedClaims(token)
-		if !ok {
-			http.Error(w, "Token claims not found", http.StatusUnauthorized)
-			return
-		}
-		sub, ok := claims["sub"].(string)
-		if !ok || sub == "" {
-			http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
-			return
-		}
-		profileId = sub
-	} else {
-		// Cookie-based fallback (e.g., from browser with session)
-		cookie, cookieErr := r.Cookie(constants.ProfileCookie)
-		if cookieErr != nil || cookie.Value == "" {
-			http.Error(w, "Unauthorized: missing bearer token or valid session cookie", http.StatusUnauthorized)
-			return
-		}
+	// Try cookie-based resolution first
+	cookie, err := r.Cookie(constants.ProfileCookie)
+	if err == nil && cookie.Value != "" {
 		cookieObj, err := profilesService.GetProfileCookie(cookie.Value)
-		if err != nil || cookieObj == nil {
-			http.Error(w, "Unauthorized: invalid profile cookie", http.StatusUnauthorized)
-			return
+		if err == nil && cookieObj != nil && cookieObj.IsActive {
+			profileId = cookieObj.ProfileId
 		}
-		if !cookieObj.IsActive {
-			http.Error(w, "Unauthorized: inactive profile cookie", http.StatusUnauthorized)
-			return
-		}
-		profileId = cookieObj.ProfileId
 	}
-	// Fetch profile
+
+	// Fallback to token-based resolution
+	if profileId == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+
+			claims, ok := authn.GetCachedClaims(token)
+			if !ok {
+				http.Error(w, "Token claims not found", http.StatusUnauthorized)
+				return
+			}
+
+			sub, ok := claims["sub"].(string)
+			if !ok || sub == "" {
+				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+				return
+			}
+
+			// Lookup profile by username (sub)
+			profile, err := profilesService.FindProfileByUserId(sub)
+			if err != nil || profile == nil {
+				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
+				return
+			}
+			profileId = profile.ProfileId
+		}
+	}
+
+	// If still not resolved, unauthorized
+	if profileId == "" {
+		http.Error(w, "Unauthorized: no valid authentication method found", http.StatusUnauthorized)
+		return
+	}
+
+	// Fetch the profile using the resolved profile ID
 	profile, err := profilesService.GetProfile(profileId)
 	if err != nil || profile == nil {
 		logger.Error(fmt.Sprintf("Profile not found for profileId: %s", profileId))
 		utils.HandleError(w, err)
 		return
 	}
-	//  Return JSON
+
+	// Return profile JSON
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(profile)
+	if err := json.NewEncoder(w).Encode(profile); err != nil {
+		logger.Error(fmt.Sprintf("Failed to encode profile for profileId %s", profileId))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 // DeleteProfile handles profile deletion
 func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "profile:delete")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusNotFound)
@@ -146,7 +160,7 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 	profileId := pathParts[len(pathParts)-1]
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	err := profilesService.DeleteProfile(profileId)
+	err = profilesService.DeleteProfile(profileId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -157,6 +171,11 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 // GetAllProfiles handles profile retrieval with and without filters
 func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "profile:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	logger := log.GetLogger()
 	tenantId := utils.ExtractTenantIdFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
@@ -185,8 +204,6 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	requestedAttrs := parseRequestedAttributes(r)
 
 	var profiles []model.ProfileResponse
-	var err error
-
 	if len(filters) > 0 {
 		// Fall back to full response if filters are used
 		logger.Info("Fetching profiles with filters")
@@ -321,6 +338,11 @@ func parseRequestedAttributes(r *http.Request) map[string][]string {
 // InitProfile initializes a new profile based on the request body and sets a cookie
 func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "profile:create")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	orgId := utils.ExtractTenantIdFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
@@ -328,7 +350,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	var profile model.ProfileRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	err := decoder.Decode(&profile)
+	err = decoder.Decode(&profile)
 
 	// Check if a valid cookie exists
 	profileCookie, err := r.Cookie(constants.ProfileCookie)
@@ -427,6 +449,12 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 
 func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
 
+	err := utils.AuthnAndAuthz(request, "profile:update")
+	if err != nil {
+		utils.HandleError(writer, err)
+		return
+	}
+
 	pathParts := strings.Split(request.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(writer, "Invalid path", http.StatusNotFound)
@@ -434,15 +462,8 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	}
 	profileId := pathParts[len(pathParts)-1]
 
-	// Uncomment this if you want to enforce auth
-	// err := utils.AuthnAndAuthz(request, "profile:update")
-	// if err != nil {
-	//	utils.HandleError(writer, err)
-	//	return
-	//}
-
 	var profile model.ProfileRequest
-	err := json.NewDecoder(request.Body).Decode(&profile)
+	err = json.NewDecoder(request.Body).Decode(&profile)
 	if err != nil {
 		http.Error(writer, "Invalid request body", http.StatusBadRequest)
 		return
@@ -463,6 +484,13 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 
 // PatchProfile handles partial updates to a profile
 func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
+
+	err := utils.AuthnAndAuthz(r, "profile:update")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusNotFound)
@@ -493,54 +521,57 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
 	logger := log.GetLogger()
+	if err := utils.AuthnAndAuthz(r, "profile:update"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	var profileId string
 	var err error
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	authHeader := r.Header.Get("Authorization")
-
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		// --- Token-based flow ---
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-
-		// Perform AuthN + AuthZ
-		if err := utils.AuthnAndAuthz(r, "profile:edit"); err != nil {
-			utils.HandleError(w, err)
-			return
-		}
-
-		// Get claims from token cache
-		claims, ok := authn.GetCachedClaims(token)
-		if !ok {
-			http.Error(w, "Token claims not found", http.StatusUnauthorized)
-			return
-		}
-
-		sub, ok := claims["sub"].(string)
-		if !ok || sub == "" {
-			http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
-			return
-		}
-		profileId = sub
-
-	} else {
-		// --- Cookie-based flow ---
-		cookie, err := r.Cookie(constants.ProfileCookie)
-		if err != nil || cookie.Value == "" {
-			http.Error(w, "Unauthorized: missing bearer token or profile cookie", http.StatusUnauthorized)
-			return
-		}
+	// Try cookie-based profileId resolution (preferred)
+	cookie, err := r.Cookie(constants.ProfileCookie)
+	if err == nil && cookie.Value != "" {
 		cookieObj, err := profilesService.GetProfileCookie(cookie.Value)
-		if err != nil || cookieObj == nil {
-			http.Error(w, "Unauthorized: invalid profile cookie", http.StatusUnauthorized)
-			return
+		if err == nil && cookieObj != nil && cookieObj.IsActive {
+			profileId = cookieObj.ProfileId
 		}
-		if !cookieObj.IsActive {
-			http.Error(w, "Unauthorized: inactive profile cookie", http.StatusUnauthorized)
-			return
+	}
+
+	// Fallback: token-based flow (get sub → lookup profile → extract profileId)
+	if profileId == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+
+			claims, ok := authn.GetCachedClaims(token)
+			if !ok {
+				http.Error(w, "Token claims not found", http.StatusUnauthorized)
+				return
+			}
+
+			sub, ok := claims["sub"].(string)
+			if !ok || sub == "" {
+				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+				return
+			}
+
+			// Lookup profile by sub (username)
+			profile, err := profilesService.FindProfileByUserId(sub)
+			if err != nil || profile == nil {
+				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
+				return
+			}
+			profileId = profile.ProfileId
 		}
-		profileId = cookieObj.ProfileId
+	}
+
+	// If still no profileId, reject
+	if profileId == "" {
+		http.Error(w, "Unauthorized: no valid auth method found", http.StatusUnauthorized)
+		return
 	}
 
 	// Parse patch payload
@@ -568,8 +599,15 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 }
 
 func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.Request) {
+
+	err := utils.AuthnAndAuthz(request, "profile:update")
+	if err != nil {
+		utils.HandleError(writer, err)
+		return
+	}
+
 	var profileSync model.ProfileSync
-	err := json.NewDecoder(request.Body).Decode(&profileSync)
+	err = json.NewDecoder(request.Body).Decode(&profileSync)
 	if err != nil {
 		http.Error(writer, "Invalid request body", http.StatusBadRequest)
 		return
@@ -722,8 +760,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 
 			} else {
-				log.GetLogger().Info("sdfgvf----")
-				//existingProfile, err = profilesService.GetProfile(existingProfile.ProfileId)
 				// Update identity attributes based on claim URIs
 				if existingProfile.IdentityAttributes == nil {
 					existingProfile.IdentityAttributes = make(map[string]interface{})

@@ -94,6 +94,11 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 // GetUnificationRules handles fetching all rules
 func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "unification_rules:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 	tenantId := utils.ExtractTenantIdFromPath(r)
@@ -122,6 +127,11 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 // GetUnificationRule Fetches a specific resolution rule.
 func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "unification_rules:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -150,6 +160,11 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 // PatchUnificationRule applies partial updates to a unification rule.
 func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "unification_rules:update")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -164,7 +179,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	err := ruleService.PatchResolutionRule(ruleId, updates)
+	err = ruleService.PatchResolutionRule(ruleId, updates)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -190,6 +205,11 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 // DeleteUnificationRule removes a resolution rule.
 func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "unification_rules:delete")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -198,7 +218,7 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	ruleId := pathParts[len(pathParts)-1]
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	err := ruleService.DeleteUnificationRule(ruleId)
+	err = ruleService.DeleteUnificationRule(ruleId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
