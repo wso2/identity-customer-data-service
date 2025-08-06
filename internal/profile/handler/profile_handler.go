@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
-	"github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -78,37 +77,56 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 // GetCurrentUserProfile handles retrieval of the current user's profile
 func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
-	// todo: Should be abel to check from the profileId in the cookies as well.
+	logger := log.GetLogger()
+	var profileId string
+	var err error
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
 	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
-		return
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		// Token-based auth
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Authn + Authz
+		if err = utils.AuthnAndAuthz(r, "profile:view"); err != nil {
+			utils.HandleError(w, err)
+			return
+		}
+
+		claims, ok := authn.GetCachedClaims(token)
+		if !ok {
+			http.Error(w, "Token claims not found", http.StatusUnauthorized)
+			return
+		}
+		sub, ok := claims["sub"].(string)
+		if !ok || sub == "" {
+			http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+			return
+		}
+		profileId = sub
+	} else {
+		// Cookie-based fallback (e.g., from browser with session)
+		cookie, cookieErr := r.Cookie(constants.ProfileCookie)
+		if cookieErr != nil || cookie.Value == "" {
+			http.Error(w, "Unauthorized: missing bearer token or valid session cookie", http.StatusUnauthorized)
+			return
+		}
+		cookieObj, err := profilesService.GetProfileCookie(cookie.Value)
+		if err != nil || cookieObj == nil {
+			http.Error(w, "Unauthorized: invalid profile cookie", http.StatusUnauthorized)
+			return
+		}
+		if !cookieObj.IsActive {
+			http.Error(w, "Unauthorized: inactive profile cookie", http.StatusUnauthorized)
+			return
+		}
+		profileId = cookieObj.ProfileId
 	}
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	err := utils.AuthnAndAuthz(r, "profile:view")
-	if err != nil {
-		utils.HandleError(w, err)
-	}
-
-	//  Get claims from cache
-	claims, ok := authn.GetCachedClaims(token)
-	if !ok {
-		http.Error(w, "Token claims not found", http.StatusUnauthorized)
-		return
-	}
-
-	sub, ok := claims["sub"].(string)
-	if !ok || sub == "" {
-		http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
-		return
-	}
-
-	tenantId := utils.ExtractTenantIdFromPath(r)
-
-	//  Fetch profile
-	profile, err := service.FindProfileByUserName(tenantId, sub)
+	// Fetch profile
+	profile, err := profilesService.GetProfile(profileId)
 	if err != nil || profile == nil {
+		logger.Error(fmt.Sprintf("Profile not found for profileId: %s", profileId))
 		utils.HandleError(w, err)
 		return
 	}
@@ -327,8 +345,13 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cookie, err := profilesService.CreateProfileCookie(profileResponse.ProfileId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	// Create and set a new cookie
-	err = setProfileCookie(w, profileResponse.ProfileId, r)
+	err = setProfileCookie(w, cookie.CookieId, r)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -376,10 +399,10 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 	return true
 }
 
-func setProfileCookie(w http.ResponseWriter, profileId string, r *http.Request) error {
+func setProfileCookie(w http.ResponseWriter, cookieId string, r *http.Request) error {
 	cookie := &http.Cookie{
 		Name:     constants.ProfileCookie,
-		Value:    profileId,
+		Value:    cookieId,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   !strings.HasPrefix(r.Host, "localhost"),
@@ -466,40 +489,82 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(updatedProfile)
 }
 
-// PatchCurrentUserProfile handles partial updates to a profile
+// PatchCurrentUserProfile handles partial updates to the current user's profile
 func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
-		http.Error(w, "Invalid path", http.StatusNotFound)
-		return
-	}
-
-	cookie, err := r.Cookie(constants.ProfileCookie)
-	if err != nil {
-
-		http.Error(w, "Missing or invalid cdm_profile_id cookie", http.StatusUnauthorized)
-		return
-	}
-	profileId := cookie.Value
-
-	var patchData map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
+	logger := log.GetLogger()
+	var profileId string
+	var err error
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
+	authHeader := r.Header.Get("Authorization")
+
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		// --- Token-based flow ---
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Perform AuthN + AuthZ
+		if err := utils.AuthnAndAuthz(r, "profile:edit"); err != nil {
+			utils.HandleError(w, err)
+			return
+		}
+
+		// Get claims from token cache
+		claims, ok := authn.GetCachedClaims(token)
+		if !ok {
+			http.Error(w, "Token claims not found", http.StatusUnauthorized)
+			return
+		}
+
+		sub, ok := claims["sub"].(string)
+		if !ok || sub == "" {
+			http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+			return
+		}
+		profileId = sub
+
+	} else {
+		// --- Cookie-based flow ---
+		cookie, err := r.Cookie(constants.ProfileCookie)
+		if err != nil || cookie.Value == "" {
+			http.Error(w, "Unauthorized: missing bearer token or profile cookie", http.StatusUnauthorized)
+			return
+		}
+		cookieObj, err := profilesService.GetProfileCookie(cookie.Value)
+		if err != nil || cookieObj == nil {
+			http.Error(w, "Unauthorized: invalid profile cookie", http.StatusUnauthorized)
+			return
+		}
+		if !cookieObj.IsActive {
+			http.Error(w, "Unauthorized: inactive profile cookie", http.StatusUnauthorized)
+			return
+		}
+		profileId = cookieObj.ProfileId
+	}
+
+	// Parse patch payload
+	var patchData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	// Apply patch
 	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
 	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to patch profile ID %s", profileId))
 		utils.HandleError(w, err)
 		return
 	}
 
+	// Return updated profile
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(updatedProfile)
+	if err := json.NewEncoder(w).Encode(updatedProfile); err != nil {
+		logger.Error(fmt.Sprintf("Failed to encode response for profile ID %s", profileId))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.Request) {
