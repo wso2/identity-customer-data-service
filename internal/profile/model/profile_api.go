@@ -29,6 +29,15 @@ type ProfileResponse struct {
 	MergedFrom         []Reference                       `json:"merged_from,omitempty" bson:"merged_from,omitempty"`
 }
 
+type ProfileListResponse struct {
+	ProfileId          string                            `json:"profile_id" bson:"profile_id"`
+	UserId             string                            `json:"user_id,omitempty" bson:"user_id,omitempty"`
+	Meta               Meta                              `json:"meta" bson:"meta"`
+	IdentityAttributes map[string]interface{}            `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
+	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
+	ApplicationData    map[string]map[string]interface{} `json:"application_data,omitempty" bson:"application_data,omitempty"`
+}
+
 type Meta struct {
 	CreatedAt int64  `json:"created_at" bson:"created_at"`
 	UpdatedAt int64  `json:"updated_at" bson:"updated_at"`

@@ -82,6 +82,13 @@ CREATE TABLE consent_categories (
     destinations TEXT[]
 );
 
+CREATE TABLE cookies (
+    cookie_id VARCHAR (255) PRIMARY KEY,
+    profile_id VARCHAR (255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true
+
+);
+
 -- Prevents duplicate entries for the same profile and app (it generally does upsert)
 ALTER TABLE application_data
 ADD CONSTRAINT unique_profile_app UNIQUE (profile_id, app_id);

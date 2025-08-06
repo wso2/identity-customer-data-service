@@ -79,6 +79,7 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 // GetCurrentUserProfile handles retrieval of the current user's profile
 func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
+	// todo: Should be abel to check from the profileId in the cookies as well.
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
 		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
@@ -140,15 +141,14 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request) {
 
 	logger := log.GetLogger()
-	logger.Info("Fetching all profiles without filters")
-	var profiles []model.ProfileResponse
-	var err error
-	// Build the filter from query params
-	queryFilters := r.URL.Query()[constants.Filter] // Slice of filter params
+	tenantId := utils.ExtractTenantIdFromPath(r)
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
 
+	// Parse filters
+	queryFilters := r.URL.Query()[constants.Filter]
 	var filters []string
 	for _, f := range queryFilters {
-		// Split by " and " to support multiple conditions in a single filter param
 		splitFilters := strings.Split(f, " and ")
 		for _, sf := range splitFilters {
 			sf = strings.TrimSpace(sf)
@@ -157,21 +157,198 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 			}
 		}
 	}
-	tenantId := utils.ExtractTenantIdFromPath(r)
-	profilesProvider := provider.NewProfilesProvider()
-	profilesService := profilesProvider.GetProfilesService()
-	if len(queryFilters) > 0 {
+
+	// Parse selective attributes (e.g., ?attributes=identity_attributes.username,application_data.cart_items)
+	requestedAttrs := parseRequestedAttributes(r)
+
+	var profiles []model.ProfileResponse
+	var err error
+
+	if len(filters) > 0 {
+		// Fall back to full response if filters are used
+		logger.Info("Fetching profiles with filters")
 		profiles, err = profilesService.GetAllProfilesWithFilter(tenantId, filters)
 	} else {
+		logger.Info("Fetching all profiles with requested attributes")
 		profiles, err = profilesService.GetAllProfiles(tenantId)
 	}
+
+	listResponse, err := buildProfileListResponse(profiles, requestedAttrs), nil
+
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(profiles)
+	_ = json.NewEncoder(w).Encode(listResponse)
+}
+
+func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs map[string][]string) []model.ProfileListResponse {
+	var result []model.ProfileListResponse
+
+	for _, profile := range profiles {
+		profileRes := model.ProfileListResponse{
+			ProfileId: profile.ProfileId,
+			Meta:      profile.Meta,
+			UserId:    profile.UserId,
+		}
+
+		// Identity Attributes
+		if fields, ok := requestedAttrs["identity_attributes"]; ok {
+			filtered := make(map[string]interface{})
+			for _, f := range fields {
+				if f == "*" {
+					filtered = profile.IdentityAttributes
+					break
+				}
+				if val, exists := profile.IdentityAttributes[f]; exists {
+					filtered[f] = val
+				}
+			}
+			profileRes.IdentityAttributes = filtered
+		} else if requestedAttrs == nil {
+			profileRes.IdentityAttributes = profile.IdentityAttributes
+		}
+
+		// Traits
+		if fields, ok := requestedAttrs["traits"]; ok {
+			filtered := make(map[string]interface{})
+			for _, f := range fields {
+				if f == "*" {
+					filtered = profile.Traits
+					break
+				}
+				if val, exists := profile.Traits[f]; exists {
+					filtered[f] = val
+				}
+			}
+			profileRes.Traits = filtered
+		} else if requestedAttrs == nil {
+			profileRes.Traits = profile.Traits
+		}
+
+		// Application Data
+		//appData := ConvertAppDataToMap(profile.ApplicationData)
+		appData := profile.ApplicationData
+		if len(appData) > 0 {
+			filteredAppData := make(map[string]map[string]interface{})
+
+			if requestedAttrs == nil || len(requestedAttrs["application_data"]) == 0 {
+				filteredAppData = appData
+			} else {
+				fields := requestedAttrs["application_data"]
+				for appKey, appFields := range appData {
+					filteredAppData[appKey] = make(map[string]interface{})
+					for _, f := range fields {
+						if f == "*" {
+							filteredAppData[appKey] = appFields
+							break
+						}
+						if val, ok := appFields[f]; ok {
+							filteredAppData[appKey][f] = val
+						}
+					}
+				}
+			}
+
+			if len(filteredAppData) > 0 {
+				profileRes.ApplicationData = filteredAppData
+			}
+		}
+
+		result = append(result, profileRes)
+	}
+
+	return result
+}
+
+func ConvertAppDataToMap(appDataList []model.ApplicationData) map[string]map[string]interface{} {
+	result := make(map[string]map[string]interface{})
+
+	for _, appData := range appDataList {
+		appMap := make(map[string]interface{})
+
+		// Add all app-specific key-values
+		for k, v := range appData.AppSpecificData {
+			appMap[k] = v
+		}
+
+		result[appData.AppId] = appMap
+	}
+
+	return result
+}
+
+func parseRequestedAttributes(r *http.Request) map[string][]string {
+	attrs := r.URL.Query().Get("attributes")
+	if attrs == "" {
+		return nil
+	}
+
+	result := make(map[string][]string)
+	for _, attr := range strings.Split(attrs, ",") {
+		attr = strings.TrimSpace(attr)
+		parts := strings.SplitN(attr, ".", 2)
+		scope := parts[0]
+		if len(parts) == 2 {
+			result[scope] = append(result[scope], parts[1])
+		} else {
+			result[scope] = append(result[scope], "*")
+		}
+	}
+	return result
+}
+
+// GetProfileWithUserId handles profile retrieval with userId as the filter.
+func (ph *ProfileHandler) GetProfileWithUserId(w http.ResponseWriter, r *http.Request) {
+
+	tenantId := utils.ExtractTenantIdFromPath(r)
+
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	// Check if userID query param is present
+	userID := r.URL.Query().Get("userID")
+
+	var (
+		profiles []model.ProfileResponse
+		err      error
+	)
+
+	if userID != "" {
+		// Build filter for userID
+		filter := fmt.Sprintf("identity_attributes.user_id eq %s", userID)
+		profiles, err = profilesService.GetAllProfilesWithFilter(tenantId, []string{filter})
+	}
+
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	if len(profiles) == 0 {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: fmt.Sprintf("No profiles found for userID: %s", userID),
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
+		return
+	}
+	if len(profiles) > 1 {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.MULTIPLE_PROFILES_FOUND.Code,
+			Message:     errors2.MULTIPLE_PROFILES_FOUND.Message,
+			Description: fmt.Sprintf("Multiple profiles found for userID: %s", userID),
+		}, http.StatusConflict)
+		utils.HandleError(w, clientError)
+		return
+	}
+	profile := profiles[0] // Assuming we want the first profile found
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(profile)
 }
 
 func (ph *ProfileHandler) CreateProfile(writer http.ResponseWriter, request *http.Request) {
@@ -210,7 +387,7 @@ func (ph *ProfileHandler) CreateProfile(writer http.ResponseWriter, request *htt
 	}
 
 	http.SetCookie(writer, &http.Cookie{
-		Name:     "cdm_profile_id",
+		Name:     constants.ProfileCookie,
 		Value:    profileResponse.ProfileId,
 		Path:     "/",
 		HttpOnly: true,
@@ -233,6 +410,103 @@ func (ph *ProfileHandler) CreateProfile(writer http.ResponseWriter, request *htt
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(writer).Encode(profileResponse)
+}
+
+func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
+
+	orgId := utils.ExtractTenantIdFromPath(r)
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	// Check if a valid cookie exists
+	profileCookie, err := r.Cookie(constants.ProfileCookie)
+	if err == nil && profileCookie.Value != "" {
+		if ph.handleExistingCookie(w, r, profileCookie.Value) {
+			return
+		}
+	}
+
+	// If no valid cookie, create a new profile and cookie
+	profile := model.ProfileRequest{}
+	profileResponse, err := profilesService.CreateProfile(profile, orgId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	// Create and set a new cookie
+	err = setProfileCookie(w, profileResponse.ProfileId, r)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	// Construct Location header for created resource
+	location := fmt.Sprintf("%s://%s%s/profiles/%s",
+		detectScheme(r),
+		r.Host,
+		constants.ApiBasePath,
+		profileResponse.ProfileId,
+	)
+
+	w.Header().Set("Location", location)
+	respondJSON(w, http.StatusCreated, profileResponse)
+}
+
+// Handles existing cookie logic, returns true if response was already written
+func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Request, cookieVal string) bool {
+
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+	cookieObj, err := profilesService.GetProfileCookie(cookieVal)
+	if err != nil || cookieObj == nil {
+		return false
+	}
+
+	var profileResponse *model.ProfileResponse
+	if cookieObj.IsActive {
+		profileResponse, err = profilesService.GetProfile(cookieObj.ProfileId)
+	} else {
+		profile := model.ProfileRequest{}
+		profileResponse, err = profilesService.CreateProfile(profile, utils.ExtractTenantIdFromPath(r))
+		if err == nil {
+			cookieObj, err = profilesService.CreateProfileCookie(profileResponse.ProfileId)
+		}
+	}
+	if err != nil {
+		utils.HandleError(w, err)
+		return true
+	}
+
+	_ = setProfileCookie(w, profileResponse.ProfileId, r)
+	respondJSON(w, http.StatusOK, profileResponse)
+	return true
+}
+
+func setProfileCookie(w http.ResponseWriter, profileId string, r *http.Request) error {
+	cookie := &http.Cookie{
+		Name:     constants.ProfileCookie,
+		Value:    profileId,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   !strings.HasPrefix(r.Host, "localhost"),
+		SameSite: http.SameSiteLaxMode,
+	}
+	http.SetCookie(w, cookie)
+	return nil
+}
+
+func detectScheme(r *http.Request) string {
+	if strings.HasPrefix(r.Host, "localhost") {
+		return "http"
+	}
+	return "https"
+}
+
+func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
@@ -279,6 +553,42 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	profileId := pathParts[len(pathParts)-1]
+
+	var patchData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updatedProfile)
+}
+
+// PatchCurrentUserProfile handles partial updates to a profile
+func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 3 {
+		http.Error(w, "Invalid path", http.StatusNotFound)
+		return
+	}
+
+	cookie, err := r.Cookie(constants.ProfileCookie)
+	if err != nil {
+
+		http.Error(w, "Missing or invalid cdm_profile_id cookie", http.StatusUnauthorized)
+		return
+	}
+	profileId := cookie.Value
 
 	var patchData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
