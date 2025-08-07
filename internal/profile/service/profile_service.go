@@ -21,15 +21,16 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
 
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
@@ -47,7 +48,6 @@ type ProfilesServiceInterface interface {
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
-	PatchProfile(id string, data map[string]interface{}) (profileModel.ProfileResponse, error)
 	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
 	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
 	PatchProfile(id string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
@@ -1248,7 +1248,7 @@ func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
 }
 
 // FindProfileByUserId retrieves a profile by user_id
-func (ps ProfilesService) FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfileWithUserId(userId)
 	logger := log.GetLogger()
@@ -1299,7 +1299,7 @@ func (ps ProfilesService) FindProfileByUserId(userId string) (*profileModel.Prof
 }
 
 // PatchProfile applies a partial update to an existing profile
-func (ps ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
 
 	existingProfile, err := profileStore.GetProfile(profileId)
 	if err != nil || existingProfile == nil {
