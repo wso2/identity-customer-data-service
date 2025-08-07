@@ -131,7 +131,7 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 	// Fetch the profile using the resolved profile ID
 	profile, err := profilesService.GetProfile(profileId)
 	if err != nil || profile == nil {
-		logger.Error(fmt.Sprintf("Profile not found for profileId: %s", profileId))
+		logger.Debug(fmt.Sprintf("Profile not found for profileId: %s", profileId))
 		utils.HandleError(w, err)
 		return
 	}

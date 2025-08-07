@@ -32,31 +32,32 @@ auth_server:
   admin_username: "admin"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
   required_scopes:
+    profile:create:
+      - "internal_cdm_profile_create"
+    profile:update:
+      - "internal_cdm_profile_update"
     profile:view:
-      - "internal_cds_profile_view"
+      - "internal_cdm_profile_view"
     profile:delete:
-      - "internal_cds_profile_delete"
+      - "internal_cdm_profile_delete"
 
     unification_rules:view:
-      - "internal_cds_unification_view"
+      - "internal_cdm_unification_rule_view"
     unification_rules:create:
-      - "internal_cds_unification_create"
+      - "internal_cdm_unification_rule_create"
     unification_rules:update:
-      - "internal_cds_unification_update"
+      - "internal_cdm_unification_rule_update"
     unification_rules:delete:
-      - "internal_cds_unification_delete"
+      - "internal_cdm_unification_rule_delete"
 
-    enrichment_rules:view:
-      - "internal_cds_enrichment_rule_view"
-    enrichment_rules:create:
-      - "internal_cds_enrichment_rule_create"
-    enrichment_rules:update:
-      - "internal_cds_enrichment_rule_update"
-    enrichment_rules:delete:
-      - "internal_cds_enrichment_rule_delete"
-
-    events:view:
-      - "internal_cds_event_view"
+    profile_schema:view:
+      - "internal_cdm_profile_schema_view"
+    profile_schema:create:
+      - "internal_cdm_profile_schema_create"
+    profile_schema:update:
+      - "internal_cdm_profile_schema_update"
+    profile_schema:delete:
+      - "internal_cdm_profile_schema_delete"
 
 sync:
   schema:
