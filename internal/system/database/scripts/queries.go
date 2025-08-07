@@ -296,25 +296,25 @@ var DeleteConsentCategory = map[string]string{
 }
 
 var InsertCookie = map[string]string{
-	"postgres": `INSERT INTO cookies (cookie_id, profile_id, is_active) VALUES ($1, $2, $3)`,
+	"postgres": `INSERT INTO profile_cookies (cookie_id, profile_id, is_active) VALUES ($1, $2, $3)`,
 }
 
 var GetCookieByCookieId = map[string]string{
-	"postgres": `SELECT cookie_id, profile_id, is_active FROM cookies WHERE cookie_id = $1`,
+	"postgres": `SELECT cookie_id, profile_id, is_active FROM profile_cookies WHERE cookie_id = $1`,
 }
 
 var GetCookieByProfileId = map[string]string{
-	"postgres": `SELECT cookie_id, profile_id, is_active FROM cookies WHERE profile_id = $1`,
+	"postgres": `SELECT cookie_id, profile_id, is_active FROM profile_cookies WHERE profile_id = $1`,
 }
 
 var UpdateCookieStatusByProfileId = map[string]string{
-	"postgres": `UPDATE cookies SET is_active = $1 WHERE profile_id = $2`,
+	"postgres": `UPDATE profile_cookies SET is_active = $1 WHERE profile_id = $2`,
 }
 
 var DeleteCookieById = map[string]string{
-	"postgres": `DELETE FROM cookies WHERE cookie_id = $1`,
+	"postgres": `DELETE FROM profile_cookies WHERE cookie_id = $1`,
 }
 
 var DeleteCookieByProfileId = map[string]string{
-	"postgres": `DELETE FROM cookies WHERE profile_id = $1`,
+	"postgres": `DELETE FROM profile_cookies WHERE profile_id = $1`,
 }

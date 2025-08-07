@@ -60,8 +60,8 @@ CREATE TABLE profile_schema (
     mutability VARCHAR(255) NOT NULL,
     multi_valued BOOLEAN DEFAULT FALSE,
     canonical_values JSONB DEFAULT '[]'::jsonb,
-    sub_attributes JSONB DEFAULT '[]'::jsonb
-    scim_dialect VARCHAR(255) ,
+    sub_attributes JSONB DEFAULT '[]'::jsonb,
+    scim_dialect VARCHAR(255)
 );
 
 -- Application Data Table
@@ -82,11 +82,10 @@ CREATE TABLE consent_categories (
     destinations TEXT[]
 );
 
-CREATE TABLE cookies (
+CREATE TABLE profile_cookies (
     cookie_id VARCHAR (255) PRIMARY KEY,
     profile_id VARCHAR (255) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true
-
 );
 
 -- Prevents duplicate entries for the same profile and app (it generally does upsert)
