@@ -46,3 +46,9 @@ type Profile struct {
 	ApplicationData    []ApplicationData      `json:"application_data,omitempty" bson:"application_data,omitempty"`
 	ProfileStatus      *ProfileStatus         `json:"profile_status,omitempty" bson:"profile_status,omitempty"`
 }
+
+type ProfileCookie struct {
+	ProfileId string `json:"profile_id" bson:"profile_id"`
+	CookieId  string `json:"cookie_id" bson:"cookie_id"`
+	IsActive  bool   `json:"is_active" bson:"is_active"`
+}

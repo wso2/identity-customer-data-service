@@ -1356,3 +1356,179 @@ func GetProfileWithUserId(userId string) (*model.Profile, error) {
 	profile.ApplicationData, _ = FetchApplicationData(profile.ProfileId)
 	return &profile, nil
 }
+
+// CreateProfileCookie creates a new profile cookie
+func CreateProfileCookie(profileCookie model.ProfileCookie) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while creating profile cookie with profileId: %s", profileCookie.ProfileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.CREATE_PROFILE_COOKIE.Code,
+			Message:     errors2.CREATE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.InsertCookie[provider.NewDBProvider().GetDBType()]
+
+	_, err = dbClient.ExecuteQuery(query, profileCookie.CookieId, profileCookie.ProfileId, profileCookie.IsActive)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed creating the profile cookie with Id: %s", profileCookie.CookieId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.CREATE_PROFILE_COOKIE.Code,
+			Message:     errors2.CREATE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	return nil
+}
+
+// GetProfileCookieByProfileId retrieves a profile cookie by profileId
+func GetProfileCookieByProfileId(profileId string) (*model.ProfileCookie, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while fetching profile cookie with profileId: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE_COOKIE.Code,
+			Message:     errors2.GET_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.GetCookieByProfileId[provider.NewDBProvider().GetDBType()]
+
+	results, err := dbClient.ExecuteQuery(query, profileId)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		logger.Debug(fmt.Sprintf("No profile cookie found with the given profileId: %s", profileId))
+		return nil, nil
+	}
+	if len(results) == 0 {
+		logger.Debug(fmt.Sprintf("No profile cookie found with the given profileId: %s", profileId))
+		return nil, nil
+	}
+
+	profileCookie := &model.ProfileCookie{
+		CookieId:  results[0]["cookie_id"].(string),
+		ProfileId: results[0]["profile_id"].(string),
+		IsActive:  results[0]["is_active"].(bool),
+	}
+	return profileCookie, nil
+}
+
+// GetProfileCookie retrieves a profile cookie by profileId
+func GetProfileCookie(cookie string) (*model.ProfileCookie, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while fetching profile cookie: %s", cookie)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE_COOKIE.Code,
+			Message:     errors2.GET_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.GetCookieByCookieId[provider.NewDBProvider().GetDBType()]
+
+	results, err := dbClient.ExecuteQuery(query, cookie)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		logger.Debug(fmt.Sprintf("No profile cookie found with the given cookie: %s", cookie))
+		return nil, nil
+	}
+	if len(results) == 0 {
+		logger.Debug(fmt.Sprintf("No profile cookie found with the given cookie: %s", cookie))
+		return nil, nil
+	}
+
+	profileCookie := &model.ProfileCookie{
+		CookieId:  results[0]["cookie_id"].(string),
+		ProfileId: results[0]["profile_id"].(string),
+		IsActive:  results[0]["is_active"].(bool),
+	}
+	return profileCookie, nil
+}
+
+// UpdateProfileCookie updates the status of a profile cookie
+func UpdateProfileCookie(profileId string, status bool) error {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while updating profile cookie with profileId: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE_COOKIE.Code,
+			Message:     errors2.UPDATE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.UpdateCookieStatusByProfileId[provider.NewDBProvider().GetDBType()]
+
+	_, err = dbClient.ExecuteQuery(query, status, profileId)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed updating the profile cookie with profile Id: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE_COOKIE.Code,
+			Message:     errors2.UPDATE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	return nil
+}
+
+// DeleteProfileCookieByProfile deletes a profile cookie by profileId
+func DeleteProfileCookieByProfile(profileId string) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while deleting profile cookie with profileId: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE_COOKIE.Code,
+			Message:     errors2.DELETE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.DeleteCookieByProfileId[provider.NewDBProvider().GetDBType()]
+
+	_, err = dbClient.ExecuteQuery(query, profileId)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed deleting the profile cookie with Id: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE_COOKIE.Code,
+			Message:     errors2.DELETE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	return nil
+}

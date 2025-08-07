@@ -121,12 +121,13 @@ func NewProfileService(mux *http.ServeMux, apiBasePath string) *ProfileService {
 
 func (s *ProfileService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
 
+	mux.HandleFunc(fmt.Sprintf("POST %s/profiles/initialize", apiBasePath), s.profileHandler.InitProfile)
 	mux.HandleFunc(fmt.Sprintf("GET %s/profiles", apiBasePath), s.profileHandler.GetAllProfiles)
-	mux.HandleFunc(fmt.Sprintf("POST %s/profiles", apiBasePath), s.profileHandler.CreateProfile)
-	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/Me", apiBasePath), s.profileHandler.GetCurrentUserProfile)
+	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/me", apiBasePath), s.profileHandler.GetCurrentUserProfile)
 	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/", apiBasePath), s.profileHandler.GetProfile)
 	mux.HandleFunc(fmt.Sprintf("PUT %s/profiles/", apiBasePath), s.profileHandler.UpdateProfile)
 	mux.HandleFunc(fmt.Sprintf("PATCH %s/profiles/", apiBasePath), s.profileHandler.PatchProfile)
+	mux.HandleFunc(fmt.Sprintf("PATCH %s/profiles/me", apiBasePath), s.profileHandler.PatchCurrentUserProfile)
 	mux.HandleFunc(fmt.Sprintf("POST %s/profiles/sync", apiBasePath), s.profileHandler.SyncProfile)
 	mux.HandleFunc(fmt.Sprintf("DELETE %s/profiles/", apiBasePath), s.profileHandler.DeleteProfile)
 }

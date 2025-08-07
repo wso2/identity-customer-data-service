@@ -187,6 +187,21 @@ var (
 		Message: "Error while updating config.",
 	}
 
+	GET_COOKIE = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Fetching profile cookie failed.",
+	}
+
+	UPDATE_COOKIE = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Updating profile cookie failed.",
+	}
+
+	DELETE_COOKIE = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Updating profile cookie failed.",
+	}
+
 	// Client error codes
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "11001",
@@ -205,6 +220,11 @@ var (
 		Description: "No user profile record found for the given profile_id",
 	}
 
+	MULTIPLE_PROFILES_FOUND = ErrorMessage{
+		Code:    errorPrefix + "11005",
+		Message: "Multiple profiles found.",
+	}
+
 	ADD_PROFILE = ErrorMessage{
 		Code:    errorPrefix + "11013",
 		Message: "Profile addition failed.",
@@ -213,6 +233,30 @@ var (
 	GET_PROFILE = ErrorMessage{
 		Code:    errorPrefix + "11014",
 		Message: "Fetching profile(s) failed.",
+	}
+
+	CREATE_PROFILE_COOKIE = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Creating profile cookie failed.",
+	}
+	GET_PROFILE_COOKIE = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Fetching profile cookie failed.",
+	}
+
+	UPDATE_PROFILE_COOKIE = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Updating profile cookie failed.",
+	}
+
+	PROFILE_COOKIE_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Profile cookie not found.",
+	}
+
+	DELETE_PROFILE_COOKIE = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Deleting profile cookie failed.",
 	}
 
 	FILTER_PROFILE = ErrorMessage{

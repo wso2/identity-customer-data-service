@@ -23,10 +23,8 @@ import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
-	"github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
-	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
@@ -50,20 +48,18 @@ func NewProfileHandler() *ProfileHandler {
 // GetProfile handles profile retrieval requests
 func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "profile:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
 	profileId := pathParts[len(pathParts)-1]
-
-	//todo: Uncomment this if you want to enforce auth
-	//err := utils.AuthnAndAuthz(r, "profile:view")
-	//if err != nil {
-	//	utils.HandleError(w, err)
-	//	return
-	//}
-	//
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 	profile, err := profilesService.GetProfile(profileId)
@@ -79,47 +75,83 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 // GetCurrentUserProfile handles retrieval of the current user's profile
 func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
-	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		http.Error(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
-		return
-	}
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	err := utils.AuthnAndAuthz(r, "profile:view")
-	if err != nil {
+	logger := log.GetLogger()
+	if err := utils.AuthnAndAuthz(r, "profile:view"); err != nil {
 		utils.HandleError(w, err)
-	}
-
-	//  Get claims from cache
-	claims, ok := authn.GetCachedClaims(token)
-	if !ok {
-		http.Error(w, "Token claims not found", http.StatusUnauthorized)
 		return
 	}
 
-	sub, ok := claims["sub"].(string)
-	if !ok || sub == "" {
-		http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+	var profileId string
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	// Try cookie-based resolution first
+	cookie, err := r.Cookie(constants.ProfileCookie)
+	if err == nil && cookie.Value != "" {
+		cookieObj, err := profilesService.GetProfileCookie(cookie.Value)
+		if err == nil && cookieObj != nil && cookieObj.IsActive {
+			profileId = cookieObj.ProfileId
+		}
+	}
+
+	// Fallback to token-based resolution
+	if profileId == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+
+			claims, ok := authn.GetCachedClaims(token)
+			if !ok {
+				http.Error(w, "Token claims not found", http.StatusUnauthorized)
+				return
+			}
+
+			sub, ok := claims["sub"].(string)
+			if !ok || sub == "" {
+				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+				return
+			}
+
+			// Lookup profile by username (sub)
+			profile, err := profilesService.FindProfileByUserId(sub)
+			if err != nil || profile == nil {
+				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
+				return
+			}
+			profileId = profile.ProfileId
+		}
+	}
+
+	// If still not resolved, unauthorized
+	if profileId == "" {
+		http.Error(w, "Unauthorized: no valid authentication method found", http.StatusUnauthorized)
 		return
 	}
 
-	tenantId := utils.ExtractTenantIdFromPath(r)
-
-	//  Fetch profile
-	profile, err := service.FindProfileByUserName(tenantId, sub)
+	// Fetch the profile using the resolved profile ID
+	profile, err := profilesService.GetProfile(profileId)
 	if err != nil || profile == nil {
+		logger.Debug(fmt.Sprintf("Profile not found for profileId: %s", profileId))
 		utils.HandleError(w, err)
 		return
 	}
-	//  Return JSON
+
+	// Return profile JSON
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(profile)
+	if err := json.NewEncoder(w).Encode(profile); err != nil {
+		logger.Error(fmt.Sprintf("Failed to encode profile for profileId %s", profileId))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 // DeleteProfile handles profile deletion
 func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "profile:delete")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusNotFound)
@@ -128,7 +160,7 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 	profileId := pathParts[len(pathParts)-1]
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	err := profilesService.DeleteProfile(profileId)
+	err = profilesService.DeleteProfile(profileId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -139,16 +171,20 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 // GetAllProfiles handles profile retrieval with and without filters
 func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "profile:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	logger := log.GetLogger()
-	logger.Info("Fetching all profiles without filters")
-	var profiles []model.ProfileResponse
-	var err error
-	// Build the filter from query params
-	queryFilters := r.URL.Query()[constants.Filter] // Slice of filter params
+	tenantId := utils.ExtractTenantIdFromPath(r)
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
 
+	// Parse filters
+	queryFilters := r.URL.Query()[constants.Filter]
 	var filters []string
 	for _, f := range queryFilters {
-		// Split by " and " to support multiple conditions in a single filter param
 		splitFilters := strings.Split(f, " and ")
 		for _, sf := range splitFilters {
 			sf = strings.TrimSpace(sf)
@@ -157,85 +193,267 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 			}
 		}
 	}
-	tenantId := utils.ExtractTenantIdFromPath(r)
-	profilesProvider := provider.NewProfilesProvider()
-	profilesService := profilesProvider.GetProfilesService()
-	if len(queryFilters) > 0 {
+
+	// Add ?userId= filter if present
+	userID := r.URL.Query().Get("userId")
+	if userID != "" {
+		filters = append(filters, fmt.Sprintf("identity_attributes.userid eq %s", userID))
+	}
+
+	// Parse selective attributes (e.g., ?attributes=identity_attributes.username,application_data.cart_items)
+	requestedAttrs := parseRequestedAttributes(r)
+
+	var profiles []model.ProfileResponse
+	if len(filters) > 0 {
+		// Fall back to full response if filters are used
+		logger.Info("Fetching profiles with filters")
 		profiles, err = profilesService.GetAllProfilesWithFilter(tenantId, filters)
 	} else {
+		logger.Info("Fetching all profiles with requested attributes")
 		profiles, err = profilesService.GetAllProfiles(tenantId)
 	}
+
+	listResponse := buildProfileListResponse(profiles, requestedAttrs)
+
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(profiles)
+	_ = json.NewEncoder(w).Encode(listResponse)
 }
 
-func (ph *ProfileHandler) CreateProfile(writer http.ResponseWriter, request *http.Request) {
+func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs map[string][]string) []model.ProfileListResponse {
 
-	// todo: Uncomment this if you want to enforce auth
-	//err := utils.AuthnAndAuthz(request, "profile:create")
-	//if err != nil {
-	//	utils.HandleError(writer, err)
-	//	return
-	//}
+	var result []model.ProfileListResponse
 
-	orgId := utils.ExtractTenantIdFromPath(request)
+	for _, profile := range profiles {
+		profileRes := model.ProfileListResponse{
+			ProfileId: profile.ProfileId,
+			Meta:      profile.Meta,
+			UserId:    profile.UserId,
+		}
+
+		if requestedAttrs == nil {
+			// If no specific attributes requested, return only meta data.
+			result = append(result, profileRes)
+			continue
+		}
+
+		// Identity Attributes
+		if fields, ok := requestedAttrs["identity_attributes"]; ok {
+			filtered := make(map[string]interface{})
+			for _, f := range fields {
+				if f == "*" {
+					filtered = profile.IdentityAttributes
+					break
+				}
+				if val, exists := profile.IdentityAttributes[f]; exists {
+					filtered[f] = val
+				}
+			}
+			profileRes.IdentityAttributes = filtered
+		} else if requestedAttrs == nil {
+			profileRes.IdentityAttributes = profile.IdentityAttributes
+		}
+
+		// Traits
+		if fields, ok := requestedAttrs["traits"]; ok {
+			filtered := make(map[string]interface{})
+			for _, f := range fields {
+				if f == "*" {
+					filtered = profile.Traits
+					break
+				}
+				if val, exists := profile.Traits[f]; exists {
+					filtered[f] = val
+				}
+			}
+			profileRes.Traits = filtered
+		} else if requestedAttrs == nil {
+			profileRes.Traits = profile.Traits
+		}
+
+		// Application Data
+		//appData := ConvertAppDataToMap(profile.ApplicationData)
+		appData := profile.ApplicationData
+		if len(appData) > 0 {
+			filteredAppData := make(map[string]map[string]interface{})
+
+			if requestedAttrs == nil || len(requestedAttrs["application_data"]) == 0 {
+				filteredAppData = appData
+			} else {
+				fields := requestedAttrs["application_data"]
+				for appKey, appFields := range appData {
+					temp := make(map[string]interface{})
+					for _, f := range fields {
+						if f == "*" {
+							temp = appFields
+							break
+						}
+						if val, ok := appFields[f]; ok {
+							temp[f] = val
+						}
+					}
+					if len(temp) > 0 {
+						filteredAppData[appKey] = temp
+					}
+				}
+
+			}
+
+			if len(filteredAppData) > 0 {
+				profileRes.ApplicationData = filteredAppData
+			}
+		}
+
+		result = append(result, profileRes)
+	}
+
+	return result
+}
+
+func parseRequestedAttributes(r *http.Request) map[string][]string {
+	attrs := r.URL.Query().Get("attributes")
+	if attrs == "" {
+		return nil
+	}
+
+	result := make(map[string][]string)
+	for _, attr := range strings.Split(attrs, ",") {
+		attr = strings.TrimSpace(attr)
+		parts := strings.SplitN(attr, ".", 2)
+		scope := parts[0]
+		if len(parts) == 2 {
+			result[scope] = append(result[scope], parts[1])
+		} else {
+			result[scope] = append(result[scope], "*")
+		}
+	}
+	return result
+}
+
+// InitProfile initializes a new profile based on the request body and sets a cookie
+func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
+
+	err := utils.AuthnAndAuthz(r, "profile:create")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	orgId := utils.ExtractTenantIdFromPath(r)
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
 
 	var profile model.ProfileRequest
-	decoder := json.NewDecoder(request.Body)
+	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	err := decoder.Decode(&profile)
-	if err != nil {
-		errMsg := fmt.Sprintf("Invalid request body. %v", err)
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.ADD_PROFILE.Code,
-			Message:     errors2.ADD_PROFILE.Message,
-			Description: errMsg,
-		}, http.StatusBadRequest)
+	err = decoder.Decode(&profile)
 
-		utils.WriteErrorResponse(writer, clientError)
+	// Check if a valid cookie exists
+	profileCookie, err := r.Cookie(constants.ProfileCookie)
+	if err == nil && profileCookie.Value != "" {
+		if ph.handleExistingCookie(w, r, profileCookie.Value) {
+			return
+		}
+	}
+
+	// If no valid cookie, create a new profile and cookie
+	profileResponse, err := profilesService.CreateProfile(profile, orgId)
+	if err != nil {
+		utils.HandleError(w, err)
 		return
 	}
 
+	cookie, err := profilesService.CreateProfileCookie(profileResponse.ProfileId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	// Create and set a new cookie
+	err = setProfileCookie(w, cookie.CookieId, r)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	// Construct Location header for created resource
+	location := fmt.Sprintf("%s://%s%s/profiles/%s",
+		detectScheme(r),
+		r.Host,
+		constants.ApiBasePath,
+		profileResponse.ProfileId,
+	)
+
+	w.Header().Set("Location", location)
+	respondJSON(w, http.StatusCreated, profileResponse)
+}
+
+// Handles existing cookie logic, returns true if response was already written
+func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Request, cookieVal string) bool {
+
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	profileResponse, err := profilesService.CreateProfile(profile, orgId)
+	cookieObj, err := profilesService.GetProfileCookie(cookieVal)
+	if err != nil || cookieObj == nil {
+		return false
+	}
+
+	var profileResponse *model.ProfileResponse
+	if cookieObj.IsActive {
+		profileResponse, err = profilesService.GetProfile(cookieObj.ProfileId)
+	} else {
+		profile := model.ProfileRequest{}
+		profileResponse, err = profilesService.CreateProfile(profile, utils.ExtractTenantIdFromPath(r))
+		if err == nil {
+			cookieObj, err = profilesService.CreateProfileCookie(profileResponse.ProfileId)
+		}
+	}
+	if err != nil {
+		utils.HandleError(w, err)
+		return true
+	}
+
+	_ = setProfileCookie(w, profileResponse.ProfileId, r)
+	respondJSON(w, http.StatusOK, profileResponse)
+	return true
+}
+
+func setProfileCookie(w http.ResponseWriter, cookieId string, r *http.Request) error {
+	cookie := &http.Cookie{
+		Name:     constants.ProfileCookie,
+		Value:    cookieId,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   !strings.HasPrefix(r.Host, "localhost"),
+		SameSite: http.SameSiteLaxMode,
+	}
+	http.SetCookie(w, cookie)
+	return nil
+}
+
+func detectScheme(r *http.Request) string {
+	if strings.HasPrefix(r.Host, "localhost") {
+		return "http"
+	}
+	return "https"
+}
+
+func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
+
+	err := utils.AuthnAndAuthz(request, "profile:update")
 	if err != nil {
 		utils.HandleError(writer, err)
 		return
 	}
-
-	http.SetCookie(writer, &http.Cookie{
-		Name:     "cdm_profile_id",
-		Value:    profileResponse.ProfileId,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true, // set to false if testing on localhost without https
-		SameSite: http.SameSiteLaxMode,
-	})
-
-	scheme := "https"
-	if strings.HasPrefix(request.Host, "localhost") {
-		scheme = "http"
-	}
-
-	location := fmt.Sprintf("%s://%s%s/profiles/%s",
-		scheme, //todo: request.URL.Scheme // always empty in Go’s standard `net/http`
-		request.Host,
-		constants.ApiBasePath,
-		profileResponse.ProfileId,
-	)
-	writer.Header().Set("Location", location)
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(writer).Encode(profileResponse)
-}
-
-func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
 
 	pathParts := strings.Split(request.URL.Path, "/")
 	if len(pathParts) < 3 {
@@ -244,15 +462,8 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	}
 	profileId := pathParts[len(pathParts)-1]
 
-	// Uncomment this if you want to enforce auth
-	// err := utils.AuthnAndAuthz(request, "profile:update")
-	// if err != nil {
-	//	utils.HandleError(writer, err)
-	//	return
-	//}
-
 	var profile model.ProfileRequest
-	err := json.NewDecoder(request.Body).Decode(&profile)
+	err = json.NewDecoder(request.Body).Decode(&profile)
 	if err != nil {
 		http.Error(writer, "Invalid request body", http.StatusBadRequest)
 		return
@@ -273,6 +484,13 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 
 // PatchProfile handles partial updates to a profile
 func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
+
+	err := utils.AuthnAndAuthz(r, "profile:update")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
 		http.Error(w, "Invalid path", http.StatusNotFound)
@@ -299,9 +517,97 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(updatedProfile)
 }
 
+// PatchCurrentUserProfile handles partial updates to the current user's profile
+func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
+
+	logger := log.GetLogger()
+	if err := utils.AuthnAndAuthz(r, "profile:update"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	var profileId string
+	var err error
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	// Try cookie-based profileId resolution (preferred)
+	cookie, err := r.Cookie(constants.ProfileCookie)
+	if err == nil && cookie.Value != "" {
+		cookieObj, err := profilesService.GetProfileCookie(cookie.Value)
+		if err == nil && cookieObj != nil && cookieObj.IsActive {
+			profileId = cookieObj.ProfileId
+		}
+	}
+
+	// Fallback: token-based flow (get sub → lookup profile → extract profileId)
+	if profileId == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+
+			claims, ok := authn.GetCachedClaims(token)
+			if !ok {
+				http.Error(w, "Token claims not found", http.StatusUnauthorized)
+				return
+			}
+
+			sub, ok := claims["sub"].(string)
+			if !ok || sub == "" {
+				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+				return
+			}
+
+			// Lookup profile by sub (username)
+			profile, err := profilesService.FindProfileByUserId(sub)
+			if err != nil || profile == nil {
+				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
+				return
+			}
+			profileId = profile.ProfileId
+		}
+	}
+
+	// If still no profileId, reject
+	if profileId == "" {
+		http.Error(w, "Unauthorized: no valid auth method found", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse patch payload
+	var patchData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	// Apply patch
+	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to patch profile ID %s", profileId))
+		utils.HandleError(w, err)
+		return
+	}
+
+	// Return updated profile
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(updatedProfile); err != nil {
+		logger.Error(fmt.Sprintf("Failed to encode response for profile ID %s", profileId))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.Request) {
+
+	err := utils.AuthnAndAuthz(request, "profile:update")
+	if err != nil {
+		utils.HandleError(writer, err)
+		return
+	}
+
 	var profileSync model.ProfileSync
-	err := json.NewDecoder(request.Body).Decode(&profileSync)
+	err = json.NewDecoder(request.Body).Decode(&profileSync)
 	if err != nil {
 		http.Error(writer, "Invalid request body", http.StatusBadRequest)
 		return
@@ -454,8 +760,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 
 			} else {
-				log.GetLogger().Info("sdfgvf----")
-				//existingProfile, err = profilesService.GetProfile(existingProfile.ProfileId)
 				// Update identity attributes based on claim URIs
 				if existingProfile.IdentityAttributes == nil {
 					existingProfile.IdentityAttributes = make(map[string]interface{})

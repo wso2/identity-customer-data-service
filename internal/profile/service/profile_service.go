@@ -42,12 +42,17 @@ import (
 type ProfilesServiceInterface interface {
 	DeleteProfile(profileId string) error
 	GetAllProfiles(tenantId string) ([]profileModel.ProfileResponse, error)
-	CreateProfile(profile profileModel.ProfileRequest, tenantId string) (profileModel.ProfileResponse, error)
-	UpdateProfile(profileId string, update profileModel.ProfileRequest) (profileModel.ProfileResponse, error)
+	CreateProfile(profile profileModel.ProfileRequest, tenantId string) (*profileModel.ProfileResponse, error)
+	UpdateProfile(profileId string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
-	PatchProfile(id string, data map[string]interface{}) (profileModel.ProfileResponse, error)
+	PatchProfile(id string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
+	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
+	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
+	CreateProfileCookie(profileId string) (*profileModel.ProfileCookie, error)
+	UpdateCookieStatus(profileId string, status bool) error
+	DeleteCookieByProfileId(profileId string) error
 }
 
 // ProfilesService is the default implementation of the ProfilesServiceInterface.
@@ -78,7 +83,7 @@ func ConvertAppData(input map[string]map[string]interface{}) []profileModel.Appl
 }
 
 // CreateProfile creates a new profile.
-func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequest, tenantId string) (profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequest, tenantId string) (*profileModel.ProfileResponse, error) {
 
 	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(tenantId)
 	logger := log.GetLogger()
@@ -90,7 +95,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 			Message:     errors2.ADD_PROFILE.Message,
 			Description: errMsg,
 		}, err)
-		return profileModel.ProfileResponse{}, serverError
+		return nil, serverError
 	}
 
 	var schema model.ProfileSchema
@@ -103,12 +108,12 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 			Message:     errors2.ADD_PROFILE.Message,
 			Description: errMsg,
 		}, err)
-		return profileModel.ProfileResponse{}, serverError
+		return nil, serverError
 	}
 
 	err = ValidateProfileAgainstSchema(profileRequest, profileModel.Profile{}, schema, false)
 	if err != nil {
-		return profileModel.ProfileResponse{}, err
+		return nil, err
 	}
 
 	// convert profile request to model
@@ -132,12 +137,12 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 
 	if err := profileStore.InsertProfile(profile); err != nil {
 		logger.Debug(fmt.Sprintf("Error insertinng profile: %s", profile.ProfileId), log.Error(err))
-		return profileModel.ProfileResponse{}, err
+		return nil, err
 	}
 	profileFetched, errWait := ps.GetProfile(profileId)
 	if errWait != nil || profileFetched == nil {
 		logger.Warn(fmt.Sprintf("Profile: %s not available after insertion: %v", profile.ProfileId, errWait))
-		return profileModel.ProfileResponse{}, errWait
+		return nil, errWait
 	}
 
 	queue := &workers.ProfileWorkerQueue{}
@@ -150,7 +155,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	//todo: handler admin/user workflows
 
 	logger.Info("Profile available after insert/update: " + profileFetched.ProfileId)
-	return *profileFetched, nil
+	return profileFetched, nil
 }
 
 func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingProfile profileModel.Profile,
@@ -493,7 +498,7 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 }
 
 // UpdateProfile creates or updates a profile
-func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profileModel.ProfileRequest) (profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfile(profileId) //todo: need to get the reference to see what to updatedProfile (see if its the master)
 	logger := log.GetLogger()
@@ -505,7 +510,7 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 			Message:     errors2.UPDATE_PROFILE.Message,
 			Description: errMsg,
 		}, err)
-		return profileModel.ProfileResponse{}, serverError
+		return nil, serverError
 	}
 
 	if profile == nil {
@@ -514,24 +519,24 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 			Message:     errors2.PROFILE_NOT_FOUND.Message,
 			Description: errors2.PROFILE_NOT_FOUND.Description,
 		}, http.StatusNotFound)
-		return profileModel.ProfileResponse{}, clientError
+		return nil, clientError
 	}
 
 	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(profile.TenantId)
 	if err != nil {
-		return profileModel.ProfileResponse{}, err
+		return nil, err
 	}
 
 	// Convert map[string]interface{} → model.ProfileSchema
 	var schema model.ProfileSchema
 	schemaBytes, _ := json.Marshal(rawSchema) // serialize
 	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
-		return profileModel.ProfileResponse{}, fmt.Errorf("invalid schema format: %w", err)
+		return nil, fmt.Errorf("invalid schema format: %w", err)
 	}
 
 	err = ValidateProfileAgainstSchema(updatedProfile, *profile, schema, true)
 	if err != nil {
-		return profileModel.ProfileResponse{}, err
+		return nil, err
 	}
 
 	var profileToUpDate profileModel.Profile
@@ -560,7 +565,7 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 				Message:     errors2.UPDATE_PROFILE.Message,
 				Description: errMsg,
 			}, err)
-			return profileModel.ProfileResponse{}, serverError
+			return nil, serverError
 		}
 
 		profileToUpDate = profileModel.Profile{
@@ -578,14 +583,14 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 
 	if err := profileStore.UpdateProfile(profileToUpDate); err != nil {
 		logger.Error(fmt.Sprintf("Error inserting/updating profile: %s", profile.ProfileId), log.Error(err))
-		return profileModel.ProfileResponse{}, err
+		return nil, err
 	}
 
 	profileFetched, errWait := ps.GetProfile(profile.ProfileId)
 	if errWait != nil || profileFetched == nil {
 		logger.Warn(fmt.Sprintf("Profile: %s not visible after insert/updatedProfile: %v", profile.ProfileId, errWait))
 		// todo: should we throw an error here?
-		return profileModel.ProfileResponse{}, errWait
+		return nil, errWait
 	}
 
 	config := UnificationModel.DefaultConfig()
@@ -594,7 +599,7 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 		queue.Enqueue(profileToUpDate)
 	}
 	logger.Info("Successfully updated profile: " + profileFetched.ProfileId)
-	return *profileFetched, nil
+	return profileFetched, nil
 }
 
 // ProfileUnificationQueue is an interface for the profile unification queue.
@@ -1249,11 +1254,11 @@ func (ps ProfilesService) FindProfileByUserId(userId string) (*profileModel.Prof
 }
 
 // PatchProfile applies a partial update to an existing profile
-func (ps ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (profileModel.ProfileResponse, error) {
+func (ps ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
 
 	existingProfile, err := profileStore.GetProfile(profileId)
 	if err != nil || existingProfile == nil {
-		return profileModel.ProfileResponse{}, errors2.NewClientError(errors2.ErrorMessage{
+		return nil, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_NOT_FOUND.Code,
 			Message:     "Profile not found",
 			Description: fmt.Sprintf("Profile %s not found", profileId),
@@ -1301,11 +1306,120 @@ func (ps ProfilesService) PatchProfile(profileId string, patch map[string]interf
 	mergedBytes, _ := json.Marshal(merged)
 	var updatedProfileReq profileModel.ProfileRequest
 	if err := json.Unmarshal(mergedBytes, &updatedProfileReq); err != nil {
-		return profileModel.ProfileResponse{}, fmt.Errorf("invalid patch structure: %w", err)
+		return nil, fmt.Errorf("invalid patch structure: %w", err)
 	}
 
 	// Reuse the PUT logic to update the profile
 	return ps.UpdateProfile(profileId, updatedProfileReq)
+}
+
+func (ps *ProfilesService) GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error) {
+
+	cookie, err := profileStore.GetProfileCookieByProfileId(profileId)
+	logger := log.GetLogger()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error fetching profile cookie by profile_id: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE_COOKIE.Code,
+			Message:     errors2.GET_PROFILE_COOKIE.Message,
+			Description: errMsg,
+		}, err)
+		return nil, serverError
+	}
+	if cookie == nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_COOKIE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_COOKIE_NOT_FOUND.Message,
+			Description: fmt.Sprintf("Profile cookie for profile_id %s not found", profileId),
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
+	return cookie, nil
+}
+
+func (ps *ProfilesService) GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error) {
+
+	cookieObj, err := profileStore.GetProfileCookie(cookie)
+	logger := log.GetLogger()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error fetching profile cookie : %s", cookie)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE_COOKIE.Code,
+			Message:     errors2.GET_PROFILE_COOKIE.Message,
+			Description: errMsg,
+		}, err)
+		return nil, serverError
+	}
+	if cookieObj == nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_COOKIE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_COOKIE_NOT_FOUND.Message,
+			Description: fmt.Sprintf("Profile cookie : %s not found", cookie),
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
+	return cookieObj, nil
+}
+
+// CreateProfileCookie creates a new profile cookie
+func (ps *ProfilesService) CreateProfileCookie(profileId string) (*profileModel.ProfileCookie, error) {
+
+	cookie := profileModel.ProfileCookie{
+		ProfileId: profileId,
+		CookieId:  uuid.New().String(),
+		IsActive:  true,
+	}
+	err := profileStore.CreateProfileCookie(cookie)
+	logger := log.GetLogger()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error creating profile cookie by profile_id: %s", cookie.ProfileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_COOKIE.Code,
+			Message:     errors2.GET_COOKIE.Message,
+			Description: errMsg,
+		}, err)
+		return nil, serverError
+	}
+	return &cookie, nil
+}
+
+// UpdateCookieStatus updates the status of a profile cookie
+func (ps *ProfilesService) UpdateCookieStatus(profileId string, status bool) error {
+
+	err := profileStore.UpdateProfileCookie(profileId, status)
+	logger := log.GetLogger()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error creating profile cookie by profile_id: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_COOKIE.Code,
+			Message:     errors2.UPDATE_COOKIE.Message,
+			Description: errMsg,
+		}, err)
+		return serverError
+	}
+	return nil
+}
+
+// DeleteCookieByProfileId deletes a profile cookie by profile_id
+func (ps *ProfilesService) DeleteCookieByProfileId(profileId string) error {
+
+	err := profileStore.DeleteProfileCookieByProfile(profileId)
+	logger := log.GetLogger()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error deleting profile cookie by profile_id: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_COOKIE.Code,
+			Message:     errors2.DELETE_COOKIE.Message,
+			Description: errMsg,
+		}, err)
+		return serverError
+	}
+	return nil
 }
 
 // DeepMerge merges two maps recursively, with src overwriting dst

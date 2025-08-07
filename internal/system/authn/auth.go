@@ -33,6 +33,7 @@ import (
 )
 
 var (
+	//todo: fetch cache from config
 	tokenCache       = cache.NewCache(15 * time.Minute)
 	expectedAudience = "iam-cds"
 )
