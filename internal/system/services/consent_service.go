@@ -19,27 +19,47 @@
 package services
 
 import (
-	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/consent/handler"
 	"net/http"
+	"strings"
 )
 
 type ConsentCategoryService struct {
 	handler *handler.ConsentCategoryHandler
 }
 
-func NewConsentCategoryService(mux *http.ServeMux, apiBasePath string) *ConsentCategoryService {
-	instance := &ConsentCategoryService{
+func NewConsentCategoryService() *ConsentCategoryService {
+	return &ConsentCategoryService{
 		handler: handler.NewConsentCategoryHandler(),
 	}
-	instance.RegisterRoutes(mux, apiBasePath)
-	return instance
 }
 
-func (s *ConsentCategoryService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) {
-	mux.HandleFunc(fmt.Sprintf("GET %s/consent-categories", apiBasePath), s.handler.GetAllConsentCategories)
-	mux.HandleFunc(fmt.Sprintf("POST %s/consent-categories", apiBasePath), s.handler.AddConsentCategory)
-	mux.HandleFunc(fmt.Sprintf("GET %s/consent-categories/", apiBasePath), s.handler.GetConsentCategory)
-	mux.HandleFunc(fmt.Sprintf("PUT %s/consent-categories/", apiBasePath), s.handler.UpdateConsentCategory)
-	mux.HandleFunc(fmt.Sprintf("DELETE %s/consent-categories/", apiBasePath), s.handler.DeleteConsentCategory)
+// Route handles tenant-aware routing for consent categories
+func (s *ConsentCategoryService) Route(w http.ResponseWriter, r *http.Request) {
+
+	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing /
+	method := r.Method
+
+	switch {
+	case method == http.MethodGet && path == "/consent-categories":
+		s.handler.GetAllConsentCategories(w, r)
+
+	case method == http.MethodPost && path == "/consent-categories":
+		s.handler.AddConsentCategory(w, r)
+
+	case strings.HasPrefix(path, "/consent-categories/"):
+		switch method {
+		case http.MethodGet:
+			s.handler.GetConsentCategory(w, r)
+		case http.MethodPut:
+			s.handler.UpdateConsentCategory(w, r)
+		case http.MethodDelete:
+			s.handler.DeleteConsentCategory(w, r)
+		default:
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+
+	default:
+		http.NotFound(w, r)
+	}
 }

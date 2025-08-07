@@ -49,13 +49,13 @@ func NewProfileSchemaHandler() *ProfileSchemaHandler {
 // AddProfileSchemaAttributesForScope handles adding a new profile schema attribute.
 func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.ResponseWriter, r *http.Request, scope string) {
 
+	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:create")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 	var schemaAttributes []model.ProfileSchemaAttribute
-	orgId := utils.ExtractTenantIdFromPath(r)
 	if err := json.NewDecoder(r.Body).Decode(&schemaAttributes); err != nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
@@ -124,6 +124,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 // GetProfileSchema handles fetching the entire profile schema.
 func (psh *ProfileSchemaHandler) GetProfileSchema(w http.ResponseWriter, r *http.Request) {
 
+	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:view")
 	if err != nil {
 		utils.HandleError(w, err)
@@ -131,7 +132,6 @@ func (psh *ProfileSchemaHandler) GetProfileSchema(w http.ResponseWriter, r *http
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := utils.ExtractTenantIdFromPath(r)
 	profileSchema, err := schemaService.GetProfileSchema(orgId)
 
 	if err != nil {
@@ -146,6 +146,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchema(w http.ResponseWriter, r *http
 // GetProfileSchemaAttributeById handles fetching the entire profile schema.
 func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
 
+	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:view")
 	if err != nil {
 		utils.HandleError(w, err)
@@ -153,7 +154,6 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := utils.ExtractTenantIdFromPath(r)
 	attribute := model.ProfileSchemaAttribute{}
 	if constants.AllowedAttributesScope[scope] {
 		attribute, err = schemaService.GetProfileSchemaAttributeById(orgId, attributeId)
@@ -170,6 +170,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 // GetProfileSchemaAttributeForScope handles fetching the entire profile schema for the scope.
 func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request, scope string) {
 
+	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:view")
 	if err != nil {
 		utils.HandleError(w, err)
@@ -177,7 +178,6 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := utils.ExtractTenantIdFromPath(r)
 	var attributes interface{}
 
 	// Build the filter from query params
@@ -216,6 +216,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 // PatchProfileSchemaAttributeById updates a profile schema attribute.
 func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
 
+	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:update")
 	if err != nil {
 		utils.HandleError(w, err)
@@ -223,7 +224,6 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := utils.ExtractTenantIdFromPath(r)
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
@@ -249,6 +249,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 // DeleteProfileSchema removes the entire profile schema.
 func (psh *ProfileSchemaHandler) DeleteProfileSchema(w http.ResponseWriter, r *http.Request) {
 
+	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:delete")
 	if err != nil {
 		utils.HandleError(w, err)
@@ -256,7 +257,6 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchema(w http.ResponseWriter, r *h
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := utils.ExtractTenantIdFromPath(r)
 	err = schemaService.DeleteProfileSchema(orgId)
 
 	if err != nil {
@@ -271,6 +271,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchema(w http.ResponseWriter, r *h
 // DeleteProfileSchemaAttributeById removes a profile schema attribute.
 func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
 
+	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:delete")
 	if err != nil {
 		utils.HandleError(w, err)
@@ -278,7 +279,6 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.Respons
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	orgId := utils.ExtractTenantIdFromPath(r)
 
 	err = schemaService.DeleteProfileSchemaAttributeById(orgId, attributeId)
 

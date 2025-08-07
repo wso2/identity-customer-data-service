@@ -19,15 +19,13 @@
 package authn
 
 import (
-	"encoding/json"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/wso2/identity-customer-data-service/internal/system/cache"
+	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -39,7 +37,7 @@ var (
 )
 
 // ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
-func ValidateAuthenticationAndReturnClaims(token string) (map[string]interface{}, error) {
+func ValidateAuthenticationAndReturnClaims(token, orgId string) (map[string]interface{}, error) {
 	// Try cache
 	if cached, found := tokenCache.Get(token); found {
 		if claims, ok := cached.(map[string]interface{}); ok && validateClaims(claims) {
@@ -57,7 +55,10 @@ func ValidateAuthenticationAndReturnClaims(token string) (map[string]interface{}
 			return claims, unauthorizedError()
 		}
 	} else {
-		claims, err = IntrospectOpaqueToken(token)
+		cfg := config.GetCDSRuntime().Config
+		identityClient := client.NewIdentityClient(cfg)
+
+		claims, err = identityClient.IntrospectToken(orgId, token)
 		if err != nil {
 			return claims, unauthorizedError()
 		}
@@ -93,22 +94,27 @@ func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 // validateClaims ensures the token has `active: true` and the expected audience
 func validateClaims(claims map[string]interface{}) bool {
 
+	logger := log.GetLogger()
 	expRaw, ok := claims["exp"]
 	if !ok {
+		logger.Info("Token does not have an expiration time.")
 		return false
 	}
 	expFloat, ok := expRaw.(float64)
 	if !ok {
+		logger.Info("Token does not have a valid expiration time.", log.Any("exp", expRaw))
 		return false
 	}
 	expUnix := int64(expFloat)
 	currentTime := time.Now().Unix()
 	if expUnix < currentTime {
+		logger.Info("Token has expired.", log.String("exp", time.Unix(expUnix, 0).String()))
 		return false
 	}
 
 	audRaw, ok := claims["aud"]
 	if !ok {
+		logger.Info("Token does not have an audience claim.")
 		return false
 	}
 
@@ -129,6 +135,7 @@ func validateClaims(claims map[string]interface{}) bool {
 			return true
 		}
 	}
+	logger.Info("Token audience does not match expected audience.")
 	return false
 }
 
@@ -150,49 +157,49 @@ func unauthorizedError() error {
 	}, http.StatusUnauthorized)
 }
 
-// IntrospectOpaqueToken introspects an opaque token t
-func IntrospectOpaqueToken(token string) (map[string]interface{}, error) {
-
-	form := url.Values{}
-	form.Set("token", token)
-
-	runtimeConfig := config.GetCDSRuntime().Config
-	authServerConfig := runtimeConfig.AuthServer
-
-	req, err := http.NewRequest("POST", authServerConfig.IntrospectionEndPoint, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.SetBasicAuth(authServerConfig.AdminUsername, authServerConfig.AdminPassword)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := http.DefaultClient.Do(req)
-	logger := log.GetLogger()
-	if err != nil {
-		errorMsg := "Failed to introspect token."
-		logger.Debug(errorMsg, log.Error(err))
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INTROSPECTION_FAILED.Code,
-			Message:     errors2.INTROSPECTION_FAILED.Description,
-			Description: errorMsg,
-		}, http.StatusUnauthorized)
-		return nil, clientError
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, unauthorizedError()
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
+//// IntrospectOpaqueToken introspects an opaque token t
+//func IntrospectOpaqueToken(token string) (map[string]interface{}, error) {
+//
+//	form := url.Values{}
+//	form.Set("token", token)
+//
+//	runtimeConfig := config.GetCDSRuntime().Config
+//	authServerConfig := runtimeConfig.AuthServer
+//	introspectionEndpoint := "https://" + c.BaseURL + "/t/" + orgId + authServerConfig.IntrospectionEndPoint
+//	req, err := http.NewRequest("POST", introspectionEndpoint, strings.NewReader(form.Encode()))
+//	if err != nil {
+//		return nil, err
+//	}
+//	req.SetBasicAuth(authServerConfig.AdminUsername, authServerConfig.AdminPassword)
+//	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+//
+//	resp, err := http.DefaultClient.Do(req)
+//	logger := log.GetLogger()
+//	if err != nil {
+//		errorMsg := "Failed to introspect token."
+//		logger.Debug(errorMsg, log.Error(err))
+//		clientError := errors2.NewClientError(errors2.ErrorMessage{
+//			Code:        errors2.INTROSPECTION_FAILED.Code,
+//			Message:     errors2.INTROSPECTION_FAILED.Description,
+//			Description: errorMsg,
+//		}, http.StatusUnauthorized)
+//		return nil, clientError
+//	}
+//	defer resp.Body.Close()
+//
+//	if resp.StatusCode != http.StatusOK {
+//		return nil, unauthorizedError()
+//	}
+//
+//	body, err := io.ReadAll(resp.Body)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	var result map[string]interface{}
+//	if err := json.Unmarshal(body, &result); err != nil {
+//		return nil, err
+//	}
+//
+//	return result, nil
+//}
