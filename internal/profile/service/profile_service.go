@@ -21,15 +21,16 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
 
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
@@ -47,6 +48,8 @@ type ProfilesServiceInterface interface {
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
+	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
+	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
 	PatchProfile(id string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
 	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
 	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
@@ -722,6 +725,48 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 	}
 }
 
+// GetProfileConsents retrieves a profile
+func (ps *ProfilesService) GetProfileConsents(ProfileId string) ([]profileModel.ConsentRecord, error) {
+
+	consentRecords, err := profileStore.GetProfileConsents(ProfileId)
+	if err != nil {
+		return nil, err
+	}
+	if consentRecords == nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_NOT_FOUND.Code,
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
+			Description: errors2.PROFILE_NOT_FOUND.Description,
+		}, http.StatusNotFound)
+		return nil, clientError
+	}
+
+	return consentRecords, nil
+}
+
+// UpdateProfileConsents updates the consent records for a profile
+func (ps *ProfilesService) UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error {
+	logger := log.GetLogger()
+
+	// Set the consent timestamp if not already set
+	currentTime := time.Now().UTC().Unix()
+	for i := range consents {
+		if consents[i].ConsentedAt == 0 {
+			consents[i].ConsentedAt = currentTime
+		}
+	}
+
+	// Update the consents in the database
+	err := profileStore.UpdateProfileConsents(profileId, consents)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to update consents for profile: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		return err
+	}
+
+	return nil
+}
+
 func mergeSCIMWithSchema(
 	scim map[string]interface{},
 	existing map[string]interface{},
@@ -1203,7 +1248,7 @@ func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
 }
 
 // FindProfileByUserId retrieves a profile by user_id
-func (ps ProfilesService) FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfileWithUserId(userId)
 	logger := log.GetLogger()
@@ -1254,7 +1299,7 @@ func (ps ProfilesService) FindProfileByUserId(userId string) (*profileModel.Prof
 }
 
 // PatchProfile applies a partial update to an existing profile
-func (ps ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
 
 	existingProfile, err := profileStore.GetProfile(profileId)
 	if err != nil || existingProfile == nil {

@@ -52,3 +52,20 @@ type ProfileCookie struct {
 	CookieId  string `json:"cookie_id" bson:"cookie_id"`
 	IsActive  bool   `json:"is_active" bson:"is_active"`
 }
+
+// ProfileConsent represents the consent information associated with a profile
+type ProfileConsent struct {
+	Consents []ConsentRecord `json:"consents" bson:"consents"`
+}
+
+// ConsentRecord represents an individual consent record for a profile
+type ConsentRecord struct {
+	CategoryIdentifier string `json:"category_identifier" bson:"category_identifier"` // References the consent category
+	IsConsented        bool   `json:"is_consented" bson:"is_consented"`               // Whether the user has given consent
+	ConsentedAt        int64  `json:"consented_at" bson:"consented_at"`               // Timestamp when consent was given/updated
+}
+
+// ProfileConsentResponse is the response model for profile consents API
+type ProfileConsentResponse struct {
+	Consents []ConsentRecord `json:"consents"`
+}

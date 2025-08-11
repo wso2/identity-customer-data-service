@@ -76,6 +76,15 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 	return profile, nil
 }
 
+func scanProfileConsentRow(row map[string]interface{}) (model.ConsentRecord, error) {
+	var profileConsent model.ConsentRecord
+
+	profileConsent.CategoryIdentifier = row["category_id"].(string)
+	profileConsent.IsConsented = row["consent_status"].(bool)
+	profileConsent.ConsentedAt = row["consented_at"].(int64)
+	return profileConsent, nil
+}
+
 // InsertProfile inserts a new profile into the database
 func InsertProfile(profile model.Profile) error {
 
@@ -243,6 +252,61 @@ func GetProfile(profileId string) (*model.Profile, error) {
 	}
 	profile.ApplicationData, _ = FetchApplicationData(profileId)
 	return &profile, nil
+}
+
+// GetProfileConsents retrieves the consents of a profile by its profileId
+func GetProfileConsents(profileId string) ([]model.ConsentRecord, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while fetching profile consents with Id: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return nil, serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.GetProfileConsentsByProfileId[provider.NewDBProvider().GetDBType()]
+
+	results, err := dbClient.ExecuteQuery(query, profileId)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		logger.Debug(fmt.Sprintf("No profile found with the given Id: %s", profileId))
+		// todo: should we return a client error with 404 here?
+		return nil, nil
+	}
+	if len(results) == 0 {
+		logger.Debug(fmt.Sprintf("No profile found with the given Id: %s", profileId))
+		var profile, _ = GetProfile(profileId)
+		if profile != nil {
+			// If no consents found and the user exists, return an empty slice instead of nil
+			return []model.ConsentRecord{}, nil
+		} else {
+			return nil, nil
+		}
+	}
+	var profileConsents []model.ConsentRecord
+	for _, row := range results {
+
+		profileConsent, err := scanProfileConsentRow(row)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Failed fetching profile consents with Id: %s", profileId)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE.Code,
+				Message:     errors2.GET_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return nil, serverError
+		}
+		profileConsents = append(profileConsents, profileConsent)
+	}
+	return profileConsents, nil
 }
 
 func FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
@@ -1530,5 +1594,90 @@ func DeleteProfileCookieByProfile(profileId string) error {
 		return serverError
 	}
 
+	return nil
+}
+
+// UpdateProfileConsents updates or creates consent records for a profile
+func UpdateProfileConsents(profileId string, consents []model.ConsentRecord) error {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get database client for updating profile consents for profile: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+	defer dbClient.Close()
+
+	// Start a transaction to ensure atomicity of consent updates
+	tx, err := dbClient.BeginTx()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to begin transaction for updating consents for profile: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	// First, delete existing consents for this profile to ensure a clean slate
+
+	deleteQuery := scripts.DeleteProfileConsentsByProfileId[provider.NewDBProvider().GetDBType()]
+	_, err = tx.Exec(deleteQuery, profileId)
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to delete existing consents for profile: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	// Insert new consent records
+	insertQuery := scripts.InsertProfileConsentsByProfileId[provider.NewDBProvider().GetDBType()]
+	for _, consent := range consents {
+
+		_, err = tx.Exec(insertQuery,
+			profileId,
+			consent.CategoryIdentifier,
+			consent.IsConsented,
+			consent.ConsentedAt)
+
+		if err != nil {
+			_ = tx.Rollback()
+			errorMsg := fmt.Sprintf("Failed to insert consent for profile: %s, category: %s",
+				profileId, consent.CategoryIdentifier)
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return serverError
+		}
+	}
+
+	// Commit the transaction
+	if err = tx.Commit(); err != nil {
+		errorMsg := fmt.Sprintf("Failed to commit transaction for updating consents for profile: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	logger.Info(fmt.Sprintf("Successfully updated consents for profile: %s", profileId))
 	return nil
 }

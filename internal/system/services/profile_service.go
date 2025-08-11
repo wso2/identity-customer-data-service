@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/profile/handler"
 	"net/http"
+	"strings"
 )
 
 type ProfileService struct {
@@ -123,11 +124,78 @@ func (s *ProfileService) RegisterRoutes(mux *http.ServeMux, apiBasePath string) 
 
 	mux.HandleFunc(fmt.Sprintf("POST %s/profiles/initialize", apiBasePath), s.profileHandler.InitProfile)
 	mux.HandleFunc(fmt.Sprintf("GET %s/profiles", apiBasePath), s.profileHandler.GetAllProfiles)
+
 	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/me", apiBasePath), s.profileHandler.GetCurrentUserProfile)
-	mux.HandleFunc(fmt.Sprintf("GET %s/profiles/", apiBasePath), s.profileHandler.GetProfile)
-	mux.HandleFunc(fmt.Sprintf("PUT %s/profiles/", apiBasePath), s.profileHandler.UpdateProfile)
-	mux.HandleFunc(fmt.Sprintf("PATCH %s/profiles/", apiBasePath), s.profileHandler.PatchProfile)
 	mux.HandleFunc(fmt.Sprintf("PATCH %s/profiles/me", apiBasePath), s.profileHandler.PatchCurrentUserProfile)
 	mux.HandleFunc(fmt.Sprintf("POST %s/profiles/sync", apiBasePath), s.profileHandler.SyncProfile)
-	mux.HandleFunc(fmt.Sprintf("DELETE %s/profiles/", apiBasePath), s.profileHandler.DeleteProfile)
+
+	// handles all requests to /profiles/{id} and its sub resources
+	mux.HandleFunc(fmt.Sprintf("%s/profiles/", apiBasePath), s.profileResourceHandler)
+}
+
+// profileResourceHandler handles all requests to /profiles/{id} and its sub resources
+func (s *ProfileService) profileResourceHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the path to extract components
+	path := r.URL.Path
+
+	// Split the path into segments
+	// Format: /api/v1/profiles/{profileId}[/consents]
+	segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
+
+	// We know the pattern starts with /profiles/
+	// Determine if this is a direct profile request or a consent request
+	if len(segments) < 3 {
+		http.NotFound(w, r)
+		return
+	}
+
+	// The profile ID is always the segment after "profiles"
+	profileIdIndex := -1
+	for i, segment := range segments {
+		if segment == "profiles" {
+			profileIdIndex = i + 1
+			break
+		}
+	}
+
+	// If we couldn't find "profiles" or there's no ID after it, return 404
+	if profileIdIndex == -1 || profileIdIndex >= len(segments) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// The profileId would be segments[profileIdIndex] but since we don't use it directly
+	// in this function (each handler extracts it again from the URL path),
+	// we avoid declaring an unused variable.
+
+	// Check if this is a consent request
+	// Format: /api/v1/profiles/{profileId}/consents
+	isConsentRequest := profileIdIndex+1 < len(segments) && segments[profileIdIndex+1] == "consents"
+
+	if isConsentRequest {
+		// Handle consent request
+		switch r.Method {
+		case http.MethodGet:
+			s.profileHandler.GetProfileConsents(w, r)
+		case http.MethodPut:
+			s.profileHandler.UpdateProfileConsents(w, r)
+		default:
+			http.Error(w, "Method not allowed for consents", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+
+	// Handle direct profile request
+	switch r.Method {
+	case http.MethodGet:
+		s.profileHandler.GetProfile(w, r)
+	case http.MethodPut:
+		s.profileHandler.UpdateProfile(w, r)
+	case http.MethodPatch:
+		s.profileHandler.PatchProfile(w, r)
+	case http.MethodDelete:
+		s.profileHandler.DeleteProfile(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
