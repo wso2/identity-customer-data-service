@@ -21,15 +21,16 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
-	"net/http"
-	"strings"
-	"sync"
 )
 
 type ProfileHandler struct {
@@ -237,7 +238,7 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 		}
 
 		if requestedAttrs == nil {
-			// If no specific attributes requested, return only meta data.
+			// If no specific attributes requested, return only metadata.
 			result = append(result, profileRes)
 			continue
 		}
@@ -255,8 +256,6 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 				}
 			}
 			profileRes.IdentityAttributes = filtered
-		} else if requestedAttrs == nil {
-			profileRes.IdentityAttributes = profile.IdentityAttributes
 		}
 
 		// Traits
@@ -272,17 +271,14 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 				}
 			}
 			profileRes.Traits = filtered
-		} else if requestedAttrs == nil {
-			profileRes.Traits = profile.Traits
 		}
 
 		// Application Data
-		//appData := ConvertAppDataToMap(profile.ApplicationData)
 		appData := profile.ApplicationData
 		if len(appData) > 0 {
 			filteredAppData := make(map[string]map[string]interface{})
 
-			if requestedAttrs == nil || len(requestedAttrs["application_data"]) == 0 {
+			if len(requestedAttrs["application_data"]) == 0 {
 				filteredAppData = appData
 			} else {
 				fields := requestedAttrs["application_data"]
@@ -301,7 +297,6 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 						filteredAppData[appKey] = temp
 					}
 				}
-
 			}
 
 			if len(filteredAppData) > 0 {
