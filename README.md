@@ -67,7 +67,7 @@ Lightweight, extensible Customer Data Server built to power personalized experie
 
 ```bash
 `curl --location 'https://localhost:9443/oauth2/token' \
---header 'Authorization: Basic Wm1nNXJwVlRmcEhzN3RyYU01OWpwWG9tRFk4YTpaRTdJelJ3Sll6czlQVnJHd3JpZ3BwZ3g0VW42amVVV0plcXhZZDM1X0VjYQ==' \
+--header 'Authorization: Basic <Base64Encoded(CLIENT_ID:CLIENT_SECRET)>' \
 --header 'Content-Type: application/x-www-form-urlencoded' \
 --data-urlencode 'grant_type=client_credentials' \
 --data-urlencode 'scope=internal_cdm_profile_update internal_cdm_profile_delete internal_cdm_profile_view internal_cdm_profile_create '`
