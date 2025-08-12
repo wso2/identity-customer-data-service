@@ -19,8 +19,10 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
-	"errors"                                                                             // Standard Go errors package
+	"errors" // Standard Go errors package
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	customerrors "github.com/wso2/identity-customer-data-service/internal/system/errors" // Alias for the custom errors
 	error2 "github.com/wso2/identity-customer-data-service/internal/system/errors"       // Importing custom error types
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -59,14 +61,12 @@ func HandleError(w http.ResponseWriter, err error) {
 }
 
 func ExtractTenantIdFromPath(r *http.Request) string {
-	path := r.URL.Path
-	parts := strings.Split(path, "/")
-	for i := 0; i < len(parts)-1; i++ {
-		if parts[i] == "t" {
-			return parts[i+1]
-		}
+	tenant := r.Context().Value(constants.TenantContextKey).(string)
+	if tenant == "" {
+		// If tenant is not found in context, fallback to default tenant
+		tenant = "carbon.super"
 	}
-	return "carbon.super" // fallback default
+	return tenant
 }
 
 func StripTenantPrefix(path string) string {
@@ -91,4 +91,49 @@ func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError
 	w.WriteHeader(http.StatusBadRequest)
 
 	_ = json.NewEncoder(w).Encode("Invalid erquest format")
+}
+
+// Rewrite `/api/v1/...` to `/t/carbon.super/api/v1/...`
+func RewriteToDefaultTenant(apiBasePath string, mux *http.ServeMux, defaultTenant string) {
+	mux.HandleFunc(apiBasePath+"/", func(w http.ResponseWriter, r *http.Request) {
+		newPath := "/t/" + defaultTenant + r.URL.Path
+		http.Redirect(w, r, newPath, http.StatusTemporaryRedirect)
+	})
+}
+
+func MountTenantDispatcher(mux *http.ServeMux, apiBasePath string, handlerFunc http.HandlerFunc) {
+	mux.HandleFunc("/t/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimSuffix(r.URL.Path, "/")
+
+		if !strings.HasPrefix(path, "/t/") {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Split: /t/{tenant}/api/v1/...
+		parts := strings.SplitN(path[len("/t/"):], "/", 2)
+		if len(parts) != 2 {
+			http.Error(w, "Invalid tenant path format", http.StatusBadRequest)
+			return
+		}
+
+		tenantID := parts[0]
+		remainingPath := "/" + parts[1]
+
+		// Ensure it starts with apiBasePath
+		if !strings.HasPrefix(remainingPath, apiBasePath) {
+			http.Error(w, "Path must start with "+apiBasePath, http.StatusNotFound)
+			return
+		}
+
+		// Strip /api/v1 to route to /profiles, etc.
+		relativePath := strings.TrimPrefix(remainingPath, apiBasePath)
+
+		// Add tenant to request context
+		ctx := context.WithValue(r.Context(), constants.TenantContextKey, tenantID)
+		r = r.WithContext(ctx)
+		r.URL.Path = relativePath
+
+		handlerFunc(w, r)
+	})
 }
