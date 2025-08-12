@@ -85,7 +85,6 @@ func scanProfileConsentRow(row map[string]interface{}) (model.ConsentRecord, err
 	return profileConsent, nil
 }
 
-// InsertProfile inserts a new profile
 // InsertProfile inserts a new profile into the database
 func InsertProfile(profile model.Profile) error {
 
