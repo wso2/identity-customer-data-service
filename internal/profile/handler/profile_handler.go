@@ -816,6 +816,86 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	_, _ = writer.Write([]byte(`{"status": "updated"}`))
 }
 
+// GetProfileConsents handles retrieving consents for a specific profile
+func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Request) {
+
+	// Extract profileId from URL path
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 4 {
+		http.Error(w, "Invalid path", http.StatusNotFound)
+		return
+	}
+
+	// Profile ID will be the second-to-last part when the URL ends with /consents
+	profileId := pathParts[len(pathParts)-2]
+
+	err := utils.AuthnAndAuthz(r, "profile:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	// Get the profiles provider and service
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	// Verify profile exists first
+	consentRecords, err := profilesService.GetProfileConsents(profileId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(consentRecords)
+}
+
+// UpdateProfileConsents handles updating consents for a specific profile
+func (ph *ProfileHandler) UpdateProfileConsents(w http.ResponseWriter, r *http.Request) {
+
+	// Extract profileId from URL path
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 4 {
+		http.Error(w, "Invalid path", http.StatusNotFound)
+		return
+	}
+
+	// Profile ID will be the second-to-last part when the URL ends with /consents
+	profileId := pathParts[len(pathParts)-2]
+
+	err := utils.AuthnAndAuthz(r, "profile:update")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	// Get the profiles provider and service
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	// Verify profile exists first
+	_, err = profilesService.GetProfile(profileId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	// Parse the request body
+	var consentUpdate []model.ConsentRecord
+	err = json.NewDecoder(r.Body).Decode(&consentUpdate)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err = profilesService.UpdateProfileConsents(profileId, consentUpdate)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(consentUpdate)
+}
+
 func setNestedMapValue(m map[string]interface{}, path string, value interface{}) {
 	parts := strings.Split(path, ".")
 	current := m

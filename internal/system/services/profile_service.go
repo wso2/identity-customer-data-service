@@ -57,6 +57,24 @@ func (s *ProfileService) Route(w http.ResponseWriter, r *http.Request) {
 		s.profileHandler.SyncProfile(w, r)
 
 	case strings.HasPrefix(path, "/profiles/"):
+		// Split path to identify sub-resources
+		segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
+
+		// Expect: /profiles/{id}[/subresource]
+		if len(segments) >= 3 && segments[2] == "consents" {
+			// Consent-specific routing
+			switch method {
+			case http.MethodGet:
+				s.profileHandler.GetProfileConsents(w, r)
+			case http.MethodPut:
+				s.profileHandler.UpdateProfileConsents(w, r)
+			default:
+				http.Error(w, "Method Not Allowed for consents", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
+		// Default profile ID route
 		switch method {
 		case http.MethodGet:
 			s.profileHandler.GetProfile(w, r)

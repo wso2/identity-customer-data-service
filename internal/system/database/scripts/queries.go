@@ -131,6 +131,16 @@ var GetProfileById = map[string]string{
 			p.profile_id = $1;`,
 }
 
+var GetProfileConsentsByProfileId = map[string]string{
+	"postgres": `SELECT profile_id, category_id, consent_status, consented_at FROM profile_consents WHERE profile_id = $1;`,
+}
+
+var DeleteProfileConsentsByProfileId = map[string]string{
+	"postgres": `DELETE FROM profile_consents WHERE profile_id = $1;`,
+}
+
+var InsertProfileConsentsByProfileId = map[string]string{
+	"postgres": `INSERT IN
 var GetAppDataByProfileId = map[string]string{
 	"postgres": `SELECT app_id, application_data FROM application_data WHERE profile_id = $1;`,
 }

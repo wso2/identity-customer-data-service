@@ -26,7 +26,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
-	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/schedulers"
@@ -84,9 +83,6 @@ func main() {
 
 	// Initialize database
 	initDatabaseFromConfig(cdsConfig)
-
-	const schemaFile = "/dbscripts/postgres.sql"
-	createTablesFromConfig(cdsHome, schemaFile)
 
 	// Initialize Event queue
 	workers.StartProfileWorker()
@@ -168,18 +164,4 @@ func getCDSHome() string {
 	}
 
 	return projectHome
-}
-
-func createTablesFromConfig(cdsHome string, schemaFile string) {
-	logger := log.GetLogger()
-	dbClient, err := provider.NewDBProvider().GetDBClient()
-	if err != nil {
-		logger.Error("Failed to get database client.", log.Error(err))
-		return
-	}
-	if err := dbClient.InitDatabase(cdsHome, schemaFile); err != nil {
-		logger.Error("Failed to create tables from configuration.", log.Error(err))
-		return
-	}
-
 }

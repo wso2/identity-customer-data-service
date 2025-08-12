@@ -37,7 +37,7 @@ func NewUnificationRulesService() *UnificationRulesService {
 // Route handles all tenant-aware unification rules endpoints
 func (s *UnificationRulesService) Route(w http.ResponseWriter, r *http.Request) {
 
-	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing /
+	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing "/" character
 	method := r.Method
 
 	switch {

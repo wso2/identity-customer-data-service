@@ -20,10 +20,7 @@ package client
 
 import (
 	"database/sql"
-	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"os"
-	"path"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -34,7 +31,6 @@ type DBClientInterface interface {
 	ExecuteQuery(query string, args ...interface{}) ([]map[string]interface{}, error)
 	BeginTx() (*sql.Tx, error)
 	Close() error
-	InitDatabase(cdsHome, file string) error
 }
 
 // DBClient is the implementation of DBClientInterface.
@@ -48,21 +44,6 @@ func NewDBClient(db *sql.DB) DBClientInterface {
 	return &DBClient{
 		db: db,
 	}
-}
-
-func (client *DBClient) InitDatabase(cdsHome, file string) error {
-
-	sqlBytes, err := os.ReadFile(path.Join(cdsHome, file))
-	if err != nil {
-		return fmt.Errorf("failed to read schema file: %w", err)
-	}
-
-	_, err = client.db.Exec(string(sqlBytes))
-	if err != nil {
-		return fmt.Errorf("failed to execute schema: %w", err)
-	}
-	log.GetLogger().Info("Database schema created successfully")
-	return nil
 }
 
 // ExecuteQuery executes a SELECT query and returns the result as a slice of maps.

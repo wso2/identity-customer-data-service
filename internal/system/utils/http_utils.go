@@ -61,15 +61,11 @@ func HandleError(w http.ResponseWriter, err error) {
 }
 
 func ExtractTenantIdFromPath(r *http.Request) string {
-	//path := r.URL.Path
-	//parts := strings.Split(path, "/")
-	//for i := 0; i < len(parts)-1; i++ {
-	//	if parts[i] == "t" {
-	//		return parts[i+1]
-	//	}
-	//}
-	//return "carbon.super" // fallback default
 	tenant := r.Context().Value(constants.TenantContextKey).(string)
+	if tenant == "" {
+		// If tenant is not found in context, fallback to default tenant
+		tenant = "carbon.super"
+	}
 	return tenant
 }
 
@@ -137,9 +133,6 @@ func MountTenantDispatcher(mux *http.ServeMux, apiBasePath string, handlerFunc h
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, tenantID)
 		r = r.WithContext(ctx)
 		r.URL.Path = relativePath
-
-		// Optional: debug log
-		// fmt.Printf("[Dispatcher] tenant=%s path=%s\n", tenantID, relativePath)
 
 		handlerFunc(w, r)
 	})
