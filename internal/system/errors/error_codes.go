@@ -38,6 +38,11 @@ var (
 		Message: "Error while updating unification rules.",
 	}
 
+	DELETE_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15011",
+		Message: "Error while deleting unification rule(s).",
+	}
+
 	INVALID_TYPE = ErrorMessage{
 		Code:    errorPrefix + "15019",
 		Message: "Invalid type.",
@@ -88,19 +93,19 @@ var (
 		Message: "Error while fetching profile schema.",
 	}
 
+	UPDATE_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15025",
+		Message: "Error while updating profile schema.",
+	}
+
 	DELETE_PROFILE_SCHEMA = ErrorMessage{
 		Code:    errorPrefix + "15025",
-		Message: "Error while deleting profile schema attribute.",
+		Message: "Error while deleting profile schema attribute(s).",
 	}
 
 	SYNC_PROFILE_SCHEMA = ErrorMessage{
 		Code:    errorPrefix + "15025",
 		Message: "Error while syncing identity attributes of profile schema.",
-	}
-
-	EXECUTE_QUERY = ErrorMessage{
-		Code:    errorPrefix + "15026",
-		Message: "Error while executing query.",
 	}
 
 	GET_CONFIG = ErrorMessage{

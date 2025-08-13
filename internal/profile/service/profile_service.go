@@ -537,8 +537,8 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 		errMsg := fmt.Sprintf("Invalid schema format for profile: %s while validating for profile update.", profile.ProfileId)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.MARSHAL_JSON.Code,
-			Message:     errors2.MARSHAL_JSON.Message,
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
 			Description: errMsg,
 		}, err)
 		return nil, serverError
@@ -1353,8 +1353,8 @@ func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]inter
 		errMsg := fmt.Sprintf("Error unmarshalling merged profile data for profile_id: %s", profileId)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UNMARSHAL_JSON.Code,
-			Message:     errors2.UNMARSHAL_JSON.Message,
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
 			Description: errMsg,
 		}, err)
 		return nil, serverError
