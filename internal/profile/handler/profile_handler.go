@@ -58,7 +58,12 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
-		http.Error(w, "Invalid path", http.StatusNotFound)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: "Invalid path for profile retrieval",
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
 		return
 	}
 	profileId := pathParts[len(pathParts)-1]
@@ -126,7 +131,12 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 
 	// If still not resolved, unauthorized
 	if profileId == "" {
-		http.Error(w, "Unauthorized: no valid authentication method found", http.StatusUnauthorized)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: "Unauthorized: no valid authentication method found",
+		}, http.StatusUnauthorized)
+		utils.HandleError(w, clientError)
 		return
 	}
 
@@ -144,9 +154,9 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.MARSHAL_JSON.Code,
-			Message:     errors2.MARSHAL_JSON.Message,
-			Description: "Failed to encode profile response",
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: "Failed to encode profile response for profileId: " + profileId,
 		}, err)
 		utils.HandleError(w, serverError)
 	}
@@ -162,7 +172,12 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 	}
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 3 {
-		http.Error(w, "Invalid path", http.StatusNotFound)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE.Code,
+			Message:     errors2.DELETE_PROFILE.Message,
+			Description: "Invalid path for profile deletion",
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
 		return
 	}
 	profileId := pathParts[len(pathParts)-1]
@@ -354,6 +369,16 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&profile)
 
+	if err != nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ADD_PROFILE.Code,
+			Message:     errors2.ADD_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
 	// Check if a valid cookie exists
 	profileCookie, err := r.Cookie(constants.ProfileCookie)
 	if err == nil && profileCookie.Value != "" {
@@ -467,7 +492,12 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	var profile model.ProfileRequest
 	err = json.NewDecoder(request.Body).Decode(&profile)
 	if err != nil {
-		http.Error(writer, "Invalid request body", http.StatusBadRequest)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(writer, clientError)
 		return
 	}
 
@@ -502,8 +532,12 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 
 	var patchData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 	}
 
 	profilesProvider := provider.NewProfilesProvider()
@@ -550,20 +584,35 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 
 			claims, ok := authn.GetCachedClaims(token)
 			if !ok {
-				http.Error(w, "Token claims not found", http.StatusUnauthorized)
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.UPDATE_PROFILE.Code,
+					Message:     errors2.UPDATE_PROFILE.Message,
+					Description: "Invalid token.",
+				}, http.StatusUnauthorized)
+				utils.HandleError(w, clientError)
 				return
 			}
 
 			sub, ok := claims["sub"].(string)
 			if !ok || sub == "" {
-				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.UPDATE_PROFILE.Code,
+					Message:     errors2.UPDATE_PROFILE.Message,
+					Description: "Missing 'sub' in token",
+				}, http.StatusUnauthorized)
+				utils.HandleError(w, clientError)
 				return
 			}
 
 			// Lookup profile by sub (username)
 			profile, err := profilesService.FindProfileByUserId(sub)
 			if err != nil || profile == nil {
-				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.UPDATE_PROFILE.Code,
+					Message:     errors2.UPDATE_PROFILE.Message,
+					Description: "Profile not found for token subject",
+				}, http.StatusUnauthorized)
+				utils.HandleError(w, clientError)
 				return
 			}
 			profileId = profile.ProfileId
@@ -572,21 +621,30 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 
 	// If still no profileId, reject
 	if profileId == "" {
-		http.Error(w, "Unauthorized: no valid auth method found", http.StatusUnauthorized)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: "Invalid authentication method. No valid profileId found.",
+		}, http.StatusUnauthorized)
+		utils.HandleError(w, clientError)
 		return
 	}
 
 	// Parse patch payload
 	var patchData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
 	// Apply patch
 	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to patch profileId: %s", profileId))
 		utils.HandleError(w, err)
 		return
 	}
@@ -598,8 +656,8 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.MARSHAL_JSON.Code,
-			Message:     errors2.MARSHAL_JSON.Message,
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
 			Description: errMsg,
 		}, err)
 		utils.HandleError(w, serverError)
@@ -618,7 +676,12 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	var profileSync model.ProfileSync
 	err = json.NewDecoder(request.Body).Decode(&profileSync)
 	if err != nil {
-		http.Error(writer, "Invalid request body", http.StatusBadRequest)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(writer, clientError)
 		return
 	}
 
@@ -837,7 +900,12 @@ func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Requ
 	// Extract profileId from URL path
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 4 {
-		http.Error(w, "Invalid path", http.StatusNotFound)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE_CONSENT.Code,
+			Message:     errors2.GET_PROFILE_CONSENT.Message,
+			Description: "Invalid path for profile consents retrieval",
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
 		return
 	}
 

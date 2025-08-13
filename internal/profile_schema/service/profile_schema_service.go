@@ -484,7 +484,7 @@ func GetProfileSchemaAttributesWithFilter(orgId string, filters []string) ([]mod
 		for _, f := range filters {
 			field, op, val, err := parseFilter(f)
 			if err != nil {
-				return nil, fmt.Errorf("invalid filter '%s': %v", f, err)
+				return nil, err
 			}
 
 			if !matches(attr, field, op, val) {
@@ -504,7 +504,12 @@ func GetProfileSchemaAttributesWithFilter(orgId string, filters []string) ([]mod
 func parseFilter(f string) (field, op, value string, err error) {
 	parts := strings.SplitN(f, " ", 3)
 	if len(parts) != 3 {
-		return "", "", "", fmt.Errorf("must be in format: field op value")
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_FILTER_FORMAT.Code,
+			Message:     errors2.INVALID_FILTER_FORMAT.Message,
+			Description: "Filter must be in the format: field op value",
+		}, http.StatusBadRequest)
+		return "", "", "", clientError
 	}
 	return parts[0], parts[1], parts[2], nil
 }
