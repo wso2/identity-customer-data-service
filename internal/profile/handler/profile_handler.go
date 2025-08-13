@@ -21,6 +21,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -140,8 +141,14 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 	// Return profile JSON
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(profile); err != nil {
-		logger.Error(fmt.Sprintf("Failed to encode profile for profileId %s", profileId))
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.MARSHAL_JSON.Code,
+			Message:     errors2.MARSHAL_JSON.Message,
+			Description: "Failed to encode profile response",
+		}, err)
+		utils.HandleError(w, serverError)
 	}
 }
 
@@ -579,7 +586,7 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 	// Apply patch
 	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to patch profile ID %s", profileId))
+		logger.Error(fmt.Sprintf("Failed to patch profileId: %s", profileId))
 		utils.HandleError(w, err)
 		return
 	}
@@ -588,8 +595,14 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(updatedProfile); err != nil {
-		logger.Error(fmt.Sprintf("Failed to encode response for profile ID %s", profileId))
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.MARSHAL_JSON.Code,
+			Message:     errors2.MARSHAL_JSON.Message,
+			Description: errMsg,
+		}, err)
+		utils.HandleError(w, serverError)
 	}
 }
 
@@ -601,6 +614,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		return
 	}
 
+	logger := log.GetLogger()
 	var profileSync model.ProfileSync
 	err = json.NewDecoder(request.Body).Decode(&profileSync)
 	if err != nil {
@@ -618,7 +632,13 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if tenantId == "" {
 		//tenantId = utils.ExtractTenantIdFromPath(request)
 		//todo: should we expect tenant id in the path or as body param
-		utils.HandleError(writer, fmt.Errorf("Tenant id cannot be empty: %w", err))
+		errMsg := fmt.Sprintf("Tenant id cannot be empty in profile sync event: %s", profileSync.Event)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, http.StatusBadRequest)
+		utils.HandleError(writer, clientError)
 		return
 	}
 
@@ -650,7 +670,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				// Save updated profile
 				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
 				if err != nil {
-					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					utils.HandleError(writer, err)
 					return
 				}
 				return
@@ -672,7 +692,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 				_, err := profilesService.CreateProfile(profileRequest, tenantId)
 				if err != nil {
-					utils.HandleError(writer, fmt.Errorf("failed to create profile: %w", err))
+					utils.HandleError(writer, err)
 					return
 				}
 			}
@@ -683,7 +703,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	}
 
 	if profileSync.Event == "AUTHENTICATION_SUCCESS" {
-		log.GetLogger().Info("Authentication success event received for user: " + profileSync.UserId)
+		logger.Info("Authentication success event received for user: " + profileSync.UserId)
 		if profileSync.ProfileId != "" && profileSync.UserId != "" {
 			// This scenario is when the user logs in with a profileId existing.
 			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
@@ -705,7 +725,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				// Save updated profile
 				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
 				if err != nil {
-					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					utils.HandleError(writer, err)
 					return
 				}
 				return
@@ -717,12 +737,12 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if profileSync.Event == "POST_DELETE_USER_WITH_ID" {
 		existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 		if existingProfile == nil {
-			utils.HandleError(writer, fmt.Errorf("profile not found for user: %s", profileSync.UserId))
+			logger.Debug("No profile found for user: " + profileSync.UserId)
 			return
 		}
 		err := profilesService.DeleteProfile(existingProfile.ProfileId)
 		if err != nil {
-			utils.HandleError(writer, fmt.Errorf("failed to delete profile: %w", err))
+			utils.HandleError(writer, err)
 			return
 		}
 		return
@@ -775,7 +795,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				// Save updated profile
 				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
 				if err != nil {
-					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					utils.HandleError(writer, err)
 					return
 				}
 			}
@@ -801,7 +821,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			// Save updated profile
 			_, err = profilesService.UpdateProfile(profileId, profileRequest)
 			if err != nil {
-				utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+				utils.HandleError(writer, err)
 				return
 			}
 		}
