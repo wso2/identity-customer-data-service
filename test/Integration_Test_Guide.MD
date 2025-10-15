@@ -21,8 +21,7 @@ This guide explains how to run, manage, and report integration tests in the `ide
 ```
 /test
   └── integration
-      ├── enrichment_rules_test.go
-      ├── events_test.go
+      ├── profile_schema_test.go
       ├── profile_test.go
       ├── unification_rules_test.go
       ├── event_stream_id_test.go
