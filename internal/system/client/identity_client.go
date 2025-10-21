@@ -22,14 +22,15 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -323,7 +324,7 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 		errorMsg := fmt.Sprintf("Failed to fetch local claims: %s", string(body))
 		return nil, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        "LOCAL_CLAIMS_FETCH_FAILED",
-			Message:     "Unable to fetch local claims",
+			Message:     fmt.Sprintf("Unable to fetch local claims. Error code: %d", resp.StatusCode),
 			Description: errorMsg,
 		}, resp.StatusCode)
 	}

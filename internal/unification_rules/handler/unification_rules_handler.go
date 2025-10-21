@@ -24,7 +24,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -132,12 +131,11 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		utils.HandleError(w, err)
 		return
 	}
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
+	ruleId := r.PathValue("ruleId")
+	if ruleId == "" {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-	ruleId := pathParts[len(pathParts)-1]
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 	rule, err := ruleService.GetUnificationRule(ruleId)
@@ -165,12 +163,11 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		utils.HandleError(w, err)
 		return
 	}
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
+	ruleId := r.PathValue("ruleId")
+	if ruleId == "" {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-	ruleId := pathParts[len(pathParts)-1]
 
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
@@ -210,12 +207,11 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 		utils.HandleError(w, err)
 		return
 	}
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
+	ruleId := r.PathValue("ruleId")
+	if ruleId == "" {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-	ruleId := pathParts[len(pathParts)-1]
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 	err = ruleService.DeleteUnificationRule(ruleId)

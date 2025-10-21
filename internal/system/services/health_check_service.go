@@ -19,37 +19,37 @@
 package services
 
 import (
-	"github.com/wso2/identity-customer-data-service/internal/health_check/handler"
 	"net/http"
 	"strings"
+
+	"github.com/wso2/identity-customer-data-service/internal/health_check/handler"
 )
 
 // HealthService handles routing for health and readiness endpoints.
 type HealthService struct {
 	handler *handler.HealthHandler
+	mux     *http.ServeMux
 }
 
 // NewHealthService creates a new HealthService instance.
 func NewHealthService() *HealthService {
-	return &HealthService{
+	s := &HealthService{
 		handler: handler.NewHealthHandler(),
+		mux:     http.NewServeMux(),
 	}
+
+	// Register routes using Go 1.22 ServeMux patterns
+	s.mux.HandleFunc("GET /health", s.handler.HandleHealth)
+	s.mux.HandleFunc("GET /ready", s.handler.HandleReadiness)
+
+	return s
 }
 
 // Route dispatches health and readiness requests.
 func (s *HealthService) Route(w http.ResponseWriter, r *http.Request) {
-
-	path := strings.TrimSuffix(r.URL.Path, "/")
-	method := r.Method
-
-	switch {
-	case method == http.MethodGet && path == "/health":
-		s.handler.HandleHealth(w, r)
-
-	case method == http.MethodGet && path == "/ready":
-		s.handler.HandleReadiness(w, r)
-
-	default:
-		http.NotFound(w, r)
+	// Normalize trailing slash for consistent matching
+	if trimmed := strings.TrimSuffix(r.URL.Path, "/"); trimmed != "" {
+		r.URL.Path = trimmed
 	}
+	s.mux.ServeHTTP(w, r)
 }

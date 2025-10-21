@@ -55,12 +55,11 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
+	profileId := r.PathValue("profileId")
+	if profileId == "" {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
-	profileId := pathParts[len(pathParts)-1]
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 	profile, err := profilesService.GetProfile(profileId)
@@ -153,12 +152,11 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 		utils.HandleError(w, err)
 		return
 	}
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
+	profileId := r.PathValue("profileId")
+	if profileId == "" {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
-	profileId := pathParts[len(pathParts)-1]
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 	err = profilesService.DeleteProfile(profileId)
@@ -450,12 +448,11 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	pathParts := strings.Split(request.URL.Path, "/")
-	if len(pathParts) < 3 {
+	profileId := request.PathValue("profileId")
+	if profileId == "" {
 		http.Error(writer, "Invalid path", http.StatusNotFound)
 		return
 	}
-	profileId := pathParts[len(pathParts)-1]
 
 	var profile model.ProfileRequest
 	err = json.NewDecoder(request.Body).Decode(&profile)
@@ -486,12 +483,11 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 3 {
+	profileId := r.PathValue("profileId")
+	if profileId == "" {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
-	profileId := pathParts[len(pathParts)-1]
 
 	var patchData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
@@ -814,15 +810,11 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 // GetProfileConsents handles retrieving consents for a specific profile
 func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Request) {
 
-	// Extract profileId from URL path
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
+	profileId := r.PathValue("profileId")
+	if profileId == "" {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
-
-	// Profile ID will be the second-to-last part when the URL ends with /consents
-	profileId := pathParts[len(pathParts)-2]
 
 	err := utils.AuthnAndAuthz(r, "profile:view")
 	if err != nil {
@@ -849,15 +841,11 @@ func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Requ
 // UpdateProfileConsents handles updating consents for a specific profile
 func (ph *ProfileHandler) UpdateProfileConsents(w http.ResponseWriter, r *http.Request) {
 
-	// Extract profileId from URL path
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
+	profileId := r.PathValue("profileId")
+	if profileId == "" {
 		http.Error(w, "Invalid path", http.StatusNotFound)
 		return
 	}
-
-	// Profile ID will be the second-to-last part when the URL ends with /consents
-	profileId := pathParts[len(pathParts)-2]
 
 	err := utils.AuthnAndAuthz(r, "profile:update")
 	if err != nil {

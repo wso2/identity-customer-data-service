@@ -21,6 +21,10 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
@@ -28,9 +32,6 @@ import (
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
-	"net/http"
-	"strings"
-	"sync"
 )
 
 type ProfileSchemaHandler struct {
@@ -47,8 +48,9 @@ func NewProfileSchemaHandler() *ProfileSchemaHandler {
 }
 
 // AddProfileSchemaAttributesForScope handles adding a new profile schema attribute.
-func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.ResponseWriter, r *http.Request, scope string) {
+func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.ResponseWriter, r *http.Request) {
 
+	scope := r.PathValue("scope")
 	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:create")
 	if err != nil {
@@ -144,8 +146,10 @@ func (psh *ProfileSchemaHandler) GetProfileSchema(w http.ResponseWriter, r *http
 }
 
 // GetProfileSchemaAttributeById handles fetching the entire profile schema.
-func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
+func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request) {
 
+	scope := r.PathValue("scope")
+	attributeId := r.PathValue("attrID")
 	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:view")
 	if err != nil {
@@ -168,8 +172,9 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 }
 
 // GetProfileSchemaAttributeForScope handles fetching the entire profile schema for the scope.
-func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request, scope string) {
+func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request) {
 
+	scope := r.PathValue("scope")
 	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:view")
 	if err != nil {
@@ -214,8 +219,9 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 }
 
 // PatchProfileSchemaAttributeById updates a profile schema attribute.
-func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
+func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request) {
 
+	attributeId := r.PathValue("attrID")
 	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:update")
 	if err != nil {
@@ -269,8 +275,9 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchema(w http.ResponseWriter, r *h
 }
 
 // DeleteProfileSchemaAttributeById removes a profile schema attribute.
-func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request, scope, attributeId string) {
+func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.ResponseWriter, r *http.Request) {
 
+	attributeId := r.PathValue("attrID")
 	orgId := utils.ExtractTenantIdFromPath(r)
 	err := utils.AuthnAndAuthz(r, "profile_schema:delete")
 	if err != nil {
@@ -290,13 +297,14 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.Respons
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request, scope string) {
+func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request) {
 
 	err := utils.AuthnAndAuthz(r, "profile_schema:delete")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+	scope := r.PathValue("scope")
 	if scope == constants.IdentityAttributes {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
