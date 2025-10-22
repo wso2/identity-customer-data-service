@@ -17,7 +17,10 @@ WORKDIR /app
 COPY . .
 
 # Build using the Makefile (resolves version, directories, etc.)
-RUN make build
+# Ensure Makefile exists and make build produces /app/target/.build/cds
+RUN test -f Makefile || (echo "ERROR: Makefile not found!" && exit 1) && \
+    make build && \
+    test -f target/.build/cds || (echo "ERROR: Build output target/.build/cds not found after make build!" && exit 1)
 
 # Stage 2: Minimal runtime image
 FROM alpine:latest
