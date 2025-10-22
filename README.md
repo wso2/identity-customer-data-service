@@ -77,6 +77,7 @@ Lightweight, extensible Customer Data Server built to power personalized experie
 
 `Authorization: Bearer <access_token>
 `
+
 ---
 ## 🏗 Build and Run
 ### 🔧 Step 1: Start PostgreSQL
