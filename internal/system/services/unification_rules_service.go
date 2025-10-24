@@ -26,37 +26,29 @@ import (
 
 type UnificationRulesService struct {
 	unificationRulesHandler *handler.UnificationRulesHandler
+	mux                     *http.ServeMux
 }
 
-func NewUnificationRulesService() *UnificationRulesService {
-	return &UnificationRulesService{
+func NewUnificationRulesService(mux *http.ServeMux) *UnificationRulesService {
+	s := &UnificationRulesService{
 		unificationRulesHandler: handler.NewUnificationRulesHandler(),
+		mux:                     mux,
 	}
+
+	// Register routes using Go 1.22 ServeMux patterns on shared mux
+	s.mux.HandleFunc("POST /unification-rules", s.unificationRulesHandler.AddUnificationRule)
+	s.mux.HandleFunc("GET /unification-rules", s.unificationRulesHandler.GetUnificationRules)
+	s.mux.HandleFunc("GET /unification-rules/{ruleId}", s.unificationRulesHandler.GetUnificationRule)
+	s.mux.HandleFunc("PATCH /unification-rules/{ruleId}", s.unificationRulesHandler.PatchUnificationRule)
+	s.mux.HandleFunc("DELETE /unification-rules/{ruleId}", s.unificationRulesHandler.DeleteUnificationRule)
+
+	return s
 }
 
 // Route handles all tenant-aware unification rules endpoints
 func (s *UnificationRulesService) Route(w http.ResponseWriter, r *http.Request) {
-
-	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing "/" character
-	method := r.Method
-
-	switch {
-	case method == http.MethodPost && path == "/unification-rules":
-		s.unificationRulesHandler.AddUnificationRule(w, r)
-
-	case method == http.MethodGet && path == "/unification-rules":
-		s.unificationRulesHandler.GetUnificationRules(w, r)
-
-	case method == http.MethodGet && strings.HasPrefix(path, "/unification-rules/"):
-		s.unificationRulesHandler.GetUnificationRule(w, r)
-
-	case method == http.MethodPatch && strings.HasPrefix(path, "/unification-rules/"):
-		s.unificationRulesHandler.PatchUnificationRule(w, r)
-
-	case method == http.MethodDelete && strings.HasPrefix(path, "/unification-rules/"):
-		s.unificationRulesHandler.DeleteUnificationRule(w, r)
-
-	default:
-		http.NotFound(w, r)
+	if trimmed := strings.TrimSuffix(r.URL.Path, "/"); trimmed != "" {
+		r.URL.Path = trimmed
 	}
+	s.mux.ServeHTTP(w, r)
 }

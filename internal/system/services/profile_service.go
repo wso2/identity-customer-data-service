@@ -19,76 +19,47 @@
 package services
 
 import (
-	"github.com/wso2/identity-customer-data-service/internal/profile/handler"
 	"net/http"
 	"strings"
+
+	"github.com/wso2/identity-customer-data-service/internal/profile/handler"
 )
 
 type ProfileService struct {
 	profileHandler *handler.ProfileHandler
+	mux            *http.ServeMux
 }
 
-func NewProfileService() *ProfileService {
-	return &ProfileService{
+func NewProfileService(mux *http.ServeMux) *ProfileService {
+	ps := &ProfileService{
 		profileHandler: handler.NewProfileHandler(),
+		mux:            mux,
 	}
+
+	// Register routes using Go 1.22+ ServeMux patterns on the shared mux
+	ps.mux.HandleFunc("GET /profiles", ps.profileHandler.GetAllProfiles)
+	ps.mux.HandleFunc("POST /profiles", ps.profileHandler.InitProfile)
+	ps.mux.HandleFunc("GET /profiles/Me", ps.profileHandler.GetCurrentUserProfile)
+	ps.mux.HandleFunc("PATCH /profiles/Me", ps.profileHandler.PatchCurrentUserProfile)
+	ps.mux.HandleFunc("POST /profiles/sync", ps.profileHandler.SyncProfile)
+
+	// Routes with path variables
+	ps.mux.HandleFunc("GET /profiles/{profileId}", ps.profileHandler.GetProfile)
+	ps.mux.HandleFunc("PATCH /profiles/{profileId}", ps.profileHandler.PatchProfile)
+	ps.mux.HandleFunc("PUT /profiles/{profileId}", ps.profileHandler.UpdateProfile)
+	ps.mux.HandleFunc("DELETE /profiles/{profileId}", ps.profileHandler.DeleteProfile)
+	ps.mux.HandleFunc("GET /profiles/{profileId}/consents", ps.profileHandler.GetProfileConsents)
+	ps.mux.HandleFunc("PUT /profiles/{profileId}/consents", ps.profileHandler.UpdateProfileConsents)
+
+	return ps
 }
 
-// Route handles all tenant-aware profile-related endpoints
+// Route handles all tenant-aware profile-related endpoints by delegating to the shared mux
 func (s *ProfileService) Route(w http.ResponseWriter, r *http.Request) {
-
-	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing /
-	method := r.Method
-
-	switch {
-	case method == http.MethodGet && path == "/profiles":
-		s.profileHandler.GetAllProfiles(w, r)
-
-	case method == http.MethodPost && path == "/profiles":
-		s.profileHandler.InitProfile(w, r)
-
-	case method == http.MethodGet && path == "/profiles/Me":
-		s.profileHandler.GetCurrentUserProfile(w, r)
-
-	case method == http.MethodPatch && path == "/profiles/Me":
-		s.profileHandler.PatchCurrentUserProfile(w, r)
-
-	case method == http.MethodPost && path == "/profiles/sync":
-		s.profileHandler.SyncProfile(w, r)
-
-	case strings.HasPrefix(path, "/profiles/"):
-		// Split path to identify sub-resources
-		segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
-
-		// Expect: /profiles/{id}[/subresource]
-		if len(segments) >= 3 && segments[2] == "consents" {
-			// Consent-specific routing
-			switch method {
-			case http.MethodGet:
-				s.profileHandler.GetProfileConsents(w, r)
-			case http.MethodPut:
-				s.profileHandler.UpdateProfileConsents(w, r)
-			default:
-				http.Error(w, "Method Not Allowed for consents", http.StatusMethodNotAllowed)
-			}
-			return
-		}
-
-		// Default profile ID route
-		switch method {
-		case http.MethodGet:
-			s.profileHandler.GetProfile(w, r)
-		case http.MethodPatch:
-			s.profileHandler.PatchProfile(w, r)
-		case http.MethodPut:
-			s.profileHandler.UpdateProfile(w, r)
-		case http.MethodDelete:
-			s.profileHandler.DeleteProfile(w, r)
-		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-
-	default:
-		http.NotFound(w, r)
+	// Normalize trailing slashes to improve matching
+	if trimmed := strings.TrimSuffix(r.URL.Path, "/"); trimmed != "" {
+		r.URL.Path = trimmed
 	}
+	// Delegate to shared pattern-based mux
+	s.mux.ServeHTTP(w, r)
 }

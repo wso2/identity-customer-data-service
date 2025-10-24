@@ -22,12 +22,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors" // Standard Go errors package
+	"net/http"
+	"strings"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	customerrors "github.com/wso2/identity-customer-data-service/internal/system/errors" // Alias for the custom errors
 	error2 "github.com/wso2/identity-customer-data-service/internal/system/errors"       // Importing custom error types
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"net/http"
-	"strings"
 )
 
 // HandleError sends an HTTP error response based on the provided error
