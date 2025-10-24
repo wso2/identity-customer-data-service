@@ -19,80 +19,45 @@
 package services
 
 import (
-	"github.com/wso2/identity-customer-data-service/internal/profile_schema/handler"
 	"net/http"
 	"strings"
+
+	"github.com/wso2/identity-customer-data-service/internal/profile_schema/handler"
 )
 
 type ProfileSchemaService struct {
 	handler *handler.ProfileSchemaHandler
+	mux     *http.ServeMux
 }
 
-func NewProfileSchemaService() *ProfileSchemaService {
-	return &ProfileSchemaService{
+func NewProfileSchemaService(mux *http.ServeMux) *ProfileSchemaService {
+	s := &ProfileSchemaService{
 		handler: handler.NewProfileSchemaHandler(),
+		mux:     mux,
 	}
+
+	// Register routes using Go 1.22 ServeMux patterns on shared mux
+	s.mux.HandleFunc("GET /profile-schema", s.handler.GetProfileSchema)
+	s.mux.HandleFunc("DELETE /profile-schema", s.handler.DeleteProfileSchema)
+	s.mux.HandleFunc("POST /profile-schema/sync", s.handler.SyncProfileSchema)
+
+	// Scope-level
+	s.mux.HandleFunc("POST /profile-schema/{scope}", s.handler.AddProfileSchemaAttributesForScope)
+	s.mux.HandleFunc("GET /profile-schema/{scope}", s.handler.GetProfileSchemaAttributeForScope)
+	s.mux.HandleFunc("DELETE /profile-schema/{scope}", s.handler.DeleteProfileSchemaAttributeForScope)
+
+	// Attribute-level (preserve original verb mapping)
+	s.mux.HandleFunc("POST /profile-schema/{scope}/{attrID}", s.handler.GetProfileSchemaAttributeById)
+	s.mux.HandleFunc("GET /profile-schema/{scope}/{attrID}", s.handler.PatchProfileSchemaAttributeById)
+	s.mux.HandleFunc("DELETE /profile-schema/{scope}/{attrID}", s.handler.DeleteProfileSchemaAttributeById)
+
+	return s
 }
 
 // Route handles tenant-aware profile-schema endpoints
 func (s *ProfileSchemaService) Route(w http.ResponseWriter, r *http.Request) {
-
-	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing /
-	method := r.Method
-
-	// Handle collection-level operations
-	if path == "/profile-schema" {
-		switch method {
-		case http.MethodGet:
-			s.handler.GetProfileSchema(w, r)
-		case http.MethodDelete:
-			s.handler.DeleteProfileSchema(w, r)
-		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-		return
+	if trimmed := strings.TrimSuffix(r.URL.Path, "/"); trimmed != "" {
+		r.URL.Path = trimmed
 	}
-
-	// Handle /profile-schema/sync
-	if path == "/profile-schema/sync" {
-		if method == http.MethodPost {
-			s.handler.SyncProfileSchema(w, r)
-			return
-		}
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Handle /profile-schema/{scope} and /profile-schema/{scope}/{attrID}
-	trimmed := strings.TrimPrefix(path, "/profile-schema/")
-	parts := strings.Split(trimmed, "/")
-
-	switch len(parts) {
-	case 1:
-		scope := parts[0]
-		switch method {
-		case http.MethodPost:
-			s.handler.AddProfileSchemaAttributesForScope(w, r, scope)
-		case http.MethodGet:
-			s.handler.GetProfileSchemaAttributeForScope(w, r, scope)
-		case http.MethodDelete:
-			s.handler.DeleteProfileSchemaAttributeForScope(w, r, scope)
-		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-	case 2:
-		scope, attrID := parts[0], parts[1]
-		switch method {
-		case http.MethodGet:
-			s.handler.GetProfileSchemaAttributeById(w, r, scope, attrID)
-		case http.MethodPut:
-			s.handler.PatchProfileSchemaAttributeById(w, r, scope, attrID)
-		case http.MethodDelete:
-			s.handler.DeleteProfileSchemaAttributeById(w, r, scope, attrID)
-		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-	default:
-		http.NotFound(w, r)
-	}
+	s.mux.ServeHTTP(w, r)
 }

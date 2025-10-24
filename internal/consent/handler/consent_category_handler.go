@@ -26,7 +26,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
-	"strings"
 )
 
 type ConsentCategoryHandler struct{}
@@ -96,7 +95,7 @@ func (h *ConsentCategoryHandler) GetConsentCategory(w http.ResponseWriter, r *ht
 		return
 	}
 
-	categoryId := extractLastPathSegment(r.URL.Path)
+	categoryId := r.PathValue("categoryId")
 	if categoryId == "" {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.CONSENT_CAT_ID.Code,
@@ -127,7 +126,7 @@ func (h *ConsentCategoryHandler) UpdateConsentCategory(w http.ResponseWriter, r 
 		return
 	}
 
-	categoryId := extractLastPathSegment(r.URL.Path)
+	categoryId := r.PathValue("categoryId")
 	if categoryId == "" {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.CONSENT_CAT_ID.Code,
@@ -166,7 +165,7 @@ func (h *ConsentCategoryHandler) DeleteConsentCategory(w http.ResponseWriter, r 
 		utils.HandleError(w, err)
 		return
 	}
-	categoryId := extractLastPathSegment(r.URL.Path)
+	categoryId := r.PathValue("categoryId")
 	if categoryId == "" {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.CONSENT_CAT_ID.Code,
@@ -184,12 +183,4 @@ func (h *ConsentCategoryHandler) DeleteConsentCategory(w http.ResponseWriter, r 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func extractLastPathSegment(path string) string {
-	parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
-	if len(parts) == 0 {
-		return ""
-	}
-	return parts[len(parts)-1]
 }

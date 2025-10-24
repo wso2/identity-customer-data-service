@@ -19,11 +19,12 @@
 package managers
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/services"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
-	"net/http"
-	"strings"
 )
 
 type ServiceManagerInterface interface {
@@ -46,38 +47,24 @@ func (sm *ServiceManager) RegisterServices(apiBasePath string) error {
 
 	utils.RewriteToDefaultTenant(apiBasePath, sm.mux, constants.DefaultTenant)
 
-	// Initialize handlers
-	profileService := services.NewProfileService()
-	schemaService := services.NewProfileSchemaService()
-	unificationService := services.NewUnificationRulesService()
-	consentService := services.NewConsentCategoryService()
+	// Create a dedicated mux for tenant-scoped routes to avoid exposing them at the root
+	routesMux := http.NewServeMux()
+
+	// Initialize services with the shared tenant routes mux so they don't create their own mux
+	_ = services.NewProfileService(routesMux)
+	_ = services.NewProfileSchemaService(routesMux)
+	_ = services.NewUnificationRulesService(routesMux)
+	_ = services.NewConsentCategoryService(routesMux)
 
 	// Single tenant dispatcher for all services
 	utils.MountTenantDispatcher(sm.mux, apiBasePath, func(w http.ResponseWriter, r *http.Request) {
 		// Internal path after tenant and base path stripping
 		path := strings.TrimSuffix(r.URL.Path, "/")
-
-		// Dispatch to correct service based on path
-		switch {
-		case strings.HasPrefix(path, "/profiles"):
-			profileService.Route(w, r)
-		case strings.HasPrefix(path, "/profiles/"):
-			profileService.Route(w, r)
-		case strings.HasPrefix(path, "/profile-schema"):
-			schemaService.Route(w, r)
-		case strings.HasPrefix(path, "/profile-schema/"):
-			schemaService.Route(w, r)
-		case strings.HasPrefix(path, "/unification-rules"):
-			unificationService.Route(w, r)
-		case strings.HasPrefix(path, "/unification-rules/"):
-			unificationService.Route(w, r)
-		case strings.HasPrefix(path, "/consent-categories"):
-			consentService.Route(w, r)
-		case strings.HasPrefix(path, "/consent-categories/"):
-			consentService.Route(w, r)
-		default:
-			http.NotFound(w, r)
+		if path == "" {
+			path = "/"
 		}
+		// Delegate to the tenant routes mux; it will 404 for unknown paths
+		routesMux.ServeHTTP(w, r)
 	})
 	return nil
 }

@@ -19,47 +19,38 @@
 package services
 
 import (
-	"github.com/wso2/identity-customer-data-service/internal/consent/handler"
 	"net/http"
 	"strings"
+
+	"github.com/wso2/identity-customer-data-service/internal/consent/handler"
 )
 
 type ConsentCategoryService struct {
 	handler *handler.ConsentCategoryHandler
+	mux     *http.ServeMux
 }
 
-func NewConsentCategoryService() *ConsentCategoryService {
-	return &ConsentCategoryService{
+func NewConsentCategoryService(mux *http.ServeMux) *ConsentCategoryService {
+	s := &ConsentCategoryService{
 		handler: handler.NewConsentCategoryHandler(),
+		mux:     mux,
 	}
+
+	// Register routes with Go 1.22 ServeMux patterns on shared mux
+	s.mux.HandleFunc("GET /consent-categories", s.handler.GetAllConsentCategories)
+	s.mux.HandleFunc("POST /consent-categories", s.handler.AddConsentCategory)
+	s.mux.HandleFunc("GET /consent-categories/{categoryId}", s.handler.GetConsentCategory)
+	s.mux.HandleFunc("PUT /consent-categories/{categoryId}", s.handler.UpdateConsentCategory)
+	s.mux.HandleFunc("DELETE /consent-categories/{categoryId}", s.handler.DeleteConsentCategory)
+
+	return s
 }
 
 // Route handles tenant-aware routing for consent categories
 func (s *ConsentCategoryService) Route(w http.ResponseWriter, r *http.Request) {
-
-	path := strings.TrimSuffix(r.URL.Path, "/") // Just clean the trailing /
-	method := r.Method
-
-	switch {
-	case method == http.MethodGet && path == "/consent-categories":
-		s.handler.GetAllConsentCategories(w, r)
-
-	case method == http.MethodPost && path == "/consent-categories":
-		s.handler.AddConsentCategory(w, r)
-
-	case strings.HasPrefix(path, "/consent-categories/"):
-		switch method {
-		case http.MethodGet:
-			s.handler.GetConsentCategory(w, r)
-		case http.MethodPut:
-			s.handler.UpdateConsentCategory(w, r)
-		case http.MethodDelete:
-			s.handler.DeleteConsentCategory(w, r)
-		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-
-	default:
-		http.NotFound(w, r)
+	// Normalize trailing slashes for consistent matching
+	if trimmed := strings.TrimSuffix(r.URL.Path, "/"); trimmed != "" {
+		r.URL.Path = trimmed
 	}
+	s.mux.ServeHTTP(w, r)
 }

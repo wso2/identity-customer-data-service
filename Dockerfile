@@ -1,5 +1,12 @@
-# Use Golang base image
-FROM golang:1.21 AS build
+# Add a build-time argument for the base images so they can be overridden during docker build
+ARG GO_BASE=golang:1.24
+ARG RUNTIME_BASE=alpine:latest
+
+# Stage 1: Builder
+FROM ${GO_BASE} AS builder
+
+# Install zip for packaging
+RUN apt-get update && apt-get install -y zip && rm -rf /var/lib/apt/lists/*
 
 # Set environment variables
 ENV GO111MODULE=on \
@@ -7,32 +14,37 @@ ENV GO111MODULE=on \
     GOOS=linux \
     GOARCH=amd64
 
-# Create a working directory
+# Set working directory
 WORKDIR /app
 
-# Copy go.mod and go.sum first (for dependency caching)
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod tidy
-
-# Copy the rest of the project files
+# Copy everything
 COPY . .
 
-# Build the application
-RUN go build -o gin-server
+# Build using the Makefile (resolves version, directories, etc.)
+# Ensure Makefile exists and make build produces /app/target/.build/cds
+RUN test -f Makefile || (echo "ERROR: Makefile not found!" && exit 1) && \
+    make build && \
+    test -f target/.build/cds || (echo "ERROR: Build output target/.build/cds not found after make build!" && exit 1)
 
-# Use a minimal image for running the server
-FROM alpine:latest
+# Stage 2: Minimal runtime image
+FROM ${RUNTIME_BASE}
 
 # Set work directory
 WORKDIR /root/
 
-# Copy the built binary
-COPY --from=build /app/gin-server .
+# Copy built binary from the Makefile output
+COPY --from=builder /app/target/.build/cds .
 
-# Expose the port (Ensure it's the same as in Choreo configurations)
+# Copy configuration files
+COPY --from=builder /app/config ./config
+
+# Optionally copy configuration/repository if required at runtime
+COPY --from=builder /app/config/repository ./repository
+COPY --from=builder /app/dbscripts ./dbscripts
+COPY --from=builder /app/version.txt .
+
+# Expose the app port
 EXPOSE 8080
 
-# Run the binary
-CMD ["./gin-server"]
+# Start the service
+CMD ["./cds"]
