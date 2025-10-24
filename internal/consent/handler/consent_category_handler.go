@@ -69,6 +69,7 @@ func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *ht
 			Description: utils.HandleDecodeError(err, "consent category"),
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
+		return
 	}
 
 	orgId := utils.ExtractTenantIdFromPath(r)
@@ -134,6 +135,7 @@ func (h *ConsentCategoryHandler) UpdateConsentCategory(w http.ResponseWriter, r 
 			Description: fmt.Sprintf("Category Id is required to fetch the consent category"),
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
+		return
 	}
 
 	var category consentModel.ConsentCategory
@@ -144,6 +146,7 @@ func (h *ConsentCategoryHandler) UpdateConsentCategory(w http.ResponseWriter, r 
 			Description: utils.HandleDecodeError(err, "consent category"),
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
+		return
 	}
 
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()
@@ -173,6 +176,7 @@ func (h *ConsentCategoryHandler) DeleteConsentCategory(w http.ResponseWriter, r 
 			Description: fmt.Sprintf("Category Id is required to fetch the consent category"),
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
+		return
 	}
 
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()

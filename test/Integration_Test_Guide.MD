@@ -24,7 +24,6 @@ This guide explains how to run, manage, and report integration tests in the `ide
       ├── profile_schema_test.go
       ├── profile_test.go
       ├── unification_rules_test.go
-      ├── event_stream_id_test.go
       ├── setup/
       │    └── schema.sql
       └── utils/
@@ -68,18 +67,6 @@ make integration-test test=Test_ProfilesService
 
 | Test Suite             | Sub-Test Name             | Description                            | Status  |
 |------------------------|---------------------------|----------------------------------------|---------|
-| `Test_EnrichmentRule`  | Add_enrichment_rule       | Adds profile enrichment rules          | ✅ Pass |
-|                        | Update_enrichment_rule    | Updates an enrichment rule             | ✅ Pass |
-|                        | Delete_enrichment_rule    | Deletes the enrichment rule            | ✅ Pass |
-| `Test_EventStreamId`   | Create_event_stream_Id    | Creates a new event stream ID          | ✅ Pass |
-|                        | Fetch_event_stream_Id_by_app | Retrieves by app/org                   | ✅ Pass |
-|                        | Get_event_stream_Id_by_Id | Fetches by ID                          | ✅ Pass |
-|                        | Rotate_event_stream_Id    | Rotates the stream ID                  | ✅ Pass |
-|                        | Revoke_event_stream_Id    | Revokes the stream ID                  | ✅ Pass |
-| `Test_Events`          | Add_event                 | Ingests an event                       | ✅ Pass |
-|                        | Get_Profile               | Verifies profile linkage               | ✅ Pass |
-|                        | Get_event_by_ID           | Fetches event by ID                    | ✅ Pass |
-|                        | Get_events_with_filters   | Filters events                         | ✅ Pass |
 | `Test_Profiles`        | Create_profile_via_event  | Creates profile from event ingestion   | ✅ Pass |
 |                        | Fetch_created_profile     | Retrieves created profile              | ✅ Pass |
 |                        | Get_all_profiles          | Lists all profiles                     | ✅ Pass |
