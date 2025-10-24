@@ -153,7 +153,7 @@ func (cs *ConsentCategoryService) UpdateConsentCategory(category model.ConsentCa
 	return store.UpdateConsentCategory(category)
 }
 
-// DeleteConsentCategory updates an existing category.
+// DeleteConsentCategory deletes an existing category.
 func (cs *ConsentCategoryService) DeleteConsentCategory(categoryId string) error {
 	if categoryId == "" {
 		return errors2.NewClientError(errors2.ErrorMessage{

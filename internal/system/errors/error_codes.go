@@ -263,7 +263,7 @@ var (
 
 	CONSENT_CAT_ID = ErrorMessage{
 		Code:    errorPrefix + "10015",
-		Message: "Consent category Id found.",
+		Message: "Consent category Id is required.",
 	}
 
 	FORBIDDEN = ErrorMessage{
