@@ -41,8 +41,8 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 		errorMsg := fmt.Sprintf("Error occurred while initializing DB client for adding profile schema attributes")
 		logger.Debug(errorMsg, log.Error(err))
 		return errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.ADD_PROFILE_SCHEMA.Code,
+			Message:     errors.ADD_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -63,8 +63,8 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 			errorMsg := fmt.Sprintf("Failed to marshal sub attributes for attribute %s", attr.AttributeId)
 			logger.Debug(errorMsg, log.Error(err))
 			return errors.NewServerError(errors.ErrorMessage{
-				Code:        errors.MARSHAL_JSON.Code,
-				Message:     errors.MARSHAL_JSON.Message,
+				Code:        errors.ADD_PROFILE_SCHEMA.Code,
+				Message:     errors.ADD_PROFILE_SCHEMA.Message,
 				Description: errorMsg,
 			}, err)
 		}
@@ -72,8 +72,8 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 
 		if err != nil {
 			return errors.NewServerError(errors.ErrorMessage{
-				Code:        errors.MARSHAL_JSON.Code,
-				Message:     errors.MARSHAL_JSON.Message,
+				Code:        errors.ADD_PROFILE_SCHEMA.Code,
+				Message:     errors.ADD_PROFILE_SCHEMA.Message,
 				Description: fmt.Sprintf("Failed to marshal canonical values for attribute %s", attr.AttributeId),
 			}, err)
 		}
@@ -112,8 +112,8 @@ func GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSche
 			orgId, attributeId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return model.ProfileSchemaAttribute{}, serverError
@@ -154,8 +154,8 @@ func GetProfileSchemaAttributesByScope(orgId, scope string) ([]model.ProfileSche
 		errorMsg := fmt.Sprintf("Error initializing DB client for org: %s and scope: %s", orgId, scope)
 		logger.Debug(errorMsg, log.Error(err))
 		return nil, errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -197,8 +197,8 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 		errorMsg := fmt.Sprintf("Failed to get database client for fetching schema attribute: %s", attributeName)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -213,8 +213,8 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 			orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.EXECUTE_QUERY.Code,
-			Message:     errors.EXECUTE_QUERY.Message,
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -233,8 +233,8 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 				attributeName, orgId)
 			logger.Debug(errorMsg, log.Error(err))
 			serverError := errors.NewServerError(errors.ErrorMessage{
-				Code:        errors.UNMARSHAL_JSON.Code,
-				Message:     errors.UNMARSHAL_JSON.Message,
+				Code:        errors.GET_PROFILE_SCHEMA.Code,
+				Message:     errors.GET_PROFILE_SCHEMA.Message,
 				Description: errorMsg,
 			}, err)
 			return nil, serverError
@@ -248,8 +248,8 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 				attributeName, orgId)
 			logger.Debug(errorMsg, log.Error(err))
 			serverError := errors.NewServerError(errors.ErrorMessage{
-				Code:        errors.UNMARSHAL_JSON.Code,
-				Message:     errors.UNMARSHAL_JSON.Message,
+				Code:        errors.GET_PROFILE_SCHEMA.Code,
+				Message:     errors.GET_PROFILE_SCHEMA.Message,
 				Description: errorMsg,
 			}, err)
 			return nil, serverError
@@ -282,8 +282,8 @@ func GetProfileSchemaAttributesForOrg(orgId string) ([]model.ProfileSchemaAttrib
 		errorMsg := fmt.Sprintf("Error occurred while fetching profile schema for org: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -297,8 +297,8 @@ func GetProfileSchemaAttributesForOrg(orgId string) ([]model.ProfileSchemaAttrib
 		errorMsg := fmt.Sprintf("Error occurred while fetching profile schema for org: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.EXECUTE_QUERY.Code,
-			Message:     errors.EXECUTE_QUERY.Message,
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -321,8 +321,8 @@ func PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[stri
 		errorMsg := fmt.Sprintf("Error occurred while patching profile schema for org: %s and attribute: %s", orgId, attributeId)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -338,7 +338,13 @@ func PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[stri
 			// Marshal slices/maps to JSON
 			jsonBytes, err := json.Marshal(v)
 			if err != nil {
-				return fmt.Errorf("failed to marshal %s to JSON: %w", key, err)
+				errorMsg := fmt.Sprintf("Error marshalling value for key '%s' in profile schema update for org: %s", key, orgId)
+				logger.Debug(errorMsg, log.Error(err))
+				return errors.NewServerError(errors.ErrorMessage{
+					Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+					Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
+					Description: errorMsg,
+				}, err)
 			}
 			setClauses = append(setClauses, fmt.Sprintf("%s = $%d", key, argIndex))
 			args = append(args, string(jsonBytes))
@@ -365,8 +371,8 @@ func PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[stri
 		errorMsg := fmt.Sprintf("Error occurred while executing update for org: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.EXECUTE_QUERY.Code,
-			Message:     errors.EXECUTE_QUERY.Message,
+			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -383,8 +389,8 @@ func DeleteProfileSchemaAttributeById(orgId, attributeId string) error {
 		errorMsg := fmt.Sprintf("Error occurred while deleting profile schema for org: %s and attribute: %s", orgId, attributeId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.DELETE_PROFILE_SCHEMA.Code,
+			Message:     errors.DELETE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -397,8 +403,8 @@ func DeleteProfileSchemaAttributeById(orgId, attributeId string) error {
 		errorMsg := fmt.Sprintf("Error occurred while deleting profile schema attribute with id: %s", attributeId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.EXECUTE_QUERY.Code,
-			Message:     errors.EXECUTE_QUERY.Message,
+			Code:        errors.DELETE_PROFILE_SCHEMA.Code,
+			Message:     errors.DELETE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -416,8 +422,8 @@ func DeleteProfileSchemaAttributes(orgId, scope string) error {
 		errorMsg := fmt.Sprintf("Error occurred while deleting profile schema for org: %s and attribute: %s", orgId, scope)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.DELETE_PROFILE_SCHEMA.Code,
+			Message:     errors.DELETE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -430,8 +436,8 @@ func DeleteProfileSchemaAttributes(orgId, scope string) error {
 		errorMsg := fmt.Sprintf("Error occurred while deleting profile schema attribute with scope: %s", scope)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.EXECUTE_QUERY.Code,
-			Message:     errors.EXECUTE_QUERY.Message,
+			Code:        errors.DELETE_PROFILE_SCHEMA.Code,
+			Message:     errors.DELETE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -448,8 +454,8 @@ func PatchProfileSchemaAttributesForScope(orgId string, scope string, updates []
 		errorMsg := fmt.Sprintf("Error initializing DB client for org: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -460,8 +466,8 @@ func PatchProfileSchemaAttributesForScope(orgId string, scope string, updates []
 		errorMsg := fmt.Sprintf("Failed to begin transaction for update of profile schema attributes for organization: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_BEGN_TRANSACTION.Code,
-			Message:     errors.DB_BEGN_TRANSACTION.Message,
+			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -474,8 +480,8 @@ func PatchProfileSchemaAttributesForScope(orgId string, scope string, updates []
 			errorMsg := fmt.Sprintf("Failed to marshal sub attributes for attribute %s", attr.AttributeId)
 			logger.Debug(errorMsg, log.Error(err))
 			return errors.NewServerError(errors.ErrorMessage{
-				Code:        errors.MARSHAL_JSON.Code,
-				Message:     errors.MARSHAL_JSON.Message,
+				Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+				Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 				Description: errorMsg,
 			}, err)
 		}
@@ -485,8 +491,8 @@ func PatchProfileSchemaAttributesForScope(orgId string, scope string, updates []
 			errorMsg := fmt.Sprintf("Failed to marshal canonical values for attribute %s", attr.AttributeId)
 			logger.Debug(errorMsg, log.Error(err))
 			return errors.NewServerError(errors.ErrorMessage{
-				Code:        errors.MARSHAL_JSON.Code,
-				Message:     errors.MARSHAL_JSON.Message,
+				Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+				Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 				Description: errorMsg,
 			}, err)
 		}
@@ -509,8 +515,8 @@ func PatchProfileSchemaAttributesForScope(orgId string, scope string, updates []
 			errorMsg := fmt.Sprintf("Failed to update attribute %s for organization %s", attr.AttributeId, orgId)
 			logger.Debug(errorMsg, log.Error(err))
 			return errors.NewServerError(errors.ErrorMessage{
-				Code:        errors.EXECUTE_QUERY.Code,
-				Message:     errors.EXECUTE_QUERY.Message,
+				Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+				Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 				Description: errorMsg,
 			}, err)
 		}
@@ -520,8 +526,8 @@ func PatchProfileSchemaAttributesForScope(orgId string, scope string, updates []
 		errorMsg := fmt.Sprintf("Failed to commit transaction for updating profile schema attributes for organization: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_COMMIT_TRANSACTION.Code,
-			Message:     errors.DB_COMMIT_TRANSACTION.Message,
+			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -539,8 +545,8 @@ func DeleteProfileSchema(orgId string) error {
 		errorMsg := fmt.Sprintf("Error occurred while deleting all of profile schema attributes for org: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.DELETE_PROFILE_SCHEMA.Code,
+			Message:     errors.DELETE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -553,8 +559,8 @@ func DeleteProfileSchema(orgId string) error {
 		errorMsg := fmt.Sprintf("Error occurred while deleting all of profile schema attributes for org: %s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.EXECUTE_QUERY.Code,
-			Message:     errors.EXECUTE_QUERY.Message,
+			Code:        errors.DELETE_PROFILE_SCHEMA.Code,
+			Message:     errors.DELETE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -601,8 +607,8 @@ func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute
 		errorMsg := fmt.Sprintf("Error initializing DB client for organization: %s ", orgID)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -685,8 +691,8 @@ func GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []s
 		errorMsg := fmt.Sprintf("Error occurred while initializing DB client for filtering profile schema attributes for org: %s and scope: %s", orgId, scope)
 		logger.Debug(errorMsg, log.Error(err))
 		return nil, errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.DB_CLIENT_INIT.Code,
-			Message:     errors.DB_CLIENT_INIT.Message,
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -731,8 +737,8 @@ func GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []s
 		errorMsg := fmt.Sprintf("Failed to execute profile schema filter query for org: %s and scope: %s", orgId, scope)
 		logger.Debug(errorMsg, log.Error(err))
 		return nil, errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.EXECUTE_QUERY.Code,
-			Message:     errors.EXECUTE_QUERY.Message,
+			Code:        errors.GET_PROFILE_SCHEMA.Code,
+			Message:     errors.GET_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}

@@ -534,7 +534,14 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 	var schema model.ProfileSchema
 	schemaBytes, _ := json.Marshal(rawSchema) // serialize
 	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
-		return nil, fmt.Errorf("invalid schema format: %w", err)
+		errMsg := fmt.Sprintf("Invalid schema format for profile: %s while validating for profile update.", profile.ProfileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, err)
+		return nil, serverError
 	}
 
 	err = ValidateProfileAgainstSchema(updatedProfile, *profile, schema, true)
@@ -1179,8 +1186,7 @@ func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
 	profiles, err := profileStore.GetAllProfilesWithFilter(tenantId, []string{filter})
 	logger := log.GetLogger()
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Error fetching profile by user_id:%s ", sub), log.Error(err))
-		return nil, fmt.Errorf("failed to query profiles: %w", err)
+		return nil, err
 	}
 
 	if len(profiles) == 0 {
@@ -1251,10 +1257,8 @@ func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
 func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfileWithUserId(userId)
-	logger := log.GetLogger()
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Error fetching profile by user_id:%s ", userId), log.Error(err))
-		return nil, fmt.Errorf("failed to query profiles: %w", err)
+		return nil, err
 	}
 	if profile == nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -1268,15 +1272,7 @@ func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.Pro
 	alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
 
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error fetching references for profile: %s", profile.ProfileId)
-		logger := log.GetLogger()
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_PROFILE.Code,
-			Message:     errors2.GET_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return nil, serverError
+		return nil, err
 	}
 	if len(alias) == 0 {
 		alias = nil
@@ -1294,7 +1290,6 @@ func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.Pro
 		},
 		MergedFrom: alias,
 	}
-
 	return profileResponse, nil
 }
 
@@ -1302,10 +1297,13 @@ func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.Pro
 func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
 
 	existingProfile, err := profileStore.GetProfile(profileId)
-	if err != nil || existingProfile == nil {
+	if err != nil {
+		return nil, err
+	}
+	if existingProfile == nil {
 		return nil, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_NOT_FOUND.Code,
-			Message:     "Profile not found",
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
 			Description: fmt.Sprintf("Profile %s not found", profileId),
 		}, http.StatusNotFound)
 	}
@@ -1351,7 +1349,15 @@ func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]inter
 	mergedBytes, _ := json.Marshal(merged)
 	var updatedProfileReq profileModel.ProfileRequest
 	if err := json.Unmarshal(mergedBytes, &updatedProfileReq); err != nil {
-		return nil, fmt.Errorf("invalid patch structure: %w", err)
+		logger := log.GetLogger()
+		errMsg := fmt.Sprintf("Error unmarshalling merged profile data for profile_id: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, err)
+		return nil, serverError
 	}
 
 	// Reuse the PUT logic to update the profile

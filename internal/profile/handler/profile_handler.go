@@ -21,6 +21,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -57,7 +58,12 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 
 	profileId := r.PathValue("profileId")
 	if profileId == "" {
-		http.Error(w, "Invalid path", http.StatusNotFound)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: "Invalid path for profile retrieval",
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
 		return
 	}
 	profilesProvider := provider.NewProfilesProvider()
@@ -124,7 +130,12 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 
 	// If still not resolved, unauthorized
 	if profileId == "" {
-		http.Error(w, "Unauthorized: no valid authentication method found", http.StatusUnauthorized)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: "Unauthorized: no valid authentication method found",
+		}, http.StatusUnauthorized)
+		utils.HandleError(w, clientError)
 		return
 	}
 
@@ -139,8 +150,14 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 	// Return profile JSON
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(profile); err != nil {
-		logger.Error(fmt.Sprintf("Failed to encode profile for profileId %s", profileId))
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: "Failed to encode profile response for profileId: " + profileId,
+		}, err)
+		utils.HandleError(w, serverError)
 	}
 }
 
@@ -154,7 +171,12 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 	}
 	profileId := r.PathValue("profileId")
 	if profileId == "" {
-		http.Error(w, "Invalid path", http.StatusNotFound)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE.Code,
+			Message:     errors2.DELETE_PROFILE.Message,
+			Description: "Invalid path for profile deletion",
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
 		return
 	}
 	profilesProvider := provider.NewProfilesProvider()
@@ -345,6 +367,16 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&profile)
 
+	if err != nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ADD_PROFILE.Code,
+			Message:     errors2.ADD_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
 	// Check if a valid cookie exists
 	profileCookie, err := r.Cookie(constants.ProfileCookie)
 	if err == nil && profileCookie.Value != "" {
@@ -457,7 +489,12 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	var profile model.ProfileRequest
 	err = json.NewDecoder(request.Body).Decode(&profile)
 	if err != nil {
-		http.Error(writer, "Invalid request body", http.StatusBadRequest)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(writer, clientError)
 		return
 	}
 
@@ -491,8 +528,12 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 
 	var patchData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 	}
 
 	profilesProvider := provider.NewProfilesProvider()
@@ -561,21 +602,30 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 
 	// If still no profileId, reject
 	if profileId == "" {
-		http.Error(w, "Unauthorized: no valid auth method found", http.StatusUnauthorized)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: "Invalid authentication method. No valid profileId found.",
+		}, http.StatusUnauthorized)
+		utils.HandleError(w, clientError)
 		return
 	}
 
 	// Parse patch payload
 	var patchData map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&patchData); err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
 	// Apply patch
 	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to patch profile ID %s", profileId))
 		utils.HandleError(w, err)
 		return
 	}
@@ -584,8 +634,14 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(updatedProfile); err != nil {
-		logger.Error(fmt.Sprintf("Failed to encode response for profile ID %s", profileId))
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, err)
+		utils.HandleError(w, serverError)
 	}
 }
 
@@ -600,7 +656,12 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	var profileSync model.ProfileSync
 	err = json.NewDecoder(request.Body).Decode(&profileSync)
 	if err != nil {
-		http.Error(writer, "Invalid request body", http.StatusBadRequest)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile"),
+		}, http.StatusBadRequest)
+		utils.HandleError(writer, clientError)
 		return
 	}
 
@@ -614,7 +675,13 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if tenantId == "" {
 		//tenantId = utils.ExtractTenantIdFromPath(request)
 		//todo: should we expect tenant id in the path or as body param
-		utils.HandleError(writer, fmt.Errorf("Tenant id cannot be empty: %w", err))
+		errMsg := fmt.Sprintf("Tenant id cannot be empty in profile sync event: %s", profileSync.Event)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, http.StatusBadRequest)
+		utils.HandleError(writer, clientError)
 		return
 	}
 
@@ -646,7 +713,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				// Save updated profile
 				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
 				if err != nil {
-					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					utils.HandleError(writer, err)
 					return
 				}
 				return
@@ -668,7 +735,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 				_, err := profilesService.CreateProfile(profileRequest, tenantId)
 				if err != nil {
-					utils.HandleError(writer, fmt.Errorf("failed to create profile: %w", err))
+					utils.HandleError(writer, err)
 					return
 				}
 			}
@@ -678,8 +745,9 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		// if needed can ensure if profile got created
 	}
 
+	logger := log.GetLogger()
 	if profileSync.Event == "AUTHENTICATION_SUCCESS" {
-		log.GetLogger().Info("Authentication success event received for user: " + profileSync.UserId)
+		logger.Info("Authentication success event received for user: " + profileSync.UserId)
 		if profileSync.ProfileId != "" && profileSync.UserId != "" {
 			// This scenario is when the user logs in with a profileId existing.
 			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
@@ -701,7 +769,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				// Save updated profile
 				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
 				if err != nil {
-					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					utils.HandleError(writer, err)
 					return
 				}
 				return
@@ -713,12 +781,12 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if profileSync.Event == "POST_DELETE_USER_WITH_ID" {
 		existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 		if existingProfile == nil {
-			utils.HandleError(writer, fmt.Errorf("profile not found for user: %s", profileSync.UserId))
+			logger.Debug("No profile found for user: " + profileSync.UserId)
 			return
 		}
 		err := profilesService.DeleteProfile(existingProfile.ProfileId)
 		if err != nil {
-			utils.HandleError(writer, fmt.Errorf("failed to delete profile: %w", err))
+			utils.HandleError(writer, err)
 			return
 		}
 		return
@@ -771,7 +839,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				// Save updated profile
 				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
 				if err != nil {
-					utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+					utils.HandleError(writer, err)
 					return
 				}
 			}
@@ -797,7 +865,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			// Save updated profile
 			_, err = profilesService.UpdateProfile(profileId, profileRequest)
 			if err != nil {
-				utils.HandleError(writer, fmt.Errorf("failed to update profile: %w", err))
+				utils.HandleError(writer, err)
 				return
 			}
 		}
@@ -812,7 +880,12 @@ func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Requ
 
 	profileId := r.PathValue("profileId")
 	if profileId == "" {
-		http.Error(w, "Invalid path", http.StatusNotFound)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE_CONSENT.Code,
+			Message:     errors2.GET_PROFILE_CONSENT.Message,
+			Description: "Invalid path for profile consents retrieval",
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
 		return
 	}
 

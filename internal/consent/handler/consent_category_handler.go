@@ -20,8 +20,10 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	consentModel "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/consent/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 )
@@ -35,6 +37,11 @@ func NewConsentCategoryHandler() *ConsentCategoryHandler {
 // GetAllConsentCategories handles GET /consent-categories
 func (h *ConsentCategoryHandler) GetAllConsentCategories(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "consent_category:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()
 	categories, err := service.GetAllConsentCategories()
 	if err != nil {
@@ -48,9 +55,20 @@ func (h *ConsentCategoryHandler) GetAllConsentCategories(w http.ResponseWriter, 
 // AddConsentCategory handles POST /consent-categories
 func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "consent_category:create")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	var category consentModel.ConsentCategory
 	if err := json.NewDecoder(r.Body).Decode(&category); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.ADD_CONSENT_CATEGORY_BAD_REQUEST.Code,
+			Message:     errors.ADD_CONSENT_CATEGORY_BAD_REQUEST.Message,
+			Description: utils.HandleDecodeError(err, "consent category"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
@@ -72,9 +90,20 @@ func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *ht
 // GetConsentCategory handles GET /consent-categories/{id}
 func (h *ConsentCategoryHandler) GetConsentCategory(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "consent_category:view")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	categoryId := r.PathValue("categoryId")
 	if categoryId == "" {
-		http.Error(w, "Category ID is required", http.StatusBadRequest)
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.CONSENT_CAT_ID.Code,
+			Message:     errors.CONSENT_CAT_ID.Message,
+			Description: fmt.Sprintf("Category Id is required to fetch the consent category"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
@@ -92,15 +121,31 @@ func (h *ConsentCategoryHandler) GetConsentCategory(w http.ResponseWriter, r *ht
 // UpdateConsentCategory handles PUT /consent-categories/{id}
 func (h *ConsentCategoryHandler) UpdateConsentCategory(w http.ResponseWriter, r *http.Request) {
 
+	err := utils.AuthnAndAuthz(r, "consent_category:update")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	categoryId := r.PathValue("categoryId")
 	if categoryId == "" {
-		http.Error(w, "Category ID is required", http.StatusBadRequest)
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.CONSENT_CAT_ID.Code,
+			Message:     errors.CONSENT_CAT_ID.Message,
+			Description: fmt.Sprintf("Category Id is required to fetch the consent category"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
 	var category consentModel.ConsentCategory
 	if err := json.NewDecoder(r.Body).Decode(&category); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.UPDATE_CONSENT_CATEGORY_BAD_REQUEST.Code,
+			Message:     errors.UPDATE_CONSENT_CATEGORY_BAD_REQUEST.Message,
+			Description: utils.HandleDecodeError(err, "consent category"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
@@ -118,15 +163,19 @@ func (h *ConsentCategoryHandler) UpdateConsentCategory(w http.ResponseWriter, r 
 // DeleteConsentCategory handles Delete /consent-categories/{id}
 func (h *ConsentCategoryHandler) DeleteConsentCategory(w http.ResponseWriter, r *http.Request) {
 
-	categoryId := r.PathValue("categoryId")
-	if categoryId == "" {
-		http.Error(w, "Category ID is required", http.StatusBadRequest)
+	err := utils.AuthnAndAuthz(r, "consent_category:delete")
+	if err != nil {
+		utils.HandleError(w, err)
 		return
 	}
-
-	var category consentModel.ConsentCategory
-	if err := json.NewDecoder(r.Body).Decode(&category); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	categoryId := r.PathValue("categoryId")
+	if categoryId == "" {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.CONSENT_CAT_ID.Code,
+			Message:     errors.CONSENT_CAT_ID.Message,
+			Description: fmt.Sprintf("Category Id is required to fetch the consent category"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 

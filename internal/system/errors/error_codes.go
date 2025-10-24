@@ -23,46 +23,6 @@ const errorPrefix = "CDS-"
 var (
 	// Server error codes
 
-	ADD_ENRICHMENT_RULE = ErrorMessage{
-		Code:    errorPrefix + "15001",
-		Message: "Error while adding enrichment rules.",
-	}
-
-	ADD_EVENT_STREAM_ID = ErrorMessage{
-		Code:    errorPrefix + "15002",
-		Message: "Error while adding event stream id.",
-	}
-
-	GET_EVENT_STREAM_ID = ErrorMessage{
-		Code:    errorPrefix + "15003",
-		Message: "Error while fetching event stream id.",
-	}
-
-	UPDATE_EVENT_STREAM_ID = ErrorMessage{
-		Code:    errorPrefix + "15004",
-		Message: "Error while fetching event stream id.",
-	}
-
-	UPDATE_ENRICHMENT_RULES = ErrorMessage{
-		Code:    errorPrefix + "15005",
-		Message: "Error while updating enrichment rules.",
-	}
-
-	FETCH_ENRICHMENT_RULES = ErrorMessage{
-		Code:    errorPrefix + "15006",
-		Message: "Error while fetching enrichment rule(s).",
-	}
-
-	DELETE_ENRICHMENT_RULES = ErrorMessage{
-		Code:    errorPrefix + "15007",
-		Message: "Error while deleting enrichment rule.",
-	}
-
-	FILTER_ENRICHMENT_RULES = ErrorMessage{
-		Code:    errorPrefix + "15008",
-		Message: "Error while filtering enrichment rules.",
-	}
-
 	ADD_UNIFICATION_RULE = ErrorMessage{
 		Code:    errorPrefix + "15009",
 		Message: "Error while adding unification rules.",
@@ -78,48 +38,9 @@ var (
 		Message: "Error while updating unification rules.",
 	}
 
-	LOCK_ACQUIRE = ErrorMessage{
-		Code:    errorPrefix + "15012",
-		Message: "Advisory lock acquisition failed",
-	}
-
-	DB_CLIENT_INIT = ErrorMessage{
-		Code:    errorPrefix + "15013",
-		Message: "Unable to initialize database client.",
-	}
-
-	DB_BEGN_TRANSACTION = ErrorMessage{
-		Code:    errorPrefix + "15013",
-		Message: "Error while beginning transaction.",
-	}
-
-	DB_COMMIT_TRANSACTION = ErrorMessage{
-		Code:    errorPrefix + "15013",
-		Message: "Error while commiting transaction.",
-	}
-
-	LOCK_RELEASE = ErrorMessage{
-		Code:    errorPrefix + "15014",
-		Message: "Error while releasing the lock.",
-	}
-
-	LOCK_KEY_GEN = ErrorMessage{
-		Code:    errorPrefix + "15015",
-		Message: "Error generating advisory lock key",
-	}
-
-	LOCK_RESULT_INVALID = ErrorMessage{
-		Code:    errorPrefix + "15016",
-		Message: "Invalid response from advisory lock query.",
-	}
-
-	MARSHAL_JSON = ErrorMessage{
-		Code:    errorPrefix + "15017",
-		Message: "Error while marshalling JSON.",
-	}
-	UNMARSHAL_JSON = ErrorMessage{
-		Code:    errorPrefix + "15018",
-		Message: "Error while un-marshalling JSON.",
+	DELETE_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15011",
+		Message: "Error while deleting unification rule(s).",
 	}
 
 	INVALID_TYPE = ErrorMessage{
@@ -130,6 +51,16 @@ var (
 	ADD_CONSENT_CATEGORY = ErrorMessage{
 		Code:    errorPrefix + "15019",
 		Message: "Adding consent category failed.",
+	}
+
+	ADD_CONSENT_CATEGORY_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Invalid request payload for adding consent category.",
+	}
+
+	UPDATE_CONSENT_CATEGORY_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "15019",
+		Message: "Invalid request payload for updating consent category.",
 	}
 
 	FETCH_CONSENT_CATEGORIES = ErrorMessage{
@@ -162,19 +93,19 @@ var (
 		Message: "Error while fetching profile schema.",
 	}
 
+	UPDATE_PROFILE_SCHEMA = ErrorMessage{
+		Code:    errorPrefix + "15025",
+		Message: "Error while updating profile schema.",
+	}
+
 	DELETE_PROFILE_SCHEMA = ErrorMessage{
 		Code:    errorPrefix + "15025",
-		Message: "Error while deleting profile schema attribute.",
+		Message: "Error while deleting profile schema attribute(s).",
 	}
 
 	SYNC_PROFILE_SCHEMA = ErrorMessage{
 		Code:    errorPrefix + "15025",
 		Message: "Error while syncing identity attributes of profile schema.",
-	}
-
-	EXECUTE_QUERY = ErrorMessage{
-		Code:    errorPrefix + "15026",
-		Message: "Error while executing query.",
 	}
 
 	GET_CONFIG = ErrorMessage{
@@ -233,6 +164,11 @@ var (
 	GET_PROFILE = ErrorMessage{
 		Code:    errorPrefix + "11014",
 		Message: "Fetching profile(s) failed.",
+	}
+
+	GET_PROFILE_CONSENT = ErrorMessage{
+		Code:    errorPrefix + "11014",
+		Message: "Fetching profile consent failed.",
 	}
 
 	CREATE_PROFILE_COOKIE = ErrorMessage{
@@ -325,6 +261,11 @@ var (
 		Message: "Consent category not found.",
 	}
 
+	CONSENT_CAT_ID = ErrorMessage{
+		Code:    errorPrefix + "10015",
+		Message: "Consent category Id is required.",
+	}
+
 	FORBIDDEN = ErrorMessage{
 		Code:        errorPrefix + "11025",
 		Message:     "ForBidden",
@@ -394,5 +335,10 @@ var (
 	UNIFICATION_RULE_PRIORITY_EXISTS = ErrorMessage{
 		Code:    errorPrefix + "12204",
 		Message: "Unification priority already taken.",
+	}
+
+	INVALID_FILTER_FORMAT = ErrorMessage{
+		Code:    errorPrefix + "13001",
+		Message: "Invalid filter format.",
 	}
 )
