@@ -21,6 +21,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
@@ -30,23 +36,18 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/schedulers"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"net"
-	"net/http"
-	"os"
-	"path/filepath"
-	"time"
 )
 
 func initDatabaseFromConfig(config *config.Config) {
 
 	logger := log.GetLogger()
-	host := config.DatabaseConfig.Host
-	port := config.DatabaseConfig.Port
-	user := config.DatabaseConfig.User
-	password := config.DatabaseConfig.Password
-	dbname := config.DatabaseConfig.DbName
+	host := config.DataSource.Hostname
+	port := config.DataSource.Port
+	user := config.DataSource.Username
+	password := config.DataSource.Password
+	dbname := config.DataSource.Name
 
-	if host == "" || port == "" || user == "" || password == "" || dbname == "" {
+	if host == "" || user == "" || password == "" || dbname == "" {
 		logger.Error("One or more Database configuration values are missing.")
 	}
 
