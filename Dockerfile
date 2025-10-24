@@ -1,5 +1,9 @@
+# Add a build-time argument for the base images so they can be overridden during docker build
+ARG GO_BASE=golang:1.24
+ARG RUNTIME_BASE=alpine:latest
+
 # Stage 1: Builder
-FROM golang:1.24 AS builder
+FROM ${GO_BASE} AS builder
 
 # Install zip for packaging
 RUN apt-get update && apt-get install -y zip && rm -rf /var/lib/apt/lists/*
@@ -23,7 +27,7 @@ RUN test -f Makefile || (echo "ERROR: Makefile not found!" && exit 1) && \
     test -f target/.build/cds || (echo "ERROR: Build output target/.build/cds not found after make build!" && exit 1)
 
 # Stage 2: Minimal runtime image
-FROM alpine:latest
+FROM ${RUNTIME_BASE}
 
 # Set work directory
 WORKDIR /root/
