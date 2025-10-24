@@ -94,7 +94,7 @@ func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError
 	_ = json.NewEncoder(w).Encode("Invalid erquest format")
 }
 
-// Rewrite `/api/v1/...` to `/t/carbon.super/api/v1/...`
+// RewriteToDefaultTenant Rewrite `/api/v1/...` to `/t/carbon.super/api/v1/...`
 func RewriteToDefaultTenant(apiBasePath string, mux *http.ServeMux, defaultTenant string) {
 	mux.HandleFunc(apiBasePath+"/", func(w http.ResponseWriter, r *http.Request) {
 		newPath := "/t/" + defaultTenant + r.URL.Path

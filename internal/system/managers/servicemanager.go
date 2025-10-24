@@ -47,6 +47,9 @@ func (sm *ServiceManager) RegisterServices(apiBasePath string) error {
 
 	utils.RewriteToDefaultTenant(apiBasePath, sm.mux, constants.DefaultTenant)
 
+	// Register non-tenant-scoped endpoints (e.g., health) on the root mux
+	_ = services.NewHealthService(sm.mux)
+
 	// Create a dedicated mux for tenant-scoped routes to avoid exposing them at the root
 	routesMux := http.NewServeMux()
 
