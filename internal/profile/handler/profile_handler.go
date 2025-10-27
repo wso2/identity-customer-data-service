@@ -508,6 +508,7 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	}
 
 	writer.WriteHeader(http.StatusOK)
+	//todo: should we not return the updated profile?
 	_, _ = writer.Write([]byte(`{"status": "updated"}`))
 }
 
@@ -546,7 +547,9 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(updatedProfile)
+	//todo: should we not return the updated profile?
+	err = json.NewEncoder(w).Encode(updatedProfile)
+	return
 }
 
 // PatchCurrentUserProfile handles partial updates to the current user's profile

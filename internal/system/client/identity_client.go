@@ -67,22 +67,27 @@ func (c *IdentityClient) fetchClientCredentialsToken(orgId string) (string, erro
 
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
-	form.Set("scope", "internal_application_mgt_view internal_claim_meta_view internal_user_mgt_list internal_user_mgt_view internal_claim_meta_view") // Optional: set required scopes
+	form.Set("scope", "internal_application_mgt_view internal_claim_meta_view internal_user_mgt_list internal_user_mgt_view internal_claim_meta_view")
 
 	authConfig := config.GetCDSRuntime().Config.AuthServer
 	tokenEndpoint := "https://" + c.BaseURL + "/t/" + orgId + authConfig.TokenEndpoint
-	log.GetLogger().Info("Fetching token from endpoint: " + tokenEndpoint)
+	logger := log.GetLogger()
 
 	req, err := http.NewRequest("POST", tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		errorMsg := "Failed to create token request"
+		logger.Debug(errorMsg, log.Error(err))
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        "TOKEN_FETCH_FAILED",
+			Message:     "Unable to get access token",
+			Description: errorMsg,
+		}, err)
 	}
 
 	req.SetBasicAuth(authConfig.ClientID, authConfig.ClientSecret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.HTTPClient.Do(req)
-	logger := log.GetLogger()
 	if err != nil {
 		errorMsg := "Failed to fetch token from identity server"
 		logger.Debug(errorMsg, log.Error(err))
@@ -106,12 +111,24 @@ func (c *IdentityClient) fetchClientCredentialsToken(orgId string) (string, erro
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		errorMsg := "Failed to read token response body"
+		logger.Debug(errorMsg, log.Error(err))
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        "TOKEN_FETCH_FAILED",
+			Message:     "Unable to get access token",
+			Description: errorMsg,
+		}, err)
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", err
+		errorMsg := "Failed to fetch token from identity server"
+		logger.Debug(errorMsg, log.Error(err))
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        "TOKEN_FETCH_FAILED",
+			Message:     "Unable to get access token",
+			Description: errorMsg,
+		}, err)
 	}
 	token, ok := result["access_token"].(string)
 	if !ok {
@@ -309,6 +326,9 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 	log.GetLogger().Info("Fetching local claims from endpoint: " + endpoint)
 	req, _ := http.NewRequest("GET", endpoint, nil)
 	token, err := c.fetchClientCredentialsToken(orgId)
+	if err != nil {
+		return nil, newx
+	}
 	log.GetLogger().Info("Fetching local claims from token: " + token)
 	req.Header.Set("Authorization", "Bearer "+token)
 

@@ -150,7 +150,7 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		}
 	}
 	if attr.ValueType == constants.ComplexDataType {
-		if attr.SubAttributes == nil || len(attr.SubAttributes) == 0 {
+		if len(attr.SubAttributes) == 0 {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
@@ -363,7 +363,7 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(orgId, attribute
 	attribute, err := s.GetProfileSchemaAttributeById(orgId, attributeId)
 	logger := log.GetLogger()
 	if err != nil {
-		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for attribute id %s: %v", orgId)
+		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for attribute id:%s in organization:%s", attribute, orgId)
 		logger.Debug(errMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE_SCHEMA.Code,
@@ -411,7 +411,7 @@ func (s *ProfileSchemaService) GetProfileSchema(orgId string) (map[string]interf
 	// Step 2: Fetch schema attributes from DB
 	schemaAttributes, err := psstr.GetProfileSchemaAttributesForOrg(orgId)
 	if err != nil {
-		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for org %s: %v", orgId)
+		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for organization: %s", orgId)
 		logger.Debug(errMsg, log.Error(err))
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE_SCHEMA.Code,

@@ -401,17 +401,6 @@ func unifyProfiles(newProfile profileModel.Profile) {
 	}
 }
 
-func doesProfileMatchOnUserId(existingProfile profileModel.Profile, newProfile profileModel.Profile) bool {
-
-	if existingProfile.UserId == "" || newProfile.UserId == "" {
-		return false // No userId to match on
-	}
-	if existingProfile.UserId == newProfile.UserId {
-		return true
-	}
-	return false
-}
-
 func sortRulesByPriority(rules []model.UnificationRule) {
 	sort.Slice(rules, func(i, j int) bool {
 		return rules[i].Priority < rules[j].Priority
