@@ -382,7 +382,7 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
 			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: fmt.Sprintf("unknown mutability: %s\", mutability"),
+			Description: fmt.Sprintf("Unknown mutability: %s", mutability),
 		}, http.StatusBadRequest)
 	}
 	return nil
@@ -706,6 +706,9 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		}
 		if masterProfile != nil {
 			masterProfile.ApplicationData, err = profileStore.FetchApplicationData(masterProfile.ProfileId)
+			if err != nil {
+				return nil, err
+			}
 
 			alias := &profileModel.Reference{
 				ProfileId: profile.ProfileStatus.ReferenceProfileId,
@@ -772,26 +775,6 @@ func (ps *ProfilesService) UpdateProfileConsents(profileId string, consents []pr
 	}
 
 	return nil
-}
-
-func mergeSCIMWithSchema(
-	scim map[string]interface{},
-	existing map[string]interface{},
-	schema []model.ProfileSchemaAttribute,
-) map[string]interface{} {
-	merged := make(map[string]interface{})
-
-	for _, attr := range schema {
-		attrKey := strings.TrimPrefix(attr.AttributeName, "identity_attributes.")
-
-		if val, ok := scim[attrKey]; ok {
-			merged[attrKey] = val
-		} else if val, ok := existing[attrKey]; ok {
-			merged[attrKey] = val
-		}
-	}
-
-	return merged
 }
 
 // DeleteProfile removes a profile from MongoDB by `perma_id`

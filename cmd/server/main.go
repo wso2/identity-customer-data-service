@@ -51,7 +51,7 @@ func initDatabaseFromConfig(config *config.Config) {
 	}
 
 	logger.Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, db host:%s, "+
-		"db port:%s", dbname, host, port))
+		"db port:%d", dbname, host, port))
 }
 
 func main() {

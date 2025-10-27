@@ -15,7 +15,7 @@ type UnificationRuleServiceInterface interface {
 	AddUnificationRule(rule model.UnificationRule, tenantId string) error
 	GetUnificationRules(tenantId string) ([]model.UnificationRule, error)
 	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
-	PatchUnificationRule(ruleId string, updates map[string]interface{}) error
+	PatchUnificationRule(ruleId, tenantId string, updates map[string]interface{}) error
 	DeleteUnificationRule(ruleId string) error
 }
 
@@ -124,8 +124,8 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 	return unificationRule, err
 }
 
-// PatchResolutionRule Applies a partial update on a specific resolution rule.
-func (urs *UnificationRuleService) PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
+// PatchUnificationRule Applies a partial update on a specific resolution rule.
+func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string, updates map[string]interface{}) error {
 
 	// Validate that all update fields are allowed
 	for field := range updates {
@@ -139,13 +139,13 @@ func (urs *UnificationRuleService) PatchUnificationRule(ruleId string, updates m
 	}
 
 	// Validate that the priority is not already in use
-	existingRules, _ := store.GetUnificationRules("")
+	existingRules, _ := store.GetUnificationRules(tenantId)
 	for _, existingRule := range existingRules {
 		if existingRule.Property == "user_id" {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UNIFICATION_RULE_ALREADY_EXISTS.Code,
 				Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
-				Description: fmt.Sprintf("user_id based unification rule can not be updated."),
+				Description: "user_id based unification rule can not be updated.",
 			}, http.StatusConflict)
 		}
 		if existingRule.RuleId != ruleId && existingRule.Priority == updates["priority"] {

@@ -118,6 +118,31 @@ var (
 		Message: "Error while updating config.",
 	}
 
+	TOKEN_FETCH_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15029",
+		Message: "Fetching token failed.",
+	}
+
+	GET_SCIM_DIALECTS = ErrorMessage{
+		Code:    errorPrefix + "15030",
+		Message: "Error while fetching SCIM dialects.",
+	}
+
+	GET_DIALECT_CLAIMS = ErrorMessage{
+		Code:    errorPrefix + "15031",
+		Message: "Error while fetching dialect claims.",
+	}
+
+	GET_LOCAL_CLAIMS_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15032",
+		Message: "Error while fetching local claims.",
+	}
+
+	GET_SCIM_USER_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15033",
+		Message: "Error while fetching SCIM user.",
+	}
+
 	GET_COOKIE = ErrorMessage{
 		Code:    errorPrefix + "11014",
 		Message: "Fetching profile cookie failed.",
@@ -340,5 +365,10 @@ var (
 	INVALID_FILTER_FORMAT = ErrorMessage{
 		Code:    errorPrefix + "13001",
 		Message: "Invalid filter format.",
+	}
+
+	FETCH_TOKEN_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15029",
+		Message: "Fetching token failed.",
 	}
 )

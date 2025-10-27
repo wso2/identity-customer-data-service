@@ -17,13 +17,13 @@ import (
 
 func Test_UnificationRule(t *testing.T) {
 
-	SUPER_TENANT_ORG := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
+	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 	profileSchemaService := schemaService.GetProfileSchemaService()
 
 	t.Run("Pre-requisite: Add_schema_attribute", func(t *testing.T) {
 		schemaAttributes := []profileSchema.ProfileSchemaAttribute{
 			{
-				OrgId:         SUPER_TENANT_ORG,
+				OrgId:         SuperTenantOrg,
 				AttributeName: "identity_attributes.email",
 				AttributeId:   uuid.New().String(),
 				ValueType:     constants.StringDataType,
@@ -40,7 +40,7 @@ func Test_UnificationRule(t *testing.T) {
 	jsonData := []byte(`{
         "rule_name": "Email based",
 		"rule_id": "` + uuid.New().String() + `",
-		"tenant_id": "` + SUPER_TENANT_ORG + `",
+		"tenant_id": "` + SuperTenantOrg + `",
         "property_name": "identity_attributes.email",
         "priority": 1,
         "is_active": true
@@ -55,12 +55,12 @@ func Test_UnificationRule(t *testing.T) {
 	rule.UpdatedAt = time.Now().Unix()
 
 	t.Run("Add_unification_rule", func(t *testing.T) {
-		err := unificationRuleService.AddUnificationRule(rule, SUPER_TENANT_ORG)
+		err := unificationRuleService.AddUnificationRule(rule, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add unification rule")
 	})
 
 	t.Run("Get_all_unification_rules", func(t *testing.T) {
-		rules, err := unificationRuleService.GetUnificationRules(SUPER_TENANT_ORG)
+		rules, err := unificationRuleService.GetUnificationRules(SuperTenantOrg)
 		require.NoError(t, err, "Failed to fetch unification rules")
 		require.NotEmpty(t, rules, "Unification rule list is empty")
 	})
@@ -69,7 +69,7 @@ func Test_UnificationRule(t *testing.T) {
 		updates := map[string]interface{}{
 			"is_active": false,
 		}
-		err := unificationRuleService.PatchUnificationRule(rule.RuleId, updates)
+		err := unificationRuleService.PatchUnificationRule(rule.RuleId, SuperTenantOrg, updates)
 		require.NoError(t, err, "Failed to patch unification rule")
 
 		updated, err := unificationRuleService.GetUnificationRule(rule.RuleId)
@@ -85,11 +85,11 @@ func Test_UnificationRule(t *testing.T) {
 	// Todo : Add cases for each unification rule and ensure they are functioning correct
 
 	t.Cleanup(func() {
-		rules, _ := unificationRuleService.GetUnificationRules(SUPER_TENANT_ORG)
+		rules, _ := unificationRuleService.GetUnificationRules(SuperTenantOrg)
 		for _, r := range rules {
 			_ = unificationRuleService.DeleteUnificationRule(r.RuleId)
 		}
-		_ = profileSchemaService.DeleteProfileSchema(SUPER_TENANT_ORG)
-		_ = profileSchemaService.DeleteProfileSchemaAttributesByScope(SUPER_TENANT_ORG, constants.IdentityAttributes)
+		_ = profileSchemaService.DeleteProfileSchema(SuperTenantOrg)
+		_ = profileSchemaService.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 	})
 }

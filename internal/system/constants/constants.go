@@ -33,12 +33,6 @@ const (
 	SchemaInitEvent = "schema-initialization"
 )
 
-const (
-	update = "update" // Update an existing profile with new data.
-	create = "create" // Create a new profile with the provided data.
-	sync   = "sync"
-)
-
 var AllowedValueTypes = map[string]bool{
 	StringDataType:   true,
 	IntegerDataType:  true,

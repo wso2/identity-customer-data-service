@@ -38,7 +38,7 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 	logger := log.GetLogger()
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error occurred while initializing DB client for adding profile schema attributes")
+		errorMsg := "Error occurred while initializing DB client for adding profile schema attributes"
 		logger.Debug(errorMsg, log.Error(err))
 		return errors.NewServerError(errors.ErrorMessage{
 			Code:        errors.ADD_PROFILE_SCHEMA.Code,
@@ -511,7 +511,16 @@ func PatchProfileSchemaAttributesForScope(orgId string, scope string, updates []
 		}
 
 		if _, err := tx.Exec(stmt, args...); err != nil {
-			tx.Rollback()
+			err := tx.Rollback()
+			if err != nil {
+				errorMsg := fmt.Sprintf("Failed to rollback updating attribute %s for organization %s", attr.AttributeId, orgId)
+				logger.Debug(errorMsg, log.Error(err))
+				return errors.NewServerError(errors.ErrorMessage{
+					Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+					Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
+					Description: errorMsg,
+				}, err)
+			}
 			errorMsg := fmt.Sprintf("Failed to update attribute %s for organization %s", attr.AttributeId, orgId)
 			logger.Debug(errorMsg, log.Error(err))
 			return errors.NewServerError(errors.ErrorMessage{

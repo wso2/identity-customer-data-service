@@ -20,7 +20,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	consentModel "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/consent/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -101,7 +100,7 @@ func (h *ConsentCategoryHandler) GetConsentCategory(w http.ResponseWriter, r *ht
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.CONSENT_CAT_ID.Code,
 			Message:     errors.CONSENT_CAT_ID.Message,
-			Description: fmt.Sprintf("Category Id is required to fetch the consent category"),
+			Description: "Category Id is required to fetch the consent category",
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -132,7 +131,7 @@ func (h *ConsentCategoryHandler) UpdateConsentCategory(w http.ResponseWriter, r 
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.CONSENT_CAT_ID.Code,
 			Message:     errors.CONSENT_CAT_ID.Message,
-			Description: fmt.Sprintf("Category Id is required to fetch the consent category"),
+			Description: "Category Id is required to fetch the consent category",
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -173,7 +172,7 @@ func (h *ConsentCategoryHandler) DeleteConsentCategory(w http.ResponseWriter, r 
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.CONSENT_CAT_ID.Code,
 			Message:     errors.CONSENT_CAT_ID.Message,
-			Description: fmt.Sprintf("Category Id is required to fetch the consent category"),
+			Description: "Category Id is required to fetch the consent category",
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
