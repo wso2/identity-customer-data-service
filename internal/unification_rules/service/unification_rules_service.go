@@ -15,7 +15,7 @@ type UnificationRuleServiceInterface interface {
 	AddUnificationRule(rule model.UnificationRule, tenantId string) error
 	GetUnificationRules(tenantId string) ([]model.UnificationRule, error)
 	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
-	PatchUnificationRule(ruleId string, updates map[string]interface{}) error
+	PatchUnificationRule(ruleId, tenantId string, updates map[string]interface{}) error
 	DeleteUnificationRule(ruleId string) error
 }
 
@@ -124,7 +124,7 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 	return unificationRule, err
 }
 
-// PatchResolutionRule Applies a partial update on a specific resolution rule.
+// PatchUnificationRule Applies a partial update on a specific resolution rule.
 func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string, updates map[string]interface{}) error {
 
 	// Validate that all update fields are allowed

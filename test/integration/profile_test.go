@@ -119,6 +119,7 @@ func Test_Profile(t *testing.T) {
 
 	t.Run("Update_Profile_Success", func(t *testing.T) {
 		_, err := profileSvc.CreateProfile(profileRequest, SUPER_TENANT_ORG)
+		require.NoError(t, err)
 
 		var updatedRequest profileModel.ProfileRequest
 		jsonData := []byte(`{

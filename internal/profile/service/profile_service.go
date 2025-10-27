@@ -706,6 +706,9 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		}
 		if masterProfile != nil {
 			masterProfile.ApplicationData, err = profileStore.FetchApplicationData(masterProfile.ProfileId)
+			if err != nil {
+				return nil, err
+			}
 
 			alias := &profileModel.Reference{
 				ProfileId: profile.ProfileStatus.ReferenceProfileId,

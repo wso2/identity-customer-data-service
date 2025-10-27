@@ -96,16 +96,16 @@ func unifyProfiles(newProfile profileModel.Profile) {
 
 				if len(existingMasterProfile.ProfileStatus.References) == 0 {
 
-					hasUserID_existing := existingMasterProfile.UserId != ""
-					hasUserID_new := newProfile.UserId != ""
+					hasUserIDExisting := existingMasterProfile.UserId != ""
+					hasUserIDNew := newProfile.UserId != ""
 
 					// Case 1: perm-temp or temp-perm
-					if hasUserID_existing != hasUserID_new {
+					if hasUserIDExisting != hasUserIDNew {
 						logger.Info(fmt.Sprintf("Stitching Temporray profile: %s to the permnanent profile:%s ",
 							newProfile.ProfileId, existingMasterProfile.ProfileId))
 
-						newChild := profileModel.Reference{}
-						if hasUserID_existing {
+						var newChild profileModel.Reference
+						if hasUserIDExisting {
 							newMasterProfile.ProfileId = existingMasterProfile.ProfileId
 							newMasterProfile.UserId = existingMasterProfile.UserId
 							newChild = profileModel.Reference{
@@ -162,7 +162,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						return
 					} else {
 						userId := ""
-						if hasUserID_existing && hasUserID_new {
+						if hasUserIDExisting && hasUserIDNew {
 							if existingMasterProfile.UserId == newProfile.UserId {
 								userId = existingMasterProfile.UserId
 								logger.Info(fmt.Sprintf("Both profiles are permanent profiles. Hence creating a new master profile: %s",
@@ -251,7 +251,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						logger.Info(fmt.Sprintf("Stitching Temporray profile: %s to the permnanent profile: %s",
 							newProfile.ProfileId, existingMasterProfile.ProfileId))
 
-						newChild := profileModel.Reference{}
+						var newChild profileModel.Reference
 						if hasUserID_existing {
 							newMasterProfile.ProfileId = existingMasterProfile.ProfileId
 							newMasterProfile.UserId = existingMasterProfile.UserId
@@ -265,6 +265,12 @@ func unifyProfiles(newProfile profileModel.Profile) {
 							newMasterProfile.UserId = newProfile.UserId
 
 							err = profileStore.UpdateProfileReferences(newMasterProfile, existingMasterProfile.ProfileStatus.References)
+
+							if err != nil {
+								logger.Error(fmt.Sprintf("Failed to update profile references for master profile: %s while unifying profile: %s",
+									newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+								return
+							}
 
 							newChild = profileModel.Reference{
 								ProfileId: existingMasterProfile.ProfileId,
@@ -330,6 +336,12 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.TenantId, newMasterProfile.ProfileId)
 
 						err = profileStore.UpdateProfileReferences(newMasterProfile, existingMasterProfile.ProfileStatus.References)
+
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to update profile references for master profile: %s while unifying profile: %s",
+								newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+							return
+						}
 
 						childProfile1 := profileModel.Reference{
 							ProfileId: newProfile.ProfileId,

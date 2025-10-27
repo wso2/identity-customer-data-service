@@ -433,7 +433,8 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 		profile := model.ProfileRequest{}
 		profileResponse, err = profilesService.CreateProfile(profile, utils.ExtractTenantIdFromPath(r))
 		if err == nil {
-			cookieObj, err = profilesService.CreateProfileCookie(profileResponse.ProfileId)
+			//todo: Revisit this logic
+			_, err = profilesService.CreateProfileCookie(profileResponse.ProfileId)
 		}
 	}
 	if err != nil {
@@ -549,6 +550,16 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	//todo: should we not return the updated profile?
 	err = json.NewEncoder(w).Encode(updatedProfile)
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
+		log.GetLogger().Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, err)
+		utils.HandleError(w, serverError)
+	}
 }
 
 // PatchCurrentUserProfile handles partial updates to the current user's profile
@@ -692,8 +703,13 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if profileSync.Event == "POST_ADD_USER" {
 		if profileSync.ProfileId != "" && profileSync.UserId != "" {
 
-			// This sceario is when the user anonymously tried and then trying to signup or login. So profile with profile id exists
+			// This scenario is when the user anonymously tried and then trying to signup or login. So profile with profile id exists
 			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
+			if err != nil {
+				//todo: decide if we need to write the response back even for fire and forget
+				utils.HandleError(writer, err)
+				return
+			}
 			if existingProfile != nil {
 				// Update identity attributes based on claim URIs
 				if existingProfile.IdentityAttributes == nil {
@@ -724,6 +740,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		} else if profileSync.ProfileId == "" {
 			// this is when we create a profile for a new user created in IS
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
 			if existingProfile == nil {
 				identityAttributes := make(map[string]interface{})
 				for claimURI, value := range identityClaims {
@@ -753,6 +773,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		if profileSync.ProfileId != "" && profileSync.UserId != "" {
 			// This scenario is when the user logs in with a profileId existing.
 			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
 			if existingProfile != nil {
 				// Update identity attributes based on claim URIs
 				if existingProfile.IdentityAttributes == nil {
