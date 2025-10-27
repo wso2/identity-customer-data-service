@@ -28,7 +28,7 @@ import (
 )
 
 type ServiceManagerInterface interface {
-	RegisterServices(apiBasePath string) error
+	RegisterServices() error
 }
 
 type ServiceManager struct {
@@ -43,28 +43,29 @@ func NewServiceManager(mux *http.ServeMux) ServiceManagerInterface {
 	}
 }
 
-func (sm *ServiceManager) RegisterServices(apiBasePath string) error {
+func (sm *ServiceManager) RegisterServices() error {
 
-	utils.RewriteToDefaultTenant(apiBasePath, sm.mux, constants.DefaultTenant)
-
-	// Register non-tenant-scoped endpoints (e.g., health) on the root mux
-	_ = services.NewHealthService(sm.mux)
+	// Redirect any /api/... calls to the default tenant (covers all versions)
+	utils.RewriteToDefaultTenant("/api", sm.mux, constants.DefaultTenant)
 
 	// Create a dedicated mux for tenant-scoped routes to avoid exposing them at the root
 	routesMux := http.NewServeMux()
 
 	// Initialize services with the shared tenant routes mux so they don't create their own mux
+	_ = services.NewHealthService(routesMux)
 	_ = services.NewProfileService(routesMux)
 	_ = services.NewProfileSchemaService(routesMux)
 	_ = services.NewUnificationRulesService(routesMux)
 	_ = services.NewConsentCategoryService(routesMux)
 
-	// Single tenant dispatcher for all services
-	utils.MountTenantDispatcher(sm.mux, apiBasePath, func(w http.ResponseWriter, r *http.Request) {
-		// Internal path after tenant and base path stripping
+	// Single tenant dispatcher for all services; services own the versioned path (e.g., /api/v1/...)
+	utils.MountTenantDispatcher(sm.mux, func(w http.ResponseWriter, r *http.Request) {
+		// Normalize trailing slash prior to routing
 		path := strings.TrimSuffix(r.URL.Path, "/")
 		if path == "" {
-			path = "/"
+			r.URL.Path = "/"
+		} else {
+			r.URL.Path = path
 		}
 		// Delegate to the tenant routes mux; it will 404 for unknown paths
 		routesMux.ServeHTTP(w, r)

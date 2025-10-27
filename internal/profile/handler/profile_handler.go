@@ -21,10 +21,11 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"net/http"
 	"strings"
 	"sync"
+
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
@@ -408,7 +409,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	location := fmt.Sprintf("%s://%s%s/profiles/%s",
 		detectScheme(r),
 		r.Host,
-		constants.ApiBasePath,
+		constants.ApiBasePath+"/v1",
 		profileResponse.ProfileId,
 	)
 
