@@ -31,7 +31,6 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/schedulers"
@@ -122,7 +121,7 @@ func initMultiplexer() *http.ServeMux {
 	serviceManager := managers.NewServiceManager(mux)
 	logger := log.GetLogger()
 	// Register the services.
-	err := serviceManager.RegisterServices(constants.ApiBasePath)
+	err := serviceManager.RegisterServices()
 	if err != nil {
 		logger.Error("Failed to register the services. ", log.Error(err))
 	}

@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile/handler"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
 type ProfileService struct {
@@ -36,20 +37,21 @@ func NewProfileService(mux *http.ServeMux) *ProfileService {
 		mux:            mux,
 	}
 
+	const base = constants.ApiBasePath + "/v1"
 	// Register routes using Go 1.22+ ServeMux patterns on the shared mux
-	ps.mux.HandleFunc("GET /profiles", ps.profileHandler.GetAllProfiles)
-	ps.mux.HandleFunc("POST /profiles", ps.profileHandler.InitProfile)
-	ps.mux.HandleFunc("GET /profiles/Me", ps.profileHandler.GetCurrentUserProfile)
-	ps.mux.HandleFunc("PATCH /profiles/Me", ps.profileHandler.PatchCurrentUserProfile)
-	ps.mux.HandleFunc("POST /profiles/sync", ps.profileHandler.SyncProfile)
+	ps.mux.HandleFunc("GET "+base+"/profiles", ps.profileHandler.GetAllProfiles)
+	ps.mux.HandleFunc("POST "+base+"/profiles", ps.profileHandler.InitProfile)
+	ps.mux.HandleFunc("GET "+base+"/profiles/Me", ps.profileHandler.GetCurrentUserProfile)
+	ps.mux.HandleFunc("PATCH "+base+"/profiles/Me", ps.profileHandler.PatchCurrentUserProfile)
+	ps.mux.HandleFunc("POST "+base+"/profiles/sync", ps.profileHandler.SyncProfile)
 
 	// Routes with path variables
-	ps.mux.HandleFunc("GET /profiles/{profileId}", ps.profileHandler.GetProfile)
-	ps.mux.HandleFunc("PATCH /profiles/{profileId}", ps.profileHandler.PatchProfile)
-	ps.mux.HandleFunc("PUT /profiles/{profileId}", ps.profileHandler.UpdateProfile)
-	ps.mux.HandleFunc("DELETE /profiles/{profileId}", ps.profileHandler.DeleteProfile)
-	ps.mux.HandleFunc("GET /profiles/{profileId}/consents", ps.profileHandler.GetProfileConsents)
-	ps.mux.HandleFunc("PUT /profiles/{profileId}/consents", ps.profileHandler.UpdateProfileConsents)
+	ps.mux.HandleFunc("GET "+base+"/profiles/{profileId}", ps.profileHandler.GetProfile)
+	ps.mux.HandleFunc("PATCH "+base+"/profiles/{profileId}", ps.profileHandler.PatchProfile)
+	ps.mux.HandleFunc("PUT "+base+"/profiles/{profileId}", ps.profileHandler.UpdateProfile)
+	ps.mux.HandleFunc("DELETE "+base+"/profiles/{profileId}", ps.profileHandler.DeleteProfile)
+	ps.mux.HandleFunc("GET "+base+"/profiles/{profileId}/consents", ps.profileHandler.GetProfileConsents)
+	ps.mux.HandleFunc("PUT "+base+"/profiles/{profileId}/consents", ps.profileHandler.UpdateProfileConsents)
 
 	return ps
 }

@@ -1,6 +1,6 @@
 package constants
 
-const ApiBasePath = "/api/v1"
+const ApiBasePath = "/api"
 const ProfileApiPath = "profiles"
 const UnificationRulesApiPath = "unification-rules"
 const ConsentApiPath = "consent"
