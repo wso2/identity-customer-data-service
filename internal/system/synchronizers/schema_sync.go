@@ -16,32 +16,17 @@
  * under the License.
  */
 
-package schedulers
+package synchronizers
 
 import (
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
-	"time"
-
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
-// StartSchemaFetchScheduler starts the periodic schema fetch job.
-func StartSchemaFetchScheduler(idClient *client.IdentityClient, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	// Run once at startup
-	//todo: check if we need this and ofcz we cant hardcode "carbon.super"
-	fetchSchemas(idClient, "carbon.super")
-
-	for range ticker.C {
-		fetchSchemas(idClient, "carbon.super")
-	}
-}
-
 // fetchSchemas gets the schema from the identity server and updates local schema
-func fetchSchemas(idClient *client.IdentityClient, orgID string) {
+func fetchSchemas(orgID string) {
+	idClient := client.GetIdentityClient()
 	logger := log.GetLogger()
 
 	claims, err := idClient.GetProfileSchema(orgID)

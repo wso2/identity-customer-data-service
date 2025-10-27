@@ -336,7 +336,16 @@ var GetOrgConfigurations = map[string]string{
 }
 
 var UpdateOrgConfigurations = map[string]string{
-	"postgres": `UPDATE cds_config SET cds_enabled = $1 , initial_schema_sync_done = $2 WHERE tenant_id = $3`,
+	"postgres": `WITH updated AS (
+		UPDATE cds_config
+		SET cds_enabled = $1,
+		    initial_schema_sync_done = $2
+		WHERE tenant_id = $3
+		RETURNING tenant_id
+	)
+	INSERT INTO cds_config (tenant_id, cds_enabled, initial_schema_sync_done)
+	SELECT $3, $1, $2
+	WHERE NOT EXISTS (SELECT 1 FROM updated)`,
 }
 
 var UpdateInitialSchemaSyncDoneConfig = map[string]string{

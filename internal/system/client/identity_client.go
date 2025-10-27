@@ -42,7 +42,7 @@ type IdentityClient struct {
 	HTTPClient *http.Client
 }
 
-// Create new client and fetch token
+// NewIdentityClient Create new client and fetch token
 func NewIdentityClient(cfg config.Config) *IdentityClient {
 
 	baseUrl := cfg.AuthServer.Host

@@ -59,8 +59,11 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Request) {
 
 	orgId := utils.ExtractTenantIdFromPath(r)
-	var config model.AdminConfigAPI
-	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+	var config model.AdminConfigUpdateAPI
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&config); err != nil {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.UPDATE_CONFIG_BAD_REQUEST.Code,
 			Message:     errors.UPDATE_CONFIG_BAD_REQUEST.Message,
@@ -70,13 +73,14 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
 	configToUpdate := model.AdminConfig{
-		TenantId:              orgId,
-		CDSEnabled:            config.CDSEnabled,
-		InitialSchemaSyncDone: config.InitialSchemaSyncDone,
+		TenantId:   orgId,
+		CDSEnabled: config.CDSEnabled,
+		// Preserving the existing value for InitialSchemaSyncDone as it is not editable via this endpoint.
+		InitialSchemaSyncDone: adminConfigService.IsInitialSchemaSyncDone(orgId),
 	}
 
-	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
 	err := adminConfigService.UpdateAdminConfig(configToUpdate, orgId)
 	if err != nil {
 		utils.HandleError(w, err)

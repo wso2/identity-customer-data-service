@@ -19,19 +19,38 @@
 package service
 
 import (
-	model "github.com/wso2/identity-customer-data-service/internal/admin_config/model"
+	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/store"
+	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 )
 
 // AdminConfigServiceInterface defines the service interface.
 type AdminConfigServiceInterface interface {
 	GetAdminConfig(tenantId string) (model.AdminConfig, error)
+	IsCDSEnabled(tenantId string) bool
+	IsInitialSchemaSyncDone(tenantId string) bool
 	UpdateAdminConfig(category model.AdminConfig, tenantId string) error
 	UpdateInitialSchemaSync(state bool, tenantId string) error
 }
 
 // AdminConfigService is the default implementation.
 type AdminConfigService struct{}
+
+func (a AdminConfigService) IsCDSEnabled(tenantId string) bool {
+	config, err := store.GetAdminConfig(tenantId)
+	if err != nil || config == nil {
+		return false
+	}
+	return config.CDSEnabled
+}
+
+func (a AdminConfigService) IsInitialSchemaSyncDone(tenantId string) bool {
+	config, err := store.GetAdminConfig(tenantId)
+	if err != nil || config == nil {
+		return false
+	}
+	return config.InitialSchemaSyncDone
+}
 
 func (a AdminConfigService) GetAdminConfig(tenantId string) (model.AdminConfig, error) {
 
@@ -47,8 +66,30 @@ func (a AdminConfigService) GetAdminConfig(tenantId string) (model.AdminConfig, 
 	return *config, nil
 }
 
-func (a AdminConfigService) UpdateAdminConfig(category model.AdminConfig, tenantId string) error {
-	return store.UpdateAdminConfig(category, tenantId)
+func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, tenantId string) error {
+
+	isCDSEnabledInitialState := a.IsCDSEnabled(tenantId)
+	isIsInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(tenantId)
+	// Schema sync status should not be changed via this method.
+	updatedConfig.InitialSchemaSyncDone = isIsInitialSchemaSyncDoneInitialState
+	err := store.UpdateAdminConfig(updatedConfig, tenantId)
+	if err != nil {
+		return err
+	}
+	schemaService := service.GetProfileSchemaService()
+	if isCDSEnabledInitialState == false && isIsInitialSchemaSyncDoneInitialState == false && updatedConfig.CDSEnabled {
+		// CDS is being enabled for the first time. Trigger initial schema sync.
+		err := schemaService.SyncProfileSchema(tenantId)
+		if err != nil {
+			return err
+		}
+		updatedConfig.InitialSchemaSyncDone = true
+		err = store.UpdateAdminConfig(updatedConfig, tenantId)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a AdminConfigService) UpdateInitialSchemaSync(state bool, tenantId string) error {
