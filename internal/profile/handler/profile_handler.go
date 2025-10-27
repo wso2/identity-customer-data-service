@@ -807,6 +807,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 	if profileSync.Event == "POST_DELETE_USER_WITH_ID" {
 		existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
+		if err != nil {
+			utils.HandleError(writer, err)
+			return
+		}
 		if existingProfile == nil {
 			logger.Debug("No profile found for user: " + profileSync.UserId)
 			return
@@ -825,6 +829,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		if profileSync.ProfileId == "" && profileSync.UserId != "" {
 
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
 			if existingProfile == nil {
 				log.GetLogger().Info("creating new profile for user: " + profileSync.UserId)
 				identityAttributes := make(map[string]interface{})
@@ -872,6 +880,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			}
 		} else {
 			existingProfile, err = profilesService.GetProfile(profileId)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
 			// Update identity attributes based on claim URIs
 			if existingProfile.IdentityAttributes == nil {
 				existingProfile.IdentityAttributes = make(map[string]interface{})
@@ -973,6 +985,10 @@ func (ph *ProfileHandler) UpdateProfileConsents(w http.ResponseWriter, r *http.R
 	}
 
 	err = profilesService.UpdateProfileConsents(profileId, consentUpdate)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
