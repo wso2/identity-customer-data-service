@@ -122,3 +122,8 @@ CREATE TABLE profile_cookies (
 ALTER TABLE application_data
     ADD CONSTRAINT unique_profile_app UNIQUE (profile_id, app_id);
 
+CREATE TABLE cds_config (
+                            tenant_id VARCHAR(255) ,
+                            cds_enabled BOOLEAN DEFAULT FALSE,
+                            initial_schema_sync_done BOOLEAN DEFAULT FALSE
+);

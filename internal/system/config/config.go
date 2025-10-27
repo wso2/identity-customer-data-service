@@ -63,15 +63,6 @@ type DataSourceConfig struct {
 	SSLMode  string `yaml:"sslmode"`
 }
 
-type Sync struct {
-	Schema Schema `yaml:"schema"`
-}
-
-type Schema struct {
-	Enabled  bool `yaml:"enabled"`
-	Interval int  `yaml:"interval"` // in seconds
-}
-
 type Config struct {
 	Addr           AddrConfig       `yaml:"addr"`
 	Log            LogConfig        `yaml:"log"`
@@ -79,5 +70,4 @@ type Config struct {
 	AuthServer     AuthServerConfig `yaml:"auth_server"`
 	DatabaseConfig DatabaseConfig   `yaml:"database"`
 	DataSource     DataSourceConfig `yaml:"datasource"`
-	Sync           Sync             `yaml:"sync"`
 }

@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package handler
+
+import (
+	"encoding/json"
+	"github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
+	"net/http"
+
+	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
+)
+
+// AdminConfigHandler handles GET and PUT operations for admin configurations.
+type AdminConfigHandler struct{}
+
+// NewAdminConfigHandler returns a new AdminConfigHandler instance.
+func NewAdminConfigHandler() *AdminConfigHandler {
+	return &AdminConfigHandler{}
+}
+
+// GetAdminConfig handles GET /admin/configs
+func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Request) {
+
+	orgId := utils.ExtractTenantIdFromPath(r)
+	adminConfigProvider := provider.NewAdminConfigProvider()
+	adminConfigService := adminConfigProvider.GetAdminConfigService()
+	config, err := adminConfigService.GetAdminConfig(orgId)
+
+	if err != nil {
+		utils.HandleError(w, err)
+	}
+
+	resp := model.AdminConfigAPI{
+		CDSEnabled:            config.CDSEnabled,
+		InitialSchemaSyncDone: config.InitialSchemaSyncDone,
+	}
+	writeJSONResponse(w, http.StatusOK, resp)
+}
+
+// UpdateAdminConfig handles PUT /admin/configs
+func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Request) {
+
+	orgId := utils.ExtractTenantIdFromPath(r)
+	var config model.AdminConfigAPI
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.UPDATE_CONFIG_BAD_REQUEST.Code,
+			Message:     errors.UPDATE_CONFIG_BAD_REQUEST.Message,
+			Description: utils.HandleDecodeError(err, "admin configuration"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
+	configToUpdate := model.AdminConfig{
+		TenantId:              orgId,
+		CDSEnabled:            config.CDSEnabled,
+		InitialSchemaSyncDone: config.InitialSchemaSyncDone,
+	}
+
+	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
+	err := adminConfigService.UpdateAdminConfig(configToUpdate, orgId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+}
+
+// Helper for JSON responses
+func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(data)
+}
