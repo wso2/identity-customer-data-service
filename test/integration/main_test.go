@@ -33,11 +33,14 @@ import (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	os.Setenv("TEST_MODE", "true") // ✅ Add this
+	os.Setenv("TEST_MODE", "true")
 
 	conf := config.Config{
 		Log: config.LogConfig{
 			LogLevel: "DEBUG",
+		},
+		DataSource: config.DataSourceConfig{
+			Type: "postgres",
 		},
 	}
 	config.OverrideCDSRuntime(conf)

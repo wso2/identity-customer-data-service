@@ -21,7 +21,7 @@ $(TOOL_BIN):
 	mkdir -p $(TOOL_BIN)
 
 # Default target.
-all: clean build
+all: clean lint build integration-test
 
 # Clean up build artifacts.
 clean:

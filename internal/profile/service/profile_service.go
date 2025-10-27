@@ -494,7 +494,7 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 			_, ok := value.(map[string]interface{})
 			return ok
 		}
-		// todo: dont we need to validate the data within complex data
+		// todo: dont we need to validate the data within complex data - as in the sub attributes
 	default:
 		return false
 	}

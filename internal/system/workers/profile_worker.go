@@ -75,7 +75,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 			newProfile.ProfileId), log.Error(err))
 	}
 
-	sortRulesByPriority(unificationRules)
+	unificationRules = filterActiveRulesAndSortByPriority(unificationRules)
 	// 🔹 Step 3: Loop through unification rules and compare profiles
 	for _, rule := range unificationRules {
 
@@ -168,7 +168,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 								logger.Info(fmt.Sprintf("Both profiles are permanent profiles. Hence creating a new master profile: %s",
 									newProfile.ProfileId))
 							} else {
-								logger.Info("We are not handling merging two permannat profiles with different userIds")
+								logger.Info("We are not handling merging two permanent profiles with different userIds")
 								continue
 							}
 						} else {
@@ -412,10 +412,17 @@ func doesProfileMatchOnUserId(existingProfile profileModel.Profile, newProfile p
 	return false
 }
 
-func sortRulesByPriority(rules []model.UnificationRule) {
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].Priority < rules[j].Priority
+func filterActiveRulesAndSortByPriority(rules []model.UnificationRule) []model.UnificationRule {
+	activeRules := make([]model.UnificationRule, 0, len(rules))
+	for _, r := range rules {
+		if r.IsActive {
+			activeRules = append(activeRules, r)
+		}
+	}
+	sort.Slice(activeRules, func(i, j int) bool {
+		return activeRules[i].Priority < activeRules[j].Priority
 	})
+	return activeRules
 }
 
 // MergeProfiles merges two profiles based on unification rules
@@ -492,8 +499,8 @@ func MergeProfiles(existingProfile profileModel.Profile, incomingProfile profile
 // doesProfileMatch checks if two profiles have matching attributes based on a unification rule
 func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileModel.Profile, rule model.UnificationRule) bool {
 
-	log.GetLogger().Info("Checking if profiles match for existing id: " + existingProfile.UserId)
-	log.GetLogger().Info("Checking if profiles match for new id: " + newProfile.UserId)
+	log.GetLogger().Debug(fmt.Sprintf("Checking if profiles match for existing id: %s, new id: %s for the rule: %s",
+		existingProfile.ProfileId, newProfile.ProfileId, rule.RuleName))
 	if rule.Property == "user_id" {
 		if existingProfile.UserId != "" && newProfile.UserId != "" {
 			if existingProfile.UserId == newProfile.UserId {
@@ -511,8 +518,8 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 		logger := log.GetLogger()
 		if checkForMatch(existingValues, newValues) {
 			logger.Info(fmt.Sprintf("Profiles %s, %s has matched for unification rule: %s ", existingProfile.ProfileId,
-				newProfile.ProfileId, rule.RuleId))
-			return true //  Match found
+				newProfile.ProfileId, rule.RuleName))
+			return true
 		}
 		return false
 	}

@@ -8,7 +8,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
-
 	"net/http"
 )
 
@@ -16,7 +15,7 @@ type UnificationRuleServiceInterface interface {
 	AddUnificationRule(rule model.UnificationRule, tenantId string) error
 	GetUnificationRules(tenantId string) ([]model.UnificationRule, error)
 	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
-	PatchResolutionRule(ruleId string, updates map[string]interface{}) error
+	PatchUnificationRule(ruleId string, updates map[string]interface{}) error
 	DeleteUnificationRule(ruleId string) error
 }
 
@@ -126,7 +125,7 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 }
 
 // PatchResolutionRule Applies a partial update on a specific resolution rule.
-func (urs *UnificationRuleService) PatchResolutionRule(ruleId string, updates map[string]interface{}) error {
+func (urs *UnificationRuleService) PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
 
 	// Validate that all update fields are allowed
 	for field := range updates {
