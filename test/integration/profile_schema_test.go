@@ -1,39 +1,66 @@
 package integration
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"testing"
+	"time"
 )
 
-func TestProfileSchemaService(t *testing.T) {
+func Test_ProfileSchemaService(t *testing.T) {
+
+	SUPER_TENANT_ORG := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 	profileSchemaService := schemaService.GetProfileSchemaService()
 
-	t.Run("AddProfileSchemaAttributesForScope_Success", func(t *testing.T) {
-		// Prepare valid attributes to add
+	// Scenario 1: Add schema attributes for all scopes
+	t.Run("Add_ProfileSchemaAttributes_Success", func(t *testing.T) {
 		attrs := []model.ProfileSchemaAttribute{
 			{
+				OrgId:                 SUPER_TENANT_ORG,
+				AttributeId:           uuid.New().String(),
 				AttributeName:         "identity_attributes.email",
 				ValueType:             constants.StringDataType,
 				MergeStrategy:         "combine",
 				Mutability:            constants.MutabilityReadWrite,
 				ApplicationIdentifier: "",
+				MultiValued:           true,
+			},
+			{
+				OrgId:                 SUPER_TENANT_ORG,
+				AttributeId:           uuid.New().String(),
+				AttributeName:         "identity_attributes.phone",
+				ValueType:             constants.StringDataType,
+				MergeStrategy:         "combine",
+				Mutability:            constants.MutabilityReadWrite,
+				ApplicationIdentifier: "",
+				MultiValued:           true,
+			},
+			{
+				OrgId:                 SUPER_TENANT_ORG,
+				AttributeId:           uuid.New().String(),
+				AttributeName:         "identity_attributes.userId",
+				ValueType:             constants.StringDataType,
+				MergeStrategy:         "combine",
+				Mutability:            constants.MutabilityReadWrite,
+				ApplicationIdentifier: "app_1",
 			},
 		}
 
-		// Call the function
 		err := profileSchemaService.AddProfileSchemaAttributesForScope(attrs, constants.IdentityAttributes)
-		require.NoError(t, err, "Expected no error when adding valid schema attributes")
+		require.NoError(t, err, "Failed to add schema attributes for valid scope")
 	})
 
-	t.Run("AddProfileSchemaAttributesForScope_InvalidScope", func(t *testing.T) {
-		// Prepare invalid scope attributes
+	// Scenario 2: Invalid attribute name scope
+	t.Run("Add_ProfileSchemaAttributes_InvalidScope", func(t *testing.T) {
 		attrs := []model.ProfileSchemaAttribute{
 			{
-				AttributeName:         "traits.email", // Incorrect scope
+				OrgId:                 SUPER_TENANT_ORG,
+				AttributeId:           uuid.New().String(),
+				AttributeName:         "invalidscope.email",
 				ValueType:             constants.StringDataType,
 				MergeStrategy:         "combine",
 				Mutability:            constants.MutabilityReadWrite,
@@ -41,44 +68,117 @@ func TestProfileSchemaService(t *testing.T) {
 			},
 		}
 
-		// Call the function
-		err := profileSchemaService.AddProfileSchemaAttributesForScope(attrs, constants.IdentityAttributes)
-		require.Error(t, err, "Expected error due to invalid scope")
+		err := profileSchemaService.AddProfileSchemaAttributesForScope(attrs, "invalidscope")
+		require.Error(t, err, "Expected validation failure for invalid scope")
 	})
 
-	t.Run("GetProfileSchema_Success", func(t *testing.T) {
-		// Assuming orgId "org-123" exists
-		orgId := "org-123"
-
-		// Mocking GetProfileSchema
-		schema, err := profileSchemaService.GetProfileSchema(orgId)
-		require.NoError(t, err, "Expected no error when fetching profile schema")
-		require.NotNil(t, schema, "Expected profile schema to be non-nil")
-	})
-
-	t.Run("DeleteProfileSchemaAttributeById_Success", func(t *testing.T) {
-		// Assuming orgId and attributeId are valid
-		orgId := "org-123"
-		attributeId := uuid.New().String()
-
-		// Mocking store deletion
-		err := profileSchemaService.DeleteProfileSchemaAttributeById(orgId, attributeId)
-		require.NoError(t, err, "Expected no error when deleting profile schema attribute")
-	})
-
-	t.Run("PatchProfileSchemaAttributeById_Success", func(t *testing.T) {
-		// Prepare patch data
-		updates := map[string]interface{}{
-			"value_type":     "string",
-			"merge_strategy": "combine",
+	// Scenario 3: Invalid when app identifier is not present
+	t.Run("Add_ProfileSchemaAttributes_InvalidScope", func(t *testing.T) {
+		attrs := []model.ProfileSchemaAttribute{
+			{
+				OrgId:         SUPER_TENANT_ORG,
+				AttributeId:   uuid.New().String(),
+				AttributeName: "application_data.email",
+				ValueType:     constants.StringDataType,
+				MergeStrategy: "combine",
+				Mutability:    constants.MutabilityReadWrite,
+			},
 		}
 
-		// Mocking patch operation
-		orgId := "org-123"
-		attributeId := uuid.New().String()
+		err := profileSchemaService.AddProfileSchemaAttributesForScope(attrs, constants.ApplicationData)
+		require.Error(t, err, "Expected validation failure for invalid scope")
+	})
 
-		err := profileSchemaService.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
-		require.NoError(t, err, "Expected no error when patching profile schema attribute")
+	// -------------------------------------------------------
+	t.Run("Get_ProfileSchema_Success", func(t *testing.T) {
+		schema, err := profileSchemaService.GetProfileSchema(SUPER_TENANT_ORG)
+		require.NoError(t, err)
+		require.NotNil(t, schema)
+		require.Contains(t, schema, constants.IdentityAttributes)
+		require.Contains(t, schema, constants.ApplicationData)
+		require.Contains(t, schema, constants.Traits)
+	})
+
+	// Scenario 5: Get attribute by ID
+	t.Run("Get_ProfileSchemaAttribute_ById", func(t *testing.T) {
+		// Create a temp attribute first
+		attr := model.ProfileSchemaAttribute{
+			OrgId:                 SUPER_TENANT_ORG,
+			AttributeId:           uuid.New().String(),
+			AttributeName:         "identity_attributes.phone_number",
+			ValueType:             constants.StringDataType,
+			MergeStrategy:         "combine",
+			Mutability:            constants.MutabilityReadWrite,
+			ApplicationIdentifier: "",
+		}
+		err := profileSchemaService.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.IdentityAttributes)
+		require.NoError(t, err)
+
+		fetched, err := profileSchemaService.GetProfileSchemaAttributeById(SUPER_TENANT_ORG, attr.AttributeId)
+		require.NoError(t, err)
+		require.Equal(t, attr.AttributeName, fetched.AttributeName)
+	})
+
+	// Scenario 6: Get attributes by scope & filter
+	t.Run("Get_ProfileSchemaAttributes_ByScopeAndFilter", func(t *testing.T) {
+		filters := []string{"attribute_name eq identity_attributes.email"}
+		filtered, err := profileSchemaService.GetProfileSchemaAttributesByScopeAndFilter(SUPER_TENANT_ORG, constants.IdentityAttributes, filters)
+		require.NoError(t, err)
+		require.NotNil(t, filtered)
+	})
+
+	// Scenario 7: Patch an existing attribute
+	t.Run("Patch_ProfileSchemaAttribute_ById", func(t *testing.T) {
+		attrId := uuid.New().String()
+		attr := model.ProfileSchemaAttribute{
+			OrgId:         SUPER_TENANT_ORG,
+			AttributeId:   attrId,
+			AttributeName: "identity_attributes.temp_field",
+			ValueType:     constants.StringDataType,
+			MergeStrategy: "combine",
+			Mutability:    constants.MutabilityReadWrite,
+		}
+
+		updates := map[string]interface{}{
+			"attribute_name": "identity_attributes.temp_field",
+			"attribute_id":   attrId,
+			"value_type":     "integer",
+			"merge_strategy": "latest",
+			"mutability":     constants.MutabilityReadWrite,
+		}
+		_ = profileSchemaService.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.IdentityAttributes)
+
+		err := profileSchemaService.PatchProfileSchemaAttributeById(SUPER_TENANT_ORG, attrId, updates)
+		require.NoError(t, err, "Failed to patch profile schema attribute")
+	})
+
+	// Scenario 8: Delete schema attribute by ID
+	t.Run("Delete_ProfileSchemaAttribute_ById", func(t *testing.T) {
+		attr := model.ProfileSchemaAttribute{
+			OrgId:         SUPER_TENANT_ORG,
+			AttributeId:   uuid.New().String(),
+			AttributeName: "traits.to_delete",
+			ValueType:     constants.StringDataType,
+			MergeStrategy: "combine",
+			Mutability:    constants.MutabilityReadWrite,
+		}
+		err := profileSchemaService.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.Traits)
+		require.NoError(t, err)
+
+		err = profileSchemaService.DeleteProfileSchemaAttributeById(SUPER_TENANT_ORG, attr.AttributeId)
+		require.NoError(t, err, "Expected no error when deleting schema attribute")
+	})
+
+	// Scenario 9: Delete all schema attributes under scope
+	t.Run("Delete_ProfileSchemaAttributes_ByScope", func(t *testing.T) {
+		err := profileSchemaService.DeleteProfileSchemaAttributesByScope(SUPER_TENANT_ORG, constants.IdentityAttributes)
+		require.NoError(t, err, "Expected no error when deleting all schema attributes by scope")
+	})
+
+	// Cleanup
+	t.Cleanup(func() {
+		_ = profileSchemaService.DeleteProfileSchema(SUPER_TENANT_ORG)
+		_ = profileSchemaService.DeleteProfileSchemaAttributesByScope(SUPER_TENANT_ORG, constants.IdentityAttributes)
 	})
 
 }

@@ -69,7 +69,7 @@ func SetupTestPostgres(ctx context.Context) (*TestPostgres, error) {
 		return nil, err
 	}
 
-	log.Printf("✅ Postgres container started at %s:%s", host, port.Port())
+	log.Printf("Postgres container started at %s:%s", host, port.Port())
 
 	return &TestPostgres{
 		Container: container,

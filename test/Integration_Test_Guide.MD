@@ -72,7 +72,7 @@ make integration-test test=Test_ProfilesService
 |                        | Get_all_profiles          | Lists all profiles                     | ✅ Pass |
 |                        | Filter_profiles           | Filters by enriched email              | ✅ Pass |
 |                        | Delete_profile            | Deletes profile and hierarchy          | ✅ Pass |
-| `Test_UnificationRule` | Pre-requisite: Add_enrichment_rule | Sets up enrichment rule for validation | ✅ Pass |
+| `Test_UnificationRule` | Pre-requisite: Add_schema_attribute | Sets up enrichment rule for validation | ✅ Pass |
 |                        | Add_unification_rule      | Adds a unification rule                | ✅ Pass |
 |                        | Get_all_unification_rules | Lists rules                            | ✅ Pass |
 |                        | Update_unification_rule   | Updates a rule                         | ✅ Pass |

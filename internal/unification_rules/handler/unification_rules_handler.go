@@ -176,8 +176,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	orgId := utils.ExtractTenantIdFromPath(r)
-	err = ruleService.PatchResolutionRule(ruleId, orgId, updates)
+	err = ruleService.PatchResolutionRule(ruleId, updates)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
