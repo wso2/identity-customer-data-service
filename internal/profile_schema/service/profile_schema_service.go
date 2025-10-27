@@ -363,7 +363,7 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(orgId, attribute
 	attribute, err := s.GetProfileSchemaAttributeById(orgId, attributeId)
 	logger := log.GetLogger()
 	if err != nil {
-		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for attribute id:%s in organization:%s", attribute, orgId)
+		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for attribute id:%s in organization:%s", attributeId, orgId)
 		logger.Debug(errMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.DELETE_PROFILE_SCHEMA.Code,

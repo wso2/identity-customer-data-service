@@ -176,23 +176,24 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	err = ruleService.PatchResolutionRule(ruleId, updates)
+	orgId := utils.ExtractTenantIdFromPath(r)
+	err = ruleService.PatchResolutionRule(ruleId, orgId, updates)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
 	rule, err := ruleService.GetUnificationRule(ruleId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	ruleResponse := model.UnificationRuleAPIResponse{
 		RuleId:   rule.RuleId,
 		RuleName: rule.RuleName,
 		Property: rule.Property,
 		Priority: rule.Priority,
 		IsActive: rule.IsActive,
-	}
-	if err != nil {
-		utils.HandleError(w, err)
-		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

@@ -11,7 +11,7 @@ This guide explains how to run, manage, and report integration tests in the `ide
 
 ##  Prerequisites
 
-1. **Install Go** (v1.20+ recommended)  
+1. **Install Go** (v1.25.0 recommended)  
 2. **Install Docker** (with CLI access)  
 
 ---

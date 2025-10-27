@@ -54,7 +54,7 @@ func Test_UnificationRule(t *testing.T) {
 		updates := map[string]interface{}{
 			"is_active": false,
 		}
-		err := svc.PatchResolutionRule(rule.RuleId, updates)
+		err := svc.PatchResolutionRule(rule.RuleId, SU, updates)
 		require.NoError(t, err, "Failed to patch unification rule")
 
 		updated, err := svc.GetUnificationRule(rule.RuleId)

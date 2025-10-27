@@ -38,7 +38,7 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 	logger := log.GetLogger()
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error occurred while initializing DB client for adding profile schema attributes")
+		errorMsg := "Error occurred while initializing DB client for adding profile schema attributes"
 		logger.Debug(errorMsg, log.Error(err))
 		return errors.NewServerError(errors.ErrorMessage{
 			Code:        errors.ADD_PROFILE_SCHEMA.Code,

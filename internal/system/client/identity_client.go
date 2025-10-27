@@ -72,14 +72,13 @@ func (c *IdentityClient) fetchClientCredentialsToken(orgId string) (string, erro
 	authConfig := config.GetCDSRuntime().Config.AuthServer
 	tokenEndpoint := "https://" + c.BaseURL + "/t/" + orgId + authConfig.TokenEndpoint
 	logger := log.GetLogger()
-
 	req, err := http.NewRequest("POST", tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		errorMsg := "Failed to create token request"
+		errorMsg := fmt.Sprintf("Failed to create token request for the organization:%s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return "", errors2.NewServerError(errors2.ErrorMessage{
-			Code:        "TOKEN_FETCH_FAILED",
-			Message:     "Unable to get access token",
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
 		}, err)
 	}
@@ -89,50 +88,55 @@ func (c *IdentityClient) fetchClientCredentialsToken(orgId string) (string, erro
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		errorMsg := "Failed to fetch token from identity server"
+		errorMsg := fmt.Sprintf("Failed to fetch token for the organization:%s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
-		return "", errors2.NewClientError(errors2.ErrorMessage{
-			Code:        "TOKEN_FETCH_FAILED",
-			Message:     "Unable to get access token",
+		// This is an internal communication. So for the clients of CDS, we treat this as a server error.
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
-		}, http.StatusUnauthorized)
+		}, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		errorMsg := fmt.Sprintf("Token endpoint returned status %d: %s", resp.StatusCode, string(bodyBytes))
-		return "", errors2.NewClientError(errors2.ErrorMessage{
-			Code:        "TOKEN_INVALID_RESPONSE",
-			Message:     "Token fetch failed",
+		errorMsg := fmt.Sprintf("Token endpoint returned status %d: for the organization:%s", resp.StatusCode, orgId)
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
-		}, resp.StatusCode)
+		}, err)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		errorMsg := "Failed to read token response body"
+		errorMsg := fmt.Sprintf("Failed to read token response for the organization:%s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return "", errors2.NewServerError(errors2.ErrorMessage{
-			Code:        "TOKEN_FETCH_FAILED",
-			Message:     "Unable to get access token",
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
 		}, err)
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
-		errorMsg := "Failed to fetch token from identity server"
+		errorMsg := fmt.Sprintf("Failed to parse token response for the organization:%s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return "", errors2.NewServerError(errors2.ErrorMessage{
-			Code:        "TOKEN_FETCH_FAILED",
-			Message:     "Unable to get access token",
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
 		}, err)
 	}
 	token, ok := result["access_token"].(string)
 	if !ok {
-		return "", fmt.Errorf("access_token not found in response: %s", string(body))
+		errorMsg := fmt.Sprintf("Access token not found in response for the organization:%s", orgId)
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, err)
 	}
 
 	return token, nil
@@ -195,20 +199,21 @@ func (c *IdentityClient) IntrospectToken(orgId, token string) (map[string]interf
 func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAttribute, error) {
 
 	logger := log.GetLogger()
-
 	localClaimsMap, err := c.GetLocalClaimsMap(orgId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch local claims: %w", err)
+		logger.Debug(fmt.Sprintf("Failed to fetch local claims for the organization:%s", orgId), log.Error(err))
+		return nil, err
 	}
 
 	dialects, err := c.GetAllDialects(orgId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch dialects: %w", err)
+		logger.Debug(fmt.Sprintf("Failed to fetch dialects for the organization:%s", orgId), log.Error(err))
+		return nil, err
 	}
-	log.GetLogger().Info("Fetched dialects", log.Int("count", len(dialects)))
+	logger.Info(fmt.Sprintf("Fetched %d dialects for the organization:%s", len(dialects), orgId))
 	var result []model.ProfileSchemaAttribute
 	for _, dialect := range dialects {
-		log.GetLogger().Info("Processing dialect", log.String("dialectURI", fmt.Sprintf("%v", dialect["dialectURI"])))
+		logger.Info("Processing dialect", log.String("dialectURI", fmt.Sprintf("%v", dialect["dialectURI"])))
 		dialectURI := fmt.Sprintf("%v", dialect["dialectURI"])
 		dialectID := fmt.Sprintf("%v", dialect["id"])
 
@@ -281,21 +286,39 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 func (c *IdentityClient) GetAllDialects(orgId string) ([]map[string]interface{}, error) {
 	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects", c.BaseURL, orgId)
 	req, _ := http.NewRequest("GET", endpoint, nil)
+	logger := log.GetLogger()
 	token, err := c.fetchClientCredentialsToken(orgId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch token: %w", err)
+		logger.Debug(fmt.Sprintf("Failed to get token for fetching the all dialects of the organization:%s",
+			orgId), log.Error(err))
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		// This is an internal communication. So for the clients of CDS, we treat this as a server error.
+		errorMsg := fmt.Sprintf("Failed to fetch all dialects for the organization:%s", orgId)
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_SCIM_DIALECTS.Code,
+			Message:     errors2.GET_SCIM_DIALECTS.Message,
+			Description: errorMsg,
+		}, err)
 	}
 	defer resp.Body.Close()
 
 	var dialects []map[string]interface{}
 	body, _ := io.ReadAll(resp.Body)
 	err = json.Unmarshal(body, &dialects)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to parse dialects response for the organization:%s", orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_SCIM_DIALECTS.Code,
+			Message:     errors2.GET_SCIM_DIALECTS.Message,
+			Description: errorMsg,
+		}, err)
+	}
 	return dialects, err
 }
 
@@ -303,52 +326,88 @@ func (c *IdentityClient) GetClaimsByDialect(dialectID, orgId string) ([]map[stri
 	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects/%s/claims", c.BaseURL, orgId, dialectID)
 	req, _ := http.NewRequest("GET", endpoint, nil)
 	token, err := c.fetchClientCredentialsToken(orgId)
+	logger := log.GetLogger()
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch token: %w", err)
+		logger.Debug(fmt.Sprintf("Failed to get token for fetching the claims of dialectID:%s of the organization:%s", dialectID, orgId), log.Error(err))
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		errMsg := fmt.Sprintf("Failed to fetch claims for dialectID:%s of the organization:%s", dialectID, orgId)
+		logger.Debug(errMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_DIALECT_CLAIMS.Code,
+			Message:     errors2.GET_DIALECT_CLAIMS.Message,
+			Description: errMsg,
+		}, err)
 	}
 	defer resp.Body.Close()
 
 	var claims []map[string]interface{}
 	body, _ := io.ReadAll(resp.Body)
 	err = json.Unmarshal(body, &claims)
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to parse claims response for dialectID:%s of the organization:%s", dialectID, orgId)
+		logger.Debug(errMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_DIALECT_CLAIMS.Code,
+			Message:     errors2.GET_DIALECT_CLAIMS.Message,
+			Description: errMsg,
+		}, err)
+	}
 	return claims, err
 }
 
 func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]interface{}, error) {
 
 	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects/local/claims", c.BaseURL, orgId)
-	log.GetLogger().Info("Fetching local claims from endpoint: " + endpoint)
+	logger := log.GetLogger()
+	logger.Info("Fetching local claims from endpoint: " + endpoint)
 	req, _ := http.NewRequest("GET", endpoint, nil)
 	token, err := c.fetchClientCredentialsToken(orgId)
 	if err != nil {
-		return nil, newx
+		logger.Debug(fmt.Sprintf("Failed to get token for fetching the local claims of the organization:%s",
+			orgId), log.Error(err))
+		return nil, err
 	}
-	log.GetLogger().Info("Fetching local claims from token: " + token)
+	logger.Info("Fetching local claims from token: " + token)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		errorMsg := fmt.Sprintf("Failed to fetch local claims for the organization:%s", orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_LOCAL_CLAIMS_FAILED.Code,
+			Message:     errors2.GET_LOCAL_CLAIMS_FAILED.Message,
+			Description: errorMsg,
+		}, err)
 	}
 	defer resp.Body.Close()
 
 	var claims []map[string]interface{}
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		errorMsg := fmt.Sprintf("Failed to fetch local claims: %s", string(body))
-		return nil, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        "LOCAL_CLAIMS_FETCH_FAILED",
-			Message:     fmt.Sprintf("Unable to fetch local claims. Error code: %d", resp.StatusCode),
+		errorMsg := fmt.Sprintf("Failed to fetch local claims, status code: %d, response: %s", resp.StatusCode, string(body))
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_LOCAL_CLAIMS_FAILED.Code,
+			Message:     errors2.GET_LOCAL_CLAIMS_FAILED.Message,
 			Description: errorMsg,
-		}, resp.StatusCode)
+		}, err)
 	}
 	err = json.Unmarshal(body, &claims)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to parse local claims response for the organization:%s", orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_LOCAL_CLAIMS_FAILED.Code,
+			Message:     errors2.GET_LOCAL_CLAIMS_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
 
 	// Build map using claimURI
 	claimMap := make(map[string]map[string]interface{})
@@ -356,7 +415,7 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 		uri := fmt.Sprintf("%v", claim["claimURI"])
 		claimMap[uri] = claim
 	}
-	return claimMap, err
+	return claimMap, nil
 }
 
 func extractClaimKeyFromLocalURI(localURI string) string {
@@ -490,18 +549,36 @@ func (c *IdentityClient) GetSCIMUser(orgId, userId string) (map[string]interface
 	endpoint := fmt.Sprintf("https://%s/t/%s/scim2/Users/%s", c.BaseURL, orgId, userId)
 	req, _ := http.NewRequest("GET", endpoint, nil)
 	token, err := c.fetchClientCredentialsToken(orgId)
+	logger := log.GetLogger()
+	if err != nil {
+		logger.Debug(fmt.Sprintf("Failed to get token for fetching the SCIM user:%s of the organization:%s",
+			userId, orgId), log.Error(err))
+		return nil, err
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		errMsg := fmt.Sprintf("Failed to fetch SCIM user:%s of the organization:%s", userId, orgId)
+		logger.Debug(errMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_SCIM_USER_FAILED.Code,
+			Message:     errors2.GET_SCIM_USER_FAILED.Message,
+			Description: errMsg,
+		}, err)
 	}
 	defer resp.Body.Close()
 
 	var user map[string]interface{}
 	body, _ := io.ReadAll(resp.Body)
 	if err := json.Unmarshal(body, &user); err != nil {
-		return nil, err
+		errMsg := fmt.Sprintf("Failed to parse SCIM user response for user:%s of the organization:%s", userId, orgId)
+		logger.Debug(errMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_SCIM_USER_FAILED.Code,
+			Message:     errors2.GET_SCIM_USER_FAILED.Message,
+			Description: errMsg,
+		}, err)
 	}
 
 	return flattenSCIMClaims(user), nil
