@@ -102,7 +102,9 @@ func RewriteToDefaultTenant(apiBasePath string, mux *http.ServeMux, defaultTenan
 	})
 }
 
-func MountTenantDispatcher(mux *http.ServeMux, apiBasePath string, handlerFunc http.HandlerFunc) {
+// MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
+// with the tenant added to the context. It preserves the remaining path (e.g., /api/v1/...).
+func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 	mux.HandleFunc("/t/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 
@@ -111,7 +113,7 @@ func MountTenantDispatcher(mux *http.ServeMux, apiBasePath string, handlerFunc h
 			return
 		}
 
-		// Split: /t/{tenant}/api/v1/...
+		// Split: /t/{tenant}/...
 		parts := strings.SplitN(path[len("/t/"):], "/", 2)
 		if len(parts) != 2 {
 			http.Error(w, "Invalid tenant path format", http.StatusBadRequest)
@@ -121,19 +123,10 @@ func MountTenantDispatcher(mux *http.ServeMux, apiBasePath string, handlerFunc h
 		tenantID := parts[0]
 		remainingPath := "/" + parts[1]
 
-		// Ensure it starts with apiBasePath
-		if !strings.HasPrefix(remainingPath, apiBasePath) {
-			http.Error(w, "Path must start with "+apiBasePath, http.StatusNotFound)
-			return
-		}
-
-		// Strip /api/v1 to route to /profiles, etc.
-		relativePath := strings.TrimPrefix(remainingPath, apiBasePath)
-
-		// Add tenant to request context
+		// Add tenant to request context and preserve remaining path (including API version)
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, tenantID)
 		r = r.WithContext(ctx)
-		r.URL.Path = relativePath
+		r.URL.Path = remainingPath
 
 		handlerFunc(w, r)
 	})

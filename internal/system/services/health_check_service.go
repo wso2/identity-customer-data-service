@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/health_check/handler"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
 // HealthService handles routing for health and readiness endpoints.
@@ -39,8 +40,9 @@ func NewHealthService(mux *http.ServeMux) *HealthService {
 	}
 
 	// Register routes using Go 1.22 ServeMux patterns
-	s.mux.HandleFunc("GET /api/v1/health", s.handler.HandleHealth)
-	s.mux.HandleFunc("GET /api/v1/ready", s.handler.HandleReadiness)
+	const base = constants.ApiBasePath + "/v1"
+	s.mux.HandleFunc("GET "+base+"/health", s.handler.HandleHealth)
+	s.mux.HandleFunc("GET "+base+"/ready", s.handler.HandleReadiness)
 
 	return s
 }
