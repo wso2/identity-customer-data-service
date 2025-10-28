@@ -102,9 +102,9 @@ CREATE TABLE profile_consents
 );
 
 CREATE TABLE profile_cookies (
-                                 cookie_id VARCHAR (255) PRIMARY KEY,
-                                 profile_id VARCHAR (255) NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
-                                 is_active BOOLEAN NOT NULL DEFAULT true
+    cookie_id VARCHAR (255) PRIMARY KEY,
+    profile_id VARCHAR (255) NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
+    is_active BOOLEAN NOT NULL DEFAULT true
 );
 
 -- Prevents duplicate entries for the same profile and app (it generally does upsert)
