@@ -49,8 +49,8 @@ func NewProfileSchemaService(mux *http.ServeMux) *ProfileSchemaService {
 	s.mux.HandleFunc("DELETE "+base+"/profile-schema/{scope}", s.handler.DeleteProfileSchemaAttributeForScope)
 
 	// Attribute-level (preserve original verb mapping)
-	s.mux.HandleFunc("POST "+base+"/profile-schema/{scope}/{attrID}", s.handler.GetProfileSchemaAttributeById)
-	s.mux.HandleFunc("GET "+base+"/profile-schema/{scope}/{attrID}", s.handler.PatchProfileSchemaAttributeById)
+	s.mux.HandleFunc("GET "+base+"/profile-schema/{scope}/{attrID}", s.handler.GetProfileSchemaAttributeById)
+	s.mux.HandleFunc("PUT "+base+"/profile-schema/{scope}/{attrID}", s.handler.PatchProfileSchemaAttributeById)
 	s.mux.HandleFunc("DELETE "+base+"/profile-schema/{scope}/{attrID}", s.handler.DeleteProfileSchemaAttributeById)
 
 	return s

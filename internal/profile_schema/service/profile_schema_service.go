@@ -40,6 +40,7 @@ type ProfileSchemaServiceInterface interface {
 	GetProfileSchemaAttributesByScopeAndFilter(id, scope string, filters []string) (interface{}, error)
 	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
 	GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error)
+	GetProfileSchemaAttributeByName(attributeName, orgId string) (*model.ProfileSchemaAttribute, error)
 	PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}) error
 	DeleteProfileSchemaAttributeById(orgId, attributeId string) error
 	SyncProfileSchema(orgId string) error
@@ -219,6 +220,10 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 
 func (s *ProfileSchemaService) GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error) {
 	return psstr.GetProfileSchemaAttributeById(orgId, attributeId)
+}
+
+func (s *ProfileSchemaService) GetProfileSchemaAttributeByName(attributeName, orgId string) (*model.ProfileSchemaAttribute, error) {
+	return psstr.GetProfileSchemaAttributeByName(orgId, attributeName)
 }
 
 // GetProfileSchemaAttributesByScope retrieves profile schema attributes for a specific scope.

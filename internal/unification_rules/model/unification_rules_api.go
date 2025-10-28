@@ -19,16 +19,16 @@
 package model
 
 type UnificationRuleAPIRequest struct {
-	RuleName string `json:"rule_name" bson:"rule_name" binding:"required"`
-	Property string `json:"property_name" bson:"property_name" binding:"required"`
-	Priority int    `json:"priority" bson:"priority" binding:"required"`
-	IsActive bool   `json:"is_active" bson:"is_active" binding:"required"`
+	RuleName     string `json:"rule_name" bson:"rule_name" binding:"required"`
+	PropertyName string `json:"property_name" bson:"property_name" binding:"required"`
+	Priority     int    `json:"priority" bson:"priority" binding:"required"`
+	IsActive     bool   `json:"is_active" bson:"is_active" binding:"required"`
 }
 
 type UnificationRuleAPIResponse struct {
-	RuleId   string `json:"rule_id" bson:"rule_id" binding:"required"`
-	RuleName string `json:"rule_name" bson:"rule_name" binding:"required"`
-	Property string `json:"property_name" bson:"property_name" binding:"required"`
-	Priority int    `json:"priority" bson:"priority" binding:"required"`
-	IsActive bool   `json:"is_active" bson:"is_active" binding:"required"`
+	RuleId       string `json:"rule_id" bson:"rule_id" binding:"required"`
+	RuleName     string `json:"rule_name" bson:"rule_name" binding:"required"`
+	PropertyName string `json:"property_name" bson:"property_name" binding:"required"`
+	Priority     int    `json:"priority" bson:"priority" binding:"required"`
+	IsActive     bool   `json:"is_active" bson:"is_active" binding:"required"`
 }
