@@ -43,7 +43,7 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 
 	// Validate if the property name belongs in schema attributes
 	filter := []string{fmt.Sprintf("attribute_name eq %s", rule.Property)}
-	schemaAttributes, err := psService.GetProfileSchemaAttributesWithFilter(rule.TenantId, filter)
+	schemaAttributes, err := psService.GetProfileSchemaAttributesWithFilter(tenantId, filter)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while checking for existingRule schema: %s", rule.Property)
