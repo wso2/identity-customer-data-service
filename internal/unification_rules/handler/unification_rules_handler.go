@@ -56,14 +56,14 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	// Set timestamps
 	now := time.Now().UTC().Unix()
 	rule := model.UnificationRule{
-		RuleId:    uuid.New().String(),
-		TenantId:  orgId,
-		RuleName:  ruleInRequest.RuleName,
-		Property:  ruleInRequest.Property,
-		Priority:  ruleInRequest.Priority,
-		IsActive:  ruleInRequest.IsActive,
-		CreatedAt: now,
-		UpdatedAt: now,
+		RuleId:       uuid.New().String(),
+		TenantId:     orgId,
+		RuleName:     ruleInRequest.RuleName,
+		PropertyName: ruleInRequest.PropertyName,
+		Priority:     ruleInRequest.Priority,
+		IsActive:     ruleInRequest.IsActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	ruleProvider := provider.NewUnificationRuleProvider()
@@ -75,11 +75,11 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	}
 	addedRule, err := ruleService.GetUnificationRule(rule.RuleId)
 	addedRuleResponse := model.UnificationRuleAPIResponse{
-		RuleId:   addedRule.RuleId,
-		RuleName: addedRule.RuleName,
-		Property: addedRule.Property,
-		Priority: addedRule.Priority,
-		IsActive: addedRule.IsActive,
+		RuleId:       addedRule.RuleId,
+		RuleName:     addedRule.RuleName,
+		PropertyName: addedRule.PropertyName,
+		Priority:     addedRule.Priority,
+		IsActive:     addedRule.IsActive,
 	}
 	if err != nil {
 		utils.HandleError(w, err)
@@ -110,11 +110,11 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	var rulesResponse []model.UnificationRuleAPIResponse
 	for _, rule := range rules {
 		tempRule := model.UnificationRuleAPIResponse{
-			RuleId:   rule.RuleId,
-			RuleName: rule.RuleName,
-			Property: rule.Property,
-			Priority: rule.Priority,
-			IsActive: rule.IsActive,
+			RuleId:       rule.RuleId,
+			RuleName:     rule.RuleName,
+			PropertyName: rule.PropertyName,
+			Priority:     rule.Priority,
+			IsActive:     rule.IsActive,
 		}
 		rulesResponse = append(rulesResponse, tempRule)
 	}
@@ -144,11 +144,11 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		return
 	}
 	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:   rule.RuleId,
-		RuleName: rule.RuleName,
-		Property: rule.Property,
-		Priority: rule.Priority,
-		IsActive: rule.IsActive,
+		RuleId:       rule.RuleId,
+		RuleName:     rule.RuleName,
+		PropertyName: rule.PropertyName,
+		Priority:     rule.Priority,
+		IsActive:     rule.IsActive,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -189,11 +189,11 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		return
 	}
 	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:   rule.RuleId,
-		RuleName: rule.RuleName,
-		Property: rule.Property,
-		Priority: rule.Priority,
-		IsActive: rule.IsActive,
+		RuleId:       rule.RuleId,
+		RuleName:     rule.RuleName,
+		PropertyName: rule.PropertyName,
+		Priority:     rule.Priority,
+		IsActive:     rule.IsActive,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

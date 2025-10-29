@@ -88,20 +88,20 @@ var DeleteProfileSchemaAttributeById = map[string]string{
 }
 
 var GetUnificationRules = map[string]string{
-	"postgres": `SELECT rule_id, rule_name, property_name, priority, is_active, created_at, updated_at 
+	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at 
 FROM unification_rules WHERE tenant_id = $1`,
 }
 
 var GetUnificationRule = map[string]string{
-	"postgres": `SELECT rule_id, rule_name, property_name, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`,
+	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`,
 }
 
 var DeleteUnificationRule = map[string]string{
 	"postgres": `DELETE FROM unification_rules WHERE rule_id = $1`,
 }
 var InsertUnificationRule = map[string]string{
-	"postgres": `INSERT INTO unification_rules (rule_id, tenant_id, rule_name, property_name, priority, is_active, created_at, updated_at) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+	"postgres": `INSERT INTO unification_rules (rule_id, tenant_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 }
 
 var InsertProfile = map[string]string{

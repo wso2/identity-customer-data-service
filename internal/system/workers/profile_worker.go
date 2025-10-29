@@ -503,7 +503,7 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 
 	log.GetLogger().Debug(fmt.Sprintf("Checking if profiles match for existing id: %s, new id: %s for the rule: %s",
 		existingProfile.ProfileId, newProfile.ProfileId, rule.RuleName))
-	if rule.Property == "user_id" {
+	if rule.PropertyName == "user_id" {
 		if existingProfile.UserId != "" && newProfile.UserId != "" {
 			if existingProfile.UserId == newProfile.UserId {
 				log.GetLogger().Info("Profiles have same user_id. Hence proceeding to merge the profile.")
@@ -515,8 +515,8 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 	} else {
 		existingJSON, _ := json.Marshal(existingProfile)
 		newJSON, _ := json.Marshal(newProfile)
-		existingValues := extractFieldFromJSON(existingJSON, rule.Property)
-		newValues := extractFieldFromJSON(newJSON, rule.Property)
+		existingValues := extractFieldFromJSON(existingJSON, rule.PropertyName)
+		newValues := extractFieldFromJSON(newJSON, rule.PropertyName)
 		logger := log.GetLogger()
 		if checkForMatch(existingValues, newValues) {
 			logger.Info(fmt.Sprintf("Profiles %s, %s has matched for unification rule: %s ", existingProfile.ProfileId,

@@ -259,6 +259,7 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 	attr := &model.ProfileSchemaAttribute{
 		OrgId:                 orgId,
 		AttributeName:         row["attribute_name"].(string),
+		AttributeId:           row["attribute_id"].(string),
 		ValueType:             row["value_type"].(string),
 		MergeStrategy:         row["merge_strategy"].(string),
 		Mutability:            row["mutability"].(string),
