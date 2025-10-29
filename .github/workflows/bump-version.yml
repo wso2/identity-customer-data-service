@@ -1,0 +1,40 @@
+name: Bump Patch Version
+
+on:
+  push:
+    branches:
+      - main
+      - mvp
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'Bump version')" # avoid infinite loop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read and bump patch version (supports v prefix)
+        id: bump
+        run: |
+          VER=$(cat version.txt)
+          CLEAN_VER=$(echo "$VER" | sed 's/^v//') # strip leading v if present
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CLEAN_VER"
+          PATCH=$((PATCH + 1))
+          NEW_VER="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_version=$NEW_VER" >> $GITHUB_OUTPUT
+          echo "Next version: $NEW_VER"
+
+      - name: Commit updated version
+        run: |
+          echo "${{ steps.bump.outputs.new_version }}" > version.txt
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add version.txt
+          git commit -m "Bump version to ${{ steps.bump.outputs.new_version }}"
+          git push

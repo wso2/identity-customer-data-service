@@ -1,0 +1,74 @@
+name: 🚀 CDS Release Builder
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.5.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name:  Validate Version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo " Invalid version format. Use vX.Y.Z"
+            exit 1
+          fi
+          echo "Version $VERSION is valid."
+
+      - name: 🏷️ Update version.txt
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "$VERSION" > version.txt
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add version.txt
+          git commit -m "Release $VERSION"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push && git push origin "$VERSION"
+
+      - name: ⚙️ Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build
+        run: make build
+
+      - name: Upload Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cds-build
+          path: target/.build/cds
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: "CDS ${{ github.event.inputs.version }}"
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+          files: target/.build/cds
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
