@@ -261,10 +261,15 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 		// Add synthetic parent objects if missing
 		for parent, subs := range pendingParents {
 			if !existingAttrs[parent] {
+				if parent == "identity_attributes.emailaddress" {
+					logger.Debug(fmt.Sprintf("Skipping synthetic parent attribute generation for: %s", parent))
+					continue // Skip as this has a separate attribute configuration
+				}
 				dialect := parentDialects[parent]
 				if dialect == "" {
 					dialect = "urn:synthetic" // fallback
 				}
+				logger.Warn(fmt.Sprintf("Adding synthetic parent attribute: %s", parent))
 				result = append(result, model.ProfileSchemaAttribute{
 					OrgId:         orgId,
 					AttributeId:   uuid.New().String(),
