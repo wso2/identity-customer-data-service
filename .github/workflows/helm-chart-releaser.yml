@@ -54,5 +54,5 @@ jobs:
           TOKEN: ${{secrets.GITHUB_BOT_TOKEN}}
           GITHUB_BOT_NAME: ${{secrets.GITHUB_BOT_NAME}}
           GITHUB_BOT_EMAIL: ${{secrets.GITHUB_BOT_EMAIL}}
-        run: bash .github/workflows/utils/release-builder.sh $GITHUB_BOT_NAME $GITHUB_BOT_EMAIL $TOKEN $GITHUB_WORKSPACE
+        run: bash .github/workflows/utils/helm-release-builder.sh $GITHUB_BOT_NAME $GITHUB_BOT_EMAIL $TOKEN $GITHUB_WORKSPACE
         id: release-builder
