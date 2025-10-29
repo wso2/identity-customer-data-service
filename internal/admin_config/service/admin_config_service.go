@@ -72,10 +72,6 @@ func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, t
 	isIsInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(tenantId)
 	// Schema sync status should not be changed via this method.
 	updatedConfig.InitialSchemaSyncDone = isIsInitialSchemaSyncDoneInitialState
-	err := store.UpdateAdminConfig(updatedConfig, tenantId)
-	if err != nil {
-		return err
-	}
 	schemaService := service.GetProfileSchemaService()
 	if !isCDSEnabledInitialState && !isIsInitialSchemaSyncDoneInitialState && updatedConfig.CDSEnabled {
 		// CDS is being enabled for the first time. Trigger initial schema sync.
