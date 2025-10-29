@@ -22,6 +22,7 @@ var UnificationQueue chan profileModel.Profile
 
 func StartProfileWorker() {
 
+	// todo: Make the queue size configurable (check if this implementation is enough or need a better queue storage)
 	UnificationQueue = make(chan profileModel.Profile, 1000)
 
 	go func() {
@@ -42,10 +43,10 @@ func EnqueueProfileForProcessing(profile profileModel.Profile) {
 	}
 }
 
-// Define a struct that implements the EventQueue interface
+// ProfileWorkerQueue Define a struct that implements the EventQueue interface
 type ProfileWorkerQueue struct{}
 
-// Implement the Enqueue method for ProfileWorkerQueue
+// Enqueue Implement the Enqueue method for ProfileWorkerQueue
 func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
 	EnqueueProfileForProcessing(profile)
 }

@@ -70,7 +70,6 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 				"Choose the sub-attribute instead.",
 		}, http.StatusBadRequest)
 	}
-	logger.Debug(fmt.Sprintf("Unification rule with property %s is valid", rule.PropertyName))
 
 	// Check if a similar unification rule already exists
 	existingRules, err := store.GetUnificationRules(tenantId)

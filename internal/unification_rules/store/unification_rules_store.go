@@ -63,7 +63,7 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 		return serverError
 	}
 
-	logger.Info(fmt.Sprintf("Unification rule : %s added successfully", rule.RuleName))
+	logger.Info(fmt.Sprintf("Unification rule : '%s' added successfully", rule.RuleName))
 	return nil
 }
 

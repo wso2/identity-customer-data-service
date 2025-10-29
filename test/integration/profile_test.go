@@ -35,7 +35,7 @@ import (
 
 func Test_Profile(t *testing.T) {
 
-	SUPER_TENANT_ORG := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
+	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 	profileSvc := profileService.GetProfilesService()
 	profileSchemaSvc := schemaService.GetProfileSchemaService()
 	unificationSvc := unificationService.GetUnificationRuleService()
@@ -44,7 +44,7 @@ func Test_Profile(t *testing.T) {
 
 		identityAttributes := []profileSchema.ProfileSchemaAttribute{
 			{
-				OrgId:         SUPER_TENANT_ORG,
+				OrgId:         SuperTenantOrg,
 				AttributeId:   uuid.New().String(),
 				AttributeName: "identity_attributes.email",
 				ValueType:     constants.StringDataType,
@@ -56,7 +56,7 @@ func Test_Profile(t *testing.T) {
 
 		traits := []profileSchema.ProfileSchemaAttribute{
 			{
-				OrgId:         SUPER_TENANT_ORG,
+				OrgId:         SuperTenantOrg,
 				AttributeId:   uuid.New().String(),
 				AttributeName: "traits.interests",
 				ValueType:     constants.StringDataType,
@@ -68,7 +68,7 @@ func Test_Profile(t *testing.T) {
 
 		appData := []profileSchema.ProfileSchemaAttribute{
 			{
-				OrgId:                 SUPER_TENANT_ORG,
+				OrgId:                 SuperTenantOrg,
 				AttributeId:           uuid.New().String(),
 				AttributeName:         "application_data.device_id",
 				ValueType:             constants.StringDataType,
@@ -100,7 +100,7 @@ func Test_Profile(t *testing.T) {
 	_ = json.Unmarshal(jsonData, &profileRequest)
 
 	t.Run("Create_Profile_Success", func(t *testing.T) {
-		profile, err := profileSvc.CreateProfile(profileRequest, SUPER_TENANT_ORG)
+		profile, err := profileSvc.CreateProfile(profileRequest, SuperTenantOrg)
 		require.NoError(t, err)
 		require.NotNil(t, profile)
 		require.Equal(t, email, profile.IdentityAttributes["email"].([]interface{})[0])
@@ -108,7 +108,7 @@ func Test_Profile(t *testing.T) {
 	})
 
 	t.Run("Get_Profile_Success", func(t *testing.T) {
-		profiles, err := profileSvc.GetAllProfiles(SUPER_TENANT_ORG)
+		profiles, err := profileSvc.GetAllProfiles(SuperTenantOrg)
 		require.NoError(t, err)
 		require.NotEmpty(t, profiles)
 		profile, err := profileSvc.GetProfile(profiles[0].ProfileId)
@@ -118,7 +118,7 @@ func Test_Profile(t *testing.T) {
 	})
 
 	t.Run("Update_Profile_Success", func(t *testing.T) {
-		_, err := profileSvc.CreateProfile(profileRequest, SUPER_TENANT_ORG)
+		_, err := profileSvc.CreateProfile(profileRequest, SuperTenantOrg)
 		require.NoError(t, err)
 
 		var updatedRequest profileModel.ProfileRequest
@@ -132,17 +132,17 @@ func Test_Profile(t *testing.T) {
 	}`)
 		_ = json.Unmarshal(jsonData, &updatedRequest)
 
-		profiles, _ := profileSvc.GetAllProfiles(SUPER_TENANT_ORG)
+		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
 		p := profiles[0]
 
-		updated, err := profileSvc.UpdateProfile(p.ProfileId, updatedRequest)
+		updated, err := profileSvc.UpdateProfile(p.ProfileId, SuperTenantOrg, updatedRequest)
 		require.NoError(t, err)
 		require.Contains(t, updated.Traits["interests"], "travel")
 		require.Equal(t, "updated@wso2.com", updated.IdentityAttributes["email"].([]interface{})[0])
 	})
 
 	t.Run("Delete_Profile_Success", func(t *testing.T) {
-		profiles, _ := profileSvc.GetAllProfiles(SUPER_TENANT_ORG)
+		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
 		p := profiles[0]
 
 		err := profileSvc.DeleteProfile(p.ProfileId)
@@ -153,15 +153,15 @@ func Test_Profile(t *testing.T) {
 	})
 
 	t.Cleanup(func() {
-		rules, _ := unificationSvc.GetUnificationRules(SUPER_TENANT_ORG)
+		rules, _ := unificationSvc.GetUnificationRules(SuperTenantOrg)
 		for _, r := range rules {
 			_ = unificationSvc.DeleteUnificationRule(r.RuleId)
 		}
-		profiles, _ := profileSvc.GetAllProfiles(SUPER_TENANT_ORG)
+		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
 		for _, p := range profiles {
 			_ = profileSvc.DeleteProfile(p.ProfileId)
 		}
-		_ = profileSchemaSvc.DeleteProfileSchema(SUPER_TENANT_ORG)
-		_ = profileSchemaSvc.DeleteProfileSchemaAttributesByScope(SUPER_TENANT_ORG, constants.IdentityAttributes)
+		_ = profileSchemaSvc.DeleteProfileSchema(SuperTenantOrg)
+		_ = profileSchemaSvc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 	})
 }

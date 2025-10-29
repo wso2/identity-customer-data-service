@@ -311,49 +311,49 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 
 	})
 
-	//t.Run("Scenario9_CrossTenantProfiles_ShouldNotUnify", func(t *testing.T) {
-	//
-	//	OTHER_TENANT := fmt.Sprintf("other.org-%d", time.Now().UnixNano())
-	//	identityAttr := []schemaModel.ProfileSchemaAttribute{
-	//		{OrgId: OTHER_TENANT, AttributeId: uuid.New().String(), AttributeName: "identity_attributes.email", ValueType: constants.StringDataType, MergeStrategy: "combine",
-	//			Mutability: constants.MutabilityReadWrite, MultiValued: true},
-	//	}
-	//	err = profileSchemaSvc.AddProfileSchemaAttributesForScope(identityAttr, constants.IdentityAttributes)
-	//
-	//	emailRuleId := uuid.New().String()
-	//	jsonData := []byte(`{
-	//    "rule_name": "` + EMAIL_BASED + `",
-	//	"rule_id": "` + emailRuleId + `",
-	//	"tenant_id": "` + OTHER_TENANT + `",
-	//    "property_name": "identity_attributes.email",
-	//    "priority": 1,
-	//    "is_active": true
-	//	}`)
-	//
-	//	var emailBasedRule model.UnificationRule
-	//	unificationErr := json.Unmarshal(jsonData, &emailBasedRule)
-	//	require.NoError(t, unificationErr, "Failed to unmarshal rule JSON")
-	//
-	//	emailBasedRule.CreatedAt = time.Now().Unix()
-	//	emailBasedRule.UpdatedAt = time.Now().Unix()
-	//
-	//	_ = unificationSvc.AddUnificationRule(emailBasedRule, SUPER_TENANT_ORG)
-	//
-	//	p1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["k@wso2.com"]}}`)
-	//	p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["k@wso2.com"]}}`)
-	//
-	//	prof1, _ := profileSvc.CreateProfile(p1, SUPER_TENANT_ORG)
-	//	prof2, _ := profileSvc.CreateProfile(p2, OTHER_TENANT)
-	//	time.Sleep(5 * time.Second)
-	//
-	//	merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
-	//	merged2, _ := profileSvc.GetProfile(prof2.ProfileId)
-	//
-	//	require.Empty(t, merged1.MergedTo)
-	//	require.Empty(t, merged2.MergedTo)
-	//	cleanProfiles(profileSvc, SUPER_TENANT_ORG)
-	//	cleanProfiles(profileSvc, OTHER_TENANT)
-	//})
+	t.Run("Scenario9_CrossTenantProfiles_ShouldNotUnify", func(t *testing.T) {
+
+		OtherTenant := fmt.Sprintf("other.org-%d", time.Now().UnixNano())
+		identityAttr := []schemaModel.ProfileSchemaAttribute{
+			{OrgId: OtherTenant, AttributeId: uuid.New().String(), AttributeName: "identity_attributes.email", ValueType: constants.StringDataType, MergeStrategy: "combine",
+				Mutability: constants.MutabilityReadWrite, MultiValued: true},
+		}
+		err = profileSchemaSvc.AddProfileSchemaAttributesForScope(identityAttr, constants.IdentityAttributes)
+
+		emailRuleId := uuid.New().String()
+		jsonData := []byte(`{
+	   "rule_name": "` + EmailBased + `",
+		"rule_id": "` + emailRuleId + `",
+		"tenant_id": "` + OtherTenant + `",
+	   "property_name": "identity_attributes.email",
+	   "priority": 1,
+	   "is_active": true
+		}`)
+
+		var emailBasedRule model.UnificationRule
+		unificationErr := json.Unmarshal(jsonData, &emailBasedRule)
+		require.NoError(t, unificationErr, "Failed to unmarshal rule JSON")
+
+		emailBasedRule.CreatedAt = time.Now().Unix()
+		emailBasedRule.UpdatedAt = time.Now().Unix()
+
+		_ = unificationSvc.AddUnificationRule(emailBasedRule, SuperTenantOrg)
+
+		p1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["k@wso2.com"]}}`)
+		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["k@wso2.com"]}}`)
+
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
+		prof2, _ := profileSvc.CreateProfile(p2, OtherTenant)
+		time.Sleep(5 * time.Second)
+
+		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
+		merged2, _ := profileSvc.GetProfile(prof2.ProfileId)
+
+		require.Empty(t, merged1.MergedTo)
+		require.Empty(t, merged2.MergedTo)
+		cleanProfiles(profileSvc, SuperTenantOrg)
+		cleanProfiles(profileSvc, OtherTenant)
+	})
 
 	// Cleanup
 	t.Cleanup(func() {

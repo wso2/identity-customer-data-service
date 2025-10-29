@@ -259,7 +259,8 @@ var GetAllReferenceProfileExceptCurrent = map[string]string{
 		profile_reference r ON p.profile_id = r.profile_id
 	WHERE 
 		r.profile_status = 'REFERENCE_PROFILE'
-		AND p.profile_id != $1;`,
+		AND p.profile_id != $1
+		AND p.tenant_id = $2;`,
 }
 
 var FetchReferencedProfiles = map[string]string{
