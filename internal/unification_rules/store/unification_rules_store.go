@@ -50,7 +50,7 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 
 	query := scripts.InsertUnificationRule[provider.NewDBProvider().GetDBType()]
 
-	_, err = dbClient.ExecuteQuery(query, rule.RuleId, orgId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive,
+	_, err = dbClient.ExecuteQuery(query, rule.RuleId, orgId, rule.RuleName, rule.PropertyName, rule.PropertyId, rule.Priority, rule.IsActive,
 		rule.CreatedAt, rule.UpdatedAt)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while adding unification rule: %s", rule.RuleName)
@@ -63,7 +63,7 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 		return serverError
 	}
 
-	logger.Info(fmt.Sprintf("Unification rule : %s added successfully", rule.RuleName))
+	logger.Info(fmt.Sprintf("Unification rule : '%s' added successfully", rule.RuleName))
 	return nil
 }
 
@@ -102,7 +102,8 @@ func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 		var rule model.UnificationRule
 		rule.RuleId = row["rule_id"].(string)
 		rule.RuleName = row["rule_name"].(string)
-		rule.Property = row["property_name"].(string)
+		rule.PropertyName = row["property_name"].(string)
+		rule.PropertyId = row["property_id"].(string)
 		rule.Priority = int(row["priority"].(int64))
 		rule.IsActive = row["is_active"].(bool)
 		rule.CreatedAt = row["created_at"].(int64)
@@ -158,7 +159,8 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 	var rule model.UnificationRule
 	rule.RuleId = row["rule_id"].(string)
 	rule.RuleName = row["rule_name"].(string)
-	rule.Property = row["property_name"].(string)
+	rule.PropertyName = row["property_name"].(string)
+	rule.PropertyId = row["property_id"].(string)
 	rule.Priority = int(row["priority"].(int64))
 	rule.IsActive = row["is_active"].(bool)
 	rule.CreatedAt = row["created_at"].(int64)

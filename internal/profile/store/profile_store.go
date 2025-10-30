@@ -1078,7 +1078,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 
 	query := scripts.GetAllReferenceProfileExceptCurrent[provider.NewDBProvider().GetDBType()]
 
-	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId)
+	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId, currentProfile.TenantId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed fetching all master profiles except for current profile: %s", currentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))

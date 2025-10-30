@@ -20,7 +20,7 @@ package model
 
 import "github.com/wso2/identity-customer-data-service/internal/system/constants"
 
-// UnificationRule represents rules for merging user profiles
+// ProfileUnificationMode represents rules for merging user profiles
 type ProfileUnificationMode struct {
 	TenantId  string `json:"tenant_id" bson:"tenant_id" `
 	MergeType string `json:"merge_type" bson:"merge_type" binding:"required"`

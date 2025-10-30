@@ -22,6 +22,7 @@ var UnificationQueue chan profileModel.Profile
 
 func StartProfileWorker() {
 
+	// todo: Make the queue size configurable (check if this implementation is enough or need a better queue storage)
 	UnificationQueue = make(chan profileModel.Profile, 1000)
 
 	go func() {
@@ -42,10 +43,10 @@ func EnqueueProfileForProcessing(profile profileModel.Profile) {
 	}
 }
 
-// Define a struct that implements the EventQueue interface
+// ProfileWorkerQueue Define a struct that implements the EventQueue interface
 type ProfileWorkerQueue struct{}
 
-// Implement the Enqueue method for ProfileWorkerQueue
+// Enqueue Implement the Enqueue method for ProfileWorkerQueue
 func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
 	EnqueueProfileForProcessing(profile)
 }
@@ -502,7 +503,7 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 
 	log.GetLogger().Debug(fmt.Sprintf("Checking if profiles match for existing id: %s, new id: %s for the rule: %s",
 		existingProfile.ProfileId, newProfile.ProfileId, rule.RuleName))
-	if rule.Property == "user_id" {
+	if rule.PropertyName == "user_id" {
 		if existingProfile.UserId != "" && newProfile.UserId != "" {
 			if existingProfile.UserId == newProfile.UserId {
 				log.GetLogger().Info("Profiles have same user_id. Hence proceeding to merge the profile.")
@@ -514,8 +515,8 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 	} else {
 		existingJSON, _ := json.Marshal(existingProfile)
 		newJSON, _ := json.Marshal(newProfile)
-		existingValues := extractFieldFromJSON(existingJSON, rule.Property)
-		newValues := extractFieldFromJSON(newJSON, rule.Property)
+		existingValues := extractFieldFromJSON(existingJSON, rule.PropertyName)
+		newValues := extractFieldFromJSON(newJSON, rule.PropertyName)
 		logger := log.GetLogger()
 		if checkForMatch(existingValues, newValues) {
 			logger.Info(fmt.Sprintf("Profiles %s, %s has matched for unification rule: %s ", existingProfile.ProfileId,

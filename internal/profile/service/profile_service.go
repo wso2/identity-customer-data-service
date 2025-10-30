@@ -44,13 +44,13 @@ type ProfilesServiceInterface interface {
 	DeleteProfile(profileId string) error
 	GetAllProfiles(tenantId string) ([]profileModel.ProfileResponse, error)
 	CreateProfile(profile profileModel.ProfileRequest, tenantId string) (*profileModel.ProfileResponse, error)
-	UpdateProfile(profileId string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
+	UpdateProfile(profileId, tenantId string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
 	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
 	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
-	PatchProfile(id string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
+	PatchProfile(profileId, tenantId string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
 	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
 	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
 	CreateProfileCookie(profileId string) (*profileModel.ProfileCookie, error)
@@ -153,6 +153,8 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	config := UnificationModel.DefaultConfig()
 
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
+		// Set tenant ID for the profile before enqueuing
+		profile.TenantId = tenantId
 		queue.Enqueue(profile)
 	}
 	//todo: handler admin/user workflows
@@ -501,7 +503,7 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 }
 
 // UpdateProfile creates or updates a profile
-func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) UpdateProfile(profileId, tenantId string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfile(profileId) //todo: need to get the reference to see what to updatedProfile (see if its the master)
 	logger := log.GetLogger()
@@ -606,6 +608,8 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 	config := UnificationModel.DefaultConfig()
 	queue := &workers.ProfileWorkerQueue{}
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
+		// Set tenant ID for the profile before enqueuing
+		profileToUpDate.TenantId = tenantId
 		queue.Enqueue(profileToUpDate)
 	}
 	logger.Info("Successfully updated profile: " + profileFetched.ProfileId)
@@ -1277,7 +1281,7 @@ func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.Pro
 }
 
 // PatchProfile applies a partial update to an existing profile
-func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) PatchProfile(profileId, tenantId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
 
 	existingProfile, err := profileStore.GetProfile(profileId)
 	if err != nil {
@@ -1344,7 +1348,7 @@ func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]inter
 	}
 
 	// Reuse the PUT logic to update the profile
-	return ps.UpdateProfile(profileId, updatedProfileReq)
+	return ps.UpdateProfile(profileId, tenantId, updatedProfileReq)
 }
 
 func (ps *ProfilesService) GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error) {

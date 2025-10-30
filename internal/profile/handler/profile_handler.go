@@ -503,7 +503,8 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	_, err = profilesService.UpdateProfile(profileId, profile)
+	tenantId := utils.ExtractTenantIdFromPath(request)
+	_, err = profilesService.UpdateProfile(profileId, tenantId, profile)
 	if err != nil {
 		utils.HandleError(writer, err)
 		return
@@ -541,8 +542,8 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-
-	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
+	tenantId := utils.ExtractTenantIdFromPath(r)
+	updatedProfile, err := profilesService.PatchProfile(profileId, tenantId, patchData)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -637,8 +638,9 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 		return
 	}
 
+	tenantId := utils.ExtractTenantIdFromPath(r)
 	// Apply patch
-	updatedProfile, err := profilesService.PatchProfile(profileId, patchData)
+	updatedProfile, err := profilesService.PatchProfile(profileId, tenantId, patchData)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -730,7 +732,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 
 				// Save updated profile
-				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
+				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, tenantId, profileRequest)
 				if err != nil {
 					utils.HandleError(writer, err)
 					return
@@ -794,7 +796,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 					ApplicationData:    existingProfile.ApplicationData,
 				}
 				// Save updated profile
-				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
+				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, tenantId, profileRequest)
 				if err != nil {
 					utils.HandleError(writer, err)
 					return
@@ -872,7 +874,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 
 				// Save updated profile
-				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, profileRequest)
+				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, tenantId, profileRequest)
 				if err != nil {
 					utils.HandleError(writer, err)
 					return
@@ -902,7 +904,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			}
 
 			// Save updated profile
-			_, err = profilesService.UpdateProfile(profileId, profileRequest)
+			_, err = profilesService.UpdateProfile(profileId, tenantId, profileRequest)
 			if err != nil {
 				utils.HandleError(writer, err)
 				return

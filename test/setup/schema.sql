@@ -1,27 +1,3 @@
--- Drop in reverse dependency order
-DROP TABLE IF EXISTS application_data;
-DROP TABLE IF EXISTS profiles;
-DROP TABLE IF EXISTS profile_schema;
-DROP TABLE IF EXISTS profile_unification_modes;
-DROP TABLE IF EXISTS profile_unification_triggers;
-DROP TABLE IF EXISTS profile_reference;
-DROP TABLE IF EXISTS unification_rules;
-DROP TABLE IF EXISTS consent_categories;
-DROP TABLE IF EXISTS profile_consents;
-DROP TABLE IF EXISTS profile_cookies;
-
-CREATE TABLE unification_rules
-(
-    rule_id       VARCHAR(255) PRIMARY KEY,
-    tenant_id     VARCHAR(255) NOT NULL,
-    rule_name     VARCHAR(255) NOT NULL,
-    property_name VARCHAR(255) NOT NULL,
-    priority      INT          NOT NULL,
-    is_active     BOOLEAN      NOT NULL,
-    created_at    BIGINT       NOT NULL,
-    updated_at    BIGINT       NOT NULL
-);
-
 CREATE TABLE profile_unification_modes
 (
     id         SERIAL PRIMARY KEY,
@@ -82,6 +58,19 @@ CREATE TABLE profile_schema
     scim_dialect VARCHAR(255)
 );
 
+CREATE TABLE unification_rules
+(
+    rule_id       VARCHAR(255) PRIMARY KEY,
+    tenant_id     VARCHAR(255) NOT NULL,
+    rule_name     VARCHAR(255) NOT NULL,
+    property_name VARCHAR(255) NOT NULL,
+    property_id  VARCHAR(255) REFERENCES profile_schema(attribute_id) ON DELETE CASCADE,
+    priority      INT          NOT NULL,
+    is_active     BOOLEAN      NOT NULL,
+    created_at    BIGINT       NOT NULL,
+    updated_at    BIGINT       NOT NULL
+);
+
 -- Application Data Table
 CREATE TABLE application_data
 (
@@ -113,9 +102,9 @@ CREATE TABLE profile_consents
 );
 
 CREATE TABLE profile_cookies (
-                                 cookie_id VARCHAR (255) PRIMARY KEY,
-                                 profile_id VARCHAR (255) NOT NULL,
-                                 is_active BOOLEAN NOT NULL DEFAULT true
+    cookie_id VARCHAR (255) PRIMARY KEY,
+    profile_id VARCHAR (255) NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
+    is_active BOOLEAN NOT NULL DEFAULT true
 );
 
 -- Prevents duplicate entries for the same profile and app (it generally does upsert)
