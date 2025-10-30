@@ -20,7 +20,9 @@ package utils
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -63,4 +65,12 @@ func GetTestHome() string {
 // GetSchemaPath returns the full path to the schema.sql file
 func GetSchemaPath() string {
 	return filepath.Join(GetTestHome(), "test", "setup", "schema.sql")
+}
+
+func ExtractErrorDescription(err error) string {
+	var clientErr *errors2.ClientError
+	if errors.As(err, &clientErr) {
+		return clientErr.Description
+	}
+	return err.Error()
 }
