@@ -72,8 +72,8 @@ func Test_ProfileSchemaService(t *testing.T) {
 			err = svc.AddProfileSchemaAttributesForScope(appData, constants.ApplicationData)
 			require.NoError(t, err, "Failed to add application_data attributes")
 
-			err = svc.DeleteProfileSchema(SuperTenantOrg)
-			err = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
+			_ = svc.DeleteProfileSchema(SuperTenantOrg)
+			_ = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 		})
 
 		t.Run("Add_InvalidScope_ShouldFail", func(t *testing.T) {
@@ -108,8 +108,8 @@ func Test_ProfileSchemaService(t *testing.T) {
 			attr := createAttr(SuperTenantOrg, "traits.orders.payment.card.type", constants.StringDataType, "combine", constants.MutabilityReadWrite)
 			err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.Traits)
 			require.NoError(t, err, "Expected success for depth 4 attribute")
-			err = svc.DeleteProfileSchema(SuperTenantOrg)
-			err = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
+			_ = svc.DeleteProfileSchema(SuperTenantOrg)
+			_ = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 		})
 
 		t.Run("Add_ValidSubAttribute_ShouldSucceed", func(t *testing.T) {
@@ -136,8 +136,8 @@ func Test_ProfileSchemaService(t *testing.T) {
 
 			err = svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{parent}, constants.Traits)
 			require.NoError(t, err, "Expected success for valid sub-attribute relationship")
-			err = svc.DeleteProfileSchema(SuperTenantOrg)
-			err = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
+			_ = svc.DeleteProfileSchema(SuperTenantOrg)
+			_ = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 		})
 
 		t.Run("Add_InvalidSubAttribute_ShouldFail", func(t *testing.T) {
