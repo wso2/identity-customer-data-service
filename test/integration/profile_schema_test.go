@@ -172,7 +172,66 @@ func Test_ProfileSchemaService(t *testing.T) {
 			err = svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{parent}, constants.Traits)
 			errDesc := utils.ExtractErrorDescription(err)
 			require.Contains(t, errDesc, "one level deeper", "Expected failure due to invalid sub-attribute depth")
+			_ = svc.DeleteProfileSchema(SuperTenantOrg)
+			_ = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 		})
+
+		t.Run("Add_MaxDepthHierarchy_ShouldSucceed", func(t *testing.T) {
+			// 1️ Level 4 leaf
+			l4 := createAttr(SuperTenantOrg, "traits.orders.payment.card.type",
+				constants.StringDataType, "combine", constants.MutabilityReadWrite)
+			err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{l4}, constants.Traits)
+			require.NoError(t, err, "Failed to add level 4 attribute")
+
+			// 2️Level 3 parent (complex) → references level 4
+			l3 := model.ProfileSchemaAttribute{
+				OrgId:         SuperTenantOrg,
+				AttributeId:   uuid.New().String(),
+				AttributeName: "traits.orders.payment.card",
+				ValueType:     constants.ComplexDataType,
+				MergeStrategy: "combine",
+				Mutability:    constants.MutabilityReadWrite,
+				SubAttributes: []model.SubAttribute{
+					{AttributeId: l4.AttributeId, AttributeName: l4.AttributeName},
+				},
+			}
+			err = svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{l3}, constants.Traits)
+			require.NoError(t, err, "Failed to add level 3 attribute")
+
+			// 3️ Level 2 parent → references level 3
+			l2 := model.ProfileSchemaAttribute{
+				OrgId:         SuperTenantOrg,
+				AttributeId:   uuid.New().String(),
+				AttributeName: "traits.orders.payment",
+				ValueType:     constants.ComplexDataType,
+				MergeStrategy: "combine",
+				Mutability:    constants.MutabilityReadWrite,
+				SubAttributes: []model.SubAttribute{
+					{AttributeId: l3.AttributeId, AttributeName: l3.AttributeName},
+				},
+			}
+			err = svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{l2}, constants.Traits)
+			require.NoError(t, err, "Failed to add level 2 attribute")
+
+			// 4️Level 1 parent → references level 2
+			l1 := model.ProfileSchemaAttribute{
+				OrgId:         SuperTenantOrg,
+				AttributeId:   uuid.New().String(),
+				AttributeName: "traits.orders",
+				ValueType:     constants.ComplexDataType,
+				MergeStrategy: "combine",
+				Mutability:    constants.MutabilityReadWrite,
+				SubAttributes: []model.SubAttribute{
+					{AttributeId: l2.AttributeId, AttributeName: l2.AttributeName},
+				},
+			}
+			err = svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{l1}, constants.Traits)
+			require.NoError(t, err, "Failed to add top-level parent attribute")
+
+			//  Everything should pass, proving depth=4 hierarchy works correctly
+			_ = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.Traits)
+		})
+
 	})
 
 	t.Run("Get Operations", func(t *testing.T) {
