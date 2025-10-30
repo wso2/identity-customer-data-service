@@ -143,6 +143,15 @@ var (
 		Message: "Error while fetching SCIM user.",
 	}
 
+	GET_ADMIN_CONFIG = ErrorMessage{
+		Code:    errorPrefix + "15034",
+		Message: "Error while fetching tenant configurations.",
+	}
+	UPDATE_ADMIN_CONFIG = ErrorMessage{
+		Code:    errorPrefix + "15035",
+		Message: "Error while updating tenant configurations.",
+	}
+
 	GET_COOKIE = ErrorMessage{
 		Code:    errorPrefix + "11014",
 		Message: "Fetching profile cookie failed.",
@@ -370,5 +379,10 @@ var (
 	FETCH_TOKEN_FAILED = ErrorMessage{
 		Code:    errorPrefix + "15029",
 		Message: "Fetching token failed.",
+	}
+
+	UPDATE_CONFIG_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "13001",
+		Message: "Invalid request payload for updating admin configuration.",
 	}
 )

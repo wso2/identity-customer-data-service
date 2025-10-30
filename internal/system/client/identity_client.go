@@ -42,7 +42,7 @@ type IdentityClient struct {
 	HTTPClient *http.Client
 }
 
-// Create new client and fetch token
+// NewIdentityClient Create new client and fetch token
 func NewIdentityClient(cfg config.Config) *IdentityClient {
 
 	baseUrl := cfg.AuthServer.Host
@@ -261,10 +261,15 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 		// Add synthetic parent objects if missing
 		for parent, subs := range pendingParents {
 			if !existingAttrs[parent] {
+				if parent == "identity_attributes.emailaddress" {
+					logger.Debug(fmt.Sprintf("Skip deriving complex parent attribute: '%s'", parent))
+					continue // Skip as this has a separate attribute configuration
+				}
 				dialect := parentDialects[parent]
 				if dialect == "" {
 					dialect = "urn:synthetic" // fallback
 				}
+				logger.Warn(fmt.Sprintf("Adding synthetic parent attribute: %s", parent))
 				result = append(result, model.ProfileSchemaAttribute{
 					OrgId:         orgId,
 					AttributeId:   uuid.New().String(),

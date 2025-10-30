@@ -331,3 +331,24 @@ var DeleteCookieById = map[string]string{
 var DeleteCookieByProfileId = map[string]string{
 	"postgres": `DELETE FROM profile_cookies WHERE profile_id = $1`,
 }
+
+var GetOrgConfigurations = map[string]string{
+	"postgres": `SELECT * FROM cds_config WHERE tenant_id = $1`,
+}
+
+var UpdateOrgConfigurations = map[string]string{
+	"postgres": `WITH updated AS (
+		UPDATE cds_config
+		SET cds_enabled = $1,
+		    initial_schema_sync_done = $2
+		WHERE tenant_id = $3
+		RETURNING tenant_id
+	)
+	INSERT INTO cds_config (tenant_id, cds_enabled, initial_schema_sync_done)
+	SELECT $3, $1, $2
+	WHERE NOT EXISTS (SELECT 1 FROM updated)`,
+}
+
+var UpdateInitialSchemaSyncDoneConfig = map[string]string{
+	"postgres": `UPDATE cds_config SET initial_schema_sync_done = $1  WHERE tenant_id = $2`,
+}
