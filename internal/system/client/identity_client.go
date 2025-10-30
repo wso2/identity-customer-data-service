@@ -262,7 +262,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 		for parent, subs := range pendingParents {
 			if !existingAttrs[parent] {
 				if parent == "identity_attributes.emailaddress" {
-					logger.Debug(fmt.Sprintf("Skipping synthetic parent attribute generation for: %s", parent))
+					logger.Debug(fmt.Sprintf("Skip deriving complex parent attribute: '%s'", parent))
 					continue // Skip as this has a separate attribute configuration
 				}
 				dialect := parentDialects[parent]
