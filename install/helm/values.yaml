@@ -30,7 +30,7 @@ cloud:
           enabled: true
           defaultCacheTimeout: 15
         auth:
-          corsAllowedOrigins:
+          corsAllowedOrigins: # TODO: Update the allowed CORS origins as needed
             - "http://localhost:3000"
             - "http://localhost:3001"
             - "https://localhost:9001"
@@ -44,8 +44,6 @@ cloud:
           type: "postgres"
           hostname: "localhost"
           port: 5432
-          username: "admin"
-          password: "password123"
           name: "iam_cds"
           sslmode: "enable"
         identityServer:
