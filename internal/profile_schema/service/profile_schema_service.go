@@ -70,7 +70,7 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 		parts := strings.SplitN(attr.AttributeName, ".", 2)
 		scopeOfAttr := parts[0]
 		if scope != scopeOfAttr {
-			errorMsg := fmt.Sprintf("Attribute '%s' does not match the api scope '%s'", attr.AttributeName, scope)
+			errorMsg := fmt.Sprintf("Attribute '%s' does not match the scope '%s'", attr.AttributeName, scope)
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
@@ -100,6 +100,7 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaAttribute) (error, bool) {
 
 	parts := strings.Split(attr.AttributeName, ".")
+	logger := log.GetLogger()
 	if len(parts) < 2 {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
@@ -109,6 +110,17 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		return clientError, false
 	}
 
+	if len(parts) > 5 {
+		logger.Warn("Attribute exceeds supported nesting. Maximum allowed depth is 4.")
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Description: "Attribute exceeds the maximum depth of 4.",
+		}, http.StatusBadRequest)
+		return clientError, false
+	}
+
+	// todo: see if we need to follow any regex validation for the attribute name
 	scope := parts[0]
 	if !constants.AllowedAttributesScope[scope] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -160,12 +172,24 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 			return clientError, false
 		}
 
+		parentDepth := len(strings.Split(attr.AttributeName, "."))
 		for _, subAttr := range attr.SubAttributes {
+			subDepth := len(strings.Split(subAttr.AttributeName, "."))
+
 			if !strings.HasPrefix(subAttr.AttributeName, attr.AttributeName+".") {
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
 					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
 					Description: fmt.Sprintf("Invalid sub-attribute name: %s. It must start with parent attribute name '%s' followed by a dot and sub-key.", subAttr.AttributeName, attr.AttributeName),
+				}, http.StatusBadRequest)
+				return clientError, false
+			}
+
+			if subDepth != parentDepth+1 {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Description: fmt.Sprintf("Invalid sub-attribute '%s'. It must be exactly one level deeper than '%s'.", subAttr.AttributeName, attr.AttributeName),
 				}, http.StatusBadRequest)
 				return clientError, false
 			}
@@ -202,7 +226,7 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-			Description: fmt.Sprintf("Invalid mutability: %s. Must be one of %v", attr.ValueType, keysOf(constants.AllowedMutabilityValues)),
+			Description: fmt.Sprintf("Invalid mutability: '%s'. Must be one of %v", attr.Mutability, keysOf(constants.AllowedMutabilityValues)),
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
@@ -211,7 +235,7 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-			Description: fmt.Sprintf("Invalid merge strategy: %s. Must be one of %v", attr.MergeStrategy, keysOf(constants.AllowedMergeStrategies)),
+			Description: fmt.Sprintf("Invalid merge strategy: '%s'. Must be one of %v", attr.MergeStrategy, keysOf(constants.AllowedMergeStrategies)),
 		}, http.StatusBadRequest)
 		return clientError, false
 	}

@@ -233,7 +233,8 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		// todo: validate whats there in updates.
+		// todo: validate whats there in updates. Need to restrict certain fields from being updated
+		// todo: name can
 		return
 	}
 	err = schemaService.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
