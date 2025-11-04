@@ -1,0 +1,704 @@
+openapi: 3.0.0
+info:
+  title: Custodian API
+  description: API documentation for customer data service.
+  version: 0.0.1
+servers:
+  - url: http://localhost:8080/{org_id}/api/v1
+
+paths:
+  /profiles:
+    get:
+      tags: [Profile]
+      summary: Get all profiles
+      operationId: getAllProfiles
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+
+  /profiles/{profile_id}:
+    get:
+      tags: [Profile]
+      summary: Retrieve profile by Id
+      operationId: getProfile
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+    delete:
+      tags: [Profile]
+      summary: Delete profile by Id
+      operationId: deleteProfile
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Profile deleted successfully
+
+  /events:
+    post:
+      tags: [Events]
+      summary: Add a single event
+      operationId: addEvent
+      security:
+        - bearerAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+      responses:
+        '201':
+          description: Event created successfully
+    get:
+      tags: [Events]
+      summary: Get events
+      operationId: getEvents
+      responses:
+        '200':
+          description: Events retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+
+  /events/write-key/{application_id}:
+    get:
+        tags: [Events]
+        summary: Get write key
+        operationId: getWriteKey
+        parameters:
+          - name: application_id
+            in: path
+            required: true
+            schema:
+              type: string
+        responses:
+            '200':
+              description: Write key retrieved successfully
+              content:
+                  application/json:
+                    schema:
+                      type: string
+  /events/{event_id}:
+    get:
+      tags: [Events]
+      summary: Get a specific event
+      operationId: getEvent
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+
+  /unification-rules:
+    post:
+      tags: [Profile Unification]
+      summary: Add new unification rule
+      operationId: addUnificationRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnificationRule'
+      responses:
+        '201':
+          description: Unification rule added successfully
+    get:
+      tags: [Profile Unification]
+      summary: Get all unification rules
+      operationId: getUnificationRules
+      responses:
+        '200':
+          description: Unification rules retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UnificationRule'
+
+  /unification-rules/{rule_id}:
+    get:
+      tags: [Profile Unification]
+      summary: Get unification rule rule by ID
+      operationId: getUnificationRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Unification rule retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnificationRule'
+    patch:
+      tags: [ Profile Unification ]
+      summary: Patch unification rule
+      operationId: patchUnificationRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnificationRulePatch'
+      responses:
+        '200':
+          description: Unification rule retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnificationRule'
+    delete:
+      tags: [Profile Unification]
+      summary: Delete unification rule
+      operationId: deleteUnificationRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Rule deleted successfully
+
+  /enrichment-rules:
+    post:
+      tags: [Profile Enrichment]
+      summary: Create profile enrichment rule
+      operationId: createEnrichmentRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileEnrichmentRule'
+      responses:
+        '201':
+          description: Rule created successfully
+    get:
+      tags: [Profile Enrichment]
+      summary: Get all profile enrichment rules
+      operationId: getEnrichmentRules
+      responses:
+        '200':
+          description: Rule retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProfileEnrichmentRule'
+
+  /enrichment-rules/{rule_id}:
+    get:
+      tags: [Profile Enrichment]
+      summary: Get profile enrichment rule by ID
+      operationId: getEnrichmentRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trait retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnrichmentRule'
+    put:
+      tags: [Profile Enrichment]
+      summary: Replace profile enrichment rule
+      operationId: putEnrichmentRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileEnrichmentRule'
+      responses:
+        '200':
+          description: Rule updated successfully
+    delete:
+      tags: [Profile Enrichment]
+      summary: Delete profile enrichment rule
+      operationId: deleteEnrichmentRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Rule deleted successfully
+
+  /consents:
+    post:
+      tags: [consent]
+      summary: Give or update consent
+      operationId: giveConsent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Consent'
+      responses:
+        '201':
+          description: Consent saved successfully
+
+  /consents/{profile_id}:
+    get:
+      tags: [consent]
+      summary: Get all consents for a user
+      operationId: getUserConsents
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of consents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Consent'
+
+    delete:
+      tags: [consent]
+      summary: Revoke all consents for a user
+      operationId: revokeAllConsents
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: consent_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Consent(s) revoked
+
+  /consent-categories:
+    get:
+      tags: [Consent Configurations]
+      summary: Get all consent categories
+      operationId: getAllConsentCategories
+      responses:
+        '200':
+          description: List of consent categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsentCategory'
+    post:
+      tags: [Consent Configurations]
+      summary: Add consent category
+      operationId: addConsentCategory
+      responses:
+        '200':
+          description: Consent category added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentCategory'
+  /consent-categories/{id}:
+    get:
+      tags: [Consent Configurations]
+      summary: Get consent category
+      operationId: getConsentCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consent category
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentCategory'
+    put:
+      tags: [Consent Configurations]
+      summary: Update consent category
+      operationId: updateConsentCategory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consent category updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentCategory'
+
+components:
+  schemas:
+    Profile:
+      type: object
+      properties:
+        profile_id:
+          type: string
+        origin_country:
+          type: string
+        identityAttributes:
+          example: {"email":"random@work.com"}
+        traits:
+          type: object
+          example: {"shopper":"true"}
+        applicationData:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplicationData'
+        profile_hierarchy:
+          $ref: '#/components/schemas/ProfileHierarchy'
+
+    ProfileHierarchy:
+      type: object
+      properties:
+        permanent_profile_id:
+          type: string
+        is_permanent:
+          type: boolean
+        list_profile:
+          type: boolean
+        temporary_profile_ids:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemporaryProfile'
+
+    ApplicationData:
+      type: object
+      properties:
+        application_id:
+          type: string
+          example: "40497337-e8bf-4d92-9545-711894ab2af3"
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Device'
+
+    Device:
+      type: object
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          example: "e8bf7337-4049-4d92-9545-711894ab2af3"
+        last_used:
+          type: integer
+          format: int64
+          description: Unix epoch timestamp
+          example: 1744338858
+        os:
+          type: string
+          example: "macOS"
+        browser:
+          type: string
+          example: "Chrome"
+      required:
+        - device_id
+        - last_used
+        - os
+        - browser
+
+    TemporaryProfile:
+      type: object
+      properties:
+        temporary_profile_id:
+          type: string
+        rule_name:
+          type: string
+
+    Event:
+      type: object
+      properties:
+        profile_id:
+          type: string
+          example: "abcd"
+        event_type:
+          type: string
+          example: "track"
+        event_name:
+          type: string
+          example: "add_to_cart"
+        event_id:
+          type: string
+          example: "random uuid"
+        application_id:
+          type: string
+          example: "application id"
+        org_id:
+          type: string
+          example: "vanheim"
+        event_timestamp:
+          type: integer
+          example: "1744338743"
+        properties:
+          type: object
+          example: {"action": "click",
+                    "object_name": "Educational #2",
+                    "object_type": "product",
+                    "value": "49.65"
+          }
+        context:
+          type: object
+          example: {"browser": "Chrome",
+                    "device_id": "40497337-e8bf-4d92-9545-711894ab2af3",
+                    "locale": "en-US",
+                    "os": "macOS",
+                    "timezone": "Asia/Colombo",
+                    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+          }
+
+    ProfileEnrichmentRule:
+      type: object
+      properties:
+        rule_id:
+          type: string
+        property_name:
+          type: string
+        description:
+          type: string
+        value:
+          type: object
+        value_type:
+          type: string
+        computation_method:
+          type: string
+          enum: [static, extract, count]
+        source_field:
+          type: string
+        time_range:
+          type: string
+        merge_strategy:
+          type: string
+          enum: [overwrite, combine, ignore]
+        trigger:
+          $ref: '#/components/schemas/RuleTrigger'
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+
+    RuleTrigger:
+      type: object
+      properties:
+        event_type:
+          type: string
+        event_name:
+          type: string
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleCondition'
+
+    RuleCondition:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+        value:
+          type: string
+
+    UnificationRule:
+      type: object
+      required:
+        - rule_name
+        - attribute
+        - priority
+        - is_active
+      properties:
+        rule_id:
+          type: string
+          format: uuid
+          description: Unique identifier for the resolution rule
+          example: "5af4235d-b95e-4b5b-9429-c9021e653361"
+        rule_name:
+          type: string
+          description: Descriptive name for the rule
+          example: "user id based"
+        attribute:
+          type: string
+          description: Attribute path to be used for unification
+          example: "identity.user_id"
+        priority:
+          type: integer
+          description: Priority of the rule (lower number = higher priority)
+          example: 1
+        is_active:
+          type: boolean
+          description: Whether the rule is currently active
+          example: true
+        created_at:
+          type: integer
+          format: int64
+          description: UNIX timestamp of creation
+          example: 1744176544
+        updated_at:
+          type: integer
+          format: int64
+          description: UNIX timestamp of last update
+          example: 1744176544
+
+    UnificationRulePatch:
+      type: object
+      properties:
+        rule_name:
+          type: string
+          description: Descriptive name for the rule
+          example: "user id based"
+        priority:
+          type: integer
+          description: Priority of the rule (lower number = higher priority)
+          example: 1
+        is_active:
+          type: boolean
+          description: Whether the rule is currently active
+          example: true
+
+    ConsentCategory:
+      type: object
+      required:
+        - category_name
+        - category_identifier
+        - purpose
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 7fa06d1e-688f-481b-8263-29c1f5ce1493
+        category_name:
+          type: string
+          example: User behavior analytics
+        category_identifier:
+          type: string
+          example: analytics
+        purpose:
+          type: string
+          enum: [profiling, personalization, destination]
+        destinations:
+          type: array
+          items:
+            type: string
+
+    Consent:
+      type: object
+      required:
+        - profile_id
+        - application_id
+        - consent_type
+        - granted
+        - categories
+        - consent_channel
+        - timestamp
+      properties:
+        consent_id:
+          type: string
+          format: uuid
+          example: "6d2ff26e-12aa-4b3d-b1d6-c7f7b6b7c7e1"
+        profile_id:
+          type: string
+          example: "12345"
+        application_id:
+          type: string
+          example: "custodian_client_app"
+        category_identifier:
+          type: string
+          example: "analytics"
+        granted:
+          type: boolean
+          example: true
+        consent_channel:
+          type: string
+          description: Source of consent
+          example: "web"
+        timestamp:
+          type: integer
+          format: int64
+          example: 1744339000
+        source_ip:
+          type: string
+          example: "192.168.1.10"
+        user_agent:
+          type: string
+          example: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+#        bearerFormat: JWT  # ⚠️ Optional. You can even remove this if you allow both JWT & opaque.

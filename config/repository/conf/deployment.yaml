@@ -1,0 +1,74 @@
+env: "${ENV}" # This will be replaced by the ENV variable
+
+log:
+  log_level: "${LOG_LEVEL}"
+  #    - "INFO", "WARN", "ERROR", "DEBUG" - and environment specific log level
+
+
+cache:
+  enabled: true
+  default_cache_timeout: 15
+
+
+auth:
+  cors_allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:3001"
+    - "https://localhost:9001"
+
+addr:
+  host: 127.0.0.1
+  port: 8900
+
+auth_server:
+  host: "localhost"
+  port : 9443
+  introspectionEndpoint: "/oauth2/introspect"
+  tokenEndpoint: "/oauth2/token"
+  revocationEndpoint: "/oauth2/revoke"
+  claimsEndpoint: "api/server/v1/claim-dialects"
+  client_id: "0FuMBMeyMdmOdyLsLibnRW5Rg0wa"
+  client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
+  admin_username: "admin"
+  admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
+  required_scopes:
+    profile:create:
+      - "internal_cdm_profile_create"
+    profile:update:
+      - "internal_cdm_profile_update"
+    profile:view:
+      - "internal_cdm_profile_view"
+    profile:delete:
+      - "internal_cdm_profile_delete"
+
+    unification_rules:view:
+      - "internal_cdm_unification_rule_view"
+    unification_rules:create:
+      - "internal_cdm_unification_rule_create"
+    unification_rules:update:
+      - "internal_cdm_unification_rule_update"
+    unification_rules:delete:
+      - "internal_cdm_unification_rule_delete"
+
+    profile_schema:view:
+      - "internal_cdm_profile_schema_view"
+    profile_schema:create:
+      - "internal_cdm_profile_schema_create"
+    profile_schema:update:
+      - "internal_cdm_profile_schema_update"
+    profile_schema:delete:
+      - "internal_cdm_profile_schema_delete"
+
+sync:
+  schema:
+    enabled: true
+    interval: 3600 # in seconds
+
+datasource:
+  type: "postgres"
+  hostname: "localhost"
+  port: 5432
+  username: "admin"
+  password: "password123"
+  name: "iam_cds"
+  sslmode: disable
