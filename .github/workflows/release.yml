@@ -45,12 +45,13 @@ jobs:
           git add version.txt
           git commit -m "Release $VERSION"
           git tag -a "$VERSION" -m "Release $VERSION"
-          git push && git push origin "$VERSION"
+          git push origin HEAD:main
+          git push origin "$VERSION"
 
       - name: ⚙️ Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25.1'
 
       - name: Build
         run: make build
