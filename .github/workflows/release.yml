@@ -56,11 +56,11 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Upload Binary
+      - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
-          name: cds-build
-          path: target/.build/cds
+          name: cds-package
+          path: target/cds-*.zip
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -70,6 +70,6 @@ jobs:
           name: "CDS ${{ github.event.inputs.version }}"
           prerelease: ${{ github.event.inputs.prerelease }}
           generate_release_notes: true
-          files: target/.build/cds
+          files: target/cds-*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
