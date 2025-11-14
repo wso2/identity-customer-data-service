@@ -96,8 +96,8 @@ func main() {
 		certDir = "./etc/certs"
 	}
 
-	serverCertPath := filepath.Join(certDir, "server.crt")
-	serverKeyPath := filepath.Join(certDir, "server.key")
+	serverCertPath := filepath.Join(certDir, cdsConfig.TLS.ServerCert)
+	serverKeyPath := filepath.Join(certDir, cdsConfig.TLS.ServerKey)
 
 	// Check cert files before starting
 	if _, err := os.Stat(serverCertPath); os.IsNotExist(err) {

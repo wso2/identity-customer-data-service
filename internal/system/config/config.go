@@ -65,9 +65,9 @@ type Config struct {
 }
 
 type TLSConfig struct {
-	MTLSEnabled bool   `mapstructure:"mtls_enabled"`
-	CertDir     string `mapstructure:"cert_dir"`
-	ServerCert  string `mapstructure:"server_cert"`
-	ServerKey   string `mapstructure:"server_key"`
-	CACert      string `mapstructure:"ca_cert"`
+	MTLSEnabled bool   `yaml:"mtls_enabled"`
+	CertDir     string `yaml:"cert_dir"`
+	ServerCert  string `yaml:"server_cert"`
+	ServerKey   string `yaml:"server_key"`
+	CACert      string `yaml:"ca_cert"`
 }
