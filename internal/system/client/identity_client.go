@@ -20,11 +20,14 @@ package client
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -42,24 +45,99 @@ type IdentityClient struct {
 	HTTPClient *http.Client
 }
 
-// NewIdentityClient Create new client and fetch token
+// NewIdentityClient creates an IdentityClient with a TLS/mTLS-ready HTTP client.
 func NewIdentityClient(cfg config.Config) *IdentityClient {
-
 	baseUrl := cfg.AuthServer.Host
 	if cfg.AuthServer.Port != "" {
 		baseUrl = cfg.AuthServer.Host + ":" + cfg.AuthServer.Port
 	}
-	log.GetLogger().Info("Creating IdentityClient with base URL: " + baseUrl)
+
+	// Load CA cert
+	caCertPath := cfg.TLS.CertDir + "/" + cfg.TLS.CACert
+	caCert, err := os.ReadFile(caCertPath)
+	if err != nil {
+		log.GetLogger().Error("failed to read CA cert", log.Error(err))
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	tlsConfig := &tls.Config{
+		RootCAs: caCertPool,
+	}
+
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+
 	client := &IdentityClient{
 		BaseURL: baseUrl,
 		HTTPClient: &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // ⚠️ Dev use only!
-			},
+			Timeout:   10 * time.Second,
+			Transport: transport,
 		},
 	}
 	return client
+}
+
+// newOutboundHTTPClient builds an http.Client that validates IS with CA,
+// and (optionally) presents a client certificate when mtls_enabled is true.
+func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*http.Client, error) {
+	// Resolve cert dir to absolute to avoid CWD surprises
+	certDir := tlsCfg.CertDir
+	if certDir == "" {
+		certDir = "/etc/certs"
+	}
+	if !filepath.IsAbs(certDir) {
+		if abs, err := filepath.Abs(certDir); err == nil {
+			certDir = abs
+		}
+	}
+
+	// Root CA pool (optional but recommended)
+	var rootCAs *x509.CertPool
+	if tlsCfg.CACert != "" {
+		caPath := filepath.Join(certDir, tlsCfg.CACert)
+		caPEM, err := os.ReadFile(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read ca_cert at %s: %w", caPath, err)
+		}
+		rootCAs = x509.NewCertPool()
+		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
+			return nil, fmt.Errorf("failed to append ca_cert into CertPool: %s", caPath)
+		}
+	}
+
+	// Client cert/key for mTLS (optional)
+	var clientCerts []tls.Certificate
+	if tlsCfg.MTLSEnabled {
+		clientCrt := filepath.Join(certDir, "client.crt")
+		clientKey := filepath.Join(certDir, "client.key")
+		pair, err := tls.LoadX509KeyPair(clientCrt, clientKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client cert/key (%s, %s): %w", clientCrt, clientKey, err)
+		}
+		clientCerts = []tls.Certificate{pair}
+	}
+
+	tcfg := &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		RootCAs:      rootCAs,          // if nil, system roots are used
+		Certificates: clientCerts,      // empty if mTLS disabled
+		ServerName:   serverHostForSNI, // ensure hostname verification (SNI)
+		// DO NOT set InsecureSkipVerify true.
+	}
+
+	tr := &http.Transport{
+		TLSClientConfig: tcfg,
+		// Reasonable defaults:
+		TLSHandshakeTimeout: 10 * time.Second,
+		IdleConnTimeout:     60 * time.Second,
+		MaxIdleConns:        100,
+		MaxConnsPerHost:     0,
+	}
+	return &http.Client{
+		Transport: tr,
+		Timeout:   30 * time.Second,
+	}, nil
 }
 
 // Fetch token using client_credentials grant
