@@ -27,7 +27,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -65,43 +64,61 @@ func main() {
 	cdsConfig, err := config.LoadConfig(cdsHome, configFile)
 	if err != nil {
 		fmt.Println("Failed to load cdsConfig. ", err)
+		os.Exit(1)
 	}
 
-	// Initialize runtime configurations.
+	// Initialize runtime configurations
 	if err := config.InitializeCDSRuntime(cdsHome, cdsConfig); err != nil {
 		fmt.Println("Failed to initialize cds runtime.", err)
+		os.Exit(1)
 	}
 
 	// Initialize logger
 	if err := log.Init(cdsConfig.Log.LogLevel); err != nil {
-		fmt.Println("Failed to initialize cds runtime.", err)
+		fmt.Println("Failed to initialize logger.", err)
+		os.Exit(1)
 	}
 
 	// Initialize database
 	initDatabaseFromConfig(cdsConfig)
 
-	// Initialize Event queue
+	// Initialize Profile worker
 	workers.StartProfileWorker()
 
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
 
 	logger := log.GetLogger()
-	logger.Info(fmt.Sprintf("WSO2 CDS starting in server address: %s", serverAddr))
-	ln, err := net.Listen("tcp", serverAddr)
-	if err != nil {
-		logger.Error("Error when starting the CDS.", log.Error(err))
+	logger.Info(fmt.Sprintf(" WSO2 CDS starting securely on: https://%s", serverAddr))
+
+	certDir := cdsConfig.TLS.CertDir
+	if certDir == "" {
+		certDir = "./etc/certs"
 	}
 
-	logger.Info(fmt.Sprintf("WSO2 CDS started in server address: %s", serverAddr))
-	server1 := &http.Server{Handler: mux}
+	serverCertPath := filepath.Join(certDir, "server.crt")
+	serverKeyPath := filepath.Join(certDir, "server.key")
 
-	if err := server1.Serve(ln); err != nil {
-		logger.Error("Failed to serve requests. ", log.Error(err))
+	// Check cert files before starting
+	if _, err := os.Stat(serverCertPath); os.IsNotExist(err) {
+		logger.Error(fmt.Sprintf("Server certificate not found at %s", serverCertPath))
+		os.Exit(1)
+	}
+	if _, err := os.Stat(serverKeyPath); os.IsNotExist(err) {
+		logger.Error(fmt.Sprintf("Server key not found at %s", serverKeyPath))
+		os.Exit(1)
 	}
 
-	logger.Info("identity-customer-data-service component has started.")
+	server := &http.Server{
+		Addr:    serverAddr,
+		Handler: mux,
+	}
 
+	logger.Info(fmt.Sprintf("HTTPS server listening on %s", serverAddr))
+	if err := server.ListenAndServeTLS(serverCertPath, serverKeyPath); err != nil {
+		logger.Error("Failed to start HTTPS server.", log.Error(err))
+		os.Exit(1)
+	}
 }
 
 // initMultiplexer initializes the HTTP multiplexer and registers the services.
@@ -110,15 +127,16 @@ func initMultiplexer() *http.ServeMux {
 	mux := http.NewServeMux()
 	serviceManager := managers.NewServiceManager(mux)
 	logger := log.GetLogger()
+
 	// Register the services.
-	err := serviceManager.RegisterServices()
-	if err != nil {
+	if err := serviceManager.RegisterServices(); err != nil {
 		logger.Error("Failed to register the services. ", log.Error(err))
 	}
 
 	return mux
 }
 
+// enableCORS allows cross-origin requests for UI/SDK clients.
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -134,24 +152,22 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 
+// getCDSHome detects the CDS project root for config resolution.
 func getCDSHome() string {
 
-	// Parse project directory from command line arguments.
-	projectHome := ""
 	projectHomeFlag := flag.String("cdsHome", "", "Path to customer data service home directory")
 	flag.Parse()
 
 	if *projectHomeFlag != "" {
 		fmt.Printf("Using %s from command line argument", *projectHomeFlag)
-		projectHome = *projectHomeFlag
-	} else {
-		// If no command line argument is provided, use the current working directory.
-		dir, dirErr := os.Getwd()
-		if dirErr != nil {
-			fmt.Println("Failed to get current working directory", dirErr)
-		}
-		projectHome = dir
+		return *projectHomeFlag
 	}
 
-	return projectHome
+	dir, dirErr := os.Getwd()
+	if dirErr != nil {
+		fmt.Println("Failed to get current working directory", dirErr)
+		return ""
+	}
+
+	return dir
 }
