@@ -116,3 +116,15 @@ cd cds-1.0.0-m1-SNAPSHOT
 ```
 
 ---
+
+## 🔒 Security Scanning
+
+The repository includes automated security scanning workflows to ensure code quality and security:
+
+- **FOSSA SCA Scan** - Software Composition Analysis for dependency vulnerabilities
+- **CodeQL Analysis** - Static code analysis for security vulnerabilities  
+- **Trivy Security Scan** - Comprehensive security scanning
+
+For detailed information about security scanning, see [Security Scanning Documentation](docs/SECURITY_SCANNING.md).
+
+---
