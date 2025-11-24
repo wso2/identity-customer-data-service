@@ -70,4 +70,6 @@ type TLSConfig struct {
 	ServerCert  string `yaml:"server_cert"`
 	ServerKey   string `yaml:"server_key"`
 	CACert      string `yaml:"ca_cert"`
+	ClientCert  string `yaml:"client_cert"`
+	ClientKey   string `yaml:"client_key"`
 }

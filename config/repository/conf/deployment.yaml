@@ -27,7 +27,7 @@ auth_server:
   tokenEndpoint: "/oauth2/token"
   revocationEndpoint: "/oauth2/revoke"
   claimsEndpoint: "api/server/v1/claim-dialects"
-  client_id: "0FuMBMeyMdmOdyLsLibnRW5Rg0wa"
+  client_id: "A5XX_NeBFi6Cf_4Zkn551xTdXnAa"
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
   admin_username: "admin"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
@@ -72,13 +72,12 @@ datasource:
   password: "${DB_PASSWORD}"
   name: "cds_db"
   sslmode: disable
-  sslrootcert: "${DB_SSL_ROOT_CERT}"  # optional
-  sslcert: "${DB_SSL_CERT}"          # optional
-  sslkey: "${DB_SSL_KEY}"
 
 tls:
   mtls_enabled: ${ENABLE_MTLS}
   cert_dir: "${TLS_CERT_DIR}"
   server_cert: "server.crt"
   server_key: "server.key"
-  ca_cert: ""
+  ca_cert: "ca.crt"
+  client_cert : "client.crt"
+  client_key : "client.key"

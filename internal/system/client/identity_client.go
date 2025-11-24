@@ -47,35 +47,23 @@ type IdentityClient struct {
 
 // NewIdentityClient creates an IdentityClient with a TLS/mTLS-ready HTTP client.
 func NewIdentityClient(cfg config.Config) *IdentityClient {
-	baseUrl := cfg.AuthServer.Host
+	baseHostPort := cfg.AuthServer.Host
 	if cfg.AuthServer.Port != "" {
-		baseUrl = cfg.AuthServer.Host + ":" + cfg.AuthServer.Port
+		baseHostPort = cfg.AuthServer.Host + ":" + cfg.AuthServer.Port
 	}
+	log.GetLogger().Info("Creating IdentityClient with base URL: " + baseHostPort)
 
-	// Load CA cert
-	caCertPath := cfg.TLS.CertDir + "/" + cfg.TLS.CACert
-	caCert, err := os.ReadFile(caCertPath)
+	httpClient, err := newOutboundHTTPClient(cfg.TLS, cfg.AuthServer.Host)
 	if err != nil {
-		log.GetLogger().Error("failed to read CA cert", log.Error(err))
+		log.GetLogger().Error("Failed to create outbound HTTPS client for IS", log.Error(err))
+		// Fall back to a minimal client to avoid nil panics; still fail fast on first request.
+		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
 
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
-
-	tlsConfig := &tls.Config{
-		RootCAs: caCertPool,
+	return &IdentityClient{
+		BaseURL:    baseHostPort,
+		HTTPClient: httpClient,
 	}
-
-	transport := &http.Transport{TLSClientConfig: tlsConfig}
-
-	client := &IdentityClient{
-		BaseURL: baseUrl,
-		HTTPClient: &http.Client{
-			Timeout:   10 * time.Second,
-			Transport: transport,
-		},
-	}
-	return client
 }
 
 // newOutboundHTTPClient builds an http.Client that validates IS with CA,
@@ -109,8 +97,8 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 	// Client cert/key for mTLS (optional)
 	var clientCerts []tls.Certificate
 	if tlsCfg.MTLSEnabled {
-		clientCrt := filepath.Join(certDir, "client.crt")
-		clientKey := filepath.Join(certDir, "client.key")
+		clientCrt := filepath.Join(certDir, tlsCfg.ClientCert)
+		clientKey := filepath.Join(certDir, tlsCfg.ClientKey)
 		pair, err := tls.LoadX509KeyPair(clientCrt, clientKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load client cert/key (%s, %s): %w", clientCrt, clientKey, err)
@@ -123,12 +111,10 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 		RootCAs:      rootCAs,          // if nil, system roots are used
 		Certificates: clientCerts,      // empty if mTLS disabled
 		ServerName:   serverHostForSNI, // ensure hostname verification (SNI)
-		// DO NOT set InsecureSkipVerify true.
 	}
 
 	tr := &http.Transport{
-		TLSClientConfig: tcfg,
-		// Reasonable defaults:
+		TLSClientConfig:     tcfg,
 		TLSHandshakeTimeout: 10 * time.Second,
 		IdleConnTimeout:     60 * time.Second,
 		MaxIdleConns:        100,
