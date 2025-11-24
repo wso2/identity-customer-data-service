@@ -89,11 +89,16 @@ func main() {
 	mux := enableCORS(initMultiplexer())
 
 	logger := log.GetLogger()
-	logger.Info(fmt.Sprintf(" WSO2 CDS starting securely on: https://%s", serverAddr))
+	logger.Info(fmt.Sprintf("WSO2 CDS starting securely on: https://%s", serverAddr))
 
 	certDir := cdsConfig.TLS.CertDir
 	if certDir == "" {
 		certDir = "./etc/certs"
+	}
+
+	if cdsConfig.TLS.ServerCert == "" || cdsConfig.TLS.ServerKey == "" {
+		logger.Error("TLS configuration is missing server certificate or key.")
+		os.Exit(1)
 	}
 
 	serverCertPath := filepath.Join(certDir, cdsConfig.TLS.ServerCert)
