@@ -65,8 +65,8 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 	}
 }
 
-// newOutboundHTTPClient builds an http.Client that validates IS with CA,
-// and (optionally) presents a client certificate when mtls_enabled is true.
+// Builds an HTTP client with TLS/mTLS configuration for outbound requests.
+// Validates the server using CA, and optionally presents a client certificate if mTLS is enabled.
 func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*http.Client, error) {
 	// Resolve cert dir to absolute to avoid CWD surprises
 	certDir := tlsCfg.CertDir
@@ -117,7 +117,7 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 		TLSHandshakeTimeout: 10 * time.Second,
 		IdleConnTimeout:     60 * time.Second,
 		MaxIdleConns:        100,
-		MaxConnsPerHost:     0,
+		MaxConnsPerHost:     100,
 	}
 	return &http.Client{
 		Transport: tr,

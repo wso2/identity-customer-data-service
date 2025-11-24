@@ -122,6 +122,26 @@ func main() {
 		os.Exit(1)
 	}
 
+	if cdsConfig.TLS.MTLSEnabled {
+		if cdsConfig.TLS.ClientCert == "" || cdsConfig.TLS.ClientKey == "" {
+			logger.Error("mTLS is enabled but client certificate or key is missing in the configuration.")
+			os.Exit(1)
+		}
+
+		clientCertPath := filepath.Join(certDir, cdsConfig.TLS.ClientCert)
+		clientKeyPath := filepath.Join(certDir, cdsConfig.TLS.ClientKey)
+
+		// Check cert files before starting
+		if _, err := os.Stat(clientCertPath); os.IsNotExist(err) {
+			logger.Error(fmt.Sprintf("Client certificate not found at %s", clientCertPath))
+			os.Exit(1)
+		}
+		if _, err := os.Stat(clientKeyPath); os.IsNotExist(err) {
+			logger.Error(fmt.Sprintf("Client key not found at %s", clientKeyPath))
+			os.Exit(1)
+		}
+	}
+
 	server := &http.Server{
 		Addr:    serverAddr,
 		Handler: mux,
@@ -179,8 +199,7 @@ func getCDSHome() string {
 	dir, dirErr := os.Getwd()
 	if dirErr != nil {
 		fmt.Println("Failed to get current working directory", dirErr)
-		return ""
+		os.Exit(1)
 	}
-
 	return dir
 }
