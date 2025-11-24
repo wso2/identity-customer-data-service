@@ -79,5 +79,5 @@ tls:
   server_cert: "server.crt"
   server_key: "server.key"
   ca_cert: "ca.crt"
-  client_cert : "client.crt"
-  client_key : "client.key"
+  client_cert: "client.crt"
+  client_key: "client.key"

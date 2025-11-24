@@ -93,7 +93,7 @@ func main() {
 
 	certDir := cdsConfig.TLS.CertDir
 	if certDir == "" {
-		certDir = "./etc/certs"
+		certDir = filepath.Join(cdsHome, "etc", "certs")
 	}
 
 	if cdsConfig.TLS.ServerCert == "" || cdsConfig.TLS.ServerKey == "" {
@@ -105,12 +105,20 @@ func main() {
 	serverKeyPath := filepath.Join(certDir, cdsConfig.TLS.ServerKey)
 
 	// Check cert files before starting
-	if _, err := os.Stat(serverCertPath); os.IsNotExist(err) {
-		logger.Error(fmt.Sprintf("Server certificate not found at %s", serverCertPath))
+	if _, err := os.Stat(serverCertPath); err != nil {
+		if os.IsNotExist(err) {
+			logger.Error(fmt.Sprintf("Server certificate not found at %s", serverCertPath))
+		} else {
+			logger.Error(fmt.Sprintf("Error accessing server certificate at %s: %v", serverCertPath, err))
+		}
 		os.Exit(1)
 	}
-	if _, err := os.Stat(serverKeyPath); os.IsNotExist(err) {
-		logger.Error(fmt.Sprintf("Server key not found at %s", serverKeyPath))
+	if _, err := os.Stat(serverKeyPath); err != nil {
+		if os.IsNotExist(err) {
+			logger.Error(fmt.Sprintf("Server key not found at %s", serverKeyPath))
+		} else {
+			logger.Error(fmt.Sprintf("Error accessing server key at %s: %v", serverKeyPath, err))
+		}
 		os.Exit(1)
 	}
 

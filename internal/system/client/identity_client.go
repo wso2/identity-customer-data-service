@@ -56,8 +56,7 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 	httpClient, err := newOutboundHTTPClient(cfg.TLS, cfg.AuthServer.Host)
 	if err != nil {
 		log.GetLogger().Error("Failed to create outbound HTTPS client for IS", log.Error(err))
-		// Fall back to a minimal client to avoid nil panics; still fail fast on first request.
-		httpClient = &http.Client{Timeout: 10 * time.Second}
+		os.Exit(1)
 	}
 
 	return &IdentityClient{
