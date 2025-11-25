@@ -23,6 +23,7 @@ import (
 	consentModel "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/consent/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 )
@@ -36,7 +37,7 @@ func NewConsentCategoryHandler() *ConsentCategoryHandler {
 // GetAllConsentCategories handles GET /consent-categories
 func (h *ConsentCategoryHandler) GetAllConsentCategories(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "consent_category:view")
+	err := security.AuthnAndAuthz(r, "consent_category:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -54,7 +55,7 @@ func (h *ConsentCategoryHandler) GetAllConsentCategories(w http.ResponseWriter, 
 // AddConsentCategory handles POST /consent-categories
 func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "consent_category:create")
+	err := security.AuthnAndAuthz(r, "consent_category:create")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -89,7 +90,7 @@ func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *ht
 // GetConsentCategory handles GET /consent-categories/{id}
 func (h *ConsentCategoryHandler) GetConsentCategory(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "consent_category:view")
+	err := security.AuthnAndAuthz(r, "consent_category:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -120,7 +121,7 @@ func (h *ConsentCategoryHandler) GetConsentCategory(w http.ResponseWriter, r *ht
 // UpdateConsentCategory handles PUT /consent-categories/{id}
 func (h *ConsentCategoryHandler) UpdateConsentCategory(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "consent_category:update")
+	err := security.AuthnAndAuthz(r, "consent_category:update")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -162,7 +163,7 @@ func (h *ConsentCategoryHandler) UpdateConsentCategory(w http.ResponseWriter, r 
 // DeleteConsentCategory handles Delete /consent-categories/{id}
 func (h *ConsentCategoryHandler) DeleteConsentCategory(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "consent_category:delete")
+	err := security.AuthnAndAuthz(r, "consent_category:delete")
 	if err != nil {
 		utils.HandleError(w, err)
 		return

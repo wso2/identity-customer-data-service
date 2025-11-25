@@ -16,12 +16,13 @@
  * under the License.
  */
 
-package utils
+package security
 
 import (
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/authz"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"net/http"
 	"strings"
 )
@@ -42,7 +43,7 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	//  Validate token
-	orgId := ExtractTenantIdFromPath(r)
+	orgId := utils.ExtractTenantIdFromPath(r)
 	claims, err := authn.ValidateAuthenticationAndReturnClaims(token, orgId)
 	if err != nil {
 		clientError := errors.NewClientError(errors.ErrorMessage{

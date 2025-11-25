@@ -45,14 +45,6 @@ type AuthServerConfig struct {
 	RequiredScopes        map[string][]string `yaml:"required_scopes"`
 }
 
-type DatabaseConfig struct {
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	DbName   string `yaml:"dbname"`
-}
-
 type DataSourceConfig struct {
 	Type     string `yaml:"type"` // e.g., "postgres", "mysql"
 	Hostname string `yaml:"hostname"`
@@ -64,10 +56,20 @@ type DataSourceConfig struct {
 }
 
 type Config struct {
-	Addr           AddrConfig       `yaml:"addr"`
-	Log            LogConfig        `yaml:"log"`
-	Auth           AuthConfig       `yaml:"auth"`
-	AuthServer     AuthServerConfig `yaml:"auth_server"`
-	DatabaseConfig DatabaseConfig   `yaml:"database"`
-	DataSource     DataSourceConfig `yaml:"datasource"`
+	Addr       AddrConfig       `yaml:"addr"`
+	Log        LogConfig        `yaml:"log"`
+	Auth       AuthConfig       `yaml:"auth"`
+	AuthServer AuthServerConfig `yaml:"auth_server"`
+	DataSource DataSourceConfig `yaml:"datasource"`
+	TLS        TLSConfig        `yaml:"tls"`
+}
+
+type TLSConfig struct {
+	MTLSEnabled bool   `yaml:"mtls_enabled"`
+	CertDir     string `yaml:"cert_dir"`
+	ServerCert  string `yaml:"server_cert"`
+	ServerKey   string `yaml:"server_key"`
+	CACert      string `yaml:"ca_cert"`
+	ClientCert  string `yaml:"client_cert"`
+	ClientKey   string `yaml:"client_key"`
 }
