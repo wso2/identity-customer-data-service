@@ -127,17 +127,93 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 	}, nil
 }
 
-// Fetch token using client_credentials grant
-func (c *IdentityClient) fetchClientCredentialsToken(orgId string) (string, error) {
+// FetchToken retrieves an access token for the given org.
+// If system app grant is enabled, it uses system_app_grant
+// Otherwise, it falls back to client_credentials per org.
+func (c *IdentityClient) FetchToken(orgId string) (string, error) {
+	logger := log.GetLogger()
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	tokenEndpoint := fmt.Sprintf("https://%s/t/", c.BaseURL)
 
+	// Common scope for both flows.
+	scope := strings.Join([]string{
+		"internal_application_mgt_view",
+		"internal_claim_meta_view",
+		"internal_user_mgt_list",
+		"internal_user_mgt_view",
+	}, " ")
+
+	if authCfg.IsSystemAppGrantEnabled {
+		logger.Debug(fmt.Sprintf("Fetching token using system_app_grant for org: %s", orgId))
+		return c.fetchOrganizationToken(orgId, tokenEndpoint+"carbon.super"+authCfg.TokenEndpoint, authCfg, scope)
+	}
+
+	logger.Debug(fmt.Sprintf("Fetching token using client_credentials for org: %s", orgId))
+	return c.fetchClientCredentialsToken(orgId, tokenEndpoint+orgId+authCfg.TokenEndpoint, authCfg, scope)
+}
+
+// fetchOrganizationToken obtains an organization-scoped token via system_app_grant.
+func (c *IdentityClient) fetchOrganizationToken(
+	orgId, endpoint string,
+	authCfg config.AuthServerConfig,
+	scope string,
+) (string, error) {
+
+	logger := log.GetLogger()
+
+	// Fetch super-tenant token
+	baseForm := url.Values{}
+	baseForm.Set("grant_type", "system_app_grant")
+	baseForm.Set("scope", scope)
+
+	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgId))
+	_, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId, false)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgId)
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	//  Exchange for organization token
+	exchangeForm := url.Values{}
+	exchangeForm.Set("grant_type", "system_app_grant")
+	exchangeForm.Set("scope", scope)
+	exchangeForm.Set("organizationId", orgId)
+
+	logger.Debug(fmt.Sprintf("Exchanging system_app_grant token for organization: %s", orgId))
+	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, exchangeForm, orgId, true)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to exchange token for the organization:%s", orgId)
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	logger.Debug(fmt.Sprintf("Successfully obtained organization-scoped token for org: %s", orgId))
+	return orgToken, nil
+}
+
+// fetchClientCredentialsToken obtains an org token directly using client_credentials grant.
+func (c *IdentityClient) fetchClientCredentialsToken(orgId, endpoint string, authCfg config.AuthServerConfig, scope string) (string, error) {
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
-	form.Set("scope", "internal_application_mgt_view internal_claim_meta_view internal_user_mgt_list internal_user_mgt_view internal_claim_meta_view")
+	form.Set("scope", scope)
+	return c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, form, orgId, false)
+}
 
-	authConfig := config.GetCDSRuntime().Config.AuthServer
-	tokenEndpoint := "https://" + c.BaseURL + "/t/" + orgId + authConfig.TokenEndpoint
+// requestToken performs the actual HTTP POST and extracts access_token from JSON.
+func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
+	form url.Values, orgId string, isOrgExchange bool,
+) (string, error) {
+
 	logger := log.GetLogger()
-	req, err := http.NewRequest("POST", tokenEndpoint, strings.NewReader(form.Encode()))
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to create token request for the organization:%s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
@@ -147,8 +223,7 @@ func (c *IdentityClient) fetchClientCredentialsToken(orgId string) (string, erro
 			Description: errorMsg,
 		}, err)
 	}
-
-	req.SetBasicAuth(authConfig.ClientID, authConfig.ClientSecret)
+	req.SetBasicAuth(clientID, clientSecret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.HTTPClient.Do(req)
@@ -173,8 +248,19 @@ func (c *IdentityClient) fetchClientCredentialsToken(orgId string) (string, erro
 		}, err)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	var result struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		errorMsg := fmt.Sprintf("Failed to parse token response for the organization:%s", orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	if result.AccessToken == "" {
 		errorMsg := fmt.Sprintf("Failed to read token response for the organization:%s", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return "", errors2.NewServerError(errors2.ErrorMessage{
@@ -184,37 +270,18 @@ func (c *IdentityClient) fetchClientCredentialsToken(orgId string) (string, erro
 		}, err)
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		errorMsg := fmt.Sprintf("Failed to parse token response for the organization:%s", orgId)
-		logger.Debug(errorMsg, log.Error(err))
-		return "", errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.TOKEN_FETCH_FAILED.Code,
-			Message:     errors2.TOKEN_FETCH_FAILED.Message,
-			Description: errorMsg,
-		}, err)
-	}
-	token, ok := result["access_token"].(string)
-	if !ok {
-		errorMsg := fmt.Sprintf("Access token not found in response for the organization:%s", orgId)
-		return "", errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.TOKEN_FETCH_FAILED.Code,
-			Message:     errors2.TOKEN_FETCH_FAILED.Message,
-			Description: errorMsg,
-		}, err)
-	}
-
-	return token, nil
+	return result.AccessToken, nil
 }
 
 // IntrospectToken introspects an opaque token using the introspection endpoint.
-func (c *IdentityClient) IntrospectToken(orgId, token string) (map[string]interface{}, error) {
+func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, error) {
 
 	form := url.Values{}
 	form.Set("token", token)
 
 	authConfig := config.GetCDSRuntime().Config.AuthServer
-	introspectionEndpoint := "https://" + c.BaseURL + "/t/" + orgId + authConfig.IntrospectionEndPoint
+	// It is possible to introspect any token against super tenant introspection endpoint and super tenant client credentials
+	introspectionEndpoint := "https://" + c.BaseURL + "/t/" + authConfig.IntrospectionEndPoint
 	log.GetLogger().Info("Introspecting token at endpoint: " + introspectionEndpoint)
 
 	req, err := http.NewRequest("POST", introspectionEndpoint, strings.NewReader(form.Encode()))
@@ -357,7 +424,7 @@ func (c *IdentityClient) GetAllDialects(orgId string) ([]map[string]interface{},
 	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects", c.BaseURL, orgId)
 	req, _ := http.NewRequest("GET", endpoint, nil)
 	logger := log.GetLogger()
-	token, err := c.fetchClientCredentialsToken(orgId)
+	token, err := c.FetchToken(orgId)
 	if err != nil {
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the all dialects of the organization:%s",
 			orgId), log.Error(err))
@@ -395,7 +462,7 @@ func (c *IdentityClient) GetAllDialects(orgId string) ([]map[string]interface{},
 func (c *IdentityClient) GetClaimsByDialect(dialectID, orgId string) ([]map[string]interface{}, error) {
 	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects/%s/claims", c.BaseURL, orgId, dialectID)
 	req, _ := http.NewRequest("GET", endpoint, nil)
-	token, err := c.fetchClientCredentialsToken(orgId)
+	token, err := c.FetchToken(orgId)
 	logger := log.GetLogger()
 	if err != nil {
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the claims of dialectID:%s of the organization:%s", dialectID, orgId), log.Error(err))
@@ -436,7 +503,7 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 	logger := log.GetLogger()
 	logger.Info("Fetching local claims from endpoint: " + endpoint)
 	req, _ := http.NewRequest("GET", endpoint, nil)
-	token, err := c.fetchClientCredentialsToken(orgId)
+	token, err := c.FetchToken(orgId)
 	if err != nil {
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the local claims of the organization:%s",
 			orgId), log.Error(err))
@@ -618,7 +685,7 @@ func (c *IdentityClient) GetSCIMUser(orgId, userId string) (map[string]interface
 
 	endpoint := fmt.Sprintf("https://%s/t/%s/scim2/Users/%s", c.BaseURL, orgId, userId)
 	req, _ := http.NewRequest("GET", endpoint, nil)
-	token, err := c.fetchClientCredentialsToken(orgId)
+	token, err := c.FetchToken(orgId)
 	logger := log.GetLogger()
 	if err != nil {
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the SCIM user:%s of the organization:%s",
