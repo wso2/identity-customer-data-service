@@ -20,6 +20,7 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
@@ -93,7 +94,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 // GetUnificationRules handles fetching all rules
 func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "unification_rules:view")
+	err := security.AuthnAndAuthz(r, "unification_rules:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -126,7 +127,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 // GetUnificationRule Fetches a specific resolution rule.
 func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "unification_rules:view")
+	err := security.AuthnAndAuthz(r, "unification_rules:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -158,7 +159,7 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 // PatchUnificationRule applies partial updates to a unification rule.
 func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "unification_rules:update")
+	err := security.AuthnAndAuthz(r, "unification_rules:update")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -203,7 +204,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 // DeleteUnificationRule removes a resolution rule.
 func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "unification_rules:delete")
+	err := security.AuthnAndAuthz(r, "unification_rules:delete")
 	if err != nil {
 		utils.HandleError(w, err)
 		return

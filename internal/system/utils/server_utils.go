@@ -18,11 +18,16 @@
 
 package utils
 
+import "sync"
+
 var cdsHome string
+var setCDSHomeOnce sync.Once
 
 // SetCDSHome sets the globally used CDS home directory path.
 func SetCDSHome(home string) {
-	cdsHome = home
+	setCDSHomeOnce.Do(func() {
+		cdsHome = home
+	})
 }
 
 // GetCDSHome returns the configured CDS home directory path.

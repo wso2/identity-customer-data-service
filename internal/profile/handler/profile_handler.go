@@ -21,6 +21,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"net/http"
 	"strings"
 	"sync"
@@ -51,7 +52,7 @@ func NewProfileHandler() *ProfileHandler {
 // GetProfile handles profile retrieval requests
 func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "profile:view")
+	err := security.AuthnAndAuthz(r, "profile:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -83,7 +84,7 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
 	logger := log.GetLogger()
-	if err := utils.AuthnAndAuthz(r, "profile:view"); err != nil {
+	if err := security.AuthnAndAuthz(r, "profile:view"); err != nil {
 		utils.HandleError(w, err)
 		return
 	}
@@ -165,7 +166,7 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 // DeleteProfile handles profile deletion
 func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "profile:delete")
+	err := security.AuthnAndAuthz(r, "profile:delete")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -193,7 +194,7 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 // GetAllProfiles handles profile retrieval with and without filters
 func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "profile:view")
+	err := security.AuthnAndAuthz(r, "profile:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -354,7 +355,7 @@ func parseRequestedAttributes(r *http.Request) map[string][]string {
 // InitProfile initializes a new profile based on the request body and sets a cookie
 func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "profile:create")
+	err := security.AuthnAndAuthz(r, "profile:create")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -476,7 +477,7 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 
 func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
 
-	err := utils.AuthnAndAuthz(request, "profile:update")
+	err := security.AuthnAndAuthz(request, "profile:update")
 	if err != nil {
 		utils.HandleError(writer, err)
 		return
@@ -518,7 +519,7 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 // PatchProfile handles partial updates to a profile
 func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "profile:update")
+	err := security.AuthnAndAuthz(r, "profile:update")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -568,7 +569,7 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
 	logger := log.GetLogger()
-	if err := utils.AuthnAndAuthz(r, "profile:update"); err != nil {
+	if err := security.AuthnAndAuthz(r, "profile:update"); err != nil {
 		utils.HandleError(w, err)
 		return
 	}
@@ -663,7 +664,7 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 
 func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.Request) {
 
-	err := utils.AuthnAndAuthz(request, "profile:update")
+	err := security.AuthnAndAuthz(request, "profile:update")
 	if err != nil {
 		utils.HandleError(writer, err)
 		return
@@ -930,7 +931,7 @@ func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	err := utils.AuthnAndAuthz(r, "profile:view")
+	err := security.AuthnAndAuthz(r, "profile:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -961,7 +962,7 @@ func (ph *ProfileHandler) UpdateProfileConsents(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	err := utils.AuthnAndAuthz(r, "profile:update")
+	err := security.AuthnAndAuthz(r, "profile:update")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
