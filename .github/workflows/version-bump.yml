@@ -1,4 +1,4 @@
-name:  Bump Next Dev Version
+name: Bump Next Dev Version
 
 on:
   workflow_run:
@@ -20,26 +20,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read current version
-        id: read_version
+      - name: Read and bump version
+        id: bump
         run: |
-          # Read current version (e.g., v0.5.0)
           VER=$(cat version.txt)
-          CLEAN_VER=$(echo "$VER" | sed 's/^v//')
+          CLEAN_VER=$(echo "$VER" | sed 's/^v//; s/-dev$//')
+          if ! [[ "$CLEAN_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format: $VER"
+            exit 1
+          fi
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CLEAN_VER"
-          
-          # Increment minor version and set as dev
           MINOR=$((MINOR + 1))
           NEW_VER="v${MAJOR}.${MINOR}.0-dev"
-
+          echo "$NEW_VER" > version.txt
           echo "new_version=$NEW_VER" >> $GITHUB_OUTPUT
           echo "Next development version: $NEW_VER"
 
-      - name: Update version.txt and commit
+      - name: Commit and push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "${{ steps.read_version.outputs.new_version }}" > version.txt
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add version.txt
-          git commit -m "🔄 Bump to next development version: ${{ steps.read_version.outputs.new_version }}"
+          git commit -m "🔄 Bump to next development version: ${{ steps.bump.outputs.new_version }}" || echo "No changes to commit"
           git push origin HEAD:main
