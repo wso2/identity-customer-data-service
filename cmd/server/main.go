@@ -19,6 +19,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"github.com/joho/godotenv"
@@ -26,10 +27,12 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func initDatabaseFromConfig(config *config.Config) {
@@ -51,7 +54,8 @@ func initDatabaseFromConfig(config *config.Config) {
 
 func main() {
 
-	cdsHome := getCDSHome()
+	cdsHome := resolveCDSHome()
+	utils.SetCDSHome(cdsHome)
 	const configFile = "/repository/conf/deployment.yaml"
 
 	envFiles, err := filepath.Glob("config/*.env")
@@ -145,6 +149,14 @@ func main() {
 	server := &http.Server{
 		Addr:    serverAddr,
 		Handler: mux,
+		// explicit TLS settings and HTTP timeouts
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 	}
 
 	logger.Info(fmt.Sprintf("HTTPS server listening on %s", serverAddr))
@@ -185,20 +197,32 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 
-// getCDSHome detects the CDS project root for config resolution.
-func getCDSHome() string {
+// resolveCDSHome parses flags and determines the CDS home directory.
+func resolveCDSHome() string {
+	// Define the flag locally
+	cdsHomeFlag := flag.String("cdsHome", "", "Path to customer data service home directory")
 
-	projectHomeFlag := flag.String("cdsHome", "", "Path to customer data service home directory")
-	flag.Parse()
-
-	if *projectHomeFlag != "" {
-		fmt.Printf("Using %s from command line argument", *projectHomeFlag)
-		return *projectHomeFlag
+	// Parse flags once (only if not already parsed)
+	if !flag.Parsed() {
+		flag.Parse()
 	}
 
-	dir, dirErr := os.Getwd()
-	if dirErr != nil {
-		fmt.Println("Failed to get current working directory", dirErr)
+	// Determine the directory
+	if *cdsHomeFlag != "" {
+		fmt.Printf("Using %s from command line argument\n", *cdsHomeFlag)
+		return *cdsHomeFlag
+	}
+
+	// Fallback to environment variable
+	if envHome := os.Getenv("CDS_HOME"); envHome != "" {
+		fmt.Printf("Using CDS_HOME from environment: %s\n", envHome)
+		return envHome
+	}
+
+	// Fallback to working directory
+	dir, err := os.Getwd()
+	if err != nil {
+		fmt.Println("Failed to get current working directory", err)
 		os.Exit(1)
 	}
 	return dir

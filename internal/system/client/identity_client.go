@@ -23,6 +23,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"io"
 	"net/http"
 	"net/url"
@@ -70,8 +71,9 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*http.Client, error) {
 	// Resolve cert dir to absolute to avoid CWD surprises
 	certDir := tlsCfg.CertDir
+	cdsHome := utils.GetCDSHome()
 	if certDir == "" {
-		certDir = "/etc/certs"
+		certDir = filepath.Join(cdsHome, "etc", "certs")
 	}
 	if !filepath.IsAbs(certDir) {
 		if abs, err := filepath.Abs(certDir); err == nil {
