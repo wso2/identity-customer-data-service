@@ -43,12 +43,10 @@ jobs:
           fi
           CURRENT_VERSION=$(cat version.txt | tr -d '[:space:]')
 
-          # Expected dev version should match input version + "-dev"
-          EXPECTED_DEV_VERSION="${INPUT_VERSION}-dev"
-
-          if [ "$CURRENT_VERSION" != "$EXPECTED_DEV_VERSION" ]; then
+          # Expect version.txt to match input version exactly
+          if [ "$CURRENT_VERSION" != "$INPUT_VERSION" ]; then
             echo "❌ version.txt mismatch."
-            echo "Expected: $EXPECTED_DEV_VERSION"
+            echo "Expected: $INPUT_VERSION"
             echo "Found:    $CURRENT_VERSION"
             exit 1
           fi
