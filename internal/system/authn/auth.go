@@ -58,7 +58,7 @@ func ValidateAuthenticationAndReturnClaims(token, orgId string) (map[string]inte
 		cfg := config.GetCDSRuntime().Config
 		identityClient := client.NewIdentityClient(cfg)
 
-		claims, err = identityClient.IntrospectToken(orgId, token)
+		claims, err = identityClient.IntrospectToken(token)
 		if err != nil {
 			return claims, unauthorizedError()
 		}
