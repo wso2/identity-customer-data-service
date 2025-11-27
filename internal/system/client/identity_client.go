@@ -133,7 +133,6 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 func (c *IdentityClient) FetchToken(orgId string) (string, error) {
 	logger := log.GetLogger()
 	authCfg := config.GetCDSRuntime().Config.AuthServer
-	tokenEndpoint := fmt.Sprintf("https://%s/t/", c.BaseURL)
 
 	// Common scope for both flows.
 	scope := strings.Join([]string{
@@ -141,20 +140,24 @@ func (c *IdentityClient) FetchToken(orgId string) (string, error) {
 		"internal_claim_meta_view",
 		"internal_user_mgt_list",
 		"internal_user_mgt_view",
-	}, " ")
+	}, constants.SpaceSeparator)
 
 	if authCfg.IsSystemAppGrantEnabled {
 		logger.Debug(fmt.Sprintf("Fetching token using system_app_grant for org: %s", orgId))
-		return c.fetchOrganizationToken(orgId, tokenEndpoint+"carbon.super"+authCfg.TokenEndpoint, authCfg, scope)
+		return c.fetchOrganizationToken(orgId, authCfg, scope)
 	}
 
 	logger.Debug(fmt.Sprintf("Fetching token using client_credentials for org: %s", orgId))
-	return c.fetchClientCredentialsToken(orgId, tokenEndpoint+orgId+authCfg.TokenEndpoint, authCfg, scope)
+	return c.fetchClientCredentialsToken(orgId, authCfg, scope)
+}
+
+func (c *IdentityClient) buildTokenEndpoint(orgId, tokenEndpoint string) string {
+	return fmt.Sprintf("https://%s/t/%s%s", c.BaseURL, orgId, tokenEndpoint)
 }
 
 // fetchOrganizationToken obtains an organization-scoped token via system_app_grant.
 func (c *IdentityClient) fetchOrganizationToken(
-	orgId, endpoint string,
+	orgId string,
 	authCfg config.AuthServerConfig,
 	scope string,
 ) (string, error) {
@@ -165,8 +168,9 @@ func (c *IdentityClient) fetchOrganizationToken(
 	baseForm := url.Values{}
 	baseForm.Set("grant_type", "system_app_grant")
 	baseForm.Set("scope", scope)
-
+	endpoint := c.buildTokenEndpoint("carbon.super", authCfg.TokenEndpoint)
 	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgId))
+	// Note: The super-tenant token is not used directly — the grant exchange happens using client credentials.
 	_, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgId)
@@ -198,8 +202,10 @@ func (c *IdentityClient) fetchOrganizationToken(
 	return orgToken, nil
 }
 
-// fetchClientCredentialsToken obtains an org token directly using client_credentials grant.
-func (c *IdentityClient) fetchClientCredentialsToken(orgId, endpoint string, authCfg config.AuthServerConfig, scope string) (string, error) {
+// fetchClientCredentialsToken obtains an organization-scoped token directly using client_credentials grant.
+func (c *IdentityClient) fetchClientCredentialsToken(orgId string, authCfg config.AuthServerConfig, scope string) (string, error) {
+
+	endpoint := c.buildTokenEndpoint(orgId, authCfg.TokenEndpoint)
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Set("scope", scope)
