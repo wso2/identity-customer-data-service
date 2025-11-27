@@ -167,7 +167,7 @@ func (c *IdentityClient) fetchOrganizationToken(
 	baseForm.Set("scope", scope)
 
 	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgId))
-	_, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId, false)
+	_, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgId)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
@@ -184,7 +184,7 @@ func (c *IdentityClient) fetchOrganizationToken(
 	exchangeForm.Set("organizationId", orgId)
 
 	logger.Debug(fmt.Sprintf("Exchanging system_app_grant token for organization: %s", orgId))
-	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, exchangeForm, orgId, true)
+	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, exchangeForm, orgId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to exchange token for the organization:%s", orgId)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
@@ -203,12 +203,12 @@ func (c *IdentityClient) fetchClientCredentialsToken(orgId, endpoint string, aut
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Set("scope", scope)
-	return c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, form, orgId, false)
+	return c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, form, orgId)
 }
 
 // requestToken performs the actual HTTP POST and extracts access_token from JSON.
 func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
-	form url.Values, orgId string, isOrgExchange bool,
+	form url.Values, orgId string,
 ) (string, error) {
 
 	logger := log.GetLogger()
@@ -281,7 +281,7 @@ func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, 
 
 	authConfig := config.GetCDSRuntime().Config.AuthServer
 	// It is possible to introspect any token against super tenant introspection endpoint and super tenant client credentials
-	introspectionEndpoint := "https://" + c.BaseURL + "/t/carbon.super/" + authConfig.IntrospectionEndPoint
+	introspectionEndpoint := "https://" + c.BaseURL + "/t/carbon.super" + authConfig.IntrospectionEndPoint
 	log.GetLogger().Info("Introspecting token at endpoint: " + introspectionEndpoint)
 
 	req, err := http.NewRequest("POST", introspectionEndpoint, strings.NewReader(form.Encode()))
