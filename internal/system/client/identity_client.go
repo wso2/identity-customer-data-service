@@ -262,12 +262,12 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 	}
 	if result.AccessToken == "" {
 		errorMsg := fmt.Sprintf("Failed to read token response for the organization:%s", orgId)
-		logger.Debug(errorMsg, log.Error(err))
+		logger.Debug(errorMsg)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
 			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
-		}, err)
+		}, nil)
 	}
 
 	return result.AccessToken, nil
@@ -281,7 +281,7 @@ func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, 
 
 	authConfig := config.GetCDSRuntime().Config.AuthServer
 	// It is possible to introspect any token against super tenant introspection endpoint and super tenant client credentials
-	introspectionEndpoint := "https://" + c.BaseURL + "/t/" + authConfig.IntrospectionEndPoint
+	introspectionEndpoint := "https://" + c.BaseURL + "/t/carbon.super/" + authConfig.IntrospectionEndPoint
 	log.GetLogger().Info("Introspecting token at endpoint: " + introspectionEndpoint)
 
 	req, err := http.NewRequest("POST", introspectionEndpoint, strings.NewReader(form.Encode()))
