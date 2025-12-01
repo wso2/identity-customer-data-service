@@ -25,7 +25,7 @@ name: Helm Chart Releaser
 on:
   # Triggers the workflow on push events but only for certain file changes on the main branch.
   push:
-    branches: [ mvp ] # TODO: change the branch name to main after the MVP release
+    branches: [ main ] # TODO: change the branch name to main after the MVP release
     paths:
       - 'install/helm/confs/**'
       - 'install/helm/templates/**'
