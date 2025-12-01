@@ -22,18 +22,15 @@
 cloud:
   deployment:
     cds:
-      containerPort: 8080 # TODO: Update to the port the CDS server listens on
-      config: #TODO: Update all the values as required in the config section. The default values have been taken from the sample deployment.yaml in the repo.
+      containerPort: 8900
+      config:
         env: "dev"
         logLevel: "INFO" # Log level: "INFO", "WARN", "ERROR", "DEBUG"
         cache:
           enabled: true
           defaultCacheTimeout: 15
         auth:
-          corsAllowedOrigins: # TODO: Update the allowed CORS origins as needed
-            - "http://localhost:3000"
-            - "http://localhost:3001"
-            - "https://localhost:9001"
+          corsAllowedOrigins:
         addr:
           host: "cds.local.com"
         sync:
@@ -92,7 +89,7 @@ cloud:
 
   service:
     name: cds-service
-    port: 8080 # TODO: Update to the port the CDS server should be exposed on. Can be equal to the container port.
+    port: 8900
   ingress:
     ratelimit:
       cds:

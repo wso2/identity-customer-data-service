@@ -28,6 +28,7 @@ auth_server:
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
   admin_username: "${AUTH_SERVER_ADMIN_USERNAME}"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
+  isSystemAppGrantEnabled: { { .Values.cloud.deployment.cds.config.identityServer.isSystemAppGrantEnabled } }
   required_scopes:
     profile:create:
       - "internal_cdm_profile_create"
@@ -56,16 +57,20 @@ auth_server:
     profile_schema:delete:
       - "internal_cdm_profile_schema_delete"
 
-sync:
-  schema:
-    enabled: {{ .Values.cloud.deployment.cds.config.sync.schema.enabled }}
-    interval: {{ .Values.cloud.deployment.cds.config.sync.schema.interval }} # in seconds
-
 datasource:
   type: {{ .Values.cloud.deployment.cds.config.datasource.type }}
   hostname: {{ .Values.cloud.deployment.cds.config.datasource.hostname }}
   port: {{ .Values.cloud.deployment.cds.config.datasource.port }}
-  username: "${DATABASE_ADMIN_USERNAME}"
-  password: "${DATABASE_ADMIN_PASSWORD}"
-  name: {{ .Values.cloud.deployment.cds.config.datasource.name }}
-  sslmode: {{ .Values.cloud.deployment.cds.config.datasource.sslmode }}
+  username: "${DB_USERNAME}"
+  password: "${DB_PASSWORD}"
+  name: {{ .Values.cloud.deployment.cds.config.datasource.name | quote }}
+  sslmode: {{ .Values.cloud.deployment.cds.config.datasource.sslmode | quote }}
+
+tls:
+  mtls_enabled: "{{ .Values.cloud.deployment.cds.config.tls.mtls_enabled }}"
+  cert_dir: "${TLS_CERT_DIR}"
+  server_cert: "{{ .Values.cloud.deployment.cds.config.tls.server_cert }}"
+  server_key: "{{ .Values.cloud.deployment.cds.config.tls.server_key }}"
+  ca_cert: "{{ .Values.cloud.deployment.cds.config.tls.ca_cert }}"
+  client_cert: "{{ .Values.cloud.deployment.cds.config.tls.client_cert }}"
+  client_key: "{{ .Values.cloud.deployment.cds.config.tls.client_key }}"
