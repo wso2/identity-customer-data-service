@@ -114,6 +114,30 @@ spec:
               mountPath: /app/repository/conf/deployment.yaml
               subPath: deployment.yaml
               readOnly: true
+            - name: cds-application-properties
+              mountPath: /app/repository/conf/deployment.yaml
+              subPath: deployment.yaml
+              readOnly: true
+            - name: cds-mtls-volume
+              mountPath: /app/repository/certs/server.crt
+              subPath: server.crt
+              readOnly: true
+            - name: cds-mtls-volume
+              mountPath: /app/repository/certs/server.key
+              subPath: server.key
+              readOnly: true
+            - name: cds-mtls-volume
+              mountPath: /app/repository/certs/client.crt
+              subPath: client.crt
+              readOnly: true
+            - name: cds-mtls-volume
+              mountPath: /app/repository/certs/client.key
+              subPath: client.key
+              readOnly: true
+            - name: cds-mtls-volume
+              mountPath: /app/repository/certs/ca.crt
+              subPath: ca.crt
+              readOnly: true
           envFrom:
             - secretRef:
                 name: cds-env-secret
@@ -124,3 +148,17 @@ spec:
             items:
              - key: deployment.yaml
                path: deployment.yaml
+        - name: cds-mtls-volume
+          configMap:
+            name: scheduler-config
+            items:
+              - key: server.crt
+                path: server.crt
+              - key: server.key
+                path: server.key
+              - key: client.crt
+                path: client.crt
+              - key: client.key
+                path: client.key
+              - key: ca.crt
+                path: ca.crt
