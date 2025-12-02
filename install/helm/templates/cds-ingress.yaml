@@ -35,7 +35,7 @@ spec:
     - host: {{ .Values.cloud.ingress.hostName }}
       http:
         paths:
-          - path: <PATH> #TODO: Specify the actual path here. Can add multiple path objects if needed.
+          - path: /api/v1
             pathType: ImplementationSpecific
             backend:
               service:

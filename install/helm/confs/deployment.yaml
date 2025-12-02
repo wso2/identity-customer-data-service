@@ -18,8 +18,8 @@ addr:
   port: {{ .Values.cloud.deployment.cds.containerPort }}
 
 auth_server:
-  host: {{ .Values.cloud.deployment.cds.config.identityServer.serviceName }}
-  port : {{ .Values.cloud.deployment.cds.config.identityServer.servicePort }}
+  host: {{ .Values.cloud.deployment.cds.config.identityServer.host }}
+  port : {{ .Values.cloud.deployment.cds.config.identityServer.port }}
   introspectionEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.introspectionEndpoint }}
   tokenEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.tokenEndpoint }}
   revocationEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.revocationEndpoint }}
