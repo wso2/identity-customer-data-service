@@ -18,7 +18,7 @@
   #
   # --------------------------------------------------------------------------------------
 
-{{ $replicas:= int .Values.cloud.deployment.cds.replicas }}
+{{- $replicas:= int .Values.cloud.deployment.cds.replicas }}
 {{- if gt $replicas 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget

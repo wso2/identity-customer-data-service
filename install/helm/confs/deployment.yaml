@@ -28,7 +28,7 @@ auth_server:
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
   admin_username: "${AUTH_SERVER_ADMIN_USERNAME}"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
-  isSystemAppGrantEnabled: { { .Values.cloud.deployment.cds.config.identityServer.isSystemAppGrantEnabled } }
+  isSystemAppGrantEnabled: {{ .Values.cloud.deployment.cds.config.identityServer.isSystemAppGrantEnabled }}
   required_scopes:
     profile:create:
       - "internal_cdm_profile_create"

@@ -30,7 +30,7 @@ cloud:
           enabled: true
           defaultCacheTimeout: 15
         auth:
-          corsAllowedOrigins:
+          corsAllowedOrigins: []
         addr:
           host: "cds.local.com"
         sync:
@@ -41,15 +41,26 @@ cloud:
           type: "postgres"
           hostname: "localhost"
           port: 5432
-          name: "iam_cds"
-          sslmode: "enable"
+          name: "cds_db"                # UPDATED
+          sslmode: "disable"            # UPDATED
+
         identityServer:
-          serviceName: identity-service
-          servicePort: 9443
+          host: identity-service             # NEW
+          port: 9443                    # NEW
           introspectionEndpoint: "/oauth2/introspect"
           tokenEndpoint: "/oauth2/token"
           revocationEndpoint: "/oauth2/revoke"
           claimsEndpoint: "api/server/v1/claim-dialects"
+          isSystemAppGrantEnabled: true
+
+      tls:
+        mtls_enabled: true
+        server_cert: "server.crt"
+        server_key: "server.key"
+        ca_cert: "ca.crt"
+        client_cert: "client.crt"
+        client_key: "client.key"
+
       secrets:
         authServerClientId: "" # Add the auth server client ID
         authServerClientSecret: "" # Add the auth server client secret
@@ -77,11 +88,11 @@ cloud:
       imagePullPolicy: Always
       resources:
         requests:
-          memory: #TODO: Update as needed by the application
-          cpu: #TODO: Update as needed by the application
+          memory: 256Mi
+          cpu: 250m
         limits:
-          memory: #TODO: Update as needed by the application
-          cpu: #TODO: Update as needed by the application
+          memory: 512Mi
+          cpu: 500m
       hpa:
         maxReplicas: 3
         averageUtilizationCPU: 75
