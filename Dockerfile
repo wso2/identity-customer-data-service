@@ -1,5 +1,5 @@
 # Add a build-time argument for the base images so they can be overridden during docker build
-ARG GO_BASE=golang:1.24
+ARG GO_BASE=golang:1.25
 ARG RUNTIME_BASE=alpine:latest
 
 # Stage 1: Builder
@@ -44,7 +44,7 @@ COPY --from=builder /app/dbscripts ./dbscripts
 COPY --from=builder /app/version.txt .
 
 # Expose the app port
-EXPOSE 8080
+EXPOSE 8900
 
 # Start the service
 CMD ["./cds"]

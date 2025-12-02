@@ -111,7 +111,7 @@ spec:
               protocol: TCP
           volumeMounts:
             - name: cds-application-properties
-              mountPath: /home/wso2carbon/app/resources/deployment.yaml #TODO Update to the path of the deployment.yaml file in the CDS server
+              mountPath: app/config/repository/conf/deployment.yaml
               subPath: deployment.yaml
               readOnly: true
           envFrom:
