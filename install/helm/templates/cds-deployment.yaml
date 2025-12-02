@@ -111,7 +111,7 @@ spec:
               protocol: TCP
           volumeMounts:
             - name: cds-application-properties
-              mountPath: /root/repository/conf/deployment.yaml
+              mountPath: /app/repository/conf/deployment.yaml
               subPath: deployment.yaml
               readOnly: true
           envFrom:
