@@ -149,16 +149,10 @@ spec:
              - key: deployment.yaml
                path: deployment.yaml
         - name: cds-mtls-volume
-          configMap:
-            name: scheduler-config
-            items:
-              - key: server.crt
-                path: server.crt
-              - key: server.key
-                path: server.key
-              - key: client.crt
-                path: client.crt
-              - key: client.key
-                path: client.key
-              - key: ca.crt
-                path: ca.crt
+          secret:
+            secretName: server.crt
+        - name: cds-mtls-volume
+          secret:
+            secretName: cds-mtls-secret
+
+
