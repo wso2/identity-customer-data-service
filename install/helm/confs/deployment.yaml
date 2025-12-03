@@ -68,7 +68,7 @@ datasource:
 
 tls:
   mtls_enabled: "{{ .Values.cloud.deployment.cds.config.tls.mtls_enabled }}"
-  cert_dir: "${TLS_CERT_DIR}"
+  cert_dir: "{{ .Values.cloud.deployment.cds.config.tls.cert_dir }}"
   server_cert: "{{ .Values.cloud.deployment.cds.config.tls.server_cert }}"
   server_key: "{{ .Values.cloud.deployment.cds.config.tls.server_key }}"
   ca_cert: "{{ .Values.cloud.deployment.cds.config.tls.ca_cert }}"

@@ -55,6 +55,7 @@ cloud:
 
       tls:
         mtls_enabled: true
+        cert_dir : "/app/repository/certs"
         server_cert: "server.crt"
         server_key: "server.key"
         ca_cert: "ca.crt"
@@ -62,7 +63,6 @@ cloud:
         client_key: "client.key"
 
       secrets:
-        tlsCertDir: ""
         authServerClientId: "" # Add the auth server client ID
         authServerClientSecret: "" # Add the auth server client secret
         authServerAdminUsername: "" # Add the auth server admin username

@@ -31,10 +31,13 @@ RUN test -f Makefile || (echo "ERROR: Makefile not found!" && exit 1) && \
 # -------------------------
 FROM ${RUNTIME_BASE}
 
-# Create non-root user (recommended for security)
-RUN adduser -D appuser
+# -------------------------
+# Create user/group with UID/GID 10001
+# -------------------------
+RUN addgroup -g 10001 appgroup && \
+    adduser  -D -u 10001 -G appgroup appuser
 
-# Use a clean app directory (NOT /root)
+# Use /app (matches your Helm volume mounts)
 WORKDIR /app
 
 # Copy binary + config
@@ -44,8 +47,11 @@ COPY --from=builder /app/config/repository ./repository
 COPY --from=builder /app/dbscripts ./dbscripts
 COPY --from=builder /app/version.txt .
 
-# Switch to non-root
-USER appuser
+# Ensure correct permissions for mounted volumes
+RUN chown -R 10001:10001 /app
+
+# Switch to non-root (UID/GID 10001)
+USER 10001:10001
 
 EXPOSE 8900
 

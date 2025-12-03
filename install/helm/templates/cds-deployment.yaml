@@ -119,24 +119,12 @@ spec:
               subPath: deployment.yaml
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/server.crt
-              subPath: server.crt
+              mountPath: /app/repository/certs/server.cer
+              subPath: server.cer
               readOnly: true
             - name: cds-mtls-volume
               mountPath: /app/repository/certs/server.key
-              subPath: server.key
-              readOnly: true
-            - name: cds-mtls-volume
-              mountPath: /app/repository/certs/client.crt
-              subPath: client.crt
-              readOnly: true
-            - name: cds-mtls-volume
-              mountPath: /app/repository/certs/client.key
-              subPath: client.key
-              readOnly: true
-            - name: cds-mtls-volume
-              mountPath: /app/repository/certs/ca.crt
-              subPath: ca.crt
+              subPath: server.pem
               readOnly: true
           envFrom:
             - secretRef:
