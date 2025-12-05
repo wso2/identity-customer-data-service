@@ -1,0 +1,110 @@
+# -------------------------------------------------------------------------------------
+#
+# Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com).
+#
+# WSO2 LLC. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# --------------------------------------------------------------------------------------
+
+
+cloud:
+  deployment:
+    cds:
+      containerPort: 8900
+      config:
+        env: "dev"
+        logLevel: "INFO" # Log level: "INFO", "WARN", "ERROR", "DEBUG"
+        cache:
+          enabled: true
+          defaultCacheTimeout: 15
+        auth:
+          corsAllowedOrigins: []
+        addr:
+          host: "cds.local.com"
+        sync:
+          schema:
+            enabled: true
+            interval: 3600 # in seconds
+        datasource:
+          type: "postgres"
+          hostname: "localhost"
+          port: 5432
+          name: "cds_db"
+          sslmode: "disable"
+
+        identityServer:
+          host: identity-service
+          port: 9443
+          introspectionEndpoint: "/oauth2/introspect"
+          tokenEndpoint: "/oauth2/token"
+          revocationEndpoint: "/oauth2/revoke"
+          claimsEndpoint: "api/server/v1/claim-dialects"
+          isSystemAppGrantEnabled: true
+
+      tls:
+        mtls_enabled: true
+        cert_dir : "/app/repository/certs"
+        server_cert: "server.crt" # server cert path
+        server_key: "server.key" # server key path
+        client_cert: "client.crt"
+        client_key: "client.key"
+
+      secrets:
+        authServerClientId: "" # Add the auth server client ID
+        authServerClientSecret: "" # Add the auth server client secret
+        authServerAdminUsername: "" # Add the auth server admin username
+        authServerAdminPassword: "" # Add the auth server admin password
+        databaseUsername: "" # Add the database admin username
+        databasePassword: "" # Add the database admin password
+      replicas: 2
+      annotations: {}
+      progressDeadlineSeconds: 300
+      minReadySeconds: 30
+      strategy:
+        rollingUpdate:
+          maxSurge: 1
+          maxUnavailable: 0
+      dockerRegistry: ""
+      imageName: ""
+      digest: ""
+      livenessProbe:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+      readinessProbe:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+      imagePullPolicy: Always
+      resources:
+        requests:
+          memory: 256Mi
+          cpu: 250m
+        limits:
+          memory: 256Mi
+          cpu: 250m
+      hpa:
+        maxReplicas: 3
+        averageUtilizationCPU: 75
+        averageUtilizationMemory: 75
+
+  service:
+    name: cds-service
+    port: 8900
+  ingress:
+    ratelimit:
+      cds:
+        zoneName: "cds"
+        burstLimit: 50
+    hostName: "cds.local.com"
+    ingressClassName: "nginx"

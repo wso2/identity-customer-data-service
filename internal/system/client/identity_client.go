@@ -20,7 +20,6 @@ package client
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
@@ -81,20 +80,6 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 		}
 	}
 
-	// Root CA pool (optional but recommended)
-	var rootCAs *x509.CertPool
-	if tlsCfg.CACert != "" {
-		caPath := filepath.Join(certDir, tlsCfg.CACert)
-		caPEM, err := os.ReadFile(caPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read ca_cert at %s: %w", caPath, err)
-		}
-		rootCAs = x509.NewCertPool()
-		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
-			return nil, fmt.Errorf("failed to append ca_cert into CertPool: %s", caPath)
-		}
-	}
-
 	// Client cert/key for mTLS (optional)
 	var clientCerts []tls.Certificate
 	if tlsCfg.MTLSEnabled {
@@ -109,7 +94,6 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 
 	tcfg := &tls.Config{
 		MinVersion:   tls.VersionTLS12,
-		RootCAs:      rootCAs,          // if nil, system roots are used
 		Certificates: clientCerts,      // empty if mTLS disabled
 		ServerName:   serverHostForSNI, // ensure hostname verification (SNI)
 	}

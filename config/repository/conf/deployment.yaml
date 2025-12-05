@@ -75,10 +75,9 @@ datasource:
   sslmode: disable
 
 tls:
-  mtls_enabled: ${ENABLE_MTLS}
-  cert_dir: "${TLS_CERT_DIR}"
-  server_cert: "server.crt"
-  server_key: "server.key"
-  ca_cert: "ca.crt"
+  mtls_enabled: true
+  cert_dir: "/etc/certs"
+  server_cert: "/etc/certs/server.crt"
+  server_key: "/etc/certs/server.key"
   client_cert: "client.crt"
   client_key: "client.key"
