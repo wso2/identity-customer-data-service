@@ -56,9 +56,8 @@ cloud:
       tls:
         mtls_enabled: true
         cert_dir : "/app/repository/certs"
-        server_cert: "server.crt"
-        server_key: "server.key"
-        ca_cert: "ca.crt"
+        server_cert: "server.crt" # server cert path
+        server_key: "server.key" # server key path
         client_cert: "client.crt"
         client_key: "client.key"
 

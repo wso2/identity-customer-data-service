@@ -71,6 +71,5 @@ tls:
   cert_dir: "{{ .Values.cloud.deployment.cds.config.tls.cert_dir }}"
   server_cert: "{{ .Values.cloud.deployment.cds.config.tls.server_cert }}"
   server_key: "{{ .Values.cloud.deployment.cds.config.tls.server_key }}"
-  ca_cert: "{{ .Values.cloud.deployment.cds.config.tls.ca_cert }}"
   client_cert: "{{ .Values.cloud.deployment.cds.config.tls.client_cert }}"
   client_key: "{{ .Values.cloud.deployment.cds.config.tls.client_key }}"
