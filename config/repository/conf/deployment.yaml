@@ -27,10 +27,11 @@ auth_server:
   tokenEndpoint: "/oauth2/token"
   revocationEndpoint: "/oauth2/revoke"
   claimsEndpoint: "api/server/v1/claim-dialects"
-  client_id: "0FuMBMeyMdmOdyLsLibnRW5Rg0wa"
+  client_id: "A5XX_NeBFi6Cf_4Zkn551xTdXnAa"
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
   admin_username: "admin"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
+  isSystemAppGrantEnabled: false
   required_scopes:
     profile:create:
       - "internal_cdm_profile_create"
@@ -68,7 +69,15 @@ datasource:
   type: "postgres"
   hostname: "localhost"
   port: 5432
-  username: "admin"
-  password: "password123"
-  name: "iam_cds"
+  username: "postgres"
+  password: "${DB_PASSWORD}"
+  name: "cds_db"
   sslmode: disable
+
+tls:
+  mtls_enabled: true
+  cert_dir: "/etc/certs"
+  server_cert: "/etc/certs/server.crt"
+  server_key: "/etc/certs/server.key"
+  client_cert: "client.crt"
+  client_key: "client.key"

@@ -1,15 +1,3 @@
-CREATE TABLE unification_rules
-(
-    rule_id       VARCHAR(255) PRIMARY KEY,
-    tenant_id     VARCHAR(255) NOT NULL,
-    rule_name     VARCHAR(255) NOT NULL,
-    property_name VARCHAR(255) NOT NULL,
-    priority      INT          NOT NULL,
-    is_active     BOOLEAN      NOT NULL,
-    created_at    BIGINT       NOT NULL,
-    updated_at    BIGINT       NOT NULL
-);
-
 CREATE TABLE profile_unification_modes
 (
     id         SERIAL PRIMARY KEY,
@@ -70,6 +58,19 @@ CREATE TABLE profile_schema
     scim_dialect VARCHAR(255)
 );
 
+CREATE TABLE unification_rules
+(
+    rule_id       VARCHAR(255) PRIMARY KEY,
+    tenant_id     VARCHAR(255) NOT NULL,
+    rule_name     VARCHAR(255) NOT NULL,
+    property_name VARCHAR(255) NOT NULL,
+    property_id  VARCHAR(255) REFERENCES profile_schema(attribute_id) ON DELETE CASCADE,
+    priority      INT          NOT NULL,
+    is_active     BOOLEAN      NOT NULL,
+    created_at    BIGINT       NOT NULL,
+    updated_at    BIGINT       NOT NULL
+);
+
 -- Application Data Table
 CREATE TABLE application_data
 (
@@ -102,7 +103,7 @@ CREATE TABLE profile_consents
 
 CREATE TABLE profile_cookies (
     cookie_id VARCHAR (255) PRIMARY KEY,
-    profile_id VARCHAR (255) NOT NULL,
+    profile_id VARCHAR (255) NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
     is_active BOOLEAN NOT NULL DEFAULT true
 );
 
@@ -110,3 +111,9 @@ CREATE TABLE profile_cookies (
 ALTER TABLE application_data
     ADD CONSTRAINT unique_profile_app UNIQUE (profile_id, app_id);
 
+-- CDS Config Table
+CREATE TABLE cds_config (
+    tenant_id VARCHAR(255) ,
+    cds_enabled BOOLEAN DEFAULT FALSE,
+    initial_schema_sync_done BOOLEAN DEFAULT FALSE
+);

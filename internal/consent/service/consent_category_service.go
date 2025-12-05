@@ -19,6 +19,7 @@
 package service
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 	model "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/consent/store"
@@ -70,7 +71,7 @@ func (cs *ConsentCategoryService) GetConsentCategory(id string) (*model.ConsentC
 		return nil, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CONSENT_CAT_NOT_FOUND.Code,
 			Message:     errors2.CONSENT_CAT_NOT_FOUND.Message,
-			Description: "Consent category not found.",
+			Description: fmt.Sprintf("Consent category not found for the provided categoryId: %s", id),
 		}, http.StatusNotFound)
 	}
 	return consentCat, nil
@@ -95,7 +96,7 @@ func (cs *ConsentCategoryService) AddConsentCategory(category model.ConsentCateg
 		return nil, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CONSENT_CAT_ALREADY_EXISTS.Code,
 			Message:     errors2.CONSENT_CAT_ALREADY_EXISTS.Message,
-			Description: "Category with the same name already exists.",
+			Description: fmt.Sprintf("Category with the same name :%s already exists.", category.CategoryName),
 		}, http.StatusConflict)
 	}
 
@@ -152,13 +153,13 @@ func (cs *ConsentCategoryService) UpdateConsentCategory(category model.ConsentCa
 	return store.UpdateConsentCategory(category)
 }
 
-// UpdateConsentCategory updates an existing category.
+// DeleteConsentCategory deletes an existing category.
 func (cs *ConsentCategoryService) DeleteConsentCategory(categoryId string) error {
 	if categoryId == "" {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.BAD_REQUEST.Code,
 			Message:     errors2.BAD_REQUEST.Message,
-			Description: "Consent category ID is required for update.",
+			Description: "Consent category Id is required for update.",
 		}, http.StatusBadRequest)
 	}
 	return store.DeleteConsentCategory(categoryId)

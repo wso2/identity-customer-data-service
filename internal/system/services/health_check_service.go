@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/health_check/handler"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
 // HealthService handles routing for health and readiness endpoints.
@@ -31,21 +32,22 @@ type HealthService struct {
 	mux     *http.ServeMux
 }
 
-// NewHealthService creates a new HealthService instance.
-func NewHealthService() *HealthService {
+// NewHealthService creates a new HealthService instance using a shared mux.
+func NewHealthService(mux *http.ServeMux) *HealthService {
 	s := &HealthService{
 		handler: handler.NewHealthHandler(),
-		mux:     http.NewServeMux(),
+		mux:     mux,
 	}
 
 	// Register routes using Go 1.22 ServeMux patterns
-	s.mux.HandleFunc("GET /health", s.handler.HandleHealth)
-	s.mux.HandleFunc("GET /ready", s.handler.HandleReadiness)
+	const base = constants.ApiBasePath + "/v1"
+	s.mux.HandleFunc("GET "+base+"/health", s.handler.HandleHealth)
+	s.mux.HandleFunc("GET "+base+"/ready", s.handler.HandleReadiness)
 
 	return s
 }
 
-// Route dispatches health and readiness requests.
+// Route dispatches health and readiness requests (not typically needed when using shared mux).
 func (s *HealthService) Route(w http.ResponseWriter, r *http.Request) {
 	// Normalize trailing slash for consistent matching
 	if trimmed := strings.TrimSuffix(r.URL.Path, "/"); trimmed != "" {

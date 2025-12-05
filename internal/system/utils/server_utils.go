@@ -16,33 +16,21 @@
  * under the License.
  */
 
-package config
+package utils
 
-import (
-	"gopkg.in/yaml.v2"
-	"os"
-	"path"
-)
+import "sync"
 
-// LoadConfig loads and sets AppConfig (global variable)
-func LoadConfig(cdsHome, filePath string) (*Config, error) {
-	file, err := os.ReadFile(path.Join(cdsHome, filePath))
-	if err != nil {
-		return nil, err
-	}
+var cdsHome string
+var setCDSHomeOnce sync.Once
 
-	expanded := os.ExpandEnv(string(file))
-
-	var cfg Config
-	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+// SetCDSHome sets the globally used CDS home directory path.
+func SetCDSHome(home string) {
+	setCDSHomeOnce.Do(func() {
+		cdsHome = home
+	})
 }
 
-// OverrideCDSRuntime holds the runtime configuration for the application
-func OverrideCDSRuntime(conf Config) {
-	runtimeConfig = &CDSRuntime{
-		Config: conf,
-	}
+// GetCDSHome returns the configured CDS home directory path.
+func GetCDSHome() string {
+	return cdsHome
 }

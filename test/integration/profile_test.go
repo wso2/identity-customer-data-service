@@ -19,110 +19,149 @@
 package integration
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	enrModel "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/model"
-	enrService "github.com/wso2/identity-customer-data-service/internal/enrichment_rules/service"
-	eventModel "github.com/wso2/identity-customer-data-service/internal/events/model"
-	eventService "github.com/wso2/identity-customer-data-service/internal/events/service"
+	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	profileworker "github.com/wso2/identity-customer-data-service/internal/system/workers"
+	profileSchema "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
+	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	unificationService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 	"testing"
 	"time"
 )
 
-func Test_Profiles(t *testing.T) {
+func Test_Profile(t *testing.T) {
 
-	logger := log.GetLogger()
-	enrichmentSvc := enrService.GetEnrichmentRuleService()
+	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 	profileSvc := profileService.GetProfilesService()
-	eventSvc := eventService.GetEventsService()
-	queue := &profileworker.ProfileWorkerQueue{}
+	profileSchemaSvc := schemaService.GetProfileSchemaService()
+	unificationSvc := unificationService.GetUnificationRuleService()
 
-	emailRule := enrModel.ProfileEnrichmentRule{
-		RuleId:            "email_extract_rule",
-		PropertyName:      "identity_attributes.email",
-		ValueType:         "arrayOfString",
-		MergeStrategy:     "combine",
-		ComputationMethod: "extract",
-		SourceField:       "email",
-		Trigger: enrModel.RuleTrigger{
-			EventType: "identify",
-			EventName: "user_logged_in",
-		},
-		CreatedAt: time.Now().Unix(),
-		UpdatedAt: time.Now().Unix(),
-	}
-	err := enrichmentSvc.AddEnrichmentRule(emailRule)
-	require.NoError(t, err, "Failed to add email enrichment rule")
+	t.Run("PreRequisite_AddProfileSchemaAttributes", func(t *testing.T) {
 
-	// Define first profile via event ingestion
-	profileID1 := uuid.New().String()
-	eventId := uuid.New().String()
-	appId := uuid.New().String()
-	logger.Debug("Creating profile with ID: " + profileID1)
-	logger.Debug("Creating profile with ID: " + eventId)
-	deviceID := uuid.New().String()
-	event1 := eventModel.Event{
-		ProfileId: profileID1,
-		EventId:   eventId,
-		EventType: "identify",
-		EventName: "user_logged_in",
-		OrgId:     "carbon.super",
-		AppId:     appId,
-		Context: map[string]interface{}{
-			"browser":   "Chrome",
-			"os":        "macOS",
-			"device_id": deviceID,
-		},
-		Properties: map[string]interface{}{
-			"email":      "test-cds@wso2.com",
-			"first_name": "Test",
-			"last_name":  "User",
-			"user_id":    "4e04c4f1-c0e6-43aa-aeb0-19b5c883a420",
-			"user_name":  "admin",
-		},
-	}
+		identityAttributes := []profileSchema.ProfileSchemaAttribute{
+			{
+				OrgId:         SuperTenantOrg,
+				AttributeId:   uuid.New().String(),
+				AttributeName: "identity_attributes.email",
+				ValueType:     constants.StringDataType,
+				MergeStrategy: "combine",
+				Mutability:    constants.MutabilityReadWrite,
+				MultiValued:   true,
+			},
+		}
 
-	t.Run("Create_profile_via_event", func(t *testing.T) {
-		err := eventSvc.AddEvents(event1, queue)
-		require.NoError(t, err, "Failed to ingest event and create profile")
+		traits := []profileSchema.ProfileSchemaAttribute{
+			{
+				OrgId:         SuperTenantOrg,
+				AttributeId:   uuid.New().String(),
+				AttributeName: "traits.interests",
+				ValueType:     constants.StringDataType,
+				MergeStrategy: "combine",
+				Mutability:    constants.MutabilityReadWrite,
+				MultiValued:   true,
+			},
+		}
+
+		appData := []profileSchema.ProfileSchemaAttribute{
+			{
+				OrgId:                 SuperTenantOrg,
+				AttributeId:           uuid.New().String(),
+				AttributeName:         "application_data.device_id",
+				ValueType:             constants.StringDataType,
+				MergeStrategy:         "combine",
+				Mutability:            constants.MutabilityReadWrite,
+				ApplicationIdentifier: "app1",
+				MultiValued:           true,
+			},
+		}
+
+		err := profileSchemaSvc.AddProfileSchemaAttributesForScope(identityAttributes, constants.IdentityAttributes)
+		require.NoError(t, err, "Failed to add identity schema attributes")
+
+		err = profileSchemaSvc.AddProfileSchemaAttributesForScope(traits, constants.Traits)
+		require.NoError(t, err, "Failed to add traits schema attributes")
+
+		err = profileSchemaSvc.AddProfileSchemaAttributesForScope(appData, constants.ApplicationData)
+		require.NoError(t, err, "Failed to add app data schema attributes")
 	})
 
-	t.Run("Fetch_created_profile", func(t *testing.T) {
-		time.Sleep(5000 * time.Millisecond) // to ensure the event is processed
-		profile, err := profileSvc.GetProfile(profileID1)
-		logger.Debug("Fetched profile: " + profile.ProfileId)
-		require.NoError(t, err, "Failed to fetch profile")
+	email := "test@wso2.com"
+	var profileRequest profileModel.ProfileRequest
+	jsonData := []byte(`{
+		  "user_id": "user-001",
+		  "identity_attributes": { "email": ["test@wso2.com"] },
+		  "traits": { "interests": ["reading"] },
+		  "application_data": { "app1": { "device_id": ["device1"] } }
+		}`)
+	_ = json.Unmarshal(jsonData, &profileRequest)
+
+	t.Run("Create_Profile_Success", func(t *testing.T) {
+		profile, err := profileSvc.CreateProfile(profileRequest, SuperTenantOrg)
+		require.NoError(t, err)
 		require.NotNil(t, profile)
-		require.Equal(t, profileID1, profile.ProfileId)
-		require.Equal(t, "test-cds@wso2.com", profile.IdentityAttributes["email"].([]interface{})[0])
-		logger.Debug("Fetched profile email: " + profile.IdentityAttributes["email"].([]interface{})[0].(string))
-		require.Equal(t, deviceID, profile.ApplicationData[0].Devices[0].DeviceId)
-		require.Equal(t, "Chrome", profile.ApplicationData[0].Devices[0].Browser)
+		require.Equal(t, email, profile.IdentityAttributes["email"].([]interface{})[0])
+		require.Contains(t, profile.Traits["interests"], "reading")
 	})
 
-	t.Run("Get_all_profiles", func(t *testing.T) {
-		profiles, err := profileSvc.GetAllProfiles()
+	t.Run("Get_Profile_Success", func(t *testing.T) {
+		profiles, err := profileSvc.GetAllProfiles(SuperTenantOrg)
 		require.NoError(t, err)
 		require.NotEmpty(t, profiles)
+		profile, err := profileSvc.GetProfile(profiles[0].ProfileId)
+		require.NoError(t, err)
+		require.NotNil(t, profile)
+		require.Contains(t, profile.IdentityAttributes["email"], email)
 	})
 
-	t.Run("Filter_profiles", func(t *testing.T) {
-		filter := []string{"identity_attributes.email co test-cds@wso2.com"}
-		filteredProfiles, err := profileSvc.GetAllProfilesWithFilter(filter)
+	t.Run("Update_Profile_Success", func(t *testing.T) {
+		_, err := profileSvc.CreateProfile(profileRequest, SuperTenantOrg)
 		require.NoError(t, err)
-		require.Len(t, filteredProfiles, 1)
-		require.Equal(t, profileID1, filteredProfiles[0].ProfileId)
+
+		var updatedRequest profileModel.ProfileRequest
+		jsonData := []byte(`{
+		"identity_attributes": {
+			"email": ["updated@wso2.com"]
+		},
+		"traits": {
+			"interests": ["reading", "travel"]
+		}
+	}`)
+		_ = json.Unmarshal(jsonData, &updatedRequest)
+
+		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
+		p := profiles[0]
+
+		updated, err := profileSvc.UpdateProfile(p.ProfileId, SuperTenantOrg, updatedRequest)
+		require.NoError(t, err)
+		require.Contains(t, updated.Traits["interests"], "travel")
+		require.Equal(t, "updated@wso2.com", updated.IdentityAttributes["email"].([]interface{})[0])
 	})
 
-	t.Run("Delete_profile", func(t *testing.T) {
-		err := profileSvc.DeleteProfile(profileID1)
+	t.Run("Delete_Profile_Success", func(t *testing.T) {
+		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
+		p := profiles[0]
+
+		err := profileSvc.DeleteProfile(p.ProfileId)
 		require.NoError(t, err)
 
-		deleted, err := profileSvc.GetProfile(profileID1)
+		_, err = profileSvc.GetProfile(p.ProfileId)
 		require.Error(t, err)
-		require.Nil(t, deleted)
+	})
+
+	t.Cleanup(func() {
+		rules, _ := unificationSvc.GetUnificationRules(SuperTenantOrg)
+		for _, r := range rules {
+			_ = unificationSvc.DeleteUnificationRule(r.RuleId)
+		}
+		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
+		for _, p := range profiles {
+			_ = profileSvc.DeleteProfile(p.ProfileId)
+		}
+		_ = profileSchemaSvc.DeleteProfileSchema(SuperTenantOrg)
+		_ = profileSchemaSvc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 	})
 }

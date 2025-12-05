@@ -28,16 +28,20 @@ import (
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
 	"github.com/wso2/identity-customer-data-service/test/setup"
 	"os"
+	"os/exec"
 	"testing"
 )
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	os.Setenv("TEST_MODE", "true") // ✅ Add this
+	os.Setenv("TEST_MODE", "true")
 
 	conf := config.Config{
 		Log: config.LogConfig{
 			LogLevel: "DEBUG",
+		},
+		DataSource: config.DataSourceConfig{
+			Type: "postgres",
 		},
 	}
 	config.OverrideCDSRuntime(conf)
@@ -63,6 +67,10 @@ func TestMain(m *testing.M) {
 
 	// Terminate container manually after tests complete
 	_ = pg.Container.Terminate(ctx)
+
+	// Remove the docker image used for tests
+	cmd := exec.Command("docker", "rm", "-f", "cds-test-postgres")
+	_, _ = cmd.CombinedOutput()
 
 	os.Exit(code)
 }

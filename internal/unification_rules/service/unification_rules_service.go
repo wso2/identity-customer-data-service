@@ -1,14 +1,31 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package service
 
 import (
 	"fmt"
-	psService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
-
 	"net/http"
 )
 
@@ -16,7 +33,7 @@ type UnificationRuleServiceInterface interface {
 	AddUnificationRule(rule model.UnificationRule, tenantId string) error
 	GetUnificationRules(tenantId string) ([]model.UnificationRule, error)
 	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
-	PatchResolutionRule(ruleId string, updates map[string]interface{}) error
+	PatchUnificationRule(ruleId, tenantId string, updates map[string]interface{}) error
 	DeleteUnificationRule(ruleId string) error
 }
 
@@ -34,20 +51,19 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 
 	logger := log.GetLogger()
 	// Need to specifically prevent
-	if rule.Property == "user_id" {
+	if rule.PropertyName == "user_id" {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UNIFICATION_RULE_ALREADY_EXISTS.Code,
 			Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
-			Description: fmt.Sprintf("Unification rule with property %s already exists", rule.Property),
+			Description: fmt.Sprintf("Unification rule with property %s already exists", rule.PropertyName),
 		}, http.StatusConflict)
 	}
 
-	// Validate if the property name belongs in schema attributes
-	filter := []string{fmt.Sprintf("attribute_name eq %s", rule.Property)}
-	schemaAttributes, err := psService.GetProfileSchemaAttributesWithFilter(rule.TenantId, filter)
+	profileSchemaService := provider.NewProfileSchemaProvider().GetProfileSchemaService()
+	schemaAttribute, err := profileSchemaService.GetProfileSchemaAttributeByName(rule.PropertyName, rule.TenantId)
 
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error occurred while checking for existingRule schema: %s", rule.Property)
+		errorMsg := fmt.Sprintf("Error occurred while checking for the property: %s", rule.PropertyName)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_UNIFICATION_RULE.Code,
@@ -57,24 +73,20 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		return serverError
 	}
 
-	if len(schemaAttributes) == 0 { // captures nil as well
+	if schemaAttribute == nil {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.ADD_UNIFICATION_RULE.Code,
 			Message:     errors2.ADD_UNIFICATION_RULE.Message,
-			Description: fmt.Sprintf("Attribute  %s is not found in schema", rule.Property),
+			Description: fmt.Sprintf("PropertyName  '%s' is not found in schema", rule.PropertyName),
 		}, http.StatusBadRequest)
-	} else {
-		for _, schemaAttribute := range schemaAttributes {
-			if schemaAttribute.ValueType == constants.ComplexDataType {
-				return errors2.NewClientError(errors2.ErrorMessage{
-					Code:    errors2.ADD_UNIFICATION_RULE.Code,
-					Message: errors2.ADD_UNIFICATION_RULE.Message,
-					Description: "Unification rule with property " + rule.Property + " is not allowed as it is a complex data type. " +
-						"Choose the sub-attribute instead.",
-				}, http.StatusBadRequest)
-			}
-			logger.Debug(fmt.Sprintf("Unification rule with property %s is valid", rule.Property))
-		}
+	}
+	if schemaAttribute.ValueType == constants.ComplexDataType {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:    errors2.ADD_UNIFICATION_RULE.Code,
+			Message: errors2.ADD_UNIFICATION_RULE.Message,
+			Description: "Unification rule with property " + rule.PropertyName + " is not allowed as it is a complex data type. " +
+				"Choose the sub-attribute instead.",
+		}, http.StatusBadRequest)
 	}
 
 	// Check if a similar unification rule already exists
@@ -83,11 +95,11 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		return err
 	}
 	for _, existingRule := range existingRules {
-		if existingRule.Property == rule.Property {
+		if existingRule.PropertyName == rule.PropertyName {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UNIFICATION_RULE_ALREADY_EXISTS.Code,
 				Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
-				Description: fmt.Sprintf("Unification rule with property %s already exists", rule.Property),
+				Description: fmt.Sprintf("Unification rule with property %s already exists", rule.PropertyName),
 			}, http.StatusConflict)
 		}
 		if existingRule.Priority == rule.Priority {
@@ -98,7 +110,7 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 			}, http.StatusBadRequest)
 		}
 	}
-
+	rule.PropertyId = schemaAttribute.AttributeId
 	return store.AddUnificationRule(rule, tenantId)
 }
 
@@ -125,8 +137,8 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 	return unificationRule, err
 }
 
-// PatchResolutionRule Applies a partial update on a specific resolution rule.
-func (urs *UnificationRuleService) PatchResolutionRule(ruleId string, updates map[string]interface{}) error {
+// PatchUnificationRule Applies a partial update on a specific resolution rule.
+func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string, updates map[string]interface{}) error {
 
 	// Validate that all update fields are allowed
 	for field := range updates {
@@ -134,19 +146,19 @@ func (urs *UnificationRuleService) PatchResolutionRule(ruleId string, updates ma
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UNIFICATION_UPDATE_FAILED.Code,
 				Message:     errors2.UNIFICATION_UPDATE_FAILED.Message,
-				Description: fmt.Sprintf("Field '%s' cannot be updated. Rule Name, Active Status or Property can only be updated", field),
+				Description: fmt.Sprintf("Field '%s' cannot be updated. Rule Name, Active Status or PropertyName can only be updated", field),
 			}, http.StatusBadRequest)
 		}
 	}
 
 	// Validate that the priority is not already in use
-	existingRules, _ := store.GetUnificationRules("")
+	existingRules, _ := store.GetUnificationRules(tenantId)
 	for _, existingRule := range existingRules {
-		if existingRule.Property == "user_id" {
+		if existingRule.PropertyName == "user_id" {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UNIFICATION_RULE_ALREADY_EXISTS.Code,
 				Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
-				Description: fmt.Sprintf("user_id based unification rule can not be updated."),
+				Description: "user_id based unification rule can not be updated.",
 			}, http.StatusConflict)
 		}
 		if existingRule.RuleId != ruleId && existingRule.Priority == updates["priority"] {

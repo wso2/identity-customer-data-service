@@ -22,34 +22,31 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/wso2/identity-customer-data-service/internal/consent/handler"
+	"github.com/wso2/identity-customer-data-service/internal/admin_config/handler"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
-type ConsentCategoryService struct {
-	handler *handler.ConsentCategoryHandler
+type AdminConfigService struct {
+	handler *handler.AdminConfigHandler
 	mux     *http.ServeMux
 }
 
-func NewConsentCategoryService(mux *http.ServeMux) *ConsentCategoryService {
-	s := &ConsentCategoryService{
-		handler: handler.NewConsentCategoryHandler(),
+func NewAdminConfigService(mux *http.ServeMux) *AdminConfigService {
+	s := &AdminConfigService{
+		handler: handler.NewAdminConfigHandler(),
 		mux:     mux,
 	}
 
 	const base = constants.ApiBasePath + "/v1"
 	// Register routes with Go 1.22 ServeMux patterns on shared mux
-	s.mux.HandleFunc("GET "+base+"/consent-categories", s.handler.GetAllConsentCategories)
-	s.mux.HandleFunc("POST "+base+"/consent-categories", s.handler.AddConsentCategory)
-	s.mux.HandleFunc("GET "+base+"/consent-categories/{categoryId}", s.handler.GetConsentCategory)
-	s.mux.HandleFunc("PUT "+base+"/consent-categories/{categoryId}", s.handler.UpdateConsentCategory)
-	s.mux.HandleFunc("DELETE "+base+"/consent-categories/{categoryId}", s.handler.DeleteConsentCategory)
+	s.mux.HandleFunc("GET "+base+"/config", s.handler.GetAdminConfig)
+	s.mux.HandleFunc("PUT "+base+"/config", s.handler.UpdateAdminConfig)
 
 	return s
 }
 
 // Route handles tenant-aware routing for consent categories
-func (s *ConsentCategoryService) Route(w http.ResponseWriter, r *http.Request) {
+func (s *AdminConfigService) Route(w http.ResponseWriter, r *http.Request) {
 	// Normalize trailing slashes for consistent matching
 	if trimmed := strings.TrimSuffix(r.URL.Path, "/"); trimmed != "" {
 		r.URL.Path = trimmed

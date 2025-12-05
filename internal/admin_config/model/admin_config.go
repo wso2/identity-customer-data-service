@@ -16,33 +16,19 @@
  * under the License.
  */
 
-package config
+package model
 
-import (
-	"gopkg.in/yaml.v2"
-	"os"
-	"path"
-)
-
-// LoadConfig loads and sets AppConfig (global variable)
-func LoadConfig(cdsHome, filePath string) (*Config, error) {
-	file, err := os.ReadFile(path.Join(cdsHome, filePath))
-	if err != nil {
-		return nil, err
-	}
-
-	expanded := os.ExpandEnv(string(file))
-
-	var cfg Config
-	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+type AdminConfig struct {
+	TenantId              string `json:"tenant_id" bson:"tenant_id"`
+	CDSEnabled            bool   `json:"cds_enabled" bson:"cds_enabled"`
+	InitialSchemaSyncDone bool   `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
 }
 
-// OverrideCDSRuntime holds the runtime configuration for the application
-func OverrideCDSRuntime(conf Config) {
-	runtimeConfig = &CDSRuntime{
-		Config: conf,
-	}
+type AdminConfigAPI struct {
+	CDSEnabled            bool `json:"cds_enabled" bson:"cds_enabled"`
+	InitialSchemaSyncDone bool `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
+}
+
+type AdminConfigUpdateAPI struct {
+	CDSEnabled bool `json:"cds_enabled" bson:"cds_enabled"`
 }

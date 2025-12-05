@@ -20,6 +20,7 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
@@ -56,14 +57,14 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	// Set timestamps
 	now := time.Now().UTC().Unix()
 	rule := model.UnificationRule{
-		RuleId:    uuid.New().String(),
-		TenantId:  orgId,
-		RuleName:  ruleInRequest.RuleName,
-		Property:  ruleInRequest.Property,
-		Priority:  ruleInRequest.Priority,
-		IsActive:  ruleInRequest.IsActive,
-		CreatedAt: now,
-		UpdatedAt: now,
+		RuleId:       uuid.New().String(),
+		TenantId:     orgId,
+		RuleName:     ruleInRequest.RuleName,
+		PropertyName: ruleInRequest.PropertyName,
+		Priority:     ruleInRequest.Priority,
+		IsActive:     ruleInRequest.IsActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	ruleProvider := provider.NewUnificationRuleProvider()
@@ -75,11 +76,11 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	}
 	addedRule, err := ruleService.GetUnificationRule(rule.RuleId)
 	addedRuleResponse := model.UnificationRuleAPIResponse{
-		RuleId:   addedRule.RuleId,
-		RuleName: addedRule.RuleName,
-		Property: addedRule.Property,
-		Priority: addedRule.Priority,
-		IsActive: addedRule.IsActive,
+		RuleId:       addedRule.RuleId,
+		RuleName:     addedRule.RuleName,
+		PropertyName: addedRule.PropertyName,
+		Priority:     addedRule.Priority,
+		IsActive:     addedRule.IsActive,
 	}
 	if err != nil {
 		utils.HandleError(w, err)
@@ -93,7 +94,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 // GetUnificationRules handles fetching all rules
 func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "unification_rules:view")
+	err := security.AuthnAndAuthz(r, "unification_rules:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -110,11 +111,11 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	var rulesResponse []model.UnificationRuleAPIResponse
 	for _, rule := range rules {
 		tempRule := model.UnificationRuleAPIResponse{
-			RuleId:   rule.RuleId,
-			RuleName: rule.RuleName,
-			Property: rule.Property,
-			Priority: rule.Priority,
-			IsActive: rule.IsActive,
+			RuleId:       rule.RuleId,
+			RuleName:     rule.RuleName,
+			PropertyName: rule.PropertyName,
+			Priority:     rule.Priority,
+			IsActive:     rule.IsActive,
 		}
 		rulesResponse = append(rulesResponse, tempRule)
 	}
@@ -126,7 +127,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 // GetUnificationRule Fetches a specific resolution rule.
 func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "unification_rules:view")
+	err := security.AuthnAndAuthz(r, "unification_rules:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -144,11 +145,11 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		return
 	}
 	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:   rule.RuleId,
-		RuleName: rule.RuleName,
-		Property: rule.Property,
-		Priority: rule.Priority,
-		IsActive: rule.IsActive,
+		RuleId:       rule.RuleId,
+		RuleName:     rule.RuleName,
+		PropertyName: rule.PropertyName,
+		Priority:     rule.Priority,
+		IsActive:     rule.IsActive,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -158,7 +159,7 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 // PatchUnificationRule applies partial updates to a unification rule.
 func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "unification_rules:update")
+	err := security.AuthnAndAuthz(r, "unification_rules:update")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -176,23 +177,24 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	err = ruleService.PatchResolutionRule(ruleId, updates)
+	orgId := utils.ExtractTenantIdFromPath(r)
+	err = ruleService.PatchUnificationRule(ruleId, orgId, updates)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
 	rule, err := ruleService.GetUnificationRule(ruleId)
-	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:   rule.RuleId,
-		RuleName: rule.RuleName,
-		Property: rule.Property,
-		Priority: rule.Priority,
-		IsActive: rule.IsActive,
-	}
 	if err != nil {
 		utils.HandleError(w, err)
 		return
+	}
+	ruleResponse := model.UnificationRuleAPIResponse{
+		RuleId:       rule.RuleId,
+		RuleName:     rule.RuleName,
+		PropertyName: rule.PropertyName,
+		Priority:     rule.Priority,
+		IsActive:     rule.IsActive,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -202,7 +204,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 // DeleteUnificationRule removes a resolution rule.
 func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "unification_rules:delete")
+	err := security.AuthnAndAuthz(r, "unification_rules:delete")
 	if err != nil {
 		utils.HandleError(w, err)
 		return

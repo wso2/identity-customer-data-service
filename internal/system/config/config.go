@@ -32,25 +32,18 @@ type AuthConfig struct {
 }
 
 type AuthServerConfig struct {
-	Host                  string              `yaml:"host"`
-	Port                  string              `yaml:"port"`
-	IntrospectionEndPoint string              `yaml:"introspectionEndpoint"`
-	TokenEndpoint         string              `yaml:"tokenEndpoint"`
-	RevocationEndpoint    string              `yaml:"revocationEndpoint"`
-	ClaimEndpoint         string              `yaml:"claim_endpoint"`
-	ClientID              string              `yaml:"client_id"`
-	ClientSecret          string              `yaml:"client_secret"`
-	AdminUsername         string              `yaml:"admin_username"`
-	AdminPassword         string              `yaml:"admin_password"`
-	RequiredScopes        map[string][]string `yaml:"required_scopes"`
-}
-
-type DatabaseConfig struct {
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	DbName   string `yaml:"dbname"`
+	Host                    string              `yaml:"host"`
+	Port                    string              `yaml:"port"`
+	IntrospectionEndPoint   string              `yaml:"introspectionEndpoint"`
+	TokenEndpoint           string              `yaml:"tokenEndpoint"`
+	RevocationEndpoint      string              `yaml:"revocationEndpoint"`
+	ClaimEndpoint           string              `yaml:"claim_endpoint"`
+	ClientID                string              `yaml:"client_id"`
+	ClientSecret            string              `yaml:"client_secret"`
+	AdminUsername           string              `yaml:"admin_username"`
+	AdminPassword           string              `yaml:"admin_password"`
+	RequiredScopes          map[string][]string `yaml:"required_scopes"`
+	IsSystemAppGrantEnabled bool                `yaml:"isSystemAppGrantEnabled"`
 }
 
 type DataSourceConfig struct {
@@ -63,21 +56,20 @@ type DataSourceConfig struct {
 	SSLMode  string `yaml:"sslmode"`
 }
 
-type Sync struct {
-	Schema Schema `yaml:"schema"`
-}
-
-type Schema struct {
-	Enabled  bool `yaml:"enabled"`
-	Interval int  `yaml:"interval"` // in seconds
-}
-
 type Config struct {
-	Addr           AddrConfig       `yaml:"addr"`
-	Log            LogConfig        `yaml:"log"`
-	Auth           AuthConfig       `yaml:"auth"`
-	AuthServer     AuthServerConfig `yaml:"auth_server"`
-	DatabaseConfig DatabaseConfig   `yaml:"database"`
-	DataSource     DataSourceConfig `yaml:"datasource"`
-	Sync           Sync             `yaml:"sync"`
+	Addr       AddrConfig       `yaml:"addr"`
+	Log        LogConfig        `yaml:"log"`
+	Auth       AuthConfig       `yaml:"auth"`
+	AuthServer AuthServerConfig `yaml:"auth_server"`
+	DataSource DataSourceConfig `yaml:"datasource"`
+	TLS        TLSConfig        `yaml:"tls"`
+}
+
+type TLSConfig struct {
+	MTLSEnabled bool   `yaml:"mtls_enabled"`
+	CertDir     string `yaml:"cert_dir"`
+	ServerCert  string `yaml:"server_cert"`
+	ServerKey   string `yaml:"server_key"`
+	ClientCert  string `yaml:"client_cert"`
+	ClientKey   string `yaml:"client_key"`
 }

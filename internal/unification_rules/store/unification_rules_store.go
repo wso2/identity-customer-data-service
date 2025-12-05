@@ -40,8 +40,8 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 		errorMsg := fmt.Sprintf("Failed to get database client for adding unification rule: %s", rule.RuleName)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DB_CLIENT_INIT.Code,
-			Message:     errors2.DB_CLIENT_INIT.Message,
+			Code:        errors2.ADD_UNIFICATION_RULE.Code,
+			Message:     errors2.ADD_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -50,20 +50,20 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 
 	query := scripts.InsertUnificationRule[provider.NewDBProvider().GetDBType()]
 
-	_, err = dbClient.ExecuteQuery(query, rule.RuleId, orgId, rule.RuleName, rule.Property, rule.Priority, rule.IsActive,
+	_, err = dbClient.ExecuteQuery(query, rule.RuleId, orgId, rule.RuleName, rule.PropertyName, rule.PropertyId, rule.Priority, rule.IsActive,
 		rule.CreatedAt, rule.UpdatedAt)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while adding unification rule: %s", rule.RuleName)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.EXECUTE_QUERY.Code,
-			Message:     errors2.EXECUTE_QUERY.Message,
+			Code:        errors2.ADD_UNIFICATION_RULE.Code,
+			Message:     errors2.ADD_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
 	}
 
-	logger.Info(fmt.Sprintf("Unification rule : %s added successfully", rule.RuleName))
+	logger.Info(fmt.Sprintf("Unification rule : '%s' added successfully", rule.RuleName))
 	return nil
 }
 
@@ -76,8 +76,8 @@ func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 		errorMsg := fmt.Sprintf("Failed to get database client for fetching unification rules for organization: %s", tenantId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DB_CLIENT_INIT.Code,
-			Message:     errors2.DB_CLIENT_INIT.Message,
+			Code:        errors2.GET_UNIFICATION_RULE.Code,
+			Message:     errors2.GET_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -90,8 +90,8 @@ func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 		errorMsg := fmt.Sprintf("Failed in fetching all unification rules for organization: %s", tenantId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.EXECUTE_QUERY.Code,
-			Message:     errors2.EXECUTE_QUERY.Message,
+			Code:        errors2.GET_UNIFICATION_RULE.Code,
+			Message:     errors2.GET_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -102,7 +102,8 @@ func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 		var rule model.UnificationRule
 		rule.RuleId = row["rule_id"].(string)
 		rule.RuleName = row["rule_name"].(string)
-		rule.Property = row["property_name"].(string)
+		rule.PropertyName = row["property_name"].(string)
+		rule.PropertyId = row["property_id"].(string)
 		rule.Priority = int(row["priority"].(int64))
 		rule.IsActive = row["is_active"].(bool)
 		rule.CreatedAt = row["created_at"].(int64)
@@ -124,8 +125,8 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 		errorMsg := fmt.Sprintf("Failed to get database client for fetching unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DB_CLIENT_INIT.Code,
-			Message:     errors2.DB_CLIENT_INIT.Message,
+			Code:        errors2.GET_UNIFICATION_RULE.Code,
+			Message:     errors2.GET_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -142,8 +143,8 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 		errorMsg := fmt.Sprintf("Failed in fetching unification rule with rule_id: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.EXECUTE_QUERY.Code,
-			Message:     errors2.EXECUTE_QUERY.Message,
+			Code:        errors2.GET_UNIFICATION_RULE.Code,
+			Message:     errors2.GET_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -158,7 +159,8 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 	var rule model.UnificationRule
 	rule.RuleId = row["rule_id"].(string)
 	rule.RuleName = row["rule_name"].(string)
-	rule.Property = row["property_name"].(string)
+	rule.PropertyName = row["property_name"].(string)
+	rule.PropertyId = row["property_id"].(string)
 	rule.Priority = int(row["priority"].(int64))
 	rule.IsActive = row["is_active"].(bool)
 	rule.CreatedAt = row["created_at"].(int64)
@@ -177,8 +179,8 @@ func PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
 		errorMsg := fmt.Sprintf("Failed to get database client for updating unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DB_CLIENT_INIT.Code,
-			Message:     errors2.DB_CLIENT_INIT.Message,
+			Code:        errors2.UPDATE_UNIFICATION_RULE.Code,
+			Message:     errors2.UPDATE_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -201,8 +203,8 @@ func PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
 		errorMsg := fmt.Sprintf("Error occurred while updating unification rule for rule_id: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.EXECUTE_QUERY.Code,
-			Message:     errors2.EXECUTE_QUERY.Message,
+			Code:        errors2.UPDATE_UNIFICATION_RULE.Code,
+			Message:     errors2.UPDATE_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -221,8 +223,8 @@ func DeleteUnificationRule(ruleId string) error {
 		errorMsg := fmt.Sprintf("Failed to get database client for updating unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DB_CLIENT_INIT.Code,
-			Message:     errors2.DB_CLIENT_INIT.Message,
+			Code:        errors2.DELETE_UNIFICATION_RULE.Code,
+			Message:     errors2.DELETE_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError
@@ -235,8 +237,8 @@ func DeleteUnificationRule(ruleId string) error {
 		errorMsg := fmt.Sprintf("Failed to delete unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.EXECUTE_QUERY.Code,
-			Message:     errors2.EXECUTE_QUERY.Message,
+			Code:        errors2.DELETE_UNIFICATION_RULE.Code,
+			Message:     errors2.DELETE_UNIFICATION_RULE.Message,
 			Description: errorMsg,
 		}, err)
 		return serverError

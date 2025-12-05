@@ -22,6 +22,7 @@ var UnificationQueue chan profileModel.Profile
 
 func StartProfileWorker() {
 
+	// todo: Make the queue size configurable (check if this implementation is enough or need a better queue storage)
 	UnificationQueue = make(chan profileModel.Profile, 1000)
 
 	go func() {
@@ -42,10 +43,10 @@ func EnqueueProfileForProcessing(profile profileModel.Profile) {
 	}
 }
 
-// Define a struct that implements the EventQueue interface
+// ProfileWorkerQueue Define a struct that implements the EventQueue interface
 type ProfileWorkerQueue struct{}
 
-// Implement the Enqueue method for ProfileWorkerQueue
+// Enqueue Implement the Enqueue method for ProfileWorkerQueue
 func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
 	EnqueueProfileForProcessing(profile)
 }
@@ -75,7 +76,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 			newProfile.ProfileId), log.Error(err))
 	}
 
-	sortRulesByPriority(unificationRules)
+	unificationRules = filterActiveRulesAndSortByPriority(unificationRules)
 	// 🔹 Step 3: Loop through unification rules and compare profiles
 	for _, rule := range unificationRules {
 
@@ -96,16 +97,16 @@ func unifyProfiles(newProfile profileModel.Profile) {
 
 				if len(existingMasterProfile.ProfileStatus.References) == 0 {
 
-					hasUserID_existing := existingMasterProfile.UserId != ""
-					hasUserID_new := newProfile.UserId != ""
+					hasUserIDExisting := existingMasterProfile.UserId != ""
+					hasUserIDNew := newProfile.UserId != ""
 
 					// Case 1: perm-temp or temp-perm
-					if hasUserID_existing != hasUserID_new {
+					if hasUserIDExisting != hasUserIDNew {
 						logger.Info(fmt.Sprintf("Stitching Temporray profile: %s to the permnanent profile:%s ",
 							newProfile.ProfileId, existingMasterProfile.ProfileId))
 
-						newChild := profileModel.Reference{}
-						if hasUserID_existing {
+						var newChild profileModel.Reference
+						if hasUserIDExisting {
 							newMasterProfile.ProfileId = existingMasterProfile.ProfileId
 							newMasterProfile.UserId = existingMasterProfile.UserId
 							newChild = profileModel.Reference{
@@ -162,13 +163,13 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						return
 					} else {
 						userId := ""
-						if hasUserID_existing && hasUserID_new {
+						if hasUserIDExisting && hasUserIDNew {
 							if existingMasterProfile.UserId == newProfile.UserId {
 								userId = existingMasterProfile.UserId
 								logger.Info(fmt.Sprintf("Both profiles are permanent profiles. Hence creating a new master profile: %s",
 									newProfile.ProfileId))
 							} else {
-								logger.Info("We are not handling merging two permannat profiles with different userIds")
+								logger.Info("We are not handling merging two permanent profiles with different userIds")
 								continue
 							}
 						} else {
@@ -251,7 +252,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						logger.Info(fmt.Sprintf("Stitching Temporray profile: %s to the permnanent profile: %s",
 							newProfile.ProfileId, existingMasterProfile.ProfileId))
 
-						newChild := profileModel.Reference{}
+						var newChild profileModel.Reference
 						if hasUserID_existing {
 							newMasterProfile.ProfileId = existingMasterProfile.ProfileId
 							newMasterProfile.UserId = existingMasterProfile.UserId
@@ -265,6 +266,12 @@ func unifyProfiles(newProfile profileModel.Profile) {
 							newMasterProfile.UserId = newProfile.UserId
 
 							err = profileStore.UpdateProfileReferences(newMasterProfile, existingMasterProfile.ProfileStatus.References)
+
+							if err != nil {
+								logger.Error(fmt.Sprintf("Failed to update profile references for master profile: %s while unifying profile: %s",
+									newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+								return
+							}
 
 							newChild = profileModel.Reference{
 								ProfileId: existingMasterProfile.ProfileId,
@@ -330,6 +337,12 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.TenantId, newMasterProfile.ProfileId)
 
 						err = profileStore.UpdateProfileReferences(newMasterProfile, existingMasterProfile.ProfileStatus.References)
+
+						if err != nil {
+							logger.Error(fmt.Sprintf("Failed to update profile references for master profile: %s while unifying profile: %s",
+								newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+							return
+						}
 
 						childProfile1 := profileModel.Reference{
 							ProfileId: newProfile.ProfileId,
@@ -401,21 +414,17 @@ func unifyProfiles(newProfile profileModel.Profile) {
 	}
 }
 
-func doesProfileMatchOnUserId(existingProfile profileModel.Profile, newProfile profileModel.Profile) bool {
-
-	if existingProfile.UserId == "" || newProfile.UserId == "" {
-		return false // No userId to match on
+func filterActiveRulesAndSortByPriority(rules []model.UnificationRule) []model.UnificationRule {
+	activeRules := make([]model.UnificationRule, 0, len(rules))
+	for _, r := range rules {
+		if r.IsActive {
+			activeRules = append(activeRules, r)
+		}
 	}
-	if existingProfile.UserId == newProfile.UserId {
-		return true
-	}
-	return false
-}
-
-func sortRulesByPriority(rules []model.UnificationRule) {
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].Priority < rules[j].Priority
+	sort.Slice(activeRules, func(i, j int) bool {
+		return activeRules[i].Priority < activeRules[j].Priority
 	})
+	return activeRules
 }
 
 // MergeProfiles merges two profiles based on unification rules
@@ -492,9 +501,9 @@ func MergeProfiles(existingProfile profileModel.Profile, incomingProfile profile
 // doesProfileMatch checks if two profiles have matching attributes based on a unification rule
 func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileModel.Profile, rule model.UnificationRule) bool {
 
-	log.GetLogger().Info("Checking if profiles match for existing id: " + existingProfile.UserId)
-	log.GetLogger().Info("Checking if profiles match for new id: " + newProfile.UserId)
-	if rule.Property == "user_id" {
+	log.GetLogger().Debug(fmt.Sprintf("Checking if profiles match for existing id: %s, new id: %s for the rule: %s",
+		existingProfile.ProfileId, newProfile.ProfileId, rule.RuleName))
+	if rule.PropertyName == "user_id" {
 		if existingProfile.UserId != "" && newProfile.UserId != "" {
 			if existingProfile.UserId == newProfile.UserId {
 				log.GetLogger().Info("Profiles have same user_id. Hence proceeding to merge the profile.")
@@ -506,13 +515,13 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 	} else {
 		existingJSON, _ := json.Marshal(existingProfile)
 		newJSON, _ := json.Marshal(newProfile)
-		existingValues := extractFieldFromJSON(existingJSON, rule.Property)
-		newValues := extractFieldFromJSON(newJSON, rule.Property)
+		existingValues := extractFieldFromJSON(existingJSON, rule.PropertyName)
+		newValues := extractFieldFromJSON(newJSON, rule.PropertyName)
 		logger := log.GetLogger()
 		if checkForMatch(existingValues, newValues) {
 			logger.Info(fmt.Sprintf("Profiles %s, %s has matched for unification rule: %s ", existingProfile.ProfileId,
-				newProfile.ProfileId, rule.RuleId))
-			return true //  Match found
+				newProfile.ProfileId, rule.RuleName))
+			return true
 		}
 		return false
 	}

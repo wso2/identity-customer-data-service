@@ -57,8 +57,8 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 		errorMsg := "Failed to unmarshal traits"
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UNMARSHAL_JSON.Code,
-			Message:     errors2.UNMARSHAL_JSON.Message,
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
 			Description: errorMsg,
 		}, err)
 		return model.Profile{}, serverError
@@ -67,8 +67,8 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 		errorMsg := "Failed to unmarshal identity attributes."
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UNMARSHAL_JSON.Code,
-			Message:     errors2.UNMARSHAL_JSON.Message,
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
 			Description: errorMsg,
 		}, err)
 		return model.Profile{}, serverError
@@ -1068,8 +1068,8 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 			currentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DB_CLIENT_INIT.Code,
-			Message:     errors2.DB_CLIENT_INIT.Message,
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -1078,13 +1078,13 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 
 	query := scripts.GetAllReferenceProfileExceptCurrent[provider.NewDBProvider().GetDBType()]
 
-	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId)
+	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId, currentProfile.TenantId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed fetching all master profiles except for current profile: %s", currentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.DB_CLIENT_INIT.Code,
-			Message:     errors2.DB_CLIENT_INIT.Message,
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
 			Description: errorMsg,
 		}, err)
 		return nil, serverError
@@ -1127,10 +1127,24 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 		}
 
 		if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal traits: %w", err)
+			errMsg := fmt.Sprintf("Failed to unmarshal traits for profile: %s", profile.ProfileId)
+			logger.Debug(errMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE.Code,
+				Message:     errors2.GET_PROFILE.Message,
+				Description: errMsg,
+			}, err)
+			return nil, serverError
 		}
 		if err := json.Unmarshal(identityJSON, &profile.IdentityAttributes); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal identity attributes: %w", err)
+			errMsg := fmt.Sprintf("Failed to unmarshal identity attributes for profile: %s", profile.ProfileId)
+			logger.Debug(errMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE.Code,
+				Message:     errors2.GET_PROFILE.Message,
+				Description: errMsg,
+			}, err)
+			return nil, serverError
 		}
 
 		profile.ApplicationData, _ = FetchApplicationData(profile.ProfileId)

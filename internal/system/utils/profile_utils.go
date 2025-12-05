@@ -18,6 +18,8 @@
 
 package utils
 
+import "fmt"
+
 func BuildProfileLocation(orgId, profileId string) string {
-	return "/api/v1/profiles/" + orgId + "/" + profileId
+	return fmt.Sprintf("%s/api/v1/profiles/%s", orgId, profileId)
 }

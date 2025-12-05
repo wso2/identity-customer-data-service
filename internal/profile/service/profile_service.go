@@ -44,13 +44,13 @@ type ProfilesServiceInterface interface {
 	DeleteProfile(profileId string) error
 	GetAllProfiles(tenantId string) ([]profileModel.ProfileResponse, error)
 	CreateProfile(profile profileModel.ProfileRequest, tenantId string) (*profileModel.ProfileResponse, error)
-	UpdateProfile(profileId string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
+	UpdateProfile(profileId, tenantId string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
 	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
 	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
-	PatchProfile(id string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
+	PatchProfile(profileId, tenantId string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
 	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
 	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
 	CreateProfileCookie(profileId string) (*profileModel.ProfileCookie, error)
@@ -153,6 +153,8 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	config := UnificationModel.DefaultConfig()
 
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
+		// Set tenant ID for the profile before enqueuing
+		profile.TenantId = tenantId
 		queue.Enqueue(profile)
 	}
 	//todo: handler admin/user workflows
@@ -382,7 +384,7 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
 			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: fmt.Sprintf("unknown mutability: %s\", mutability"),
+			Description: fmt.Sprintf("Unknown mutability: %s", mutability),
 		}, http.StatusBadRequest)
 	}
 	return nil
@@ -494,14 +496,14 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 			_, ok := value.(map[string]interface{})
 			return ok
 		}
-		// todo: dont we need to validate the data within complex data
+		// todo: dont we need to validate the data within complex data - as in the sub attributes
 	default:
 		return false
 	}
 }
 
 // UpdateProfile creates or updates a profile
-func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) UpdateProfile(profileId, tenantId string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfile(profileId) //todo: need to get the reference to see what to updatedProfile (see if its the master)
 	logger := log.GetLogger()
@@ -534,7 +536,14 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 	var schema model.ProfileSchema
 	schemaBytes, _ := json.Marshal(rawSchema) // serialize
 	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
-		return nil, fmt.Errorf("invalid schema format: %w", err)
+		errMsg := fmt.Sprintf("Invalid schema format for profile: %s while validating for profile update.", profile.ProfileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, err)
+		return nil, serverError
 	}
 
 	err = ValidateProfileAgainstSchema(updatedProfile, *profile, schema, true)
@@ -599,6 +608,8 @@ func (ps *ProfilesService) UpdateProfile(profileId string, updatedProfile profil
 	config := UnificationModel.DefaultConfig()
 	queue := &workers.ProfileWorkerQueue{}
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
+		// Set tenant ID for the profile before enqueuing
+		profileToUpDate.TenantId = tenantId
 		queue.Enqueue(profileToUpDate)
 	}
 	logger.Info("Successfully updated profile: " + profileFetched.ProfileId)
@@ -699,6 +710,9 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		}
 		if masterProfile != nil {
 			masterProfile.ApplicationData, err = profileStore.FetchApplicationData(masterProfile.ProfileId)
+			if err != nil {
+				return nil, err
+			}
 
 			alias := &profileModel.Reference{
 				ProfileId: profile.ProfileStatus.ReferenceProfileId,
@@ -765,26 +779,6 @@ func (ps *ProfilesService) UpdateProfileConsents(profileId string, consents []pr
 	}
 
 	return nil
-}
-
-func mergeSCIMWithSchema(
-	scim map[string]interface{},
-	existing map[string]interface{},
-	schema []model.ProfileSchemaAttribute,
-) map[string]interface{} {
-	merged := make(map[string]interface{})
-
-	for _, attr := range schema {
-		attrKey := strings.TrimPrefix(attr.AttributeName, "identity_attributes.")
-
-		if val, ok := scim[attrKey]; ok {
-			merged[attrKey] = val
-		} else if val, ok := existing[attrKey]; ok {
-			merged[attrKey] = val
-		}
-	}
-
-	return merged
 }
 
 // DeleteProfile removes a profile from MongoDB by `perma_id`
@@ -1179,8 +1173,7 @@ func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
 	profiles, err := profileStore.GetAllProfilesWithFilter(tenantId, []string{filter})
 	logger := log.GetLogger()
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Error fetching profile by user_id:%s ", sub), log.Error(err))
-		return nil, fmt.Errorf("failed to query profiles: %w", err)
+		return nil, err
 	}
 
 	if len(profiles) == 0 {
@@ -1251,10 +1244,8 @@ func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
 func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfileWithUserId(userId)
-	logger := log.GetLogger()
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Error fetching profile by user_id:%s ", userId), log.Error(err))
-		return nil, fmt.Errorf("failed to query profiles: %w", err)
+		return nil, err
 	}
 	if profile == nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -1268,15 +1259,7 @@ func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.Pro
 	alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
 
 	if err != nil {
-		errorMsg := fmt.Sprintf("Error fetching references for profile: %s", profile.ProfileId)
-		logger := log.GetLogger()
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_PROFILE.Code,
-			Message:     errors2.GET_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return nil, serverError
+		return nil, err
 	}
 	if len(alias) == 0 {
 		alias = nil
@@ -1294,18 +1277,20 @@ func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.Pro
 		},
 		MergedFrom: alias,
 	}
-
 	return profileResponse, nil
 }
 
 // PatchProfile applies a partial update to an existing profile
-func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) PatchProfile(profileId, tenantId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
 
 	existingProfile, err := profileStore.GetProfile(profileId)
-	if err != nil || existingProfile == nil {
+	if err != nil {
+		return nil, err
+	}
+	if existingProfile == nil {
 		return nil, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_NOT_FOUND.Code,
-			Message:     "Profile not found",
+			Message:     errors2.PROFILE_NOT_FOUND.Message,
 			Description: fmt.Sprintf("Profile %s not found", profileId),
 		}, http.StatusNotFound)
 	}
@@ -1351,11 +1336,19 @@ func (ps *ProfilesService) PatchProfile(profileId string, patch map[string]inter
 	mergedBytes, _ := json.Marshal(merged)
 	var updatedProfileReq profileModel.ProfileRequest
 	if err := json.Unmarshal(mergedBytes, &updatedProfileReq); err != nil {
-		return nil, fmt.Errorf("invalid patch structure: %w", err)
+		logger := log.GetLogger()
+		errMsg := fmt.Sprintf("Error unmarshalling merged profile data for profile_id: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, err)
+		return nil, serverError
 	}
 
 	// Reuse the PUT logic to update the profile
-	return ps.UpdateProfile(profileId, updatedProfileReq)
+	return ps.UpdateProfile(profileId, tenantId, updatedProfileReq)
 }
 
 func (ps *ProfilesService) GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error) {

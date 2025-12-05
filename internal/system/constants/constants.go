@@ -1,6 +1,6 @@
 package constants
 
-const ApiBasePath = "/api/v1"
+const ApiBasePath = "/api"
 const ProfileApiPath = "profiles"
 const UnificationRulesApiPath = "unification-rules"
 const ConsentApiPath = "consent"
@@ -10,6 +10,7 @@ const Filter = "filter"
 const Attributes = "attributes"        // Query parameter to filter attributes in the request.
 const ProfileCookie = "cdm_profile_id" // Cookie name to store the profile ID in the browser.
 const DefaultTenant = "carbon.super"
+const SpaceSeparator = " "
 
 type contextKey string
 
@@ -31,12 +32,6 @@ const (
 
 const (
 	SchemaInitEvent = "schema-initialization"
-)
-
-const (
-	update = "update" // Update an existing profile with new data.
-	create = "create" // Create a new profile with the provided data.
-	sync   = "sync"
 )
 
 var AllowedValueTypes = map[string]bool{

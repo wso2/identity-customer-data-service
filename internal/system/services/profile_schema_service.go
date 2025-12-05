@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/handler"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
 type ProfileSchemaService struct {
@@ -36,20 +37,21 @@ func NewProfileSchemaService(mux *http.ServeMux) *ProfileSchemaService {
 		mux:     mux,
 	}
 
+	const base = constants.ApiBasePath + "/v1"
 	// Register routes using Go 1.22 ServeMux patterns on shared mux
-	s.mux.HandleFunc("GET /profile-schema", s.handler.GetProfileSchema)
-	s.mux.HandleFunc("DELETE /profile-schema", s.handler.DeleteProfileSchema)
-	s.mux.HandleFunc("POST /profile-schema/sync", s.handler.SyncProfileSchema)
+	s.mux.HandleFunc("GET "+base+"/profile-schema", s.handler.GetProfileSchema)
+	s.mux.HandleFunc("DELETE "+base+"/profile-schema", s.handler.DeleteProfileSchema)
+	s.mux.HandleFunc("POST "+base+"/profile-schema/sync", s.handler.SyncProfileSchema)
 
 	// Scope-level
-	s.mux.HandleFunc("POST /profile-schema/{scope}", s.handler.AddProfileSchemaAttributesForScope)
-	s.mux.HandleFunc("GET /profile-schema/{scope}", s.handler.GetProfileSchemaAttributeForScope)
-	s.mux.HandleFunc("DELETE /profile-schema/{scope}", s.handler.DeleteProfileSchemaAttributeForScope)
+	s.mux.HandleFunc("POST "+base+"/profile-schema/{scope}", s.handler.AddProfileSchemaAttributesForScope)
+	s.mux.HandleFunc("GET "+base+"/profile-schema/{scope}", s.handler.GetProfileSchemaAttributeForScope)
+	s.mux.HandleFunc("DELETE "+base+"/profile-schema/{scope}", s.handler.DeleteProfileSchemaAttributeForScope)
 
 	// Attribute-level (preserve original verb mapping)
-	s.mux.HandleFunc("POST /profile-schema/{scope}/{attrID}", s.handler.GetProfileSchemaAttributeById)
-	s.mux.HandleFunc("GET /profile-schema/{scope}/{attrID}", s.handler.PatchProfileSchemaAttributeById)
-	s.mux.HandleFunc("DELETE /profile-schema/{scope}/{attrID}", s.handler.DeleteProfileSchemaAttributeById)
+	s.mux.HandleFunc("GET "+base+"/profile-schema/{scope}/{attrID}", s.handler.GetProfileSchemaAttributeById)
+	s.mux.HandleFunc("PUT "+base+"/profile-schema/{scope}/{attrID}", s.handler.PatchProfileSchemaAttributeById)
+	s.mux.HandleFunc("DELETE "+base+"/profile-schema/{scope}/{attrID}", s.handler.DeleteProfileSchemaAttributeById)
 
 	return s
 }

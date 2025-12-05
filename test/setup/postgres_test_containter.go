@@ -37,6 +37,7 @@ type TestPostgres struct {
 func SetupTestPostgres(ctx context.Context) (*TestPostgres, error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:15-alpine",
+		Name:         "cds-test-postgres",
 		ExposedPorts: []string{"5432/tcp"},
 		Env: map[string]string{
 			"POSTGRES_USER":     "testuser",
@@ -69,7 +70,7 @@ func SetupTestPostgres(ctx context.Context) (*TestPostgres, error) {
 		return nil, err
 	}
 
-	log.Printf("✅ Postgres container started at %s:%s", host, port.Port())
+	log.Printf("Postgres container started at %s:%s", host, port.Port())
 
 	return &TestPostgres{
 		Container: container,

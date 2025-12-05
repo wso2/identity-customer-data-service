@@ -256,11 +256,14 @@ func DeleteConsentCategory(categoryId string) error {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		return errors2.NewServerError(errors2.ErrorMessage{
+		errorMsg := fmt.Sprintf("Failed to get db client for deleting consent category: %s", categoryId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_CONSENT_CATEGORY.Code,
 			Message:     errors2.UPDATE_CONSENT_CATEGORY.Message,
-			Description: "Database connection failed.",
+			Description: errorMsg,
 		}, err)
+		return serverError
 	}
 	defer dbClient.Close()
 
@@ -279,11 +282,12 @@ func DeleteConsentCategory(categoryId string) error {
 	query := scripts.DeleteConsentCategory[provider.NewDBProvider().GetDBType()]
 	_, err = tx.Exec(query, categoryId)
 	if err != nil {
-		logger.Debug("Failed to update consent category", log.Error(err))
+		errMsg := fmt.Sprintf("Failed to execute query for deleting consent category: %s", categoryId)
+		logger.Debug(errMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_CONSENT_CATEGORY.Code,
 			Message:     errors2.UPDATE_CONSENT_CATEGORY.Message,
-			Description: "Failed to update consent category.",
+			Description: errMsg,
 		}, err)
 	}
 	return tx.Commit()

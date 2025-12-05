@@ -21,6 +21,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"net/http"
 	"strings"
 	"sync"
@@ -52,7 +53,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 
 	scope := r.PathValue("scope")
 	orgId := utils.ExtractTenantIdFromPath(r)
-	err := utils.AuthnAndAuthz(r, "profile_schema:create")
+	err := security.AuthnAndAuthz(r, "profile_schema:create")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -127,7 +128,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 func (psh *ProfileSchemaHandler) GetProfileSchema(w http.ResponseWriter, r *http.Request) {
 
 	orgId := utils.ExtractTenantIdFromPath(r)
-	err := utils.AuthnAndAuthz(r, "profile_schema:view")
+	err := security.AuthnAndAuthz(r, "profile_schema:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -151,7 +152,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 	scope := r.PathValue("scope")
 	attributeId := r.PathValue("attrID")
 	orgId := utils.ExtractTenantIdFromPath(r)
-	err := utils.AuthnAndAuthz(r, "profile_schema:view")
+	err := security.AuthnAndAuthz(r, "profile_schema:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -176,7 +177,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 
 	scope := r.PathValue("scope")
 	orgId := utils.ExtractTenantIdFromPath(r)
-	err := utils.AuthnAndAuthz(r, "profile_schema:view")
+	err := security.AuthnAndAuthz(r, "profile_schema:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -223,7 +224,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 
 	attributeId := r.PathValue("attrID")
 	orgId := utils.ExtractTenantIdFromPath(r)
-	err := utils.AuthnAndAuthz(r, "profile_schema:update")
+	err := security.AuthnAndAuthz(r, "profile_schema:update")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -233,7 +234,8 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		// todo: validate whats there in updates.
+		// todo: validate whats there in updates. Need to restrict certain fields from being updated
+		// todo: name can
 		return
 	}
 	err = schemaService.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
@@ -256,7 +258,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 func (psh *ProfileSchemaHandler) DeleteProfileSchema(w http.ResponseWriter, r *http.Request) {
 
 	orgId := utils.ExtractTenantIdFromPath(r)
-	err := utils.AuthnAndAuthz(r, "profile_schema:delete")
+	err := security.AuthnAndAuthz(r, "profile_schema:delete")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -279,7 +281,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.Respons
 
 	attributeId := r.PathValue("attrID")
 	orgId := utils.ExtractTenantIdFromPath(r)
-	err := utils.AuthnAndAuthz(r, "profile_schema:delete")
+	err := security.AuthnAndAuthz(r, "profile_schema:delete")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -299,7 +301,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.Respons
 
 func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "profile_schema:delete")
+	err := security.AuthnAndAuthz(r, "profile_schema:delete")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -330,7 +332,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.Res
 
 func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *http.Request) {
 
-	err := utils.AuthnAndAuthz(r, "profile_schema:update")
+	err := security.AuthnAndAuthz(r, "profile_schema:update")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
