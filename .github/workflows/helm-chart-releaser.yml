@@ -46,7 +46,7 @@ jobs:
       # Checks-out the repository from main(default) branch under $GITHUB_WORKSPACE.
       - uses: actions/checkout@v2
         with:
-          token: ${{secrets.GITHUB_BOT_TOKEN}}
+          token: ${{secrets.CDS_DEPLOYMENT_PAT}}
 
       # Define a step to execute the script.
       - name: Run the helm-chart-releaser script
