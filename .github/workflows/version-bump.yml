@@ -56,8 +56,6 @@ jobs:
           echo "✅ Next version: $NEW_VER"
 
       - name: Commit and push
-        env:
-          TOKEN: ${{ secrets.CDS_RELEASE_PAT != '' && secrets.CDS_RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "wso2-iam-bot"
           git config user.email "wso2-iam-bot@users.noreply.github.com"
@@ -66,4 +64,4 @@ jobs:
             || echo "No changes to commit"
 
           echo "Pushing version bump to main..."
-          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }} HEAD:main
+          git push origin HEAD:main
