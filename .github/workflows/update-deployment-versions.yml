@@ -54,4 +54,4 @@ jobs:
           git config user.email "${{ secrets.GIT_BOT_EMAIL }}"
           git add ci-pipelines/cds/setup-variables.yaml
           git commit -m "Update CDS_APPLICATION_TAG to ${{ steps.get_tag.outputs.TAG_NAME }}"
-          git push origin ${{ secrets.DEPLOYMENT_REPOSITORY_BRANCH }}
+          git push origin ${{ secrets.DEPLOYMENT_REPOSITORY_CI_BRANCH }}
