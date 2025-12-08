@@ -52,7 +52,7 @@ jobs:
       - name: Run the helm-chart-releaser script
         env:
           TOKEN: ${{secrets.CDS_DEPLOYMENT_PAT}}
-          GITHUB_BOT_NAME: ${{secrets.CDS_GIT_BOT_USERNAME}}
-          GITHUB_BOT_EMAIL: ${{secrets.CDS_GIT_BOT_EMAIL}}
+          GITHUB_BOT_NAME: ${{secrets.IAM_CLOUD_BOT_USERNAME}}
+          GITHUB_BOT_EMAIL: ${{secrets.IAM_CLOUD_BOT_EMAIL}}
         run: bash .github/workflows/utils/helm-release-builder.sh $GITHUB_BOT_NAME $GITHUB_BOT_EMAIL $TOKEN $GITHUB_WORKSPACE
         id: release-builder
