@@ -119,12 +119,12 @@ spec:
               subPath: deployment.yaml
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/server.cer
-              subPath: server.cer
+              mountPath: /app/repository/certs/client.cer
+              subPath: client.cer
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/server.key
-              subPath: server.pem
+              mountPath: /app/repository/certs/client.key
+              subPath: customer-data-service-client-key.pem
               readOnly: true
           envFrom:
             - secretRef:
@@ -138,9 +138,6 @@ spec:
                path: deployment.yaml
         - name: cds-mtls-volume
           secret:
-            secretName: server.crt
-        - name: cds-mtls-volume
-          secret:
-            secretName: cds-mtls-secret
+            secretName: customer-data-service-keys
 
 
