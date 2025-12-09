@@ -28,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Manually set tag name"
+        description: "Manually set released tag name (e.g., v0.9.0)"
         required: false
         type: string
 
@@ -41,17 +41,34 @@ jobs:
     steps:
       - name: Determine tag name
         id: tag
+        env:
+          GH_TOKEN: ${{ secrets.CDS_DEPLOYMENT_PAT }}
         run: |
-          # Manual run
+          echo "📌 Determining tag name..."
+
+          # Manual override
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "📌 Manual trigger: using provided tag."
             echo "TAG_NAME=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Extract tag from release builder workflow
-          TAG=$(jq -r '.workflow_run.display_title' < $GITHUB_EVENT_PATH | awk '{print $NF}')
+          # Auto mode: tag created by Release Builder
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+          echo "🔍 Looking up tags for commit SHA: $COMMIT_SHA"
+
+          # Fetch tags pointing to this commit
+          TAG=$(gh api \
+            repos/${{ github.repository }}/commits/$COMMIT_SHA \
+            --jq '.[].name' 2>/dev/null)
+
+          if [ -z "$TAG" ]; then
+            echo "❌ ERROR: No tag found for commit: $COMMIT_SHA"
+            exit 1
+          fi
+
+          echo "🎯 Detected tag: $TAG"
           echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
-          echo "Detected tag: $TAG"
 
       - name: Skip if helm tag
         if: contains(steps.tag.outputs.TAG_NAME, 'helm')
@@ -70,7 +87,10 @@ jobs:
       - name: Update CDS_APPLICATION_TAG
         run: |
           cd deployment-repo
-          sed -i "s/CDS_APPLICATION_TAG: .*/CDS_APPLICATION_TAG: \"${{ steps.tag.outputs.TAG_NAME }}\"/" \
+          echo "🔧 Updating CDS_APPLICATION_TAG to: ${{ steps.tag.outputs.TAG_NAME }}"
+
+          sed -i \
+            "s/CDS_APPLICATION_TAG: .*/CDS_APPLICATION_TAG: \"${{ steps.tag.outputs.TAG_NAME }}\"/" \
             ci-pipelines/cds/setup-variables.yaml
 
       - name: Commit and push changes
@@ -78,6 +98,9 @@ jobs:
           cd deployment-repo
           git config user.name "${{ secrets.IAM_CLOUD_BOT_USERNAME }}"
           git config user.email "${{ secrets.IAM_CLOUD_BOT_EMAIL }}"
+
           git add ci-pipelines/cds/setup-variables.yaml
-          git commit -m "Update CDS_APPLICATION_TAG to ${{ steps.tag.outputs.TAG_NAME }}" || echo "No changes"
+          git commit -m "Update CDS_APPLICATION_TAG to ${{ steps.tag.outputs.TAG_NAME }}" || echo "ℹ️ No changes to commit"
+          
+          echo "🚀 Pushing changes..."
           git push origin ${{ secrets.DEPLOYMENT_REPOSITORY_CI_BRANCH }}
