@@ -21,18 +21,43 @@
 name: Update CI Pipeline Tag
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["🚀 CDS Release Builder"]
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Manually set tag name"
+        required: false
+        type: string
 
 jobs:
-  update-ci-pipeline-version:
+  update-ci:
+    if: >
+      (github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    if: "!contains(github.ref_name, 'helm')"
+
     steps:
-      - name: Get tag name
-        id: get_tag
-        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Determine tag name
+        id: tag
+        run: |
+          # Manual run
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG_NAME=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Extract tag from release builder workflow
+          TAG=$(jq -r '.workflow_run.display_title' < $GITHUB_EVENT_PATH | awk '{print $NF}')
+          echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
+          echo "Detected tag: $TAG"
+
+      - name: Skip if helm tag
+        if: contains(steps.tag.outputs.TAG_NAME, 'helm')
+        run: |
+          echo "Skipping because tag contains 'helm': ${{ steps.tag.outputs.TAG_NAME }}"
+          exit 0
 
       - name: Checkout deployment repository
         uses: actions/checkout@v3
@@ -45,7 +70,8 @@ jobs:
       - name: Update CDS_APPLICATION_TAG
         run: |
           cd deployment-repo
-          sed -i "s/CDS_APPLICATION_TAG: .*/CDS_APPLICATION_TAG: \"${{ steps.get_tag.outputs.TAG_NAME }}\"/" ci-pipelines/cds/setup-variables.yaml
+          sed -i "s/CDS_APPLICATION_TAG: .*/CDS_APPLICATION_TAG: \"${{ steps.tag.outputs.TAG_NAME }}\"/" \
+            ci-pipelines/cds/setup-variables.yaml
 
       - name: Commit and push changes
         run: |
@@ -53,5 +79,5 @@ jobs:
           git config user.name "${{ secrets.IAM_CLOUD_BOT_USERNAME }}"
           git config user.email "${{ secrets.IAM_CLOUD_BOT_EMAIL }}"
           git add ci-pipelines/cds/setup-variables.yaml
-          git commit -m "Update CDS_APPLICATION_TAG to ${{ steps.get_tag.outputs.TAG_NAME }}"
+          git commit -m "Update CDS_APPLICATION_TAG to ${{ steps.tag.outputs.TAG_NAME }}" || echo "No changes"
           git push origin ${{ secrets.DEPLOYMENT_REPOSITORY_CI_BRANCH }}
