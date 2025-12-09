@@ -31,7 +31,9 @@ const (
 )
 
 const (
-	SchemaInitEvent = "schema-initialization"
+	AddAttribute    = "add-attribute"
+	UpdateAttribute = "update-attribute"
+	DeleteAttribute = "delete-attribute"
 )
 
 var AllowedValueTypes = map[string]bool{
