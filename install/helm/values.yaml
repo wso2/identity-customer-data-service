@@ -52,6 +52,7 @@ cloud:
           revocationEndpoint: "/oauth2/revoke"
           claimsEndpoint: "api/server/v1/claim-dialects"
           isSystemAppGrantEnabled: true
+          certName: "wso2carboninternal.cer"
 
       tls:
         mtls_enabled: true
@@ -59,7 +60,6 @@ cloud:
         server_cert: "server.crt" # server cert path
         server_key: "server.key" # server key path
         client_cert: "client.crt"
-        client_key: "client.key"
 
       secrets:
         authServerClientId: "" # Add the auth server client ID

@@ -119,13 +119,16 @@ spec:
               subPath: deployment.yaml
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/client.cer
-              subPath: client.cer
+              mountPath: /app/repository/certs/server.cer
+              subPath: server.cer
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/client.key
+              mountPath: /app/repository/certs/server.key
               subPath: customer-data-service-client-key.pem
               readOnly: true
+            - name: is-public-cert
+              mountPath: /app/repository/certs/client.crt
+              subPath: {{ .Values.cloud.deployment.cds.identityServer.certName }}
           envFrom:
             - secretRef:
                 name: cds-env-secret
@@ -139,5 +142,11 @@ spec:
         - name: cds-mtls-volume
           secret:
             secretName: customer-data-service-keys
+        - name: is-public-cert
+          configMap:
+              name: identity-server-public-cert
+              items:
+                - key: {{ .Values.cloud.deployment.cds.identityServer.certName }}
+                  path: {{ .Values.cloud.deployment.cds.identityServer.certName }}
 
 

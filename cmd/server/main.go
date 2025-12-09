@@ -100,13 +100,13 @@ func main() {
 		certDir = filepath.Join(cdsHome, "etc", "certs")
 	}
 
-	if cdsConfig.TLS.ServerCert == "" || cdsConfig.TLS.ServerKey == "" {
+	if cdsConfig.TLS.CDSPublicCert == "" || cdsConfig.TLS.CDSPrivateKey == "" {
 		logger.Error("TLS configuration is missing server certificate or key.")
 		os.Exit(1)
 	}
 
-	serverCertPath := cdsConfig.TLS.ServerCert
-	serverKeyPath := cdsConfig.TLS.ServerKey
+	serverCertPath := cdsConfig.TLS.CDSPublicCert
+	serverKeyPath := cdsConfig.TLS.CDSPrivateKey
 
 	// Check cert files before starting
 	if _, err := os.Stat(serverCertPath); err != nil {
@@ -127,21 +127,16 @@ func main() {
 	}
 
 	if cdsConfig.TLS.MTLSEnabled {
-		if cdsConfig.TLS.ClientCert == "" || cdsConfig.TLS.ClientKey == "" {
+		if cdsConfig.TLS.IdentityServerPublicKey == "" {
 			logger.Error("mTLS is enabled but client certificate or key is missing in the configuration.")
 			os.Exit(1)
 		}
 
-		clientCertPath := filepath.Join(certDir, cdsConfig.TLS.ClientCert)
-		clientKeyPath := filepath.Join(certDir, cdsConfig.TLS.ClientKey)
+		clientCertPath := filepath.Join(certDir, cdsConfig.TLS.IdentityServerPublicKey)
 
 		// Check cert files before starting
 		if _, err := os.Stat(clientCertPath); os.IsNotExist(err) {
 			logger.Error(fmt.Sprintf("Client certificate not found at %s", clientCertPath))
-			os.Exit(1)
-		}
-		if _, err := os.Stat(clientKeyPath); os.IsNotExist(err) {
-			logger.Error(fmt.Sprintf("Client key not found at %s", clientKeyPath))
 			os.Exit(1)
 		}
 	}

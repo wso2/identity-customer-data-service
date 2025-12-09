@@ -20,6 +20,7 @@ package client
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
@@ -80,21 +81,36 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 		}
 	}
 
-	// Client cert/key for mTLS (optional)
-	var clientCerts []tls.Certificate
-	if tlsCfg.MTLSEnabled {
-		clientCrt := filepath.Join(certDir, tlsCfg.ClientCert)
-		clientKey := filepath.Join(certDir, tlsCfg.ClientKey)
-		pair, err := tls.LoadX509KeyPair(clientCrt, clientKey)
+	// Root CA pool (optional but recommended)
+	var rootCAs *x509.CertPool
+	if tlsCfg.IdentityServerPublicKey != "" {
+		caPath := filepath.Join(certDir, tlsCfg.IdentityServerPublicKey)
+		caPEM, err := os.ReadFile(caPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load client cert/key (%s, %s): %w", clientCrt, clientKey, err)
+			return nil, fmt.Errorf("failed to read ca_cert at %s: %w", caPath, err)
 		}
-		clientCerts = []tls.Certificate{pair}
+		rootCAs = x509.NewCertPool()
+		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
+			return nil, fmt.Errorf("failed to append ca_cert into CertPool: %s", caPath)
+		}
+	}
+
+	// Client cert/key for mTLS (optional)
+	var certificates []tls.Certificate
+	if tlsCfg.MTLSEnabled {
+		cdsPublicCrt := filepath.Join(certDir, tlsCfg.CDSPublicCert)
+		cdsPrivatekey := filepath.Join(certDir, tlsCfg.CDSPrivateKey)
+		pair, err := tls.LoadX509KeyPair(cdsPublicCrt, cdsPrivatekey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load cert/key (%s, %s): %w", cdsPublicCrt, cdsPrivatekey, err)
+		}
+		certificates = []tls.Certificate{pair}
 	}
 
 	tcfg := &tls.Config{
 		MinVersion:   tls.VersionTLS12,
-		Certificates: clientCerts,      // empty if mTLS disabled
+		RootCAs:      rootCAs,          // nil means use system CA certs
+		Certificates: certificates,     // empty if mTLS disabled
 		ServerName:   serverHostForSNI, // ensure hostname verification (SNI)
 	}
 
