@@ -126,6 +126,9 @@ spec:
               mountPath: /app/repository/certs/server.key
               subPath: customer-data-service-client-key.pem
               readOnly: true
+            - name: is-public-cert
+              mountPath: /app/repository/certs/client.crt
+              subPath: wso2carboninternal.cer
           envFrom:
             - secretRef:
                 name: cds-env-secret
@@ -143,7 +146,7 @@ spec:
           configMap:
               name: identity-server-public-cert
               items:
-                - key: { { .Values.cloud.deployment.identityServer.certName } }
-                  path: { { .Values.cloud.deployment.identityServer.certName } }
+                - key: wso2carboninternal.cer
+                  path: wso2carboninternal.cer
 
 
