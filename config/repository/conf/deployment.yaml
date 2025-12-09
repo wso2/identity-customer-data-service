@@ -80,4 +80,3 @@ tls:
   server_cert: "/etc/certs/server.crt"
   server_key: "/etc/certs/server.key"
   client_cert: "client.crt"
-  client_key: "client.key"
