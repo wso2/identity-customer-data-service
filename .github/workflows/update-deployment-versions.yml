@@ -84,9 +84,9 @@ jobs:
       - name: Checkout deployment repository
         uses: actions/checkout@v3
         with:
-          repository: ${{ vars.DEPLOYMENT_REPOSITORY }}
+          repository: ${{ env.DEPLOYMENT_REPOSITORY }}
           token: ${{ secrets.CDS_DEPLOYMENT_PAT }}
-          ref: ${{ vars.DEPLOYMENT_REPOSITORY_CI_BRANCH }}
+          ref: ${{ env.DEPLOYMENT_REPOSITORY_CI_BRANCH }}
           path: deployment-repo
 
       - name: Update CDS_APPLICATION_TAG
@@ -101,9 +101,9 @@ jobs:
       - name: Commit and push changes
         run: |
           cd deployment-repo
-          git config user.name "${{ vars.IAM_CLOUD_BOT_USERNAME }}"
-          git config user.email "${{ vars.IAM_CLOUD_BOT_EMAIL }}"
+          git config user.name "${{ env.IAM_CLOUD_BOT_USERNAME }}"
+          git config user.email "${{ env.IAM_CLOUD_BOT_EMAIL }}"
 
           git add ci-pipelines/cds/setup-variables.yaml
           git commit -m "Update CDS_APPLICATION_TAG to ${{ steps.tag.outputs.TAG_NAME }}" || echo "ℹ️ No changes to commit"
-          git push origin ${{ vars.DEPLOYMENT_REPOSITORY_CI_BRANCH }}
+          git push origin ${{ env.DEPLOYMENT_REPOSITORY_CI_BRANCH }}
