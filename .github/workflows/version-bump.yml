@@ -97,6 +97,7 @@ jobs:
       # -------------------------------------------------------
       - name: Determine next version
         id: bump
+        if: github.event_name != 'push' || steps.merge.outputs.is_merge == 'true'
         run: |
           VER=$(cat version.txt)
           CLEAN=${VER#v}
@@ -141,6 +142,7 @@ jobs:
       # Commit and push version bump
       # -------------------------------------------------------
       - name: Commit & push
+        if: github.event_name != 'push' || steps.merge.outputs.is_merge == 'true'
         run: |
           git config user.name "wso2-iam-bot"
           git config user.email "wso2-iam-bot@users.noreply.github.com"
