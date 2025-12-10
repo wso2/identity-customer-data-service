@@ -34,31 +34,31 @@ auth_server:
   isSystemAppGrantEnabled: false
   required_scopes:
     profile:create:
-      - "internal_cdm_profile_create"
+      - "cds_profile_create"
     profile:update:
-      - "internal_cdm_profile_update"
+      - "cds_profile_update"
     profile:view:
-      - "internal_cdm_profile_view"
+      - "cds_profile_view"
     profile:delete:
-      - "internal_cdm_profile_delete"
+      - "cds_profile_delete"
 
     unification_rules:view:
-      - "internal_cdm_unification_rule_view"
+      - "cds_unification_rule_view"
     unification_rules:create:
-      - "internal_cdm_unification_rule_create"
+      - "cds_unification_rule_create"
     unification_rules:update:
-      - "internal_cdm_unification_rule_update"
+      - "cds_unification_rule_update"
     unification_rules:delete:
-      - "internal_cdm_unification_rule_delete"
+      - "cds_unification_rule_delete"
 
     profile_schema:view:
-      - "internal_cdm_profile_schema_view"
+      - "cds_profile_schema_view"
     profile_schema:create:
-      - "internal_cdm_profile_schema_create"
+      - "cds_profile_schema_create"
     profile_schema:update:
-      - "internal_cdm_profile_schema_update"
+      - "cds_profile_schema_update"
     profile_schema:delete:
-      - "internal_cdm_profile_schema_delete"
+      - "cds_profile_schema_delete"
 
 sync:
   schema:
