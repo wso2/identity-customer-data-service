@@ -105,8 +105,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	serverCertPath := cdsConfig.TLS.CDSPublicCert
-	serverKeyPath := cdsConfig.TLS.CDSPrivateKey
+	serverCertPath := filepath.Join(certDir, cdsConfig.TLS.CDSPublicCert)
+	serverKeyPath := filepath.Join(certDir, cdsConfig.TLS.CDSPrivateKey)
 
 	// Check cert files before starting
 	if _, err := os.Stat(serverCertPath); err != nil {
