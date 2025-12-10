@@ -46,7 +46,7 @@ func NewServiceManager(mux *http.ServeMux) ServiceManagerInterface {
 func (sm *ServiceManager) RegisterServices() error {
 
 	// Redirect any /api/... calls to the default tenant (covers all versions)
-	utils.RewriteToDefaultTenant("/api", sm.mux, constants.DefaultTenant)
+	utils.RewriteToDefaultTenant(constants.ApiBasePath, sm.mux, constants.DefaultTenant)
 
 	// Create a dedicated mux for tenant-scoped routes to avoid exposing them at the root
 	routesMux := http.NewServeMux()
