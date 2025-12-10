@@ -21,5 +21,5 @@ package utils
 import "fmt"
 
 func BuildProfileLocation(orgId, profileId string) string {
-	return fmt.Sprintf("%s/api/v1/profiles/%s", orgId, profileId)
+	return fmt.Sprintf("%s/cds/api/v1/profiles/%s", orgId, profileId)
 }
