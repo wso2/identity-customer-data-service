@@ -81,6 +81,7 @@ jobs:
             fi
           else
             echo "is_merge=false" >> $GITHUB_OUTPUT
+          fi
 
       # -------------------------------------------------------
       # Skip push events that are NOT merge commits
