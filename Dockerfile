@@ -41,18 +41,19 @@ RUN addgroup -g 10001 appgroup && \
 WORKDIR /app
 
 # Copy binary + config
-COPY --from=builder /app/target/.build/cds .
+COPY --from=builder /app/target/.build/cds /app/cds
 COPY --from=builder /app/config ./config
 COPY --from=builder /app/config/repository ./repository
 COPY --from=builder /app/dbscripts ./dbscripts
 COPY --from=builder /app/version.txt .
 
-# Ensure correct permissions for mounted volumes
-RUN chown -R 10001:10001 /app
+# Ensure correct permissions
+RUN chown -R 10001:10001 /app && \
+    chmod 755 /app/cds
 
 # Switch to non-root (UID/GID 10001)
 USER 10001:10001
 
 EXPOSE 8900
 
-CMD ["./cds"]
+CMD ["app/cds"]
