@@ -67,7 +67,7 @@ datasource:
   sslmode: {{ .Values.cloud.deployment.cds.config.datasource.sslmode | quote }}
 
 tls:
-  mtls_enabled: "{{ .Values.cloud.deployment.cds.tls.mtls_enabled }}"
+  mtls_enabled: {{ .Values.cloud.deployment.cds.tls.mtls_enabled }}
   cert_dir: "{{ .Values.cloud.deployment.cds.tls.cert_dir }}"
   server_cert: "{{ .Values.cloud.deployment.cds.tls.server_cert }}"
   server_key: "{{ .Values.cloud.deployment.cds.tls.server_key }}"
