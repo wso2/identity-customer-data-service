@@ -47,10 +47,14 @@ COPY --from=builder /app/config/repository ./repository
 COPY --from=builder /app/dbscripts ./dbscripts
 COPY --from=builder /app/version.txt .
 
-# Ensure correct permissions for mounted volumes
+# Create directory structure BEFORE Kubernetes mounts
+RUN mkdir -p /app/repository/conf && \
+    mkdir -p /app/repository/certs
+
+# Correct permissions
 RUN chown -R 10001:10001 /app
 
-# Switch to non-root (UID/GID 10001)
+# Switch to non-root
 USER 10001:10001
 
 EXPOSE 8900
