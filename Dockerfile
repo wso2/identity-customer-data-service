@@ -41,20 +41,17 @@ RUN addgroup -g 10001 appgroup && \
 WORKDIR /app
 
 # Copy binary + config
-COPY --from=builder /app/target/.build/cds .
+COPY --from=builder /app/target/.build/cds /app/cds
 COPY --from=builder /app/config ./config
 COPY --from=builder /app/config/repository ./repository
 COPY --from=builder /app/dbscripts ./dbscripts
 COPY --from=builder /app/version.txt .
 
-# Create directory structure BEFORE Kubernetes mounts
-RUN mkdir -p /app/repository/conf && \
-    mkdir -p /app/repository/certs
+# Ensure correct permissions
+RUN chown -R 10001:10001 /app && \
+    chmod 755 /app/cds
 
-# Correct permissions
-RUN chown -R 10001:10001 /app
-
-# Switch to non-root
+# Switch to non-root (UID/GID 10001)
 USER 10001:10001
 
 EXPOSE 8900
