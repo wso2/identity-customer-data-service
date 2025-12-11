@@ -73,14 +73,14 @@ spec:
           image: "{{ .Values.cloud.deployment.cds.dockerRegistry }}/{{ .Values.cloud.deployment.cds.imageName }}@{{ .Values.cloud.deployment.cds.digest }}"
           livenessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /cds/api/v1/health
               port: {{ .Values.cloud.deployment.cds.containerPort }}
               scheme: HTTPS
             initialDelaySeconds: {{ .Values.cloud.deployment.cds.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.cloud.deployment.cds.livenessProbe.periodSeconds }}
           readinessProbe:
             httpGet:
-              path: /api/v1/ready
+              path: /cds/api/v1/health
               port: {{ .Values.cloud.deployment.cds.containerPort }}
               scheme: HTTPS
             initialDelaySeconds: {{ .Values.cloud.deployment.cds.readinessProbe.initialDelaySeconds }}
