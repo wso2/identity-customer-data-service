@@ -52,7 +52,7 @@ cloud:
           revocationEndpoint: "/oauth2/revoke"
           claimsEndpoint: "api/server/v1/claim-dialects"
           isSystemAppGrantEnabled: true
-          certName: "wso2carboninternal.cer"
+          certName: "wso2carbontls.cer"
 
       tls:
         mtls_enabled: true
