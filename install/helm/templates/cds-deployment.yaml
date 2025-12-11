@@ -112,10 +112,6 @@ spec:
               mountPath: /app/repository/conf/deployment.yaml
               subPath: deployment.yaml
               readOnly: true
-            - name: cds-application-properties
-              mountPath: /app/repository/conf/deployment.yaml
-              subPath: deployment.yaml
-              readOnly: true
             - name: cds-mtls-volume
               mountPath: /app/repository/certs/server.cer
               subPath: server.cer
