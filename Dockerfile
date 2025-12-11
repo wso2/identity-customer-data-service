@@ -41,7 +41,7 @@ RUN addgroup -g 10001 appgroup && \
 WORKDIR /app
 
 # Copy binary + config
-COPY --from=builder /app/target/.build/cds /app/cds
+COPY --from=builder /app/target/.build/cds .
 COPY --from=builder /app/config ./config
 COPY --from=builder /app/config/repository ./repository
 COPY --from=builder /app/dbscripts ./dbscripts
