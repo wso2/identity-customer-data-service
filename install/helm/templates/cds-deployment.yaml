@@ -114,7 +114,7 @@ spec:
               readOnly: true
             - name: cds-mtls-volume
               mountPath: /app/repository/certs/server.cer
-              subPath: server.cer
+              subPath: client.cer
               readOnly: true
             - name: cds-mtls-volume
               mountPath: /app/repository/certs/server.key
