@@ -56,4 +56,4 @@ USER 10001:10001
 
 EXPOSE 8900
 
-CMD ["/.cds"]
+CMD ["./cds"]
