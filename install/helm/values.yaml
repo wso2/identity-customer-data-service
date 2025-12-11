@@ -103,7 +103,7 @@ cloud:
   ingress:
     ratelimit:
       cds:
-        zoneName: "cds"
+        zoneName: "customerDataService"
         burstLimit: 50
     hostName: "cds.local.com"
     ingressClassName: "nginx"
