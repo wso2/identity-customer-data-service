@@ -69,7 +69,6 @@ cloud:
         databaseUsername: "" # Add the database admin username
         databasePassword: "" # Add the database admin password
       replicas: 2
-      annotations: {}
       progressDeadlineSeconds: 300
       minReadySeconds: 30
       strategy:
