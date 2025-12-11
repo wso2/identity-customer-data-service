@@ -117,11 +117,11 @@ spec:
               subPath: client.cer
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/server.key
+              mountPath: /app/repository/certs/customer-data-service-client-key.pem
               subPath: customer-data-service-client-key.pem
               readOnly: true
             - name: is-public-cert
-              mountPath: /app/repository/certs/client.crt
+              mountPath: /app/repository/certs/{{ .Values.cloud.deployment.cds.config.identityServer.certName }}
               subPath: {{ .Values.cloud.deployment.cds.config.identityServer.certName }}
           envFrom:
             - secretRef:
