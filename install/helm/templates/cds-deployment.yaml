@@ -113,7 +113,7 @@ spec:
               subPath: deployment.yaml
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/server.cer
+              mountPath: /app/repository/certs/client.cer
               subPath: client.cer
               readOnly: true
             - name: cds-mtls-volume
