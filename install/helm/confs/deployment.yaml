@@ -67,8 +67,8 @@ datasource:
   sslmode: {{ .Values.cloud.deployment.cds.config.datasource.sslmode | quote }}
 
 tls:
-  mtls_enabled: "{{ .Values.cloud.deployment.cds.config.tls.mtls_enabled }}"
-  cert_dir: "{{ .Values.cloud.deployment.cds.config.tls.cert_dir }}"
-  server_cert: "{{ .Values.cloud.deployment.cds.config.tls.server_cert }}"
-  server_key: "{{ .Values.cloud.deployment.cds.config.tls.server_key }}"
-  client_cert: "{{ .Values.cloud.deployment.cds.config.tls.client_cert }}"
+  mtls_enabled: "{{ .Values.cloud.deployment.cds.tls.mtls_enabled }}"
+  cert_dir: "{{ .Values.cloud.deployment.cds.tls.cert_dir }}"
+  server_cert: "{{ .Values.cloud.deployment.cds.tls.server_cert }}"
+  server_key: "{{ .Values.cloud.deployment.cds.tls.server_key }}"
+  client_cert: "{{ .Values.cloud.deployment.cds.tls.client_cert }}"
