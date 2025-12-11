@@ -23,10 +23,8 @@ kind: Deployment
 metadata:
   name: cds
   namespace: {{ .Release.Namespace }}
-{{- with .Values.cloud.deployment.cds.annotations }}
   annotations:
-{{ toYaml . | indent 4 }}
-{{- end }}
+    asgardeo.io/minimum-replica-count: {{ .Values.cloud.deployment.cds.replicas | quote }}
 spec:
   progressDeadlineSeconds: {{ .Values.cloud.deployment.cds.progressDeadlineSeconds }}
   replicas: {{ default 1 .Values.cloud.deployment.cds.replicas }}
