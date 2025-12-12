@@ -32,7 +32,7 @@ cloud:
         auth:
           corsAllowedOrigins: []
         addr:
-          host: "cds.local.com"
+          host: "localhost"
         sync:
           schema:
             enabled: true

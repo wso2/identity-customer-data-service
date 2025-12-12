@@ -27,6 +27,7 @@ metadata:
       limit_req zone={{ .Values.cloud.ingress.ratelimit.cds.zoneName }} burst={{ .Values.cloud.ingress.ratelimit.cds.burstLimit }} nodelay;                                                   
       limit_req_status 429;
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
   namespace:  {{ .Release.Namespace }}
   name: cds
 spec:
@@ -35,7 +36,7 @@ spec:
     - host: {{ .Values.cloud.ingress.hostName }}
       http:
         paths:
-          - path: /cds/api/v1
+          - path: /cds/api/.*
             pathType: ImplementationSpecific
             backend:
               service:
