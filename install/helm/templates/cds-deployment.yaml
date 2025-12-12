@@ -80,7 +80,7 @@ spec:
             periodSeconds: {{ .Values.cloud.deployment.cds.livenessProbe.periodSeconds }}
           readinessProbe:
             httpGet:
-              path: /cds/api/v1/health
+              path: /cds/api/v1/ready
               port: {{ .Values.cloud.deployment.cds.containerPort }}
               scheme: HTTPS
             initialDelaySeconds: {{ .Values.cloud.deployment.cds.readinessProbe.initialDelaySeconds }}

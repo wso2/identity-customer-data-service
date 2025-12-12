@@ -36,7 +36,7 @@ spec:
     - host: {{ .Values.cloud.ingress.hostName }}
       http:
         paths:
-          - path: /cds/api/.*
+          - path: /cds/api/v1/.*
             pathType: ImplementationSpecific
             backend:
               service:
