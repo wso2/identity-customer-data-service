@@ -1,6 +1,6 @@
 # Allow overriding base images
 ARG GO_BASE=golang:1.24
-ARG RUNTIME_BASE=ubuntu:focal
+ARG RUNTIME_BASE=acrasgardeomainshared001.azurecr.io/eclipse-temurin:21.0.9_10-jdk-jammy_2025-12-08_14-14-42@sha256:1e8c81c5d9b5ceba3a0251bfec2886f5927b79e255e16687d27082cf33c41aa5
 
 # -------------------------
 # Stage 1: Builder
