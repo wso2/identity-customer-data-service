@@ -34,8 +34,9 @@ FROM ${RUNTIME_BASE}
 # -------------------------
 # Create user/group with UID/GID 10001
 # -------------------------
-RUN addgroup -g 10001 appgroup && \
-    adduser  -D -u 10001 -G appgroup appuser
+RUN \
+groupadd -g 10001 -r appgroup && useradd -u 10001 -r appuser \
+-g appgroup -d /app
 
 # Use /app (matches your Helm volume mounts)
 WORKDIR /app
