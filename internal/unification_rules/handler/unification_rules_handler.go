@@ -107,7 +107,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 		return
 	}
 	// Convert rules to API response format
-	var rulesResponse []model.UnificationRuleAPIResponse
+	rulesResponse := []model.UnificationRuleAPIResponse{}
 	for _, rule := range rules {
 		tempRule := model.UnificationRuleAPIResponse{
 			RuleId:       rule.RuleId,

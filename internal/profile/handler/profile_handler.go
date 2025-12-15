@@ -249,7 +249,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 
 func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs map[string][]string) []model.ProfileListResponse {
 
-	var result []model.ProfileListResponse
+	result := []model.ProfileListResponse{}
 
 	for _, profile := range profiles {
 		profileRes := model.ProfileListResponse{
