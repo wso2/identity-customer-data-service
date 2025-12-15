@@ -1,6 +1,6 @@
 # Allow overriding base images
 ARG GO_BASE=golang:1.24
-ARG RUNTIME_BASE=acrasgardeomainshared001.azurecr.io/ubuntu:focal_2022-03-03_05-36-51
+ARG RUNTIME_BASE=ubuntu:focal
 
 # -------------------------
 # Stage 1: Builder
