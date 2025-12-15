@@ -21,37 +21,89 @@
 name: Update CI Pipeline Tag
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["🚀 CDS Release Builder"]
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Manually set released tag name (e.g., v0.9.0)"
+        required: false
+        type: string
 
 jobs:
-  update-ci-pipeline-version:
+  update-ci:
+    if: >
+      (github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    if: "!contains(github.ref_name, 'helm')"
+
     steps:
-      - name: Get tag name
-        id: get_tag
-        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Determine tag name
+        id: tag
+        run: |
+          echo "📌 Determining tag name…"
+
+          # Manual trigger case
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "📌 Manual trigger: using provided tag"
+            echo "TAG_NAME=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+          echo "🔍 Workflow run commit SHA: $COMMIT_SHA"
+
+          echo "📦 Fetching repository..."
+          git clone --quiet https://github.com/${{ github.repository }} repo
+          cd repo
+
+          # Must fetch tags
+          git fetch --tags --force
+
+          # Tag lookup
+          TAG=$(git tag --points-at $COMMIT_SHA)
+
+          if [ -z "$TAG" ]; then
+            echo "❌ ERROR: No tag found pointing to commit: $COMMIT_SHA"
+            exit 1
+          fi
+
+          # In case multiple tags exist, choose the first
+          TAG=$(echo "$TAG" | head -n 1)
+
+          echo "🎯 Tag detected: $TAG"
+          echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Skip if helm tag
+        if: contains(steps.tag.outputs.TAG_NAME, 'helm')
+        run: |
+          echo "Skipping because tag contains 'helm': ${{ steps.tag.outputs.TAG_NAME }}"
+          exit 0
 
       - name: Checkout deployment repository
         uses: actions/checkout@v3
         with:
           repository: ${{ secrets.DEPLOYMENT_REPOSITORY }}
-          token: ${{ secrets.GIT_BOT_TOKEN }}
+          token: ${{ secrets.CDS_DEPLOYMENT_PAT }}
           ref: ${{ secrets.DEPLOYMENT_REPOSITORY_CI_BRANCH }}
           path: deployment-repo
 
       - name: Update CDS_APPLICATION_TAG
         run: |
           cd deployment-repo
-          sed -i "s/CDS_APPLICATION_TAG: .*/CDS_APPLICATION_TAG: \"${{ steps.get_tag.outputs.TAG_NAME }}\"/" ci-pipelines/cds/setup-variables.yaml
+          echo "🔧 Updating CDS_APPLICATION_TAG to: ${{ steps.tag.outputs.TAG_NAME }}"
+
+          sed -i \
+            "s/CDS_APPLICATION_TAG: .*/CDS_APPLICATION_TAG: \"${{ steps.tag.outputs.TAG_NAME }}\"/" \
+            ci-pipelines/cds/setup-variables.yaml
 
       - name: Commit and push changes
         run: |
           cd deployment-repo
-          git config user.name "${{ secrets.GIT_BOT_NAME }}"
-          git config user.email "${{ secrets.GIT_BOT_EMAIL }}"
+          git config user.name "${{ secrets.IAM_CLOUD_BOT_USERNAME }}"
+          git config user.email "${{ secrets.IAM_CLOUD_BOT_EMAIL }}"
+
           git add ci-pipelines/cds/setup-variables.yaml
-          git commit -m "Update CDS_APPLICATION_TAG to ${{ steps.get_tag.outputs.TAG_NAME }}"
+          git commit -m "Update CDS_APPLICATION_TAG to ${{ steps.tag.outputs.TAG_NAME }}" || echo "ℹ️ No changes to commit"
           git push origin ${{ secrets.DEPLOYMENT_REPOSITORY_CI_BRANCH }}

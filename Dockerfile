@@ -1,6 +1,6 @@
 # Allow overriding base images
 ARG GO_BASE=golang:1.24
-ARG RUNTIME_BASE=alpine:latest
+ARG RUNTIME_BASE=acrasgardeomainshared001.azurecr.io/ubuntu:focal_2022-03-03_05-36-51
 
 # -------------------------
 # Stage 1: Builder
@@ -47,8 +47,9 @@ COPY --from=builder /app/config/repository ./repository
 COPY --from=builder /app/dbscripts ./dbscripts
 COPY --from=builder /app/version.txt .
 
-# Ensure correct permissions for mounted volumes
-RUN chown -R 10001:10001 /app
+# Ensure correct permissions
+RUN chown -R 10001:10001 /app && \
+    chmod 755 /app/cds
 
 # Switch to non-root (UID/GID 10001)
 USER 10001:10001

@@ -32,7 +32,7 @@ cloud:
         auth:
           corsAllowedOrigins: []
         addr:
-          host: "cds.local.com"
+          host: "localhost"
         sync:
           schema:
             enabled: true
@@ -52,14 +52,14 @@ cloud:
           revocationEndpoint: "/oauth2/revoke"
           claimsEndpoint: "api/server/v1/claim-dialects"
           isSystemAppGrantEnabled: true
+          certName: "wso2carbontls.cer"
 
       tls:
         mtls_enabled: true
         cert_dir : "/app/repository/certs"
-        server_cert: "server.crt" # server cert path
-        server_key: "server.key" # server key path
-        client_cert: "client.crt"
-        client_key: "client.key"
+        server_cert: "client.cer"
+        server_key: "customer-data-service-client-key.pem"
+        client_cert: "wso2carbontls.cer"
 
       secrets:
         authServerClientId: "" # Add the auth server client ID
@@ -69,7 +69,6 @@ cloud:
         databaseUsername: "" # Add the database admin username
         databasePassword: "" # Add the database admin password
       replicas: 2
-      annotations: {}
       progressDeadlineSeconds: 300
       minReadySeconds: 30
       strategy:
@@ -104,7 +103,7 @@ cloud:
   ingress:
     ratelimit:
       cds:
-        zoneName: "cds"
+        zoneName: "customerDataService"
         burstLimit: 50
     hostName: "cds.local.com"
     ingressClassName: "nginx"

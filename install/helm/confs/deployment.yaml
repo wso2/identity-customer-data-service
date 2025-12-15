@@ -31,31 +31,31 @@ auth_server:
   isSystemAppGrantEnabled: {{ .Values.cloud.deployment.cds.config.identityServer.isSystemAppGrantEnabled }}
   required_scopes:
     profile:create:
-      - "internal_cdm_profile_create"
+      - "cds_profile_create"
     profile:update:
-      - "internal_cdm_profile_update"
+      - "cds_profile_update"
     profile:view:
-      - "internal_cdm_profile_view"
+      - "cds_profile_view"
     profile:delete:
-      - "internal_cdm_profile_delete"
+      - "cds_profile_delete"
 
     unification_rules:view:
-      - "internal_cdm_unification_rule_view"
+      - "cds_unification_rule_view"
     unification_rules:create:
-      - "internal_cdm_unification_rule_create"
+      - "cds_unification_rule_create"
     unification_rules:update:
-      - "internal_cdm_unification_rule_update"
+      - "cds_unification_rule_update"
     unification_rules:delete:
-      - "internal_cdm_unification_rule_delete"
+      - "cds_unification_rule_delete"
 
     profile_schema:view:
-      - "internal_cdm_profile_schema_view"
+      - "cds_profile_schema_view"
     profile_schema:create:
-      - "internal_cdm_profile_schema_create"
+      - "cds_profile_schema_create"
     profile_schema:update:
-      - "internal_cdm_profile_schema_update"
+      - "cds_profile_schema_update"
     profile_schema:delete:
-      - "internal_cdm_profile_schema_delete"
+      - "cds_profile_schema_delete"
 
 datasource:
   type: {{ .Values.cloud.deployment.cds.config.datasource.type }}
@@ -67,9 +67,8 @@ datasource:
   sslmode: {{ .Values.cloud.deployment.cds.config.datasource.sslmode | quote }}
 
 tls:
-  mtls_enabled: "{{ .Values.cloud.deployment.cds.config.tls.mtls_enabled }}"
-  cert_dir: "{{ .Values.cloud.deployment.cds.config.tls.cert_dir }}"
-  server_cert: "{{ .Values.cloud.deployment.cds.config.tls.server_cert }}"
-  server_key: "{{ .Values.cloud.deployment.cds.config.tls.server_key }}"
-  client_cert: "{{ .Values.cloud.deployment.cds.config.tls.client_cert }}"
-  client_key: "{{ .Values.cloud.deployment.cds.config.tls.client_key }}"
+  mtls_enabled: {{ .Values.cloud.deployment.cds.tls.mtls_enabled }}
+  cert_dir: "{{ .Values.cloud.deployment.cds.tls.cert_dir }}"
+  server_cert: "{{ .Values.cloud.deployment.cds.tls.server_cert }}"
+  server_key: "{{ .Values.cloud.deployment.cds.tls.server_key }}"
+  client_cert: "{{ .Values.cloud.deployment.cds.tls.client_cert }}"

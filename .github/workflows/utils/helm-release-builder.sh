@@ -23,7 +23,7 @@
 set -e
 set -o pipefail
 
-if [ "$#" -ne 3 ] || ! [ -d "$3" ]; then
+if [ "$#" -ne 4 ] || ! [ -d "$4" ]; then
   echo "Error: Invalid or insufficient arguements!" >&2
   echo "Usage: bash $0 <GITHUB_USERNAME> <GITHUB_USER_EMAIL> <GITHUB_TOKEN> <PRODUCT_REPO_DIR>" >&2
   exit 1
