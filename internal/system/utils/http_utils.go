@@ -94,13 +94,13 @@ func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError
 	_ = json.NewEncoder(w).Encode("Invalid erquest format")
 }
 
-// RewriteToDefaultTenant Rewrite `/api/v1/...` to `/t/carbon.super/api/v1/...`
-func RewriteToDefaultTenant(apiBasePath string, mux *http.ServeMux, defaultTenant string) {
-	mux.HandleFunc(apiBasePath+"/", func(w http.ResponseWriter, r *http.Request) {
-		newPath := "/t/" + defaultTenant + r.URL.Path
-		http.Redirect(w, r, newPath, http.StatusTemporaryRedirect)
-	})
-}
+//// RewriteToDefaultTenant Rewrite `/api/v1/...` to `/t/carbon.super/api/v1/...`
+//func RewriteToDefaultTenant(apiBasePath string, mux *http.ServeMux, defaultTenant string) {
+//	mux.HandleFunc(apiBasePath+"/", func(w http.ResponseWriter, r *http.Request) {
+//		newPath := "/t/" + defaultTenant + r.URL.Path
+//		http.Redirect(w, r, newPath, http.StatusTemporaryRedirect)
+//	})
+//}
 
 // MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
 // with the tenant added to the context. It preserves the remaining path (e.g., /api/v1/...).
