@@ -458,6 +458,108 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		cleanProfiles(profileSvc, SuperTenantOrg)
 	})
 
+	t.Run("Scenario19_TwoMastersWithExistingHierarchiesMerge", func(t *testing.T) {
+		// Scenario: Two masters with existing hierarchies merge
+		// Master1 has 3 children
+		// Master2 has 2 children
+		// P3 and P4 share an attribute should trigger merge
+		// Expected: All 5 children end up under unified hierarchy with merged data
+
+		// Step 1: Create first hierarchy (Master1 with 3 children)
+		p1 := mustUnmarshalProfile({"identity_attributes":{"email":["hierarchy1@wso2.com"]},"traits":{"interests":["reading"]}})
+		p2 := mustUnmarshalProfile({"identity_attributes":{"email":["hierarchy1@wso2.com"]},"traits":{"interests":["writing"]}})
+		p3 := mustUnmarshalProfile({"identity_attributes":{"email":["hierarchy1@wso2.com"],"phone_number":["0771111111"]},"traits":{"interests":["coding"]}})
+
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
+		time.Sleep(500 * time.Millisecond)
+		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		time.Sleep(500 * time.Millisecond)
+		prof3, _ := profileSvc.CreateProfile(p3, SuperTenantOrg)
+		time.Sleep(3 * time.Second)
+
+		// Verify first hierarchy is created
+		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
+		merged2, _ := profileSvc.GetProfile(prof2.ProfileId)
+		merged3, _ := profileSvc.GetProfile(prof3.ProfileId)
+
+		require.NotEmpty(t, merged1.MergedTo.ProfileId, "P1 should be merged")
+		require.NotEmpty(t, merged2.MergedTo.ProfileId, "P2 should be merged")
+		require.NotEmpty(t, merged3.MergedTo.ProfileId, "P3 should be merged")
+
+		// All three should have same master
+		master1Id := merged1.MergedTo.ProfileId
+		require.Equal(t, master1Id, merged2.MergedTo.ProfileId, "P1 and P2 should have same master")
+		require.Equal(t, master1Id, merged3.MergedTo.ProfileId, "P1 and P3 should have same master")
+
+		master1, _ := profileSvc.GetProfile(master1Id)
+		require.NotNil(t, master1, "Master1 should exist")
+		require.Equal(t, 3, len(master1.MergedFrom), "Master1 should have 3 children")
+
+		// Step 2: Create second hierarchy (Master2 with 2 children)
+		p4 := mustUnmarshalProfile({"identity_attributes":{"email":["hierarchy2@wso2.com"],"phone_number":["0772222222"]},"traits":{"interests":["gaming"]}})
+		p5 := mustUnmarshalProfile({"identity_attributes":{"email":["hierarchy2@wso2.com"]},"traits":{"interests":["music"]}})
+
+		prof4, _ := profileSvc.CreateProfile(p4, SuperTenantOrg)
+		time.Sleep(500 * time.Millisecond)
+		prof5, _ := profileSvc.CreateProfile(p5, SuperTenantOrg)
+		time.Sleep(3 * time.Second)
+
+		// Verify second hierarchy is created
+		merged4, _ := profileSvc.GetProfile(prof4.ProfileId)
+		merged5, _ := profileSvc.GetProfile(prof5.ProfileId)
+
+		require.NotEmpty(t, merged4.MergedTo.ProfileId, "P4 should be merged")
+		require.NotEmpty(t, merged5.MergedTo.ProfileId, "P5 should be merged")
+
+		master2Id := merged4.MergedTo.ProfileId
+		require.Equal(t, master2Id, merged5.MergedTo.ProfileId, "P4 and P5 should have same master")
+
+		master2, _ := profileSvc.GetProfile(master2Id)
+		require.NotNil(t, master2, "Master2 should exist")
+		require.Equal(t, 2, len(master2.MergedFrom), "Master2 should have 2 children")
+
+		// Step 3: Create a profile that connects both hierarchies
+		// P6 shares phone with P3 (from Master1) and shares phone with P4 (from Master2)
+		p6 := mustUnmarshalProfile({"identity_attributes":{"phone_number":["0771111111","0772222222"]},"traits":{"interests":["sports"]}})
+		prof6, _ := profileSvc.CreateProfile(p6, SuperTenantOrg)
+		time.Sleep(5 * time.Second)
+
+		// Step 4: Verify all profiles are now in unified hierarchy
+		finalMerged1, _ := profileSvc.GetProfile(prof1.ProfileId)
+		finalMerged2, _ := profileSvc.GetProfile(prof2.ProfileId)
+		finalMerged3, _ := profileSvc.GetProfile(prof3.ProfileId)
+		finalMerged4, _ := profileSvc.GetProfile(prof4.ProfileId)
+		finalMerged5, _ := profileSvc.GetProfile(prof5.ProfileId)
+		finalMerged6, _ := profileSvc.GetProfile(prof6.ProfileId)
+
+		// All profiles should have a master (merged)
+		require.NotEmpty(t, finalMerged1.MergedTo.ProfileId, "P1 should be in unified hierarchy")
+		require.NotEmpty(t, finalMerged2.MergedTo.ProfileId, "P2 should be in unified hierarchy")
+		require.NotEmpty(t, finalMerged3.MergedTo.ProfileId, "P3 should be in unified hierarchy")
+		require.NotEmpty(t, finalMerged4.MergedTo.ProfileId, "P4 should be in unified hierarchy")
+		require.NotEmpty(t, finalMerged5.MergedTo.ProfileId, "P5 should be in unified hierarchy")
+		require.NotEmpty(t, finalMerged6.MergedTo.ProfileId, "P6 should be in unified hierarchy")
+
+		// Find the final master
+		finalMasterId := finalMerged6.MergedTo.ProfileId
+		finalMaster, _ := profileSvc.GetProfile(finalMasterId)
+		require.NotNil(t, finalMaster, "Final master should exist")
+
+		// Verify interests from both hierarchies are combined
+		interests := finalMaster.Traits["interests"].([]interface{})
+		require.GreaterOrEqual(t, len(interests), 4, "Should have interests from multiple profiles")
+
+		// Verify at least one phone number is present
+		phoneNumbers := finalMaster.IdentityAttributes["phone_number"].([]interface{})
+		require.GreaterOrEqual(t, len(phoneNumbers), 1, "Should have at least one phone number")
+
+		// Verify email from at least one hierarchy is present
+		emails := finalMaster.IdentityAttributes["email"].([]interface{})
+		require.GreaterOrEqual(t, len(emails), 1, "Should have at least one email")
+
+		cleanProfiles(profileSvc, SuperTenantOrg)
+	})
+
 	// Cleanup
 	t.Cleanup(func() {
 		rules, _ := unificationSvc.GetUnificationRules(SuperTenantOrg)
