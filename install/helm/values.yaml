@@ -42,7 +42,7 @@ cloud:
           hostname: "localhost"
           port: 5432
           name: "cds_db"
-          sslmode: "disable"
+          sslmode: require
 
         identityServer:
           host: identity-service

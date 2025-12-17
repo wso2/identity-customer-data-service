@@ -46,6 +46,7 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 
 	if err != nil {
 		utils.HandleError(w, err)
+		return
 	}
 
 	resp := model.AdminConfigAPI{

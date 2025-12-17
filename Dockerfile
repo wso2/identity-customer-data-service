@@ -1,6 +1,6 @@
 # Allow overriding base images
 ARG GO_BASE=golang:1.24
-ARG RUNTIME_BASE=acrasgardeomainshared001.azurecr.io/ubuntu:focal_2022-03-03_05-36-51
+ARG RUNTIME_BASE=acrasgardeomainshared001.azurecr.io/eclipse-temurin:21.0.9_10-jdk-jammy_2025-12-08_14-14-42@sha256:1e8c81c5d9b5ceba3a0251bfec2886f5927b79e255e16687d27082cf33c41aa5
 
 # -------------------------
 # Stage 1: Builder
@@ -34,8 +34,9 @@ FROM ${RUNTIME_BASE}
 # -------------------------
 # Create user/group with UID/GID 10001
 # -------------------------
-RUN addgroup -g 10001 appgroup && \
-    adduser  -D -u 10001 -G appgroup appuser
+RUN \
+groupadd -g 10001 -r appgroup && useradd -u 10001 -r appuser \
+-g appgroup -d /app
 
 # Use /app (matches your Helm volume mounts)
 WORKDIR /app

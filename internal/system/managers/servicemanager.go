@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/services"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
@@ -45,14 +44,14 @@ func NewServiceManager(mux *http.ServeMux) ServiceManagerInterface {
 
 func (sm *ServiceManager) RegisterServices() error {
 
-	// Redirect any /api/... calls to the default tenant (covers all versions)
-	utils.RewriteToDefaultTenant(constants.ApiBasePath, sm.mux, constants.DefaultTenant)
-
-	// Create a dedicated mux for tenant-scoped routes to avoid exposing them at the root
-	routesMux := http.NewServeMux()
+	// Non-tenanted root services (health, ready)
+	rootMux := http.NewServeMux()
+	_ = services.NewHealthService(rootMux) // registers /cds/api/v1/health, /ready
+	sm.mux.Handle("/cds/", rootMux)
 
 	// Initialize services with the shared tenant routes mux so they don't create their own mux
-	_ = services.NewHealthService(routesMux)
+	routesMux := http.NewServeMux()
+	//_ = services.NewHealthService(routesMux)
 	_ = services.NewProfileService(routesMux)
 	_ = services.NewProfileSchemaService(routesMux)
 	_ = services.NewUnificationRulesService(routesMux)
