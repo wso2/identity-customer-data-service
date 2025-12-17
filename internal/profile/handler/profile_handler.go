@@ -746,8 +746,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			// this is when we create a profile for a new user created in IS
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if err != nil {
-				utils.HandleError(writer, err)
-				return
+				if !utils.HasClientErrorCode(err, errors2.PROFILE_NOT_FOUND.Code) {
+					utils.HandleError(writer, err)
+					return
+				}
 			}
 			if existingProfile == nil {
 				identityAttributes := make(map[string]interface{})
