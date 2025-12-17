@@ -87,6 +87,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		utils.HandleError(w, err)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // Helper for JSON responses
