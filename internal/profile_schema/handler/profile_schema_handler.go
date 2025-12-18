@@ -21,10 +21,11 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -347,8 +348,8 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 
 	log.GetLogger().Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaAtt.Event, schemaAtt.OrgId))
 
-	if schemaAtt.Event == constants.AddAttribute {
-		//todo Update to handle attribute addition event
+	if schemaAtt.Event == constants.AddScimAttribute || schemaAtt.Event == constants.UpdateScimAttribute ||
+		schemaAtt.Event == constants.DeleteScimAttribute || schemaAtt.Event == constants.UpdateLocalAttribute {
 		orgId := schemaAtt.OrgId
 		err := schemaService.SyncProfileSchema(orgId)
 		if err != nil {
