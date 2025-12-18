@@ -25,7 +25,7 @@ cloud:
       containerPort: 8900
       config:
         env: "dev"
-        logLevel: "INFO" # Log level: "INFO", "WARN", "ERROR", "DEBUG"
+        logLevel: "DEBUG" # Log level: "INFO", "WARN", "ERROR", "DEBUG"
         cache:
           enabled: true
           defaultCacheTimeout: 15
