@@ -110,7 +110,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	err = schemaService.AddProfileSchemaAttributesForScope(schemaAttributes, scope, orgId)
+	err = schemaService.AddProfileSchemaAttributesForScope(schemaAttributes, scope, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

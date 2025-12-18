@@ -74,9 +74,9 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 			ValueType: constants.IntegerDataType, MergeStrategy: "overwrite", Mutability: constants.MutabilityReadWrite, ApplicationIdentifier: AppId},
 	}
 
-	err := profileSchemaSvc.AddProfileSchemaAttributesForScope(identityAttr, constants.IdentityAttributes)
-	err1 := profileSchemaSvc.AddProfileSchemaAttributesForScope(traits, constants.Traits)
-	err2 := profileSchemaSvc.AddProfileSchemaAttributesForScope(appData, constants.ApplicationData)
+	err := profileSchemaSvc.AddProfileSchemaAttributesForScope(identityAttr, constants.IdentityAttributes, SuperTenantOrg)
+	err1 := profileSchemaSvc.AddProfileSchemaAttributesForScope(traits, constants.Traits, SuperTenantOrg)
+	err2 := profileSchemaSvc.AddProfileSchemaAttributesForScope(appData, constants.ApplicationData, SuperTenantOrg)
 	require.NoError(t, err)
 	require.NoError(t, err1)
 	require.NoError(t, err2)
@@ -550,7 +550,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		finalMasterId := finalMerged6.MergedTo.ProfileId
 		finalMaster, _ := profileSvc.GetProfile(finalMasterId)
 		require.NotNil(t, finalMaster, "Final master should exist")
-		
+
 		// Show all children of final master
 		fmt.Println("\n  Final Master's Direct Children:")
 		for i, child := range finalMaster.MergedFrom {
