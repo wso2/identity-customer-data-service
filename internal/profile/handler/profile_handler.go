@@ -365,7 +365,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	orgId := utils.ExtractTenantIdFromPath(r)
 
 	if !isCDSEnabled(orgId) {
-		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + orgId
+		errMsg := "Unable to process profile initiation as CDS is not enabled for tenant: " + orgId
 		log.GetLogger().Info(errMsg)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
