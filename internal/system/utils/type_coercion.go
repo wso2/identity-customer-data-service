@@ -21,6 +21,7 @@ package utils
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -219,7 +220,7 @@ func coerceToBoolean(value interface{}, logger *log.Logger) interface{} {
 		return v
 	case string:
 		// Parse common string representations
-		lower := v
+		lower := strings.ToLower(v)
 		if lower == "true" || lower == "1" || lower == "yes" {
 			return true
 		}
