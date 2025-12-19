@@ -638,7 +638,9 @@ func ConvertAppDataToMap(appDataList []profileModel.ApplicationData) map[string]
 	return result
 }
 
-// GetProfile retrieves a profile
+// GetProfile retrieves a profile and applies schema-driven type coercion.
+// This ensures that the returned profile data matches the current schema,
+// even if the stored data was written under a previous schema version.
 func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfile(ProfileId)
@@ -654,13 +656,30 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		return nil, clientError
 	}
 
+	// Fetch the current schema for this tenant to apply type coercion
+	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(profile.TenantId)
+	logger := log.GetLogger()
+	if err != nil {
+		logger.Warn(fmt.Sprintf("Could not fetch schema for tenant %s, skipping type coercion: %v", profile.TenantId, err))
+		// Continue without schema coercion - profile data will be returned as-is
+	} else {
+		// Convert raw schema to structured format
+		var schema model.ProfileSchema
+		schemaBytes, _ := json.Marshal(rawSchema)
+		if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+			logger.Warn(fmt.Sprintf("Invalid schema format for tenant %s, skipping type coercion: %v", profile.TenantId, err))
+		} else {
+			// Apply schema-driven type coercion to the profile
+			applySchemaToProfile(profile, schema)
+		}
+	}
+
 	if profile.ProfileStatus.IsReferenceProfile {
 
 		alias, err := profileStore.FetchReferencedProfiles(ProfileId)
 
 		if err != nil {
 			errorMsg := fmt.Sprintf("Error fetching references for profile: %s", ProfileId)
-			logger := log.GetLogger()
 			logger.Debug(errorMsg, log.Error(err))
 			serverError := errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.GET_PROFILE.Code,
@@ -672,19 +691,6 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		if len(alias) == 0 {
 			alias = nil
 		}
-		//
-		//if profile.UserId != "" {
-		//	scimData, err := client.GetSCIMUser(profile.UserId)
-		//	if err != nil {
-		//		log.GetLogger().Warn("Failed to fetch SCIM data", log.Error(err))
-		//	} else {
-		//		schemaAttrs, err := dbClient.GetSchemaAttributes(profile.TenantId, "identity_attributes")
-		//		if err != nil {
-		//			return nil, err
-		//		}
-		//		profile.IdentityAttributes = mergeSCIMWithSchema(scimData, profile.IdentityAttributes, schemaAttrs)
-		//	}
-		//}
 
 		profileResponse := &profileModel.ProfileResponse{
 			ProfileId:          profile.ProfileId,
@@ -712,6 +718,15 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 			masterProfile.ApplicationData, err = profileStore.FetchApplicationData(masterProfile.ProfileId)
 			if err != nil {
 				return nil, err
+			}
+
+			// Apply schema coercion to master profile as well
+			if rawSchema != nil {
+				var schema model.ProfileSchema
+				schemaBytes, _ := json.Marshal(rawSchema)
+				if err := json.Unmarshal(schemaBytes, &schema); err == nil {
+					applySchemaToProfile(masterProfile, schema)
+				}
 			}
 
 			alias := &profileModel.Reference{
@@ -964,7 +979,9 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 	return nil
 }
 
-// GetAllProfiles retrieves all profiles
+// GetAllProfiles retrieves all profiles and applies schema-driven type coercion.
+// This ensures that returned profile data matches the current schema,
+// even if stored data was written under previous schema versions.
 func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.ProfileResponse, error) {
 
 	existingProfiles, err := profileStore.GetAllProfiles(tenantId)
@@ -975,14 +992,34 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 		return []profileModel.ProfileResponse{}, nil
 	}
 
+	// Fetch the current schema once for all profiles
+	logger := log.GetLogger()
+	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(tenantId)
+	var schema model.ProfileSchema
+	schemaAvailable := false
+	if err != nil {
+		logger.Warn(fmt.Sprintf("Could not fetch schema for tenant %s, skipping type coercion: %v", tenantId, err))
+	} else {
+		schemaBytes, _ := json.Marshal(rawSchema)
+		if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+			logger.Warn(fmt.Sprintf("Invalid schema format for tenant %s, skipping type coercion: %v", tenantId, err))
+		} else {
+			schemaAvailable = true
+		}
+	}
+
 	// todo: app context should be restricted for apps that is requesting these
 
 	var result []profileModel.ProfileResponse
 	for _, profile := range existingProfiles {
+		// Apply schema coercion to each profile
+		if schemaAvailable {
+			applySchemaToProfile(&profile, schema)
+		}
+
 		alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Error fetching references for profile: %s", profile.ProfileId)
-			logger := log.GetLogger()
 			logger.Debug(errorMsg, log.Error(err))
 			serverError := errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.GET_PROFILE.Code,
@@ -1018,6 +1055,11 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 
 			masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
 
+			// Apply schema coercion to master profile too
+			if schemaAvailable {
+				applySchemaToProfile(masterProfile, schema)
+			}
+
 			// building the hierarchy
 			masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
 
@@ -1046,7 +1088,9 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 	return result, nil
 }
 
-// GetAllProfilesWithFilter handles fetching all profiles with filter
+// GetAllProfilesWithFilter handles fetching all profiles with filter and applies schema-driven type coercion.
+// This ensures that returned profile data matches the current schema,
+// even if stored data was written under previous schema versions.
 func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error) {
 
 	// Step 1: Fetch enrichment rules to extract value types
@@ -1093,8 +1137,29 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []s
 		filteredProfiles = []profileModel.Profile{}
 	}
 
+	// Fetch the current schema once for all profiles
+	logger := log.GetLogger()
+	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(tenantId)
+	var schema model.ProfileSchema
+	schemaAvailable := false
+	if err != nil {
+		logger.Warn(fmt.Sprintf("Could not fetch schema for tenant %s, skipping type coercion: %v", tenantId, err))
+	} else {
+		schemaBytes, _ := json.Marshal(rawSchema)
+		if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+			logger.Warn(fmt.Sprintf("Invalid schema format for tenant %s, skipping type coercion: %v", tenantId, err))
+		} else {
+			schemaAvailable = true
+		}
+	}
+
 	var result []profileModel.ProfileResponse
 	for _, profile := range filteredProfiles {
+		// Apply schema coercion to each profile
+		if schemaAvailable {
+			applySchemaToProfile(&profile, schema)
+		}
+
 		if profile.ProfileStatus.IsReferenceProfile {
 			profileResponse := &profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
@@ -1118,6 +1183,11 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []s
 
 			masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
 			masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
+
+			// Apply schema coercion to master profile too
+			if schemaAvailable {
+				applySchemaToProfile(masterProfile, schema)
+			}
 
 			// Override for visual reference to the child
 			masterProfile.ProfileId = profile.ProfileId
@@ -1474,4 +1544,74 @@ func DeepMerge(dst, src map[string]interface{}) map[string]interface{} {
 		}
 	}
 	return dst
+}
+
+// buildSchemaMap constructs a map of attribute names to their schema definitions.
+// This is used for applying schema-driven type coercion at read time.
+//
+// Design rationale:
+// - Profile values are stored as generic JSON
+// - The schema is the source of truth for types
+// - At read time, we coerce values to match the current schema
+// - This enables schema evolution without bulk profile updates
+func buildSchemaMap(schemaAttrs []model.ProfileSchemaAttribute) map[string]utils.SchemaAttribute {
+	schemaMap := make(map[string]utils.SchemaAttribute)
+
+	for _, attr := range schemaAttrs {
+		// Extract the attribute key (remove scope prefix)
+		// e.g., "identity_attributes.email" -> "email"
+		parts := strings.SplitN(attr.AttributeName, ".", 2)
+		if len(parts) == 2 {
+			key := parts[1]
+			schemaMap[key] = utils.SchemaAttribute{
+				ValueType:   attr.ValueType,
+				MultiValued: attr.MultiValued,
+			}
+		}
+	}
+
+	return schemaMap
+}
+
+// applySchemaToProfile applies schema-driven type coercion to all attribute sections of a profile.
+// This ensures that returned profile data matches the current schema, even if the stored
+// data was written under a previous schema version.
+//
+// Design rationale:
+// - Profiles store data in a schema-agnostic format
+// - Schema changes (type modifications, new attributes) should not require bulk profile updates
+// - At read time, we coerce stored values to match the current schema
+// - Incompatible conversions result in attributes being omitted
+// - Attributes not in schema are preserved for backward compatibility
+func applySchemaToProfile(profile *profileModel.Profile, schema model.ProfileSchema) {
+	logger := log.GetLogger()
+
+	// Apply schema to identity attributes
+	if profile.IdentityAttributes != nil && len(schema.IdentityAttributes) > 0 {
+		identitySchemaMap := buildSchemaMap(schema.IdentityAttributes)
+		profile.IdentityAttributes = utils.ApplySchemaToAttributes(profile.IdentityAttributes, identitySchemaMap)
+		logger.Debug(fmt.Sprintf("Applied schema to identity attributes for profile: %s", profile.ProfileId))
+	}
+
+	// Apply schema to traits
+	if profile.Traits != nil && len(schema.Traits) > 0 {
+		traitsSchemaMap := buildSchemaMap(schema.Traits)
+		profile.Traits = utils.ApplySchemaToAttributes(profile.Traits, traitsSchemaMap)
+		logger.Debug(fmt.Sprintf("Applied schema to traits for profile: %s", profile.ProfileId))
+	}
+
+	// Apply schema to application data
+	if profile.ApplicationData != nil && len(schema.ApplicationData) > 0 {
+		for i := range profile.ApplicationData {
+			appData := &profile.ApplicationData[i]
+			appID := appData.AppId
+
+			// Get schema for this specific application
+			if appSchemaAttrs, ok := schema.ApplicationData[appID]; ok && len(appSchemaAttrs) > 0 {
+				appSchemaMap := buildSchemaMap(appSchemaAttrs)
+				appData.AppSpecificData = utils.ApplySchemaToAttributes(appData.AppSpecificData, appSchemaMap)
+				logger.Debug(fmt.Sprintf("Applied schema to application data for app: %s in profile: %s", appID, profile.ProfileId))
+			}
+		}
+	}
 }
