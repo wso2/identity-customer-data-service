@@ -248,12 +248,17 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		errorMsg := fmt.Sprintf("Token endpoint returned status %d: for the organization:%s in system_app_grant", resp.StatusCode, orgId)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		errorMsg := fmt.Sprintf(
+			"Token endpoint returned status %d for org:%s. Endpoint: %s. Response: %s",
+			resp.StatusCode, orgId, endpoint, strings.TrimSpace(string(bodyBytes)),
+		)
+		logger.Debug(errorMsg)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
 			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
-		}, err)
+		}, fmt.Errorf("token endpoint non-200: %d", resp.StatusCode))
 	}
 
 	var result struct {
@@ -315,12 +320,17 @@ func (c *IdentityClient) requestTokenForOrg(endpoint, superTenantToken string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		errorMsg := fmt.Sprintf("Token endpoint returned status %d: for the organization:%s", resp.StatusCode, orgId)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		errorMsg := fmt.Sprintf(
+			"Token endpoint returned status %d for org:%s. Endpoint: %s. Response: %s",
+			resp.StatusCode, orgId, endpoint, strings.TrimSpace(string(bodyBytes)),
+		)
+		logger.Debug(errorMsg)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
 			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
-		}, err)
+		}, fmt.Errorf("token endpoint non-200: %d", resp.StatusCode))
 	}
 
 	var result struct {
@@ -584,7 +594,6 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 			orgId), log.Error(err))
 		return nil, err
 	}
-	logger.Info("Fetching local claims from token: " + token)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.HTTPClient.Do(req)
