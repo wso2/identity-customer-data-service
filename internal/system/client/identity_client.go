@@ -23,7 +23,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"io"
 	"net/http"
 	"net/url"
@@ -31,6 +30,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -171,7 +172,7 @@ func (c *IdentityClient) fetchOrganizationToken(
 	endpoint := c.buildTokenEndpoint("carbon.super", authCfg.TokenEndpoint)
 	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgId))
 	// Note: The super-tenant token is not used directly — the grant exchange happens using client credentials.
-	_, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId)
+	superTenantToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgId)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
@@ -188,7 +189,8 @@ func (c *IdentityClient) fetchOrganizationToken(
 	exchangeForm.Set("organizationId", orgId)
 
 	logger.Debug(fmt.Sprintf("Exchanging system_app_grant token for organization: %s", orgId))
-	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, exchangeForm, orgId)
+	endpoint = c.buildTokenEndpoint(orgId, authCfg.TokenEndpoint)
+	orgToken, err := c.requestTokenForOrg(endpoint, superTenantToken, exchangeForm, orgId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to exchange token for the organization:%s", orgId)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
@@ -221,7 +223,7 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 
 	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to create token request for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to create token request for the organization:%s in system_app_grant", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
@@ -234,8 +236,75 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to fetch token for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to fetch token for the organization:%s in system_app_grant", orgId)
+		logger.Debug(err.Error())
+		// This is an internal communication. So for the clients of CDS, we treat this as a server error.
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errorMsg := fmt.Sprintf("Token endpoint returned status %d: for the organization:%s in system_app_grant", resp.StatusCode, orgId)
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		errorMsg := fmt.Sprintf("Failed to parse token response for the organization:%s in system_app_grant", orgId)
 		logger.Debug(errorMsg, log.Error(err))
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	if result.AccessToken == "" {
+		errorMsg := fmt.Sprintf("Failed to read token response for the organization:%s in system_app_grant", orgId)
+		logger.Debug(errorMsg)
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, nil)
+	}
+
+	return result.AccessToken, nil
+}
+
+// requestTokenForOrg performs the token exchange using the super-tenant token.
+func (c *IdentityClient) requestTokenForOrg(endpoint, superTenantToken string,
+	form url.Values, orgId string,
+) (string, error) {
+
+	logger := log.GetLogger()
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to create token request for the organization:%s", orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return "", errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.TOKEN_FETCH_FAILED.Code,
+			Message:     errors2.TOKEN_FETCH_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "SystemApp "+superTenantToken)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		logger.Debug(err.Error())
+		errorMsg := fmt.Sprintf("Failed to fetch token for the organization:%s", orgId)
 		// This is an internal communication. So for the clients of CDS, we treat this as a server error.
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
