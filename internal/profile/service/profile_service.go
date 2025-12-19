@@ -1587,21 +1587,21 @@ func applySchemaToProfile(profile *profileModel.Profile, schema model.ProfileSch
 	logger := log.GetLogger()
 
 	// Apply schema to identity attributes
-	if profile.IdentityAttributes != nil && len(schema.IdentityAttributes) > 0 {
+	if len(schema.IdentityAttributes) > 0 {
 		identitySchemaMap := buildSchemaMap(schema.IdentityAttributes)
 		profile.IdentityAttributes = utils.ApplySchemaToAttributes(profile.IdentityAttributes, identitySchemaMap)
 		logger.Debug(fmt.Sprintf("Applied schema to identity attributes for profile: %s", profile.ProfileId))
 	}
 
 	// Apply schema to traits
-	if profile.Traits != nil && len(schema.Traits) > 0 {
+	if len(schema.Traits) > 0 {
 		traitsSchemaMap := buildSchemaMap(schema.Traits)
 		profile.Traits = utils.ApplySchemaToAttributes(profile.Traits, traitsSchemaMap)
 		logger.Debug(fmt.Sprintf("Applied schema to traits for profile: %s", profile.ProfileId))
 	}
 
 	// Apply schema to application data
-	if profile.ApplicationData != nil && len(schema.ApplicationData) > 0 {
+	if len(schema.ApplicationData) > 0 {
 		for i := range profile.ApplicationData {
 			appData := &profile.ApplicationData[i]
 			appID := appData.AppId

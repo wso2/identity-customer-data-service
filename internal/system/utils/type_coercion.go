@@ -282,7 +282,7 @@ func coerceToDateTime(value interface{}) interface{} {
 // Returns:
 // - A new map with coerced values matching the schema
 func ApplySchemaToAttributes(attributes map[string]interface{}, schemaAttributes map[string]SchemaAttribute) map[string]interface{} {
-	if attributes == nil || len(attributes) == 0 {
+	if len(attributes) == 0 {
 		return attributes
 	}
 
