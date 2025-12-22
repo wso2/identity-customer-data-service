@@ -45,8 +45,8 @@ cloud:
           sslmode: require
 
         identityServer:
-          host: identity-service
-          port: 9443
+          host: dev.api.asgardeo.io
+          port: ""
           introspectionEndpoint: "/oauth2/introspect"
           tokenEndpoint: "/oauth2/token"
           revocationEndpoint: "/oauth2/revoke"
