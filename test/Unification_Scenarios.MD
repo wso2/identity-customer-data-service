@@ -56,3 +56,13 @@ It simulates multiple real-world merging situations across temporary and permane
 | **7** | Rule Inactivation                                   | Email rule temporarily disabled. | No merge occurs until rule is re-enabled. |
 | **8** | Rule Change Stability                               | Existing merged profiles remain stable after rule changes. | Unification remains intact; hierarchy unchanged. |
 | **9** | Cross-Tenant Isolation                              | Two profiles from different tenants share same identifiers. | Profiles remain separate; no cross-tenant unification. |
+| **10** | Multiple Cascading Merges                          | Four profiles chain together - P1, P2 by email, P2, P3 by phone, P3, P4 by email. | All four merge into one master with combined data. |
+| **11** | Deep Hierarchy Unification                         | Two profiles merge first, then a third joins via phone match. | All three end up in same hierarchy with all interests combined. |
+| **12** | Application Data Merge                             | Profiles with different application data merge together. | App data from both profiles gets combined properly. |
+| **13** | Update Triggers Reunification                      | Two separate profiles exist, one gets updated to add matching email. | After update, both profiles merge together. |
+| **14** | Multiple Attributes Match                          | Two profiles match on both email AND phone at the same time. | They merge once using higher priority rule (email). |
+| **15** | Four Profile Chain                                 | Chain merge A to B to C to D through email and phone links. | All four merge with all preferences combined. |
+| **16** | Permanent with Multiple Temps                      | One permanent profile, three temps join via email and phone. | All temps merge under the permanent profile. |
+| **17** | Different Trait Types Merge                        | Profiles have arrays (interests) and scalars (score). | Arrays combine, scalars use last value. |
+| **18** | Rule Reactivation                                  | Rule disabled, profiles created, rule re-enabled, new profile added. | New profile triggers merge after rule reactivation. |
+| **19** | Two Hierarchies Merge                              | Two separate master hierarchies (3 children + 2 children) connected by new profile. | All profiles end up in single unified hierarchy. |
