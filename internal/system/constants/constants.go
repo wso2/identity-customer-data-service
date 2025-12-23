@@ -31,7 +31,10 @@ const (
 )
 
 const (
-	SchemaInitEvent = "schema-initialization"
+	AddScimAttribute     = "POST_ADD_EXTERNAL_CLAIM"
+	UpdateScimAttribute  = "POST_UPDATE_EXTERNAL_CLAIM"
+	DeleteScimAttribute  = "POST_DELETE_EXTERNAL_CLAIM"
+	UpdateLocalAttribute = "POST_UPDATE_LOCAL_CLAIM"
 )
 
 var AllowedValueTypes = map[string]bool{

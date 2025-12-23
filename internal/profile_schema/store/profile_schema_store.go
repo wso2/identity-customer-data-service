@@ -33,7 +33,7 @@ import (
 )
 
 // AddProfileSchemaAttributesForScope adds multiple profile schema attributes.
-func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope string) error {
+func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope, orgId string) error {
 
 	logger := log.GetLogger()
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -80,7 +80,7 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 
 		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d,  $%d, $%d,  $%d, $%d, $%d) ",
 			idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11))
-		valueArgs = append(valueArgs, attr.OrgId, attr.AttributeId, attr.AttributeName, attr.ValueType,
+		valueArgs = append(valueArgs, orgId, attr.AttributeId, attr.AttributeName, attr.ValueType,
 			attr.MergeStrategy, attr.ApplicationIdentifier, attr.Mutability, attr.MultiValued, subAttrsJSON,
 			canonicalJSON, scope)
 

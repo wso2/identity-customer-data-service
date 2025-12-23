@@ -3,11 +3,12 @@ package integration
 import (
 	"encoding/json"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
-	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	profileSchema "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -32,7 +33,7 @@ func Test_UnificationRule(t *testing.T) {
 				Mutability:    constants.MutabilityReadWrite,
 			},
 		}
-		err := profileSchemaService.AddProfileSchemaAttributesForScope(schemaAttributes, constants.IdentityAttributes)
+		err := profileSchemaService.AddProfileSchemaAttributesForScope(schemaAttributes, constants.IdentityAttributes, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add enrichment rule dependency")
 	})
 
@@ -70,7 +71,7 @@ func Test_UnificationRule(t *testing.T) {
 			MergeStrategy: "combine",
 			Mutability:    constants.MutabilityReadWrite,
 		}
-		err := profileSchemaService.AddProfileSchemaAttributesForScope([]profileSchema.ProfileSchemaAttribute{subAttr}, constants.Traits)
+		err := profileSchemaService.AddProfileSchemaAttributesForScope([]profileSchema.ProfileSchemaAttribute{subAttr}, constants.Traits, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add sub-attribute to schema")
 
 		//  Add parent complex attribute referencing sub-attribute
@@ -88,7 +89,7 @@ func Test_UnificationRule(t *testing.T) {
 				},
 			},
 		}
-		err = profileSchemaService.AddProfileSchemaAttributesForScope([]profileSchema.ProfileSchemaAttribute{parentAttr}, constants.Traits)
+		err = profileSchemaService.AddProfileSchemaAttributesForScope([]profileSchema.ProfileSchemaAttribute{parentAttr}, constants.Traits, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add complex attribute to schema")
 
 		// Try creating a unification rule with that complex attribute

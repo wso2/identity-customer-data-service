@@ -21,9 +21,11 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"io"
 	"strings"
+
+	"github.com/pkg/errors"
+	cdsErrors "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
 func HandleDecodeError(err error, resourceName string) string {
@@ -60,4 +62,16 @@ func HandleDecodeError(err error, resourceName string) string {
 	default:
 		return fmt.Sprintf("Invalid JSON payload for %s.", resourceName)
 	}
+}
+
+// HasClientErrorCode checks whether the given error is a ClientError with the given code.
+func HasClientErrorCode(err error, code string) bool {
+	if err == nil {
+		return false
+	}
+	var clientErr *cdsErrors.ClientError
+	if errors.As(err, &clientErr) {
+		return clientErr.ErrorMessage.Code == code
+	}
+	return false
 }
