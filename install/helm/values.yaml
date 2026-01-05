@@ -55,7 +55,7 @@ cloud:
           certName: "wso2carbontls.cer"
 
       tls:
-        mtls_enabled: false
+        mtls_enabled: true
         cert_dir : "/app/repository/certs"
         server_cert: "client.cer"
         server_key: "customer-data-service-client-key.pem"
