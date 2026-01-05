@@ -72,3 +72,4 @@ tls:
   server_cert: "{{ .Values.cloud.deployment.cds.tls.server_cert }}"
   server_key: "{{ .Values.cloud.deployment.cds.tls.server_key }}"
   client_cert: "{{ .Values.cloud.deployment.cds.tls.client_cert }}"
+  trust_store: "{{ .Values.cloud.deployment.cds.tls.trust_store }}"

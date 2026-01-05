@@ -60,6 +60,7 @@ cloud:
         server_cert: "client.cer"
         server_key: "customer-data-service-client-key.pem"
         client_cert: "wso2carbontls.cer"
+        trust_store: "trust-store.pem"
 
       secrets:
         authServerClientId: "" # Add the auth server client ID

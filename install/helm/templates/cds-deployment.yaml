@@ -119,6 +119,9 @@ spec:
             - name: cds-mtls-volume
               mountPath: /app/repository/certs/customer-data-service-client-key.pem
               subPath: customer-data-service-client-key.pem
+            - name: cds-mtls-volume
+              mountPath: /app/repository/certs/trust-store.pem
+              subPath: trust-store.pem
               readOnly: true
             - name: is-public-cert
               mountPath: /app/repository/certs/{{ .Values.cloud.deployment.cds.config.identityServer.certName }}

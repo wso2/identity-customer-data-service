@@ -22,6 +22,11 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
@@ -29,10 +34,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"net/http"
-	"os"
-	"path/filepath"
-	"time"
 )
 
 func initDatabaseFromConfig(config *config.Config) {
@@ -124,21 +125,6 @@ func main() {
 			logger.Error(fmt.Sprintf("Error accessing server key at %s: %v", serverKeyPath, err))
 		}
 		os.Exit(1)
-	}
-
-	if cdsConfig.TLS.MTLSEnabled {
-		if cdsConfig.TLS.IdentityServerPublicKey == "" {
-			logger.Error("mTLS is enabled but client certificate or key is missing in the configuration.")
-			os.Exit(1)
-		}
-
-		clientCertPath := filepath.Join(certDir, cdsConfig.TLS.IdentityServerPublicKey)
-
-		// Check cert files before starting
-		if _, err := os.Stat(clientCertPath); os.IsNotExist(err) {
-			logger.Error(fmt.Sprintf("Client certificate not found at %s", clientCertPath))
-			os.Exit(1)
-		}
 	}
 
 	server := &http.Server{

@@ -80,3 +80,4 @@ tls:
   server_cert: "server.crt" #filename
   server_key: "server.key" #filename
   client_cert: "client.crt"   #filename
+  trust_store: "trust-bundle.pem"      #filename
