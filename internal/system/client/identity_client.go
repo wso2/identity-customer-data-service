@@ -82,17 +82,22 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 		}
 	}
 
-	// Root CA pool (optional but recommended)
-	var rootCAs *x509.CertPool
-	if tlsCfg.IdentityServerPublicKey != "" {
-		caPath := filepath.Join(certDir, tlsCfg.IdentityServerPublicKey)
-		caPEM, err := os.ReadFile(caPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read ca_cert at %s: %w", caPath, err)
-		}
+	// Root CAs: start with system roots, then append trust store if provided.
+	rootCAs, err := x509.SystemCertPool()
+	if err != nil || rootCAs == nil {
 		rootCAs = x509.NewCertPool()
-		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
-			return nil, fmt.Errorf("failed to append ca_cert into CertPool: %s", caPath)
+	}
+
+	trustFile := tlsCfg.TrustStore
+
+	if trustFile != "" {
+		trustPath := filepath.Join(certDir, trustFile)
+		trustPEM, err := os.ReadFile(trustPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read trust_store at %s: %w", trustPath, err)
+		}
+		if ok := rootCAs.AppendCertsFromPEM(trustPEM); !ok {
+			return nil, fmt.Errorf("failed to append certs from trust_store: %s", trustPath)
 		}
 	}
 

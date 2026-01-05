@@ -71,4 +71,5 @@ type TLSConfig struct {
 	CDSPublicCert           string `yaml:"server_cert"`
 	CDSPrivateKey           string `yaml:"server_key"`
 	IdentityServerPublicKey string `yaml:"client_cert"`
+	TrustStore              string `yaml:"trust_store"`
 }
