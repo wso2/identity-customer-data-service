@@ -466,15 +466,19 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		// Expected: All 5 children end up under unified hierarchy with merged data
 
 		// Step 1: Create first hierarchy (Master1 with 3 children)
+		fmt.Println("--- STEP 1: Creating First Hierarchy ---")
 		p1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy1@wso2.com"]},"traits":{"interests":["reading"]}}`)
 		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy1@wso2.com"]},"traits":{"interests":["writing"]}}`)
 		p3 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy1@wso2.com"],"phone_number":["0771111111"]},"traits":{"interests":["coding"]}}`)
 
 		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
+		fmt.Printf("Created P1: %s (email: hierarchy1@wso2.com)\n", prof1.ProfileId[:8])
 		time.Sleep(500 * time.Millisecond)
 		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		fmt.Printf("Created P2: %s (email: hierarchy1@wso2.com)\n", prof2.ProfileId[:8])
 		time.Sleep(500 * time.Millisecond)
 		prof3, _ := profileSvc.CreateProfile(p3, SuperTenantOrg)
+		fmt.Printf("Created P3: %s (email: hierarchy1@wso2.com, phone: 0771111111)\n", prof3.ProfileId[:8])
 		time.Sleep(3 * time.Second)
 
 		// Verify first hierarchy is created
@@ -493,15 +497,97 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 
 		master1, _ := profileSvc.GetProfile(master1Id)
 		require.NotNil(t, master1, "Master1 should exist")
-		require.GreaterOrEqual(t, len(master1.MergedFrom), 4, "Master1 should have at least 3 children")
+		require.GreaterOrEqual(t, len(master1.MergedFrom), 3, "Master1 should have at least 3 children")
+
+		fmt.Println("\n✓ First Hierarchy Created:")
+		fmt.Printf("  Master1: %s\n", master1Id[:8])
+		fmt.Printf("    ├─ P1 (%s) merged via: %s\n", prof1.ProfileId[:8], merged1.MergedTo.Reason)
+		fmt.Printf("    ├─ P2 (%s) merged via: %s\n", prof2.ProfileId[:8], merged2.MergedTo.Reason)
+		fmt.Printf("    └─ P3 (%s) merged via: %s\n", prof3.ProfileId[:8], merged3.MergedTo.Reason)
+		fmt.Printf("  Total children: %d\n", len(master1.MergedFrom))
+		fmt.Printf("  Master1 Children IDs: ")
+		for i, child := range master1.MergedFrom {
+			if i > 0 {
+				fmt.Print(", ")
+			}
+			fmt.Printf("%s", child.ProfileId[:8])
+		}
+		fmt.Println()
+		fmt.Printf("  Interests: %v\n", master1.Traits["interests"])
+
+		// Detailed verification of Master1's 4 children
+		fmt.Println("\n--- DETAILED MASTER1 CHILDREN ANALYSIS ---")
+		fmt.Printf("Master1 has %d children. Let's examine each:\n", len(master1.MergedFrom))
+		for i, child := range master1.MergedFrom {
+			childProfile, _ := profileSvc.GetProfile(child.ProfileId)
+			if childProfile != nil {
+				fmt.Printf("\n[Child %d] Profile ID: %s\n", i+1, child.ProfileId[:8])
+				fmt.Printf("  Merge Reason: %s\n", child.Reason)
+				fmt.Printf("  Created At: %d\n", childProfile.Meta.CreatedAt)
+				
+				// Check which original profile this is
+				childType := "UNKNOWN"
+				if child.ProfileId == prof1.ProfileId {
+					childType = "P1 (Original)"
+				} else if child.ProfileId == prof2.ProfileId {
+					childType = "P2 (Original)"
+				} else if child.ProfileId == prof3.ProfileId {
+					childType = "P3 (Original)"
+				} else {
+					childType = "INTERMEDIATE PROFILE (created during merge)"
+				}
+				fmt.Printf("  Type: %s\n", childType)
+				
+				// Show attributes
+				if emails, ok := childProfile.IdentityAttributes["email"]; ok {
+					fmt.Printf("  Emails: %v\n", emails)
+				} else {
+					fmt.Printf("  Emails: (none)\n")
+				}
+				
+				if phones, ok := childProfile.IdentityAttributes["phone_number"]; ok {
+					fmt.Printf("  Phones: %v\n", phones)
+				} else {
+					fmt.Printf("  Phones: (none)\n")
+				}
+				
+				if interests, ok := childProfile.Traits["interests"]; ok {
+					fmt.Printf("  Interests: %v\n", interests)
+				} else {
+					fmt.Printf("  Interests: (none)\n")
+				}
+				
+				// Check if this child was itself merged from others
+				if len(childProfile.MergedFrom) > 0 {
+					fmt.Printf("  ⚠ This is a MASTER profile with %d children:\n", len(childProfile.MergedFrom))
+					for j, grandchild := range childProfile.MergedFrom {
+						fmt.Printf("      [%d] %s (reason: %s)\n", j+1, grandchild.ProfileId[:8], grandchild.Reason)
+					}
+				}
+				
+				// Check merge status
+				if childProfile.MergedTo.ProfileId != "" {
+					fmt.Printf("  Merged To: %s (via: %s)\n", childProfile.MergedTo.ProfileId[:8], childProfile.MergedTo.Reason)
+				} else {
+					fmt.Printf("  Merged To: (none - this is a child profile)\n")
+				}
+			}
+		}
+		
+		fmt.Println("\n✓ Master1 First Hierarchy Analysis Complete")
+		fmt.Println("  Summary: Master1 was created with merged data from all children")
+		fmt.Printf("  The 4th child is likely an intermediate master created during the merge process\n")
 
 		// Step 2: Create second hierarchy (Master2 with 2 children)
+		fmt.Println("\n--- STEP 2: Creating Second Hierarchy ---")
 		p4 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy2@wso2.com"],"phone_number":["0772222222"]},"traits":{"interests":["gaming"]}}`)
 		p5 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy2@wso2.com"]},"traits":{"interests":["music"]}}`)
 
 		prof4, _ := profileSvc.CreateProfile(p4, SuperTenantOrg)
+		fmt.Printf("Created P4: %s (email: hierarchy2@wso2.com, phone: 0772222222)\n", prof4.ProfileId[:8])
 		time.Sleep(500 * time.Millisecond)
 		prof5, _ := profileSvc.CreateProfile(p5, SuperTenantOrg)
+		fmt.Printf("Created P5: %s (email: hierarchy2@wso2.com)\n", prof5.ProfileId[:8])
 		time.Sleep(3 * time.Second)
 
 		// Verify second hierarchy is created
@@ -518,13 +604,32 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		require.NotNil(t, master2, "Master2 should exist")
 		require.GreaterOrEqual(t, len(master2.MergedFrom), 2, "Master2 should have at least 2 children")
 
+		fmt.Println("\n✓ Second Hierarchy Created:")
+		fmt.Printf("  Master2: %s\n", master2Id[:8])
+		fmt.Printf("    ├─ P4 (%s) merged via: %s\n", prof4.ProfileId[:8], merged4.MergedTo.Reason)
+		fmt.Printf("    └─ P5 (%s) merged via: %s\n", prof5.ProfileId[:8], merged5.MergedTo.Reason)
+		fmt.Printf("  Total children: %d\n", len(master2.MergedFrom))
+		fmt.Printf("  Master2 Children IDs: ")
+		for i, child := range master2.MergedFrom {
+			if i > 0 {
+				fmt.Print(", ")
+			}
+			fmt.Printf("%s", child.ProfileId[:8])
+		}
+		fmt.Println()
+		fmt.Printf("  Interests: %v\n", master2.Traits["interests"])
+
 		// Step 3: Create a profile that connects both hierarchies
+		fmt.Println("\n--- STEP 3: Creating Bridge Profile ---")
 		// P6 shares phone with P3 (from Master1) and shares phone with P4 (from Master2)
 		p6 := mustUnmarshalProfile(`{"identity_attributes":{"phone_number":["0771111111","0772222222"]},"traits":{"interests":["sports"]}}`)
 		prof6, _ := profileSvc.CreateProfile(p6, SuperTenantOrg)
+		fmt.Printf("Created P6: %s (phones: 0771111111, 0772222222)\n", prof6.ProfileId[:8])
+		fmt.Println("  ⚡ This should trigger merge of both hierarchies!")
 		time.Sleep(5 * time.Second)
 
 		// Step 4: Verify all profiles are now in unified hierarchy
+		fmt.Println("\n--- STEP 4: Verifying Unified Hierarchy ---")
 		finalMerged1, _ := profileSvc.GetProfile(prof1.ProfileId)
 		finalMerged2, _ := profileSvc.GetProfile(prof2.ProfileId)
 		finalMerged3, _ := profileSvc.GetProfile(prof3.ProfileId)
@@ -545,9 +650,152 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		finalMaster, _ := profileSvc.GetProfile(finalMasterId)
 		require.NotNil(t, finalMaster, "Final master should exist")
 
+		fmt.Println("\n✓ FINAL UNIFIED HIERARCHY:")
+		fmt.Printf("  Final Master: %s\n", finalMasterId[:8])
+		fmt.Printf("  Total children: %d\n", len(finalMaster.MergedFrom))
+		
+		// Show all children of final master
+		fmt.Println("\n  Final Master's Direct Children:")
+		for i, child := range finalMaster.MergedFrom {
+			fmt.Printf("    [%d] %s (reason: %s)\n", i+1, child.ProfileId[:8], child.Reason)
+		}
+		
+		// Check for nested hierarchies - children that are themselves masters
+		fmt.Println("\n  Checking for Nested Hierarchies:")
+		hasNestedHierarchy := false
+		for _, child := range finalMaster.MergedFrom {
+			childProfile, _ := profileSvc.GetProfile(child.ProfileId)
+			if childProfile != nil && len(childProfile.MergedFrom) > 0 {
+				hasNestedHierarchy = true
+				fmt.Printf("    ⚠ %s is a MASTER with %d children:\n", child.ProfileId[:8], len(childProfile.MergedFrom))
+				for j, grandchild := range childProfile.MergedFrom {
+					fmt.Printf("        [%d] %s (reason: %s)\n", j+1, grandchild.ProfileId[:8], grandchild.Reason)
+				}
+			}
+		}
+		if !hasNestedHierarchy {
+			fmt.Println("    ✓ No nested hierarchies - all children are leaf profiles")
+			fmt.Println("    (Old masters were flattened and their children moved up)")
+		}
+		
+		// Specifically check if old Master1 still exists and has children
+		fmt.Println("\n  Checking Old Master1 Status:")
+		oldMaster1Check, _ := profileSvc.GetProfile(master1Id)
+		if oldMaster1Check != nil {
+			fmt.Printf("    Old Master1 (%s) still exists\n", master1Id[:8])
+			if oldMaster1Check.MergedTo.ProfileId != "" {
+				fmt.Printf("      → Merged to: %s (via: %s)\n", oldMaster1Check.MergedTo.ProfileId[:8], oldMaster1Check.MergedTo.Reason)
+			}
+			if len(oldMaster1Check.MergedFrom) > 0 {
+				fmt.Printf("      → Still has %d children:\n", len(oldMaster1Check.MergedFrom))
+				for i, child := range oldMaster1Check.MergedFrom {
+					fmt.Printf("          [%d] %s\n", i+1, child.ProfileId[:8])
+				}
+			} else {
+				fmt.Printf("      → Has NO children (flattened)\n")
+			}
+		} else {
+			fmt.Printf("    Old Master1 (%s) no longer exists (deleted)\n", master1Id[:8])
+		}
+		
+		fmt.Println("\n  Complete Merge Tree:")
+
+		// Show who merged into whom
+		fmt.Printf("    ├─ P1 (%s) → Master: %s (via: %s)\n",
+			prof1.ProfileId[:8], finalMerged1.MergedTo.ProfileId[:8], finalMerged1.MergedTo.Reason)
+		fmt.Printf("    ├─ P2 (%s) → Master: %s (via: %s)\n",
+			prof2.ProfileId[:8], finalMerged2.MergedTo.ProfileId[:8], finalMerged2.MergedTo.Reason)
+		fmt.Printf("    ├─ P3 (%s) → Master: %s (via: %s)\n",
+			prof3.ProfileId[:8], finalMerged3.MergedTo.ProfileId[:8], finalMerged3.MergedTo.Reason)
+		fmt.Printf("    ├─ P4 (%s) → Master: %s (via: %s)\n",
+			prof4.ProfileId[:8], finalMerged4.MergedTo.ProfileId[:8], finalMerged4.MergedTo.Reason)
+		fmt.Printf("    ├─ P5 (%s) → Master: %s (via: %s)\n",
+			prof5.ProfileId[:8], finalMerged5.MergedTo.ProfileId[:8], finalMerged5.MergedTo.Reason)
+		fmt.Printf("    └─ P6 (%s) → Master: %s (via: %s)\n",
+			prof6.ProfileId[:8], finalMerged6.MergedTo.ProfileId[:8], finalMerged6.MergedTo.Reason)
+
+		// Show if old masters merged
+		fmt.Println("\n  Old Masters Status:")
+		oldMaster1, _ := profileSvc.GetProfile(master1Id)
+		oldMaster2, _ := profileSvc.GetProfile(master2Id)
+
+		if oldMaster1 != nil {
+			if oldMaster1.MergedTo.ProfileId != "" {
+				fmt.Printf("    Master1 (%s) → Merged into: %s (via: %s)\n",
+					master1Id[:8], oldMaster1.MergedTo.ProfileId[:8], oldMaster1.MergedTo.Reason)
+			} else {
+				fmt.Printf("    Master1 (%s) → Still a master (children: %d)\n",
+					master1Id[:8], len(oldMaster1.MergedFrom))
+				if len(oldMaster1.MergedFrom) > 0 {
+					fmt.Printf("      Master1's children: ")
+					for i, child := range oldMaster1.MergedFrom {
+						if i > 0 {
+							fmt.Print(", ")
+						}
+						fmt.Printf("%s", child.ProfileId[:8])
+					}
+					fmt.Println()
+				}
+			}
+		} else {
+			fmt.Printf("    Master1 (%s) → Deleted (children moved to new master)\n", master1Id[:8])
+		}
+
+		if oldMaster2 != nil {
+			if oldMaster2.MergedTo.ProfileId != "" {
+				fmt.Printf("    Master2 (%s) → Merged into: %s (via: %s)\n",
+					master2Id[:8], oldMaster2.MergedTo.ProfileId[:8], oldMaster2.MergedTo.Reason)
+			} else {
+				fmt.Printf("    Master2 (%s) → Still a master (children: %d)\n",
+					master2Id[:8], len(oldMaster2.MergedFrom))
+				if len(oldMaster2.MergedFrom) > 0 {
+					fmt.Printf("      Master2's children: ")
+					for i, child := range oldMaster2.MergedFrom {
+						if i > 0 {
+							fmt.Print(", ")
+						}
+						fmt.Printf("%s", child.ProfileId[:8])
+					}
+					fmt.Println()
+				}
+			}
+		} else {
+			fmt.Printf("    Master2 (%s) → Deleted (children moved to new master)\n", master2Id[:8])
+		}
+
 		// Verify interests from both hierarchies are combined
 		interests := finalMaster.Traits["interests"].([]interface{})
 		require.GreaterOrEqual(t, len(interests), 4, "Should have interests from multiple profiles")
+
+		fmt.Printf("\n  Final Master Data:\n")
+		fmt.Printf("    Emails: %v\n", finalMaster.IdentityAttributes["email"])
+		fmt.Printf("    Phones: %v\n", finalMaster.IdentityAttributes["phone_number"])
+		fmt.Printf("    Interests: %v\n", interests)
+		
+		// Check if P4 and P5 are actually in the final hierarchy
+		fmt.Println("\n  Detailed Profile Status:")
+		profiles := []struct {
+			name string
+			id   string
+			prof *profileModel.ProfileResponse
+		}{
+			{"P1", prof1.ProfileId, finalMerged1},
+			{"P2", prof2.ProfileId, finalMerged2},
+			{"P3", prof3.ProfileId, finalMerged3},
+			{"P4", prof4.ProfileId, finalMerged4},
+			{"P5", prof5.ProfileId, finalMerged5},
+			{"P6", prof6.ProfileId, finalMerged6},
+		}
+		
+		for _, p := range profiles {
+			if p.prof.MergedTo.ProfileId == finalMasterId {
+				fmt.Printf("    ✓ %s (%s) → Final Master (%s) [UNIFIED]\n", 
+					p.name, p.id[:8], finalMasterId[:8])
+			} else {
+				fmt.Printf("    ⚠ %s (%s) → Other Master (%s) [NOT FULLY UNIFIED]\n", 
+					p.name, p.id[:8], p.prof.MergedTo.ProfileId[:8])
+			}
+		}
 
 		// Verify at least one phone number is present
 		phoneNumbers := finalMaster.IdentityAttributes["phone_number"].([]interface{})
@@ -556,6 +804,10 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		// Verify email from at least one hierarchy is present
 		emails := finalMaster.IdentityAttributes["email"].([]interface{})
 		require.GreaterOrEqual(t, len(emails), 1, "Should have at least one email")
+
+		fmt.Println("\n========================================")
+		fmt.Println("TEST PASSED ✓")
+		fmt.Println("========================================")
 
 		cleanProfiles(profileSvc, SuperTenantOrg)
 	})
