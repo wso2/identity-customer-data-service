@@ -318,57 +318,36 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						}
 						return
 					} else {
-						userId := ""
+						// Case 2: Both temporary OR both permanent with same user_id
+						// In both cases, merge into existing master (no new master creation)
+						
 						if hasUserID_existing && hasUserID_new {
-							if existingMasterProfile.UserId == newProfile.UserId {
-								userId = existingMasterProfile.UserId
-								logger.Info(fmt.Sprintf("Both profiles are permanent profiles. Hence creating a new master profile: %s",
-									newProfile.ProfileId))
-							} else {
-								logger.Info("We are not handling merging two permannat profiles with different userIds")
+							// Both permanent profiles
+							if existingMasterProfile.UserId != newProfile.UserId {
+								logger.Info("We are not handling merging two permanent profiles with different userIds")
 								continue
 							}
+							logger.Info(fmt.Sprintf("Both profiles are permanent profiles with same user_id. Merging new profile %s into existing master: %s",
+								newProfile.ProfileId, existingMasterProfile.ProfileId))
 						} else {
-							logger.Info(fmt.Sprintf("Both profiles are temporary profiles. Hence creating a new master profile: %s",
-								newProfile.ProfileId))
+							// Both temporary profiles
+							logger.Info(fmt.Sprintf("Both profiles are temporary profiles. Merging new profile %s into existing master: %s",
+								newProfile.ProfileId, existingMasterProfile.ProfileId))
 						}
-						newMasterProfile.ProfileId = uuid.New().String()
-						newMasterProfile.UserId = userId
-						newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.TenantId, newMasterProfile.ProfileId)
-
-						err = profileStore.UpdateProfileReferences(newMasterProfile, existingMasterProfile.ProfileStatus.References)
-
-						if err != nil {
-							logger.Error(fmt.Sprintf("Failed to update profile references for master profile: %s while unifying profile: %s",
-								newMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
-							return
-						}
-
+						
+						// Use the existing master profile ID and update it with merged data
+						newMasterProfile.ProfileId = existingMasterProfile.ProfileId
+						newMasterProfile.UserId = existingMasterProfile.UserId
+						
+						// Add new profile as a child
 						childProfile1 := profileModel.Reference{
 							ProfileId: newProfile.ProfileId,
 							Reason:    rule.RuleName,
 						}
-						childProfile2 := profileModel.Reference{
-							ProfileId: existingMasterProfile.ProfileId,
-							Reason:    rule.RuleName,
-						}
-						newMasterProfile.ProfileStatus = &profileModel.ProfileStatus{
-							IsReferenceProfile: true,
-							ListProfile:        false,
-							References:         []profileModel.Reference{childProfile1, childProfile2},
-						}
 
-						err := profileStore.InsertProfile(newMasterProfile)
-						if err != nil {
-							logger.Error(fmt.Sprintf("Failed to insert master profile while unifying profile: %s",
-								newProfile.ProfileId), log.Error(err))
-							return
-						}
-
-						children := []profileModel.Reference{childProfile1, childProfile2}
+						children := []profileModel.Reference{childProfile1}
 
 						err = profileStore.UpdateProfileReferences(newMasterProfile, children)
-
 						if err != nil {
 							logger.Error(fmt.Sprintf("Failed to add child profiles to the master profile: %s",
 								newMasterProfile.ProfileId), log.Error(err))
@@ -404,7 +383,6 @@ func unifyProfiles(newProfile profileModel.Profile) {
 								return
 							}
 						}
-
 						return
 					}
 
