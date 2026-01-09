@@ -178,7 +178,7 @@ func (c *IdentityClient) fetchOrganizationToken(
 	endpoint := c.buildTokenEndpoint("carbon.super", authCfg.TokenEndpoint)
 	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgId))
 	// Note: The super-tenant token is not used directly — the grant exchange happens using client credentials.
-	superTenantToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId)
+	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgId)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
@@ -187,25 +187,6 @@ func (c *IdentityClient) fetchOrganizationToken(
 			Description: errorMsg,
 		}, err)
 	}
-
-	//  Exchange for organization token
-	exchangeForm := url.Values{}
-	exchangeForm.Set("grant_type", "system_app_grant")
-	exchangeForm.Set("scope", scope)
-	exchangeForm.Set("organizationId", orgId)
-
-	logger.Debug(fmt.Sprintf("Exchanging system_app_grant token for organization: %s", orgId))
-	endpoint = c.buildTokenEndpoint(orgId, authCfg.TokenEndpoint)
-	orgToken, err := c.requestTokenForOrg(endpoint, superTenantToken, exchangeForm, orgId)
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to exchange token for the organization:%s", orgId)
-		return "", errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.TOKEN_FETCH_FAILED.Code,
-			Message:     errors2.TOKEN_FETCH_FAILED.Message,
-			Description: errorMsg,
-		}, err)
-	}
-
 	logger.Debug(fmt.Sprintf("Successfully obtained organization-scoped token for org: %s", orgId))
 	return orgToken, nil
 }
