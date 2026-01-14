@@ -818,6 +818,11 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 			}
 
+			if existingProfile == nil {
+				logger.Debug("No profile found for user: " + profileSync.UserId)
+				return
+			}
+
 			_, err := profilesService.GetProfileCookieByProfileId(profileId)
 			if err != nil {
 				utils.HandleError(writer, err)
