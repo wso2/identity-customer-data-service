@@ -818,6 +818,12 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 			}
 
+			_, err := profilesService.GetProfileCookieByProfileId(profileId)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
+
 			err = profilesService.UpdateCookieStatus(existingProfile.ProfileId, false)
 			if err != nil {
 				utils.HandleError(writer, err)
