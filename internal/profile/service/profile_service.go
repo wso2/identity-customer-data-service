@@ -54,7 +54,7 @@ type ProfilesServiceInterface interface {
 	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
 	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
 	CreateProfileCookie(profileId string) (*profileModel.ProfileCookie, error)
-	UpdateCookieStatus(profileId string, status bool) error
+	UpdateCookieStatus(profileId string, isActive bool) error
 	DeleteCookieByProfileId(profileId string) error
 }
 
@@ -1425,9 +1425,9 @@ func (ps *ProfilesService) CreateProfileCookie(profileId string) (*profileModel.
 }
 
 // UpdateCookieStatus updates the status of a profile cookie
-func (ps *ProfilesService) UpdateCookieStatus(profileId string, status bool) error {
+func (ps *ProfilesService) UpdateCookieStatus(profileId string, isActive bool) error {
 
-	err := profileStore.UpdateProfileCookie(profileId, status)
+	err := profileStore.UpdateProfileCookie(profileId, isActive)
 	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("Error creating profile cookie by profile_id: %s", profileId)

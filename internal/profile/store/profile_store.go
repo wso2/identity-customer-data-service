@@ -1545,7 +1545,7 @@ func GetProfileCookie(cookie string) (*model.ProfileCookie, error) {
 }
 
 // UpdateProfileCookie updates the status of a profile cookie
-func UpdateProfileCookie(profileId string, status bool) error {
+func UpdateProfileCookie(profileId string, isActive bool) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -1563,7 +1563,7 @@ func UpdateProfileCookie(profileId string, status bool) error {
 
 	query := scripts.UpdateCookieStatusByProfileId[provider.NewDBProvider().GetDBType()]
 
-	_, err = dbClient.ExecuteQuery(query, status, profileId)
+	_, err = dbClient.ExecuteQuery(query, isActive, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed updating the profile cookie with profile Id: %s", profileId)
 		logger.Debug(errorMsg, log.Error(err))

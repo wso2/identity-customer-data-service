@@ -7,8 +7,8 @@ const ConsentApiPath = "consent"
 const ProfileSchemaApiPath = "profile-schema"
 const IdentityServerDialectsPath = "/api/server/v1/claim-dialects"
 const Filter = "filter"
-const Attributes = "attributes"        // Query parameter to filter attributes in the request.
-const ProfileCookie = "cdm_profile_id" // Cookie name to store the profile ID in the browser.
+const Attributes = "attributes"     // Query parameter to filter attributes in the request.
+const ProfileCookie = "cds_profile" // Cookie name to store the profile ID in the browser.
 const DefaultTenant = "carbon.super"
 const SpaceSeparator = " "
 
