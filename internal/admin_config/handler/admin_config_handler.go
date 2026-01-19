@@ -20,10 +20,11 @@ package handler
 
 import (
 	"encoding/json"
+	"net/http"
+
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
-	"net/http"
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 )
@@ -39,10 +40,10 @@ func NewAdminConfigHandler() *AdminConfigHandler {
 // GetAdminConfig handles GET /admin/configs
 func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Request) {
 
-	orgId := utils.ExtractTenantIdFromPath(r)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	adminConfigProvider := provider.NewAdminConfigProvider()
 	adminConfigService := adminConfigProvider.GetAdminConfigService()
-	config, err := adminConfigService.GetAdminConfig(orgId)
+	config, err := adminConfigService.GetAdminConfig(orgHandle)
 
 	if err != nil {
 		utils.HandleError(w, err)
@@ -59,7 +60,7 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 // UpdateAdminConfig handles PUT /admin/configs
 func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Request) {
 
-	orgId := utils.ExtractTenantIdFromPath(r)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	var config model.AdminConfigUpdateAPI
 
 	decoder := json.NewDecoder(r.Body)
@@ -76,13 +77,13 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 
 	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
 	configToUpdate := model.AdminConfig{
-		TenantId:   orgId,
+		TenantId:   orgHandle,
 		CDSEnabled: config.CDSEnabled,
 		// Preserving the existing value for InitialSchemaSyncDone as it is not editable via this endpoint.
-		InitialSchemaSyncDone: adminConfigService.IsInitialSchemaSyncDone(orgId),
+		InitialSchemaSyncDone: adminConfigService.IsInitialSchemaSyncDone(orgHandle),
 	}
 
-	err := adminConfigService.UpdateAdminConfig(configToUpdate, orgId)
+	err := adminConfigService.UpdateAdminConfig(configToUpdate, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

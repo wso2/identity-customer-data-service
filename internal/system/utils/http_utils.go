@@ -61,7 +61,7 @@ func HandleError(w http.ResponseWriter, err error) {
 	}
 }
 
-func ExtractTenantIdFromPath(r *http.Request) string {
+func ExtractOrgHandleFromPath(r *http.Request) string {
 	tenant := r.Context().Value(constants.TenantContextKey).(string)
 	if tenant == "" {
 		// If tenant is not found in context, fallback to default tenant
