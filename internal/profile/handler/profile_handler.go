@@ -21,10 +21,11 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 
@@ -808,6 +809,36 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		}
 	}
 
+	if profileSync.Event == "SESSION_TERMINATE" {
+		logger.Info("Event received session termination for user: " + profileSync.UserId)
+		if profileSync.UserId != "" {
+			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
+
+			if existingProfile == nil {
+				logger.Debug("No profile found for user: " + profileSync.UserId)
+				return
+			}
+			profileCookie, err := profilesService.GetProfileCookieByProfileId(existingProfile.ProfileId)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
+			if profileCookie == nil {
+				logger.Debug("No cookie found for profile during session termination: " + existingProfile.ProfileId)
+				return
+			}
+			err = profilesService.UpdateCookieStatus(existingProfile.ProfileId, false)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
+		}
+	}
+
 	if profileSync.Event == "POST_DELETE_USER_WITH_ID" {
 		existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 		if err != nil {
@@ -824,7 +855,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			return
 		}
 		return
-		// if needed can ensure if profile got created
 	}
 
 	if profileSync.Event == "POST_SET_USER_CLAIM_VALUES_WITH_ID" {
