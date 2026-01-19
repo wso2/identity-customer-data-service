@@ -40,10 +40,10 @@ func NewAdminConfigHandler() *AdminConfigHandler {
 // GetAdminConfig handles GET /admin/configs
 func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Request) {
 
-	orgId := utils.ExtractOrgHandleFromPath(r)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	adminConfigProvider := provider.NewAdminConfigProvider()
 	adminConfigService := adminConfigProvider.GetAdminConfigService()
-	config, err := adminConfigService.GetAdminConfig(orgId)
+	config, err := adminConfigService.GetAdminConfig(orgHandle)
 
 	if err != nil {
 		utils.HandleError(w, err)
