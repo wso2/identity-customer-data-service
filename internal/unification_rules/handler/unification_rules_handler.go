@@ -20,13 +20,14 @@ package handler
 
 import (
 	"encoding/json"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
-	"net/http"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -53,12 +54,12 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		return
 	}
 
-	orgId := utils.ExtractOrgHandleFromPath(r)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	// Set timestamps
 	now := time.Now().UTC().Unix()
 	rule := model.UnificationRule{
 		RuleId:       uuid.New().String(),
-		TenantId:     orgId,
+		TenantId:     orgHandle,
 		RuleName:     ruleInRequest.RuleName,
 		PropertyName: ruleInRequest.PropertyName,
 		Priority:     ruleInRequest.Priority,
@@ -69,7 +70,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	err := ruleService.AddUnificationRule(rule, orgId)
+	err := ruleService.AddUnificationRule(rule, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -101,8 +102,8 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	tenantId := utils.ExtractOrgHandleFromPath(r)
-	rules, err := ruleService.GetUnificationRules(tenantId)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	rules, err := ruleService.GetUnificationRules(orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -177,8 +178,8 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	orgId := utils.ExtractOrgHandleFromPath(r)
-	err = ruleService.PatchUnificationRule(ruleId, orgId, updates)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	err = ruleService.PatchUnificationRule(ruleId, orgHandle, updates)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

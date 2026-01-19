@@ -201,7 +201,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	logger := log.GetLogger()
-	tenantId := utils.ExtractOrgHandleFromPath(r)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
@@ -231,10 +231,10 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	if len(filters) > 0 {
 		// Fall back to full response if filters are used
 		logger.Info("Fetching profiles with filters")
-		profiles, err = profilesService.GetAllProfilesWithFilter(tenantId, filters)
+		profiles, err = profilesService.GetAllProfilesWithFilter(orgHandle, filters)
 	} else {
 		logger.Info("Fetching all profiles with requested attributes")
-		profiles, err = profilesService.GetAllProfiles(tenantId)
+		profiles, err = profilesService.GetAllProfiles(orgHandle)
 	}
 
 	listResponse := buildProfileListResponse(profiles, requestedAttrs)
@@ -361,7 +361,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, err)
 		return
 	}
-	orgId := utils.ExtractOrgHandleFromPath(r)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
@@ -389,7 +389,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If no valid cookie, create a new profile and cookie
-	profileResponse, err := profilesService.CreateProfile(profile, orgId)
+	profileResponse, err := profilesService.CreateProfile(profile, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -505,8 +505,8 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	tenantId := utils.ExtractOrgHandleFromPath(request)
-	_, err = profilesService.UpdateProfile(profileId, tenantId, profile)
+	orgHandle := utils.ExtractOrgHandleFromPath(request)
+	_, err = profilesService.UpdateProfile(profileId, orgHandle, profile)
 	if err != nil {
 		utils.HandleError(writer, err)
 		return
@@ -544,8 +544,8 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	tenantId := utils.ExtractOrgHandleFromPath(r)
-	updatedProfile, err := profilesService.PatchProfile(profileId, tenantId, patchData)
+	orgHandler := utils.ExtractOrgHandleFromPath(r)
+	updatedProfile, err := profilesService.PatchProfile(profileId, orgHandler, patchData)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -640,9 +640,9 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 		return
 	}
 
-	tenantId := utils.ExtractOrgHandleFromPath(r)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	// Apply patch
-	updatedProfile, err := profilesService.PatchProfile(profileId, tenantId, patchData)
+	updatedProfile, err := profilesService.PatchProfile(profileId, orgHandle, patchData)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
