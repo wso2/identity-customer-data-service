@@ -822,13 +822,15 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				logger.Debug("No profile found for user: " + profileSync.UserId)
 				return
 			}
-
-			_, err := profilesService.GetProfileCookieByProfileId(existingProfile.ProfileId)
+			profileCookie, err := profilesService.GetProfileCookieByProfileId(existingProfile.ProfileId)
 			if err != nil {
 				utils.HandleError(writer, err)
 				return
 			}
-
+			if profileCookie == nil {
+				logger.Debug("No cookie found for profile during session termination: " + existingProfile.ProfileId)
+				return
+			}
 			err = profilesService.UpdateCookieStatus(existingProfile.ProfileId, false)
 			if err != nil {
 				utils.HandleError(writer, err)
