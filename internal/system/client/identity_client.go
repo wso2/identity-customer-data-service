@@ -174,7 +174,7 @@ func (c *IdentityClient) fetchOrganizationToken(
 	baseForm := url.Values{}
 	baseForm.Set("grant_type", "system_app_grant")
 	baseForm.Set("scope", scope)
-	baseForm.Set("organizationId", orgId)
+	baseForm.Set("organizationHandle", orgId)
 	endpoint := c.buildTokenEndpoint("carbon.super", authCfg.TokenEndpoint)
 	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgId))
 	// Note: The super-tenant token is not used directly — the grant exchange happens using client credentials.
