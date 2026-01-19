@@ -201,7 +201,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	logger := log.GetLogger()
-	tenantId := utils.ExtractTenantIdFromPath(r)
+	tenantId := utils.ExtractOrgHandleFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
@@ -361,7 +361,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, err)
 		return
 	}
-	orgId := utils.ExtractTenantIdFromPath(r)
+	orgId := utils.ExtractOrgHandleFromPath(r)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
@@ -434,7 +434,7 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 		profileResponse, err = profilesService.GetProfile(cookieObj.ProfileId)
 	} else {
 		profile := model.ProfileRequest{}
-		profileResponse, err = profilesService.CreateProfile(profile, utils.ExtractTenantIdFromPath(r))
+		profileResponse, err = profilesService.CreateProfile(profile, utils.ExtractOrgHandleFromPath(r))
 		if err == nil {
 			//todo: Revisit this logic
 			_, err = profilesService.CreateProfileCookie(profileResponse.ProfileId)
@@ -505,7 +505,7 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	tenantId := utils.ExtractTenantIdFromPath(request)
+	tenantId := utils.ExtractOrgHandleFromPath(request)
 	_, err = profilesService.UpdateProfile(profileId, tenantId, profile)
 	if err != nil {
 		utils.HandleError(writer, err)
@@ -544,7 +544,7 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	tenantId := utils.ExtractTenantIdFromPath(r)
+	tenantId := utils.ExtractOrgHandleFromPath(r)
 	updatedProfile, err := profilesService.PatchProfile(profileId, tenantId, patchData)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -640,7 +640,7 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 		return
 	}
 
-	tenantId := utils.ExtractTenantIdFromPath(r)
+	tenantId := utils.ExtractOrgHandleFromPath(r)
 	// Apply patch
 	updatedProfile, err := profilesService.PatchProfile(profileId, tenantId, patchData)
 	if err != nil {
@@ -691,7 +691,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	tenantId := profileSync.TenantId
 
 	if tenantId == "" {
-		//tenantId = utils.ExtractTenantIdFromPath(request)
+		//tenantId = utils.ExtractOrgHandleFromPath(request)
 		//todo: should we expect tenant id in the path or as body param
 		errMsg := fmt.Sprintf("Tenant id cannot be empty in profile sync event: %s", profileSync.Event)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{

@@ -53,7 +53,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		return
 	}
 
-	orgId := utils.ExtractTenantIdFromPath(r)
+	orgId := utils.ExtractOrgHandleFromPath(r)
 	// Set timestamps
 	now := time.Now().UTC().Unix()
 	rule := model.UnificationRule{
@@ -101,7 +101,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	tenantId := utils.ExtractTenantIdFromPath(r)
+	tenantId := utils.ExtractOrgHandleFromPath(r)
 	rules, err := ruleService.GetUnificationRules(tenantId)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -177,7 +177,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	orgId := utils.ExtractTenantIdFromPath(r)
+	orgId := utils.ExtractOrgHandleFromPath(r)
 	err = ruleService.PatchUnificationRule(ruleId, orgId, updates)
 	if err != nil {
 		utils.HandleError(w, err)

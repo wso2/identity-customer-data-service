@@ -43,7 +43,7 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	//  Validate token
-	orgId := utils.ExtractTenantIdFromPath(r)
+	orgId := utils.ExtractOrgHandleFromPath(r)
 	claims, err := authn.ValidateAuthenticationAndReturnClaims(token, orgId)
 	if err != nil {
 		clientError := errors.NewClientError(errors.ErrorMessage{

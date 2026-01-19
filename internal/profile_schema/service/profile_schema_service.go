@@ -21,6 +21,9 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	psstr "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
@@ -28,8 +31,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"net/http"
-	"strings"
 )
 
 type ProfileSchemaServiceInterface interface {
@@ -563,15 +564,15 @@ func matches(attr model.ProfileSchemaAttribute, field, op, val string) bool {
 	return false
 }
 
-func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
+func (s *ProfileSchemaService) SyncProfileSchema(orgHandle string) error {
 
 	cfg := config.GetCDSRuntime().Config
 	identityClient := client.NewIdentityClient(cfg)
 
-	claims, err := identityClient.GetProfileSchema(orgId)
+	claims, err := identityClient.GetProfileSchema(orgHandle)
 	logger := log.GetLogger()
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to fetch profile schema from identity server for organization %s:", orgId)
+		errMsg := fmt.Sprintf("failed to fetch profile schema from identity server for organization %s:", orgHandle)
 		logger.Debug(errMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
@@ -581,9 +582,9 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
 	}
 
 	if len(claims) > 0 {
-		err := psstr.UpsertIdentityAttributes(orgId, claims)
+		err := psstr.UpsertIdentityAttributes(orgHandle, claims)
 		if err != nil {
-			errMsg := fmt.Sprintf("failed to persist profile schema for organization %s:", orgId)
+			errMsg := fmt.Sprintf("failed to persist profile schema for organization %s:", orgHandle)
 			logger.Debug(errMsg, log.Error(err))
 			return errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
@@ -591,7 +592,7 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
 				Description: errMsg,
 			}, err)
 		}
-		logger.Info("Profile schema successfully updated for org: " + orgId)
+		logger.Info("Profile schema successfully updated for org: " + orgHandle)
 	}
 	return nil
 }

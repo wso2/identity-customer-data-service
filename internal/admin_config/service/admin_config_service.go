@@ -66,21 +66,21 @@ func (a AdminConfigService) GetAdminConfig(tenantId string) (model.AdminConfig, 
 	return *config, nil
 }
 
-func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, tenantId string) error {
+func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, orgHandle string) error {
 
-	isCDSEnabledInitialState := a.IsCDSEnabled(tenantId)
-	isIsInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(tenantId)
+	isCDSEnabledInitialState := a.IsCDSEnabled(orgHandle)
+	isIsInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(orgHandle)
 	// Schema sync status should not be changed via this method.
 	updatedConfig.InitialSchemaSyncDone = isIsInitialSchemaSyncDoneInitialState
 	schemaService := service.GetProfileSchemaService()
 	if !isCDSEnabledInitialState && !isIsInitialSchemaSyncDoneInitialState && updatedConfig.CDSEnabled {
 		// CDS is being enabled for the first time. Trigger initial schema sync.
-		err := schemaService.SyncProfileSchema(tenantId)
+		err := schemaService.SyncProfileSchema(orgHandle)
 		if err != nil {
 			return err
 		}
 		updatedConfig.InitialSchemaSyncDone = true
-		err = store.UpdateAdminConfig(updatedConfig, tenantId)
+		err = store.UpdateAdminConfig(updatedConfig, orgHandle)
 		if err != nil {
 			return err
 		}

@@ -136,7 +136,7 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 // FetchToken retrieves an access token for the given org.
 // If system app grant is enabled, it uses system_app_grant
 // Otherwise, it falls back to client_credentials per org.
-func (c *IdentityClient) FetchToken(orgId string) (string, error) {
+func (c *IdentityClient) FetchToken(orgHandle string) (string, error) {
 	logger := log.GetLogger()
 	authCfg := config.GetCDSRuntime().Config.AuthServer
 
@@ -149,12 +149,12 @@ func (c *IdentityClient) FetchToken(orgId string) (string, error) {
 	}, constants.SpaceSeparator)
 
 	if authCfg.IsSystemAppGrantEnabled {
-		logger.Debug(fmt.Sprintf("Fetching token using system_app_grant for org: %s", orgId))
-		return c.fetchOrganizationToken(orgId, authCfg, scope)
+		logger.Debug(fmt.Sprintf("Fetching token using system_app_grant for org: %s", orgHandle))
+		return c.fetchOrganizationToken(orgHandle, authCfg, scope)
 	}
 
-	logger.Debug(fmt.Sprintf("Fetching token using client_credentials for org: %s", orgId))
-	return c.fetchClientCredentialsToken(orgId, authCfg, scope)
+	logger.Debug(fmt.Sprintf("Fetching token using client_credentials for org: %s", orgHandle))
+	return c.fetchClientCredentialsToken(orgHandle, authCfg, scope)
 }
 
 func (c *IdentityClient) buildTokenEndpoint(orgId, tokenEndpoint string) string {
@@ -163,7 +163,7 @@ func (c *IdentityClient) buildTokenEndpoint(orgId, tokenEndpoint string) string 
 
 // fetchOrganizationToken obtains an organization-scoped token via system_app_grant.
 func (c *IdentityClient) fetchOrganizationToken(
-	orgId string,
+	orgHandle string,
 	authCfg config.AuthServerConfig,
 	scope string,
 ) (string, error) {
@@ -174,20 +174,20 @@ func (c *IdentityClient) fetchOrganizationToken(
 	baseForm := url.Values{}
 	baseForm.Set("grant_type", "system_app_grant")
 	baseForm.Set("scope", scope)
-	baseForm.Set("organizationHandle", orgId)
+	baseForm.Set("organizationHandle", orgHandle)
 	endpoint := c.buildTokenEndpoint("carbon.super", authCfg.TokenEndpoint)
-	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgId))
+	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgHandle))
 	// Note: The super-tenant token is not used directly — the grant exchange happens using client credentials.
-	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId)
+	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgHandle)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgHandle)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
 			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
 		}, err)
 	}
-	logger.Debug(fmt.Sprintf("Successfully obtained organization-scoped token for org: %s", orgId))
+	logger.Debug(fmt.Sprintf("Successfully obtained organization-scoped token for org: %s", orgHandle))
 	return orgToken, nil
 }
 
@@ -328,21 +328,21 @@ func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, 
 	return result, nil
 }
 
-func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAttribute, error) {
+func (c *IdentityClient) GetProfileSchema(orgHandle string) ([]model.ProfileSchemaAttribute, error) {
 
 	logger := log.GetLogger()
-	localClaimsMap, err := c.GetLocalClaimsMap(orgId)
+	localClaimsMap, err := c.GetLocalClaimsMap(orgHandle)
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Failed to fetch local claims for the organization:%s", orgId), log.Error(err))
+		logger.Debug(fmt.Sprintf("Failed to fetch local claims for the organization:%s", orgHandle), log.Error(err))
 		return nil, err
 	}
 
-	dialects, err := c.GetAllDialects(orgId)
+	dialects, err := c.GetAllDialects(orgHandle)
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Failed to fetch dialects for the organization:%s", orgId), log.Error(err))
+		logger.Debug(fmt.Sprintf("Failed to fetch dialects for the organization:%s", orgHandle), log.Error(err))
 		return nil, err
 	}
-	logger.Info(fmt.Sprintf("Fetched %d dialects for the organization:%s", len(dialects), orgId))
+	logger.Info(fmt.Sprintf("Fetched %d dialects for the organization:%s", len(dialects), orgHandle))
 	var result []model.ProfileSchemaAttribute
 	for _, dialect := range dialects {
 		logger.Info("Processing dialect", log.String("dialectURI", fmt.Sprintf("%v", dialect["dialectURI"])))
@@ -358,7 +358,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 			continue
 		}
 
-		claims, err := c.GetClaimsByDialect(dialectID, orgId)
+		claims, err := c.GetClaimsByDialect(dialectID, orgHandle)
 		if err != nil {
 			logger.Warn(fmt.Sprintf("Failed to fetch claims for dialect %s", dialectURI))
 			continue
@@ -375,7 +375,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 				continue
 			}
 
-			attr, subAttr, parent := ConvertSCIMClaimWithLocal(scimClaim, localClaim, claims, orgId, dialectURI)
+			attr, subAttr, parent := ConvertSCIMClaimWithLocal(scimClaim, localClaim, claims, orgHandle, dialectURI)
 			result = append(result, attr)
 			existingAttrs[attr.AttributeName] = true
 
@@ -403,7 +403,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 				}
 				logger.Warn(fmt.Sprintf("Adding synthetic parent attribute: %s", parent))
 				result = append(result, model.ProfileSchemaAttribute{
-					OrgId:         orgId,
+					OrgId:         orgHandle,
 					AttributeId:   uuid.New().String(),
 					AttributeName: parent,
 					ValueType:     constants.ComplexDataType,
@@ -416,18 +416,18 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 		}
 	}
 
-	logger.Info(fmt.Sprintf("Successfully built %d profile schema attributes for org: %s", len(result), orgId))
+	logger.Info(fmt.Sprintf("Successfully built %d profile schema attributes for org: %s", len(result), orgHandle))
 	return result, nil
 }
 
-func (c *IdentityClient) GetAllDialects(orgId string) ([]map[string]interface{}, error) {
-	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects", c.BaseURL, orgId)
+func (c *IdentityClient) GetAllDialects(orgHandle string) ([]map[string]interface{}, error) {
+	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects", c.BaseURL, orgHandle)
 	req, _ := http.NewRequest("GET", endpoint, nil)
 	logger := log.GetLogger()
-	token, err := c.FetchToken(orgId)
+	token, err := c.FetchToken(orgHandle)
 	if err != nil {
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the all dialects of the organization:%s",
-			orgId), log.Error(err))
+			orgHandle), log.Error(err))
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -435,7 +435,7 @@ func (c *IdentityClient) GetAllDialects(orgId string) ([]map[string]interface{},
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		// This is an internal communication. So for the clients of CDS, we treat this as a server error.
-		errorMsg := fmt.Sprintf("Failed to fetch all dialects for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to fetch all dialects for the organization:%s", orgHandle)
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_SCIM_DIALECTS.Code,
 			Message:     errors2.GET_SCIM_DIALECTS.Message,
@@ -448,7 +448,7 @@ func (c *IdentityClient) GetAllDialects(orgId string) ([]map[string]interface{},
 	body, _ := io.ReadAll(resp.Body)
 	err = json.Unmarshal(body, &dialects)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to parse dialects response for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to parse dialects response for the organization:%s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_SCIM_DIALECTS.Code,
