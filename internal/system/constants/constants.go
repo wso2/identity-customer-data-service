@@ -8,7 +8,7 @@ const ProfileSchemaApiPath = "profile-schema"
 const IdentityServerDialectsPath = "/api/server/v1/claim-dialects"
 const Filter = "filter"
 const Attributes = "attributes"     // Query parameter to filter attributes in the request.
-const ProfileCookie = "cds_profile" // Cookie name to store the profile ID in the browser.
+const ProfileCookie = "cds_profile" // Cookie name to store cookie that corresponds to profile ID.
 const DefaultTenant = "carbon.super"
 const SpaceSeparator = " "
 

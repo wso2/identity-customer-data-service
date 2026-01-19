@@ -810,7 +810,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	}
 
 	if profileSync.Event == "SESSION_TERMINATE" {
-		logger.Info(" event received session termination for user: " + profileSync.UserId)
+		logger.Info("Event received session termination for user: " + profileSync.UserId)
 		if profileSync.UserId != "" {
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if err != nil {
@@ -823,7 +823,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 			}
 
-			_, err := profilesService.GetProfileCookieByProfileId(profileId)
+			_, err := profilesService.GetProfileCookieByProfileId(existingProfile.ProfileId)
 			if err != nil {
 				utils.HandleError(writer, err)
 				return
