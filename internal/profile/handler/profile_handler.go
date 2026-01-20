@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 
+	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -362,6 +363,19 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
+
+	if !isCDSEnabled(orgHandle) {
+		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + orgHandle
+		log.GetLogger().Info(errMsg)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: errMsg,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
@@ -703,6 +717,18 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		return
 	}
 
+	if !isCDSEnabled(tenantId) {
+		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + tenantId
+		log.GetLogger().Info(errMsg)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: errMsg,
+		}, http.StatusBadRequest)
+		utils.HandleError(writer, clientError)
+		return
+	}
+
 	var existingProfile *model.ProfileResponse
 
 	if profileSync.Event == "POST_ADD_USER" {
@@ -746,8 +772,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			// this is when we create a profile for a new user created in IS
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if err != nil {
-				utils.HandleError(writer, err)
-				return
+				if !utils.HasClientErrorCode(err, errors2.PROFILE_NOT_FOUND.Code) {
+					utils.HandleError(writer, err)
+					return
+				}
 			}
 			if existingProfile == nil {
 				identityAttributes := make(map[string]interface{})
@@ -809,36 +837,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		}
 	}
 
-	if profileSync.Event == "SESSION_TERMINATE" {
-		logger.Info("Event received session termination for user: " + profileSync.UserId)
-		if profileSync.UserId != "" {
-			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
-			if err != nil {
-				utils.HandleError(writer, err)
-				return
-			}
-
-			if existingProfile == nil {
-				logger.Debug("No profile found for user: " + profileSync.UserId)
-				return
-			}
-			profileCookie, err := profilesService.GetProfileCookieByProfileId(existingProfile.ProfileId)
-			if err != nil {
-				utils.HandleError(writer, err)
-				return
-			}
-			if profileCookie == nil {
-				logger.Debug("No cookie found for profile during session termination: " + existingProfile.ProfileId)
-				return
-			}
-			err = profilesService.UpdateCookieStatus(existingProfile.ProfileId, false)
-			if err != nil {
-				utils.HandleError(writer, err)
-				return
-			}
-		}
-	}
-
 	if profileSync.Event == "POST_DELETE_USER_WITH_ID" {
 		existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 		if err != nil {
@@ -855,6 +853,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			return
 		}
 		return
+		// if needed can ensure if profile got created
 	}
 
 	if profileSync.Event == "POST_SET_USER_CLAIM_VALUES_WITH_ID" {
@@ -1050,4 +1049,9 @@ func setNestedMapValue(m map[string]interface{}, path string, value interface{})
 func extractClaimKeyFromLocalURI(localURI string) string {
 	parts := strings.Split(localURI, "/")
 	return parts[len(parts)-1]
+}
+
+// isCDSEnabled checks if CDS is enabled for the given tenant
+func isCDSEnabled(tenantId string) bool {
+	return adminConfigService.GetAdminConfigService().IsCDSEnabled(tenantId)
 }

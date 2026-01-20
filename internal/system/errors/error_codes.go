@@ -385,4 +385,9 @@ var (
 		Code:    errorPrefix + "13001",
 		Message: "Invalid request payload for updating admin configuration.",
 	}
+
+	CDS_NOT_ENABLED = ErrorMessage{
+		Code:    errorPrefix + "15036",
+		Message: "Customer data service is not enabled for the tenant.",
+	}
 )

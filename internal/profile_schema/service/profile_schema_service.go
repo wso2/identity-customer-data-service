@@ -36,7 +36,7 @@ import (
 type ProfileSchemaServiceInterface interface {
 	GetProfileSchema(orgId string) (map[string]interface{}, error)
 	DeleteProfileSchema(orgId string) error
-	AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope string) error
+	AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope, orgId string) error
 	GetProfileSchemaAttributesByScope(orgId, scope string) (interface{}, error)
 	GetProfileSchemaAttributesByScopeAndFilter(id, scope string, filters []string) (interface{}, error)
 	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
@@ -57,7 +57,7 @@ func GetProfileSchemaService() ProfileSchemaServiceInterface {
 }
 
 // AddProfileSchemaAttributesForScope adds profile schema attributes to the specific scope.
-func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttributes []model.ProfileSchemaAttribute, scope string) error {
+func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttributes []model.ProfileSchemaAttribute, scope, orgId string) error {
 
 	validAttrs := make([]model.ProfileSchemaAttribute, 0, len(schemaAttributes))
 	for _, attr := range schemaAttributes {
@@ -95,7 +95,7 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 		}
 	}
 
-	return psstr.AddProfileSchemaAttributesForScope(validAttrs, scope)
+	return psstr.AddProfileSchemaAttributesForScope(validAttrs, scope, orgId)
 }
 
 func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaAttribute) (error, bool) {
