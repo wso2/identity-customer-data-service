@@ -21,43 +21,50 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"io"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
+// HandleDecodeError interprets JSON decoding errors and returns user-friendly messages.
 func HandleDecodeError(err error, resourceName string) string {
 	if err == nil {
 		return ""
 	}
 
-	switch {
-	case errors.Is(err, io.EOF):
+	// Empty body
+	if errors.Is(err, io.EOF) {
 		return fmt.Sprintf("Request body for %s is empty.", resourceName)
+	}
 
-	case strings.HasPrefix(err.Error(), "json: unknown field "):
-		// Extract offending field name from the error
+	// Unknown field (when using DisallowUnknownFields)
+	if strings.HasPrefix(err.Error(), "json: unknown field ") {
 		field := strings.TrimPrefix(err.Error(), "json: unknown field ")
 		return fmt.Sprintf("Unknown field %s in %s request body.", field, resourceName)
-
-	case errors.As(err, &json.UnmarshalTypeError{}):
-		var ute *json.UnmarshalTypeError
-		errors.As(err, &ute)
-		if ute != nil {
-			return fmt.Sprintf("Invalid type for field '%s'. Expected %s in %s request body.",
-				ute.Field, ute.Type, resourceName)
-		}
-		return fmt.Sprintf("Invalid type in %s request body.", resourceName)
-
-	case errors.As(err, &json.SyntaxError{}):
-		var se *json.SyntaxError
-		errors.As(err, &se)
-		if se != nil {
-			return fmt.Sprintf("Malformed JSON at position %d in %s request body.", se.Offset, resourceName)
-		}
-		return fmt.Sprintf("Malformed JSON in %s request body.", resourceName)
-
-	default:
-		return fmt.Sprintf("Invalid JSON payload for %s.", resourceName)
 	}
+
+	// Malformed JSON
+	var se *json.SyntaxError
+	if errors.As(err, &se) && se != nil {
+		return fmt.Sprintf("Malformed JSON in %s request body.", resourceName)
+	}
+
+	var ute *json.UnmarshalTypeError
+	if errors.As(err, &ute) && ute != nil {
+		// Top-level mismatch (common: object sent, array expected)
+		if ute.Field == "" && ute.Value == "object" {
+			return fmt.Sprintf("Request body for %s must be a JSON array.", resourceName)
+		}
+
+		if ute.Field != "" {
+			return fmt.Sprintf("Invalid type for field '%s' in %s request body.", ute.Field, resourceName)
+		}
+
+		// Field-level mismatch: mention the JSON field name only.
+		return fmt.Sprintf("Invalid type for field '%s' in %s request body.", ute.Field, resourceName)
+	}
+
+	// Generic fallback
+	return fmt.Sprintf("Invalid JSON payload for %s.", resourceName)
 }
