@@ -20,48 +20,48 @@ package security
 
 import (
 	"net/http"
-	//"strings"
-	//
-	//"github.com/wso2/identity-customer-data-service/internal/system/authn"
-	//"github.com/wso2/identity-customer-data-service/internal/system/authz"
-	//"github.com/wso2/identity-customer-data-service/internal/system/errors"
-	//"github.com/wso2/identity-customer-data-service/internal/system/utils"
+	"strings"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/authn"
+	"github.com/wso2/identity-customer-data-service/internal/system/authz"
+	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 // AuthnAndAuthz performs authentication and authorization for the given HTTP request and operation.
 func AuthnAndAuthz(r *http.Request, operation string) error {
-	//
-	//authHeader := r.Header.Get("Authorization")
-	//if !strings.HasPrefix(authHeader, "Bearer ") || authHeader == "" {
-	//	clientError := errors.NewClientError(errors.ErrorMessage{
-	//		Code:        errors.UN_AUTHORIZED.Code,
-	//		Message:     errors.UN_AUTHORIZED.Message,
-	//		Description: "Missing or invalid Authorization header",
-	//	}, http.StatusUnauthorized)
-	//	return clientError
-	//}
-	//
-	//token := strings.TrimPrefix(authHeader, "Bearer ")
-	//
-	////  Validate token
-	//orgHandle := utils.ExtractOrgHandleFromPath(r)
-	//claims, err := authn.ValidateAuthenticationAndReturnClaims(token, orgHandle)
-	//if err != nil {
-	//	clientError := errors.NewClientError(errors.ErrorMessage{
-	//		Code:        errors.UN_AUTHORIZED.Code,
-	//		Message:     errors.UN_AUTHORIZED.Message,
-	//		Description: "Missing or invalid Authorization header",
-	//	}, http.StatusUnauthorized)
-	//	return clientError
-	//}
-	//
-	//if !authz.ValidatePermission(claims["scope"].(string), operation) {
-	//	clientError := errors.NewClientError(errors.ErrorMessage{
-	//		Code:        errors.FORBIDDEN.Code,
-	//		Message:     errors.FORBIDDEN.Message,
-	//		Description: "Do not have permission to perform this operation",
-	//	}, http.StatusForbidden)
-	//	return clientError
-	//}
+
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") || authHeader == "" {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.UN_AUTHORIZED.Code,
+			Message:     errors.UN_AUTHORIZED.Message,
+			Description: "Missing or invalid Authorization header",
+		}, http.StatusUnauthorized)
+		return clientError
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+
+	//  Validate token
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	claims, err := authn.ValidateAuthenticationAndReturnClaims(token, orgHandle)
+	if err != nil {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.UN_AUTHORIZED.Code,
+			Message:     errors.UN_AUTHORIZED.Message,
+			Description: "Missing or invalid Authorization header",
+		}, http.StatusUnauthorized)
+		return clientError
+	}
+
+	if !authz.ValidatePermission(claims["scope"].(string), operation) {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.FORBIDDEN.Code,
+			Message:     errors.FORBIDDEN.Message,
+			Description: "Do not have permission to perform this operation",
+		}, http.StatusForbidden)
+		return clientError
+	}
 	return nil
 }
