@@ -347,8 +347,8 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 
 	log.GetLogger().Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaAtt.Event, schemaAtt.OrgId))
 
-	if schemaAtt.Event == constants.AddScimAttribute || schemaAtt.Event == constants.UpdateScimAttribute ||
-		schemaAtt.Event == constants.DeleteScimAttribute || schemaAtt.Event == constants.UpdateLocalAttribute {
+	if schemaAtt.Event == constants.AddScimAttributeEvent || schemaAtt.Event == constants.UpdateScimAttributeEvent ||
+		schemaAtt.Event == constants.DeleteScimAttributeEvent || schemaAtt.Event == constants.UpdateLocalAttributeEvent {
 		orgId := schemaAtt.OrgId
 		err := schemaService.SyncProfileSchema(orgId)
 		if err != nil {

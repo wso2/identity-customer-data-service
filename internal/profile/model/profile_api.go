@@ -52,9 +52,10 @@ type ProfileRequest struct {
 }
 
 type ProfileSync struct {
-	UserId    string                 `json:"userId" bson:"userId"`
-	ProfileId string                 `json:"profileId" bson:"profileId"`
-	Event     string                 `json:"event" bson:"event"`
-	Claims    map[string]interface{} `json:"claims,omitempty" bson:"claims,omitempty"`
-	TenantId  string                 `json:"tenantId,omitempty" bson:"tenantId,omitempty"`
+	UserId        string                 `json:"userId" bson:"userId"`
+	ProfileCookie string                 `json:"profileCookie" bson:"profileCookie"`
+	ProfileId     string                 `json:"profileId" bson:"profileId"`
+	Event         string                 `json:"event" bson:"event"`
+	Claims        map[string]interface{} `json:"claims,omitempty" bson:"claims,omitempty"`
+	TenantId      string                 `json:"tenantId,omitempty" bson:"tenantId,omitempty"`
 }

@@ -686,6 +686,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	}
 
 	var profileSync model.ProfileSync
+	logger := log.GetLogger()
 	err = json.NewDecoder(request.Body).Decode(&profileSync)
 	if err != nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -731,13 +732,16 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 	var existingProfile *model.ProfileResponse
 
-	if profileSync.Event == "POST_ADD_USER" {
-		if profileSync.ProfileId != "" && profileSync.UserId != "" {
+	if profileSync.Event == constants.AddUserEvent {
+		if profileSync.ProfileCookie != "" && profileSync.UserId != "" {
+			cookieObj, err := profilesService.GetProfileCookie(profileSync.ProfileCookie)
+			if err == nil && cookieObj != nil && cookieObj.IsActive {
+				profileId = cookieObj.ProfileId
+			}
 
 			// This scenario is when the user anonymously tried and then trying to signup or login. So profile with profile id exists
-			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
+			existingProfile, err = profilesService.GetProfile(profileId)
 			if err != nil {
-				//todo: decide if we need to write the response back even for fire and forget
 				utils.HandleError(writer, err)
 				return
 			}
@@ -768,7 +772,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 			}
 			return
-		} else if profileSync.ProfileId == "" {
+		} else if profileSync.ProfileCookie == "" {
 			// this is when we create a profile for a new user created in IS
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if err != nil {
@@ -800,44 +804,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		// if needed can ensure if profile got created
 	}
 
-	logger := log.GetLogger()
-	if profileSync.Event == "AUTHENTICATION_SUCCESS" {
-		logger.Info("Authentication success event received for user: " + profileSync.UserId)
-		if profileSync.ProfileId != "" && profileSync.UserId != "" {
-			// This scenario is when the user logs in with a profileId existing.
-			existingProfile, err = profilesService.GetProfile(profileSync.ProfileId)
-			if err != nil {
-				utils.HandleError(writer, err)
-				return
-			}
-			if existingProfile != nil {
-				// Update identity attributes based on claim URIs
-				if existingProfile.IdentityAttributes == nil {
-					existingProfile.IdentityAttributes = make(map[string]interface{})
-				}
-
-				// This is to update userId
-				//todo: See if we need to fetch the identity data as well.
-
-				profileRequest := model.ProfileRequest{
-					UserId:             profileSync.UserId,
-					IdentityAttributes: existingProfile.IdentityAttributes,
-					Traits:             existingProfile.Traits,
-					ApplicationData:    existingProfile.ApplicationData,
-				}
-				// Save updated profile
-				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, tenantId, profileRequest)
-				if err != nil {
-					utils.HandleError(writer, err)
-					return
-				}
-				return
-			}
-			return
-		}
-	}
-
-	if profileSync.Event == "POST_DELETE_USER_WITH_ID" {
+	if profileSync.Event == constants.DeleteUserEvent {
 		existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 		if err != nil {
 			utils.HandleError(writer, err)
@@ -853,13 +820,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			return
 		}
 		return
-		// if needed can ensure if profile got created
 	}
 
-	if profileSync.Event == "POST_SET_USER_CLAIM_VALUES_WITH_ID" {
-
-		if profileSync.ProfileId == "" && profileSync.UserId != "" {
-
+	if profileSync.Event == constants.UpdateUserClaimsEvent || profileSync.Event == constants.UpdateUserClaimEvent {
+		if profileSync.UserId != "" {
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if err != nil {
 				utils.HandleError(writer, err)
@@ -910,36 +874,8 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 					return
 				}
 			}
-		} else {
-			existingProfile, err = profilesService.GetProfile(profileId)
-			if err != nil {
-				utils.HandleError(writer, err)
-				return
-			}
-			// Update identity attributes based on claim URIs
-			if existingProfile.IdentityAttributes == nil {
-				existingProfile.IdentityAttributes = make(map[string]interface{})
-			}
-
-			for claimURI, value := range identityClaims {
-				attributeKeyPath := extractClaimKeyFromLocalURI(claimURI)
-				setNestedMapValue(existingProfile.IdentityAttributes, attributeKeyPath, value)
-			}
-
-			profileRequest := model.ProfileRequest{
-				UserId:             existingProfile.UserId,
-				IdentityAttributes: existingProfile.IdentityAttributes,
-				Traits:             existingProfile.Traits,
-				ApplicationData:    existingProfile.ApplicationData,
-			}
-
-			// Save updated profile
-			_, err = profilesService.UpdateProfile(profileId, tenantId, profileRequest)
-			if err != nil {
-				utils.HandleError(writer, err)
-				return
-			}
 		}
+		return
 	}
 
 	writer.WriteHeader(http.StatusOK)
