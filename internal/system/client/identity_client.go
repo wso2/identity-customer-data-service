@@ -430,7 +430,12 @@ func (c *IdentityClient) GetAllDialects(orgHandle string) ([]map[string]interfac
 			orgHandle), log.Error(err))
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", "SystemApp "+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -468,7 +473,12 @@ func (c *IdentityClient) GetClaimsByDialect(dialectID, orgId string) ([]map[stri
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the claims of dialectID:%s of the organization:%s", dialectID, orgId), log.Error(err))
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", "SystemApp "+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -509,7 +519,12 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 			orgId), log.Error(err))
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", "SystemApp "+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -691,7 +706,12 @@ func (c *IdentityClient) GetSCIMUser(orgId, userId string) (map[string]interface
 			userId, orgId), log.Error(err))
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", "SystemApp "+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
