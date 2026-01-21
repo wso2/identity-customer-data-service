@@ -85,13 +85,28 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 			return err
 		}
 		if existing != nil {
-			errorMsg := fmt.Sprintf("Attribute '%s' already exists for org '%s'", attr.AttributeName, attr.OrgId)
-			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
-				Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
-				Description: errorMsg,
-			}, http.StatusConflict)
-			return clientError
+			// For application_data attributes, check both attribute name AND application identifier
+			if scope == constants.ApplicationData {
+				if existing.ApplicationIdentifier == attr.ApplicationIdentifier {
+					errorMsg := fmt.Sprintf("Attribute '%s' already exists for application '%s' in org '%s'", 
+						attr.AttributeName, attr.ApplicationIdentifier, attr.OrgId)
+					clientError := errors2.NewClientError(errors2.ErrorMessage{
+						Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
+						Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
+						Description: errorMsg,
+					}, http.StatusConflict)
+					return clientError
+				}
+			} else {
+				// For non-application attributes, duplicate names are not allowed
+				errorMsg := fmt.Sprintf("Attribute '%s' already exists for org '%s'", attr.AttributeName, attr.OrgId)
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
+					Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
+					Description: errorMsg,
+				}, http.StatusConflict)
+				return clientError
+			}
 		}
 	}
 

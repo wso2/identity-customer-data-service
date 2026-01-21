@@ -73,7 +73,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			err = svc.AddProfileSchemaAttributesForScope(appData, constants.ApplicationData, SuperTenantOrg)
 			require.NoError(t, err, "Failed to add application_data attributes")
 
-			_ = svc.DeleteProfileSchema(SuperTenantOrg)
+			_ = svc.DeleteProfileSchema(SuperTenantOrg)	
 			_ = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 		})
 
@@ -96,6 +96,90 @@ func Test_ProfileSchemaService(t *testing.T) {
 			err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.ApplicationData, SuperTenantOrg)
 			errDesc := utils.ExtractErrorDescription(err)
 			require.Contains(t, errDesc, "Application identifier is required", "Expected validation failure for missing application identifier")
+		})
+
+		t.Run("Add_SameAttributeNameDifferentApps_ShouldSucceed", func(t *testing.T) {
+			// Test that the same attribute name can be used for different applications
+			app1Attr := model.ProfileSchemaAttribute{
+				OrgId:                 SuperTenantOrg,
+				AttributeId:           uuid.New().String(),
+				AttributeName:         "application_data.theme",
+				ValueType:             constants.StringDataType,
+				MergeStrategy:         "overwrite",
+				Mutability:            constants.MutabilityReadWrite,
+				ApplicationIdentifier: "mobile-app",
+			}
+			err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{app1Attr}, constants.ApplicationData, SuperTenantOrg)
+			require.NoError(t, err, "Failed to add theme attribute for mobile-app")
+
+			// Add the SAME attribute name for a DIFFERENT application - should succeed
+			app2Attr := model.ProfileSchemaAttribute{
+				OrgId:                 SuperTenantOrg,
+				AttributeId:           uuid.New().String(),
+				AttributeName:         "application_data.theme",
+				ValueType:             constants.StringDataType,
+				MergeStrategy:         "overwrite",
+				Mutability:            constants.MutabilityReadWrite,
+				ApplicationIdentifier: "web-app",
+			}
+			err = svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{app2Attr}, constants.ApplicationData, SuperTenantOrg)
+			require.NoError(t, err, "Should allow same attribute name for different applications")
+
+			// Verify both attributes exist
+			schema, err := svc.GetProfileSchema(SuperTenantOrg)
+			require.NoError(t, err)
+			appDataSchemaMap := schema[constants.ApplicationData].(map[string][]model.ProfileSchemaAttribute)
+			
+			mobileThemeFound := false
+			webThemeFound := false
+			for _, attrs := range appDataSchemaMap {
+				for _, attr := range attrs {
+					if attr.AttributeName == "application_data.theme" {
+						if attr.ApplicationIdentifier == "mobile-app" {
+							mobileThemeFound = true
+						}
+						if attr.ApplicationIdentifier == "web-app" {
+							webThemeFound = true
+						}
+					}
+				}
+			}
+			require.True(t, mobileThemeFound, "mobile-app theme attribute not found")
+			require.True(t, webThemeFound, "web-app theme attribute not found")
+
+			_ = svc.DeleteProfileSchema(SuperTenantOrg)
+		})
+
+		t.Run("Add_SameAttributeNameSameApp_ShouldFail", func(t *testing.T) {
+			// Test that duplicate attribute for the SAME application is blocked
+			app1Attr := model.ProfileSchemaAttribute{
+				OrgId:                 SuperTenantOrg,
+				AttributeId:           uuid.New().String(),
+				AttributeName:         "application_data.language",
+				ValueType:             constants.StringDataType,
+				MergeStrategy:         "overwrite",
+				Mutability:            constants.MutabilityReadWrite,
+				ApplicationIdentifier: "mobile-app",
+			}
+			err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{app1Attr}, constants.ApplicationData, SuperTenantOrg)
+			require.NoError(t, err, "Failed to add language attribute for mobile-app")
+
+			// Try to add the SAME attribute for the SAME application - should fail
+			duplicateAttr := model.ProfileSchemaAttribute{
+				OrgId:                 SuperTenantOrg,
+				AttributeId:           uuid.New().String(),
+				AttributeName:         "application_data.language",
+				ValueType:             constants.StringDataType,
+				MergeStrategy:         "overwrite",
+				Mutability:            constants.MutabilityReadWrite,
+				ApplicationIdentifier: "mobile-app",
+			}
+			err = svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{duplicateAttr}, constants.ApplicationData, SuperTenantOrg)
+			require.Error(t, err, "Should not allow duplicate attribute for same application")
+			errDesc := utils.ExtractErrorDescription(err)
+			require.Contains(t, errDesc, "already exists for application", "Expected error message about duplicate attribute")
+
+			_ = svc.DeleteProfileSchema(SuperTenantOrg)
 		})
 
 		t.Run("Add_TooDeepAttribute_ShouldFail", func(t *testing.T) {
