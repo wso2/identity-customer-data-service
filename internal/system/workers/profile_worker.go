@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"reflect"
 )
 
 var UnificationQueue chan profileModel.Profile
@@ -490,6 +491,16 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 			return false
 		}
 		return false
+	} else if strings.HasPrefix(rule.PropertyName, "application_data.") {
+		// Special handling for application_data attributes
+		// Only match attributes within the SAME app_id to prevent cross application merging
+		logger := log.GetLogger()
+		matched := checkApplicationDataMatch(existingProfile, newProfile, rule.PropertyName)
+		if matched {
+			logger.Info(fmt.Sprintf("Profiles %s, %s has matched for unification rule: %s (application-scoped)", 
+				existingProfile.ProfileId, newProfile.ProfileId, rule.RuleName))
+		}
+		return matched
 	} else {
 		existingJSON, _ := json.Marshal(existingProfile)
 		newJSON, _ := json.Marshal(newProfile)
@@ -503,6 +514,73 @@ func doesProfileMatch(existingProfile profileModel.Profile, newProfile profileMo
 		}
 		return false
 	}
+}
+
+// checkApplicationDataMatch checks if application_data attributes match within the SAME app_id
+// This prevents cross application merging: P1.app1.theme only matches P2.app1.theme (not P2.app2.theme)
+func checkApplicationDataMatch(existingProfile profileModel.Profile, newProfile profileModel.Profile, propertyName string) bool {
+	attributeName := strings.TrimPrefix(propertyName, "application_data.")
+	logger := log.GetLogger()
+	
+	// Build a map of app_id -> attribute value for existing profile
+	existingAppValues := make(map[string]interface{})
+	for _, appData := range existingProfile.ApplicationData {
+		if val, exists := appData.AppSpecificData[attributeName]; exists {
+			existingAppValues[appData.AppId] = val
+			logger.Debug(fmt.Sprintf("Existing profile %s has %s='%v' in app '%s'", 
+				existingProfile.ProfileId, attributeName, val, appData.AppId))
+		}
+	}
+	
+	// Check if new profile has matching value in any COMMON app_id
+	for _, appData := range newProfile.ApplicationData {
+		if val, exists := appData.AppSpecificData[attributeName]; exists {
+			logger.Debug(fmt.Sprintf("New profile %s has %s='%v' in app '%s'", 
+				newProfile.ProfileId, attributeName, val, appData.AppId))
+			
+			// Check if the SAME app_id exists in existing profile
+			if existingVal, hasCommonApp := existingAppValues[appData.AppId]; hasCommonApp {
+				// Compare values within the same app_id
+				if isValueMatch(existingVal, val) {
+					logger.Info(fmt.Sprintf("Match found: Both profiles have %s='%v' in same app '%s'", 
+						attributeName, val, appData.AppId))
+					return true
+				}
+			}
+		}
+	}
+	
+	logger.Debug(fmt.Sprintf("No application-scoped match found for %s between profiles %s and %s", 
+		attributeName, existingProfile.ProfileId, newProfile.ProfileId))
+	return false
+}
+
+// isValueMatch compares two values for equality, handling different types
+func isValueMatch(val1, val2 interface{}) bool {
+	// Handle string comparison
+	if str1, ok1 := val1.(string); ok1 {
+		if str2, ok2 := val2.(string); ok2 {
+			return str1 == str2
+		}
+	}
+	
+	// Handle array comparison
+	if arr1, ok1 := val1.([]interface{}); ok1 {
+		if arr2, ok2 := val2.([]interface{}); ok2 {
+			// Check if any element from arr1 exists in arr2
+			for _, item1 := range arr1 {
+				for _, item2 := range arr2 {
+					if isValueMatch(item1, item2) {
+						return true
+					}
+				}
+			}
+			return false
+		}
+	}
+	
+	// Fallback: safe deep equality for non-comparable types
+	return reflect.DeepEqual(val1, val2)
 }
 
 // extractFieldFromJSON extracts a nested field from raw JSON (`[]byte`) without pre-converting to a map
