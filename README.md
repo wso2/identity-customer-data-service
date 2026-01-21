@@ -30,7 +30,7 @@ Lightweight, extensible Customer Data Server built to power personalized experie
         - Add administrator
 
 3. Create the Environment File
-    - Create a **dev.env** file under conf/repository/config/:
+    - Create a **dev.env** file under conf/:
         - paste the Client secret copied
       ```bash
          ENV=dev
