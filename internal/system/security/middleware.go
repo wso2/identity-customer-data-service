@@ -53,7 +53,18 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 		return clientError
 	}
 
-	if !authz.ValidatePermission(claims["scope"].(string), operation) {
+	//  Validate authorization
+	scope, ok := claims["scope"]
+	if !ok || scope == nil {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.FORBIDDEN.Code,
+			Message:     errors.FORBIDDEN.Message,
+			Description: errors.FORBIDDEN.Description,
+		}, http.StatusForbidden)
+		return clientError
+	}
+
+	if !authz.ValidatePermission(scope.(string), operation) {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.FORBIDDEN.Code,
 			Message:     errors.FORBIDDEN.Message,
