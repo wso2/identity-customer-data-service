@@ -714,6 +714,11 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 				return nil, err
 			}
 
+			profile.ApplicationData, err = profileStore.FetchApplicationData(profile.ProfileId)
+			if err != nil {
+				return nil, err
+			}
+
 			alias := &profileModel.Reference{
 				ProfileId: profile.ProfileStatus.ReferenceProfileId,
 				Reason:    profile.ProfileStatus.ReferenceReason,
@@ -722,7 +727,7 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 			profileResponse := &profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
 				UserId:             masterProfile.UserId,
-				ApplicationData:    ConvertAppDataToMap(masterProfile.ApplicationData),
+				ApplicationData:    ConvertAppDataToMap(profile.ApplicationData),
 				Traits:             masterProfile.Traits,
 				IdentityAttributes: masterProfile.IdentityAttributes,
 				Meta: profileModel.Meta{
