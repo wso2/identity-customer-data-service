@@ -303,7 +303,7 @@ var (
 	FORBIDDEN = ErrorMessage{
 		Code:        errorPrefix + "11025",
 		Message:     "ForBidden",
-		Description: "You do not have permission to access this resource.",
+		Description: "You do not have enough permission to access this resource.",
 	}
 
 	INVALID_PROFILE = ErrorMessage{

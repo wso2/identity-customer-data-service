@@ -60,6 +60,12 @@ auth_server:
     profile_schema:delete:
       - "cds_profile_schema_delete"
 
+    admin_config:view:
+      - "cds_admin_config_view"
+    admin_config:update:
+      - "cds_admin_config_update"
+
+
 sync:
   schema:
     enabled: true
