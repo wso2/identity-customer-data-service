@@ -366,7 +366,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		cleanProfiles(profileSvc, OtherTenant)
 	})
 
-	t.Run("Scenario11_AppAttribute_Separation", func(t *testing.T) {
+	t.Run("Scenario10_AppAttribute_Separation", func(t *testing.T) {
 
 		p1JSON := `{ "identity_attributes":{"email":["shared-app-test@wso2.com"]}, "application_data":{"` + AppA_Id + `":{"ui_mode":"dark"}}}`
 		p1Req := mustUnmarshalProfile(p1JSON)
