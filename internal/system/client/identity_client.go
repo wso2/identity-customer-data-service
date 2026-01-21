@@ -432,7 +432,7 @@ func (c *IdentityClient) GetAllDialects(orgHandle string) ([]map[string]interfac
 	}
 	authCfg := config.GetCDSRuntime().Config.AuthServer
 	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", "SystemApp "+token)
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
 	} else {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -475,7 +475,7 @@ func (c *IdentityClient) GetClaimsByDialect(dialectID, orgId string) ([]map[stri
 	}
 	authCfg := config.GetCDSRuntime().Config.AuthServer
 	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", "SystemApp "+token)
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
 	} else {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -521,7 +521,7 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 	}
 	authCfg := config.GetCDSRuntime().Config.AuthServer
 	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", "SystemApp "+token)
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
 	} else {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -708,7 +708,7 @@ func (c *IdentityClient) GetSCIMUser(orgId, userId string) (map[string]interface
 	}
 	authCfg := config.GetCDSRuntime().Config.AuthServer
 	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", "SystemApp "+token)
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
 	} else {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

@@ -11,6 +11,7 @@ const Attributes = "attributes"     // Query parameter to filter attributes in t
 const ProfileCookie = "cds_profile" // Cookie name to store cookie that corresponds to profile ID.
 const DefaultTenant = "carbon.super"
 const SpaceSeparator = " "
+const SystemAppHeader = "SystemApp"
 
 type contextKey string
 
