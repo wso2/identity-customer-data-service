@@ -679,7 +679,7 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 
 func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.Request) {
 
-	err := security.AuthnAndAuthz(request, "profile:update")
+	err := security.AuthnWithAdminCredentials(request)
 	if err != nil {
 		utils.HandleError(writer, err)
 		return

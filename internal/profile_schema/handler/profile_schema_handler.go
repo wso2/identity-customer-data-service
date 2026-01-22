@@ -332,7 +332,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.Res
 
 func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *http.Request) {
 
-	err := security.AuthnAndAuthz(r, "profile_schema:update")
+	err := security.AuthnWithAdminCredentials(r)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
