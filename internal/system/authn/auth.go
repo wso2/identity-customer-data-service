@@ -19,31 +19,23 @@
 package authn
 
 import (
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/wso2/identity-customer-data-service/internal/system/cache"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"net/http"
-	"strings"
-	"time"
 )
 
 var (
-	//todo: fetch cache from config
-	tokenCache       = cache.NewCache(15 * time.Minute)
 	expectedAudience = "iam-cds"
 )
 
 // ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
-func ValidateAuthenticationAndReturnClaims(token, orgId string) (map[string]interface{}, error) {
-	// Try cache
-	if cached, found := tokenCache.Get(token); found {
-		if claims, ok := cached.(map[string]interface{}); ok && validateClaims(claims) {
-			return claims, nil
-		}
-	}
+func ValidateAuthenticationAndReturnClaims(token string) (map[string]interface{}, error) {
 
 	var claims map[string]interface{}
 	var err error
@@ -68,7 +60,6 @@ func ValidateAuthenticationAndReturnClaims(token, orgId string) (map[string]inte
 		return claims, unauthorizedError()
 	}
 
-	tokenCache.Set(token, claims)
 	return claims, nil
 }
 
@@ -137,16 +128,6 @@ func validateClaims(claims map[string]interface{}) bool {
 	}
 	logger.Info("Token audience does not match expected audience.")
 	return false
-}
-
-// GetCachedClaims returns claims from cache if available
-func GetCachedClaims(token string) (map[string]interface{}, bool) {
-	cached, found := tokenCache.Get(token)
-	if !found {
-		return nil, false
-	}
-	claims, ok := cached.(map[string]interface{})
-	return claims, ok
 }
 
 func unauthorizedError() error {

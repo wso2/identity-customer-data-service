@@ -24,6 +24,7 @@ import (
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
@@ -40,6 +41,10 @@ func NewAdminConfigHandler() *AdminConfigHandler {
 // GetAdminConfig handles GET /admin/configs
 func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Request) {
 
+	if err := security.AuthnAndAuthz(r, "admin_config:view"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	adminConfigProvider := provider.NewAdminConfigProvider()
 	adminConfigService := adminConfigProvider.GetAdminConfigService()
@@ -60,6 +65,10 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 // UpdateAdminConfig handles PUT /admin/configs
 func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Request) {
 
+	if err := security.AuthnAndAuthz(r, "admin_config:update"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	var config model.AdminConfigUpdateAPI
 

@@ -110,20 +110,24 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
-			claims, ok := authn.GetCachedClaims(token)
-			if !ok {
-				http.Error(w, "Token claims not found", http.StatusUnauthorized)
+			claims, err := authn.ParseJWTClaims(token)
+			if err != nil {
+				http.Error(w, "Invalid token", http.StatusUnauthorized)
 				return
 			}
 
-			sub, ok := claims["sub"].(string)
-			if !ok || sub == "" {
+			sub, ok := claims["sub"]
+			if !ok {
 				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
 				return
 			}
 
 			// Lookup profile by username (sub)
-			profile, err := profilesService.FindProfileByUserId(sub)
+			subStr, ok := sub.(string)
+			if !ok || subStr == "" {
+				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+			}
+			profile, err := profilesService.FindProfileByUserId(subStr)
 			if err != nil || profile == nil {
 				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
 				return
@@ -609,20 +613,27 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
-			claims, ok := authn.GetCachedClaims(token)
-			if !ok {
-				http.Error(w, "Token claims not found", http.StatusUnauthorized)
+			claims, err := authn.ParseJWTClaims(token)
+			if err != nil {
+				http.Error(w, "Invalid token", http.StatusUnauthorized)
 				return
 			}
 
-			sub, ok := claims["sub"].(string)
-			if !ok || sub == "" {
+			sub, ok := claims["sub"]
+			if !ok {
+				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+				return
+			}
+
+			// Lookup profile by username (sub)
+			subStr, ok := sub.(string)
+			if !ok || subStr == "" {
 				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
 				return
 			}
 
 			// Lookup profile by sub (username)
-			profile, err := profilesService.FindProfileByUserId(sub)
+			profile, err := profilesService.FindProfileByUserId(subStr)
 			if err != nil || profile == nil {
 				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
 				return

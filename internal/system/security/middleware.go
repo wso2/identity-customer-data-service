@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -29,7 +29,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 // AuthnWithAdminCredentials performs authentication using admin credentials from the request.
@@ -94,8 +93,7 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	//  Validate token
-	orgHandle := utils.ExtractOrgHandleFromPath(r)
-	claims, err := authn.ValidateAuthenticationAndReturnClaims(token, orgHandle)
+	claims, err := authn.ValidateAuthenticationAndReturnClaims(token)
 	if err != nil {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
@@ -105,7 +103,18 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 		return clientError
 	}
 
-	if !authz.ValidatePermission(claims["scope"].(string), operation) {
+	//  Validate authorization
+	scope, ok := claims["scope"]
+	if !ok || scope == nil {
+		clientError := errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.FORBIDDEN.Code,
+			Message:     errors.FORBIDDEN.Message,
+			Description: errors.FORBIDDEN.Description,
+		}, http.StatusForbidden)
+		return clientError
+	}
+
+	if !authz.ValidatePermission(scope.(string), operation) {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.FORBIDDEN.Code,
 			Message:     errors.FORBIDDEN.Message,
