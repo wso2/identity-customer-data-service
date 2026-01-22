@@ -29,6 +29,7 @@ const (
 	BooleanDataType  = "boolean"
 	DateTimeDataType = "date_time"
 	ComplexDataType  = "complex"
+	EpochDataType    = "epoch"
 )
 
 const (
@@ -49,6 +50,7 @@ var AllowedValueTypes = map[string]bool{
 	BooleanDataType:  true,
 	DateTimeDataType: true,
 	ComplexDataType:  true,
+	EpochDataType:    true,
 }
 
 // Mutability values define how an attribute can be created, read, or updated.
