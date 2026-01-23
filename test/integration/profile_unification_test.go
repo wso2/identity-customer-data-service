@@ -356,6 +356,82 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		cleanProfiles(profileSvc, OtherTenant)
 	})
 
+	t.Run("Scenario10_CrossApplicationAttributeMatch", func(t *testing.T) {
+		// TEST SCENARIO:
+		// Profile 1: Has app1 (theme="light") AND app2 (theme="dark")
+		// Profile 2: Has app2 (theme="light")
+		// Unification Rule: Based on application_data.theme attribute
+
+		App1Id := "app-theme-001"
+		App2Id := "app-theme-002"
+
+		themeSchema := []schemaModel.ProfileSchemaAttribute{
+			{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(),
+				AttributeName: "application_data.theme",
+				ValueType:     constants.StringDataType, MergeStrategy: "combine",
+				Mutability: constants.MutabilityReadWrite, MultiValued: false,
+				ApplicationIdentifier: App1Id},
+			{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(),
+				AttributeName: "application_data.theme",
+				ValueType:     constants.StringDataType, MergeStrategy: "combine",
+				Mutability: constants.MutabilityReadWrite, MultiValued: false,
+				ApplicationIdentifier: App2Id},
+		}
+		err := profileSchemaSvc.AddProfileSchemaAttributesForScope(themeSchema, constants.ApplicationData, SuperTenantOrg)
+		require.NoError(t, err, "Failed to add theme schema")
+
+		themeRuleId := uuid.New().String()
+		themeRuleData := []byte(`{
+			"rule_name": "theme_based",
+			"rule_id": "` + themeRuleId + `",
+			"tenant_id": "` + SuperTenantOrg + `",
+			"property_name": "application_data.theme",
+			"priority": 3,
+			"is_active": true
+		}`)
+		var themeRule model.UnificationRule
+		_ = json.Unmarshal(themeRuleData, &themeRule)
+		themeRule.CreatedAt = time.Now().Unix()
+		themeRule.UpdatedAt = time.Now().Unix()
+		err = unificationSvc.AddUnificationRule(themeRule, SuperTenantOrg)
+		require.NoError(t, err, "Failed to add theme-based unification rule")
+
+		p1 := mustUnmarshalProfile(`{
+			"identity_attributes":{"email":["theme-test-p1@wso2.com"]},
+			"traits":{"interests":["design"]},
+			"application_data":{
+				"` + App1Id + `":{"theme":"light"},
+				"` + App2Id + `":{"theme":"dark"}
+			}
+		}`)
+
+		p2 := mustUnmarshalProfile(`{
+			"identity_attributes":{"email":["theme-test-p2@wso2.com"]},
+			"traits":{"interests":["coding"]},
+			"application_data":{
+				"` + App2Id + `":{"theme":"light"}
+			}
+		}`)
+
+		prof1, err := profileSvc.CreateProfile(p1, SuperTenantOrg)
+		require.NoError(t, err, "Failed to create profile 1")
+
+		prof2, err := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		require.NoError(t, err, "Failed to create profile 2")
+
+		time.Sleep(2 * time.Second)
+
+		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
+		merged2, _ := profileSvc.GetProfile(prof2.ProfileId)
+
+		didMerge := merged1.MergedTo.ProfileId != "" || merged2.MergedTo.ProfileId != ""
+
+		require.False(t, didMerge, "Profiles should NOT merge based on cross-application attribute match")
+
+		_ = unificationSvc.DeleteUnificationRule(themeRuleId)
+		cleanProfiles(profileSvc, SuperTenantOrg)
+	})
+
 	// Cleanup
 	t.Cleanup(func() {
 		rules, _ := unificationSvc.GetUnificationRules(SuperTenantOrg)
