@@ -463,6 +463,22 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 		_, ok := value.(bool)
 		return ok
 
+	case constants.EpochDataType:
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if _, ok := v.(string); !ok {
+					return false
+				}
+			}
+			return true
+		}
+		_, ok := value.(string)
+		return ok
+
 	case constants.DateTimeDataType:
 		if multiValued {
 			arr, ok := value.([]interface{})
@@ -477,6 +493,22 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 			return true
 		}
 		_, ok := value.(string) // optionally: validate ISO 8601
+		return ok
+
+	case constants.DateDataType:
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if _, ok := v.(string); !ok {
+					return false
+				}
+			}
+			return true
+		}
+		_, ok := value.(string)
 		return ok
 
 	case constants.ComplexDataType:

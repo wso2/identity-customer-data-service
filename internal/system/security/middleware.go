@@ -19,13 +19,63 @@
 package security
 
 import (
+	"crypto/subtle"
+	"encoding/base64"
 	"net/http"
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/authz"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
+
+// AuthnWithAdminCredentials performs authentication using admin credentials from the request.
+func AuthnWithAdminCredentials(r *http.Request) error {
+
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
+		return errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.UN_AUTHORIZED.Code,
+			Message:     errors.UN_AUTHORIZED.Message,
+			Description: "Missing or invalid Authorization header",
+		}, http.StatusUnauthorized)
+	}
+
+	token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Basic "))
+
+	isValidAdmin, err := validateAdminCredentials(token)
+	if err != nil || !isValidAdmin {
+		return errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.UN_AUTHORIZED.Code,
+			Message:     errors.UN_AUTHORIZED.Message,
+			Description: "Missing or invalid Authorization header",
+		}, http.StatusUnauthorized)
+	}
+
+	return nil
+}
+
+func validateAdminCredentials(token string) (bool, error) {
+
+	authServerConfig := config.GetCDSRuntime().Config.AuthServer
+	username := strings.TrimSpace(authServerConfig.AdminUsername)
+	password := strings.TrimSpace(authServerConfig.AdminPassword)
+	if username == "" || password == "" || token == "" {
+		return false, nil
+	}
+
+	creds := username + ":" + password
+	expected := base64.StdEncoding.EncodeToString([]byte(creds))
+
+	if subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1 {
+		log.GetLogger().Debug("Admin credentials validated successfully.")
+		return true, nil
+	}
+
+	return false, nil
+}
 
 // AuthnAndAuthz performs authentication and authorization for the given HTTP request and operation.
 func AuthnAndAuthz(r *http.Request, operation string) error {
