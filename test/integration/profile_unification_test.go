@@ -49,6 +49,8 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	PhoneBased := "phone_based"
 	EmailBased := "email_based"
 	AppId := "test-app-001"
+	AppA_Id := "app-A"
+	AppB_Id := "app-B"
 	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 
 	// Initialize Profile Schema Attributes
@@ -71,6 +73,14 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	appData := []schemaModel.ProfileSchemaAttribute{
 		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "application_data.device_id", ValueType: constants.StringDataType, MergeStrategy: "combine",
 			Mutability: constants.MutabilityReadWrite, MultiValued: true, ApplicationIdentifier: AppId},
+		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(),
+			AttributeName: "application_data.ui_mode",
+			ValueType:     constants.StringDataType, MergeStrategy: "overwrite",
+			Mutability: constants.MutabilityReadWrite, ApplicationIdentifier: AppA_Id},
+		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(),
+			AttributeName: "application_data.ui_mode",
+			ValueType:     constants.StringDataType, MergeStrategy: "overwrite",
+			Mutability: constants.MutabilityReadWrite, ApplicationIdentifier: AppB_Id},
 	}
 
 	err := profileSchemaSvc.AddProfileSchemaAttributesForScope(identityAttr, constants.IdentityAttributes, SuperTenantOrg)
@@ -354,6 +364,60 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		require.Empty(t, merged2.MergedTo)
 		cleanProfiles(profileSvc, SuperTenantOrg)
 		cleanProfiles(profileSvc, OtherTenant)
+	})
+
+	t.Run("Scenario10_AppAttribute_Separation", func(t *testing.T) {
+
+		p1JSON := `{ "identity_attributes":{"email":["shared-app-test@wso2.com"]}, "application_data":{"` + AppA_Id + `":{"ui_mode":"dark"},"` + AppB_Id + `":{"ui_mode":"light"}}}`
+		p1Req := mustUnmarshalProfile(p1JSON)
+
+		p2JSON := `{"identity_attributes":{"email":["shared-app-test@wso2.com"]}, "application_data":{"` + AppB_Id + `":{"ui_mode":"light"}}}`
+		p2Req := mustUnmarshalProfile(p2JSON)
+
+		prof1, err1 := profileSvc.CreateProfile(p1Req, SuperTenantOrg)
+		require.NoError(t, err1)
+		prof2, err2 := profileSvc.CreateProfile(p2Req, SuperTenantOrg)
+		require.NoError(t, err2)
+
+		time.Sleep(2 * time.Second)
+
+		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
+		merged2, _ := profileSvc.GetProfile(prof2.ProfileId)
+
+		require.NotEmpty(t, merged1.MergedTo.ProfileId, "Merged1 should be merged")
+		require.NotEmpty(t, merged2.MergedTo.ProfileId, "Merged2 should be merged")
+		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId, "Should merge to same profile")
+
+		var master *profileModel.ProfileResponse
+		if merged1.MergedTo.ProfileId == "" {
+			master = merged1
+		} else {
+			master, _ = profileSvc.GetProfile(merged1.MergedTo.ProfileId)
+		}
+
+		// Master profile should have both app attributes intact
+		appData := master.ApplicationData
+		appAData := appData[AppA_Id]
+		appBData := appData[AppB_Id]
+
+		require.NotNil(t, appAData["ui_mode"], "App A ui_mode should not be nil")
+		require.NotNil(t, appBData["ui_mode"], "App B ui_mode should not be nil")
+		require.Equal(t, "dark", appAData["ui_mode"], "App A ui_mode should be 'dark'")
+
+		// Profile 1 and Profile 2 should have their respective app attributes but not the others
+		p1Final, _ := profileSvc.GetProfile(prof1.ProfileId)
+		p2Final, _ := profileSvc.GetProfile(prof2.ProfileId)
+
+		p1AppData := p1Final.ApplicationData
+		p2AppData := p2Final.ApplicationData
+
+		require.NotNil(t, p1AppData[AppA_Id]["ui_mode"], "Profile 1 ui_mode should not be nil")
+		require.NotNil(t, p1AppData[AppB_Id]["ui_mode"], "Profile 1 ui_mode should not be nil")
+
+		require.NotNil(t, p2AppData[AppB_Id]["ui_mode"], "Profile 2 ui_mode should not be nil")
+		require.NotNil(t, p2AppData[AppA_Id]["ui_mode"], "Profile 2 ui_mode should not be nil")
+		
+		cleanProfiles(profileSvc, SuperTenantOrg)
 	})
 
 	// Cleanup
