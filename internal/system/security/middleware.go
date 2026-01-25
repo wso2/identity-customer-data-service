@@ -35,7 +35,9 @@ import (
 func AuthnWithAdminCredentials(r *http.Request) error {
 
 	authHeader := r.Header.Get("Authorization")
+	logger := log.GetLogger()
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
+		logger.Debug("Missing or invalid Authorization header")
 		return errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
@@ -47,6 +49,7 @@ func AuthnWithAdminCredentials(r *http.Request) error {
 
 	isValidAdmin, err := validateAdminCredentials(token)
 	if err != nil || !isValidAdmin {
+		logger.Debug("Invalid admin credentials")
 		return errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
@@ -62,7 +65,9 @@ func validateAdminCredentials(token string) (bool, error) {
 	authServerConfig := config.GetCDSRuntime().Config.AuthServer
 	username := strings.TrimSpace(authServerConfig.AdminUsername)
 	password := strings.TrimSpace(authServerConfig.AdminPassword)
+	logger := log.GetLogger()
 	if username == "" || password == "" || token == "" {
+		logger.Debug("Admin credentials are not set properly in the configuration.")
 		return false, nil
 	}
 
@@ -70,7 +75,7 @@ func validateAdminCredentials(token string) (bool, error) {
 	expected := base64.StdEncoding.EncodeToString([]byte(creds))
 
 	if subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1 {
-		log.GetLogger().Debug("Admin credentials validated successfully.")
+		logger.Debug("Admin credentials validated successfully.")
 		return true, nil
 	}
 
