@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 
+	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
 	"github.com/google/uuid"
@@ -337,19 +338,40 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 		utils.HandleError(w, err)
 		return
 	}
-	var schemaAtt model.ProfileSchemaSync
-	if err := json.NewDecoder(r.Body).Decode(&schemaAtt); err != nil {
+	var schemaSync model.ProfileSchemaSync
+	if err := json.NewDecoder(r.Body).Decode(&schemaSync); err != nil {
 		http.Error(w, "Invalid request.", http.StatusBadRequest)
+		return
+	}
+	orgId := schemaSync.OrgId
+	if orgId == "" {
+		errMsg := fmt.Sprintf("Organization handle cannot be empty in sync event: %s", schemaSync.Event)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+	if !isCDSEnabled(orgId) {
+		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + orgId
+		log.GetLogger().Info(errMsg)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: errMsg,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
 
-	log.GetLogger().Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaAtt.Event, schemaAtt.OrgId))
+	log.GetLogger().Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaSync.Event, schemaSync.OrgId))
 
-	if schemaAtt.Event == constants.AddScimAttributeEvent || schemaAtt.Event == constants.UpdateScimAttributeEvent ||
-		schemaAtt.Event == constants.DeleteScimAttributeEvent || schemaAtt.Event == constants.UpdateLocalAttributeEvent {
-		orgId := schemaAtt.OrgId
+	if schemaSync.Event == constants.AddScimAttributeEvent || schemaSync.Event == constants.UpdateScimAttributeEvent ||
+		schemaSync.Event == constants.DeleteScimAttributeEvent || schemaSync.Event == constants.UpdateLocalAttributeEvent {
 		err := schemaService.SyncProfileSchema(orgId)
 		if err != nil {
 			utils.HandleError(w, err)
@@ -365,4 +387,9 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 	w.WriteHeader(http.StatusNotFound)
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Unknown sync event."})
 
+}
+
+// isCDSEnabled checks if CDS is enabled for the given tenant
+func isCDSEnabled(tenantId string) bool {
+	return adminConfigService.GetAdminConfigService().IsCDSEnabled(tenantId)
 }

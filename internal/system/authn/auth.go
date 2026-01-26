@@ -35,7 +35,7 @@ var (
 )
 
 // ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
-func ValidateAuthenticationAndReturnClaims(token string) (map[string]interface{}, error) {
+func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]interface{}, error) {
 
 	var claims map[string]interface{}
 	var err error
@@ -56,7 +56,7 @@ func ValidateAuthenticationAndReturnClaims(token string) (map[string]interface{}
 		}
 	}
 
-	if !validateClaims(claims) {
+	if !validateClaims(orgHandle, claims) {
 		return claims, unauthorizedError()
 	}
 
@@ -82,30 +82,41 @@ func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 	return claims, nil
 }
 
-// validateClaims ensures the token has `active: true` and the expected audience
-func validateClaims(claims map[string]interface{}) bool {
+// validateClaims ensures the token has `active: true` and the expected audience and org_handle
+func validateClaims(orgHandle string, claims map[string]interface{}) bool {
 
 	logger := log.GetLogger()
+	orgHandleInClaimRaw, ok := claims["org_handle"]
+	if !ok || orgHandleInClaimRaw != orgHandle {
+		logger.Debug("Token does not have the expected org_handle claim.")
+		return false
+	}
+	orgHandleInClaim, ok := orgHandleInClaimRaw.(string)
+	if !ok || orgHandleInClaim != orgHandle {
+		logger.Debug("Token org_handle claim is not valid.")
+		return false
+	}
+
 	expRaw, ok := claims["exp"]
 	if !ok {
-		logger.Info("Token does not have an expiration time.")
+		logger.Debug("Token does not have an expiration time.")
 		return false
 	}
 	expFloat, ok := expRaw.(float64)
 	if !ok {
-		logger.Info("Token does not have a valid expiration time.", log.Any("exp", expRaw))
+		logger.Debug("Token does not have a valid expiration time.", log.Any("exp", expRaw))
 		return false
 	}
 	expUnix := int64(expFloat)
 	currentTime := time.Now().Unix()
 	if expUnix < currentTime {
-		logger.Info("Token has expired.", log.String("exp", time.Unix(expUnix, 0).String()))
+		logger.Debug("Token has expired.", log.String("exp", time.Unix(expUnix, 0).String()))
 		return false
 	}
 
 	audRaw, ok := claims["aud"]
 	if !ok {
-		logger.Info("Token does not have an audience claim.")
+		logger.Debug("Token does not have an audience claim.")
 		return false
 	}
 
@@ -126,7 +137,7 @@ func validateClaims(claims map[string]interface{}) bool {
 			return true
 		}
 	}
-	logger.Info("Token audience does not match expected audience.")
+	logger.Debug("Token audience does not match expected audience.")
 	return false
 }
 

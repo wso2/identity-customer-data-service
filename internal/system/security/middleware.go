@@ -29,6 +29,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 // AuthnWithAdminCredentials performs authentication using admin credentials from the request.
@@ -95,10 +96,12 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 		return clientError
 	}
 
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	//  Validate token
-	claims, err := authn.ValidateAuthenticationAndReturnClaims(token)
+	claims, err := authn.ValidateAuthenticationAndReturnClaims(token, orgHandle)
 	if err != nil {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
