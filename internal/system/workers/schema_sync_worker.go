@@ -28,11 +28,13 @@ import (
 
 var SchemaSyncQueue chan model.ProfileSchemaSync
 
+const defaultQueueSize = 1000
+
 // StartSchemaSyncWorker initializes and starts the schema sync worker
 func StartSchemaSyncWorker() {
 
-	// Initialize the queue with a buffer size of 1000 (configurable in future)
-	SchemaSyncQueue = make(chan model.ProfileSchemaSync, 1000)
+	// Initialize the queue with a buffer size (configurable in future via config)
+	SchemaSyncQueue = make(chan model.ProfileSchemaSync, defaultQueueSize)
 
 	go func() {
 		for schemaSync := range SchemaSyncQueue {
@@ -42,9 +44,20 @@ func StartSchemaSyncWorker() {
 }
 
 // EnqueueSchemaSyncJob adds a schema sync job to the queue
-func EnqueueSchemaSyncJob(schemaSync model.ProfileSchemaSync) {
-	if SchemaSyncQueue != nil {
-		SchemaSyncQueue <- schemaSync
+// Returns true if successfully enqueued, false if queue is full
+func EnqueueSchemaSyncJob(schemaSync model.ProfileSchemaSync) bool {
+	if SchemaSyncQueue == nil {
+		log.GetLogger().Error("Schema sync queue is not initialized. Cannot enqueue job.")
+		return false
+	}
+	
+	// Use non-blocking send to avoid hanging if queue is full
+	select {
+	case SchemaSyncQueue <- schemaSync:
+		return true
+	default:
+		log.GetLogger().Error(fmt.Sprintf("Schema sync queue is full. Cannot enqueue job for tenant: %s", schemaSync.OrgId))
+		return false
 	}
 }
 

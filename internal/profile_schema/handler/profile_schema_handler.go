@@ -373,7 +373,17 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 		schemaSync.Event == constants.DeleteScimAttributeEvent || schemaSync.Event == constants.UpdateLocalAttributeEvent {
 		
 		// Enqueue the schema sync job for asynchronous processing
-		workers.EnqueueSchemaSyncJob(schemaSync)
+		if !workers.EnqueueSchemaSyncJob(schemaSync) {
+			errMsg := fmt.Sprintf("Failed to enqueue schema sync job for tenant: %s. Queue may be full.", schemaSync.OrgId)
+			log.GetLogger().Error(errMsg)
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
+				Message:     errors2.SYNC_PROFILE_SCHEMA.Message,
+				Description: errMsg,
+			}, fmt.Errorf("queue is full or not initialized"))
+			utils.HandleError(w, serverError)
+			return
+		}
 		
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
