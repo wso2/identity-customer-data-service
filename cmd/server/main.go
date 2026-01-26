@@ -90,6 +90,9 @@ func main() {
 	// Initialize Profile worker
 	workers.StartProfileWorker()
 
+	// Initialize Schema Sync worker
+	workers.StartSchemaSyncWorker()
+
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
 

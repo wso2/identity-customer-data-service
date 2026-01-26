@@ -3,27 +3,28 @@ package workers
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"sort"
-	"strings"
-	"time"
 )
 
 var UnificationQueue chan profileModel.Profile
 
 func StartProfileWorker() {
 
-	// todo: Make the queue size configurable (check if this implementation is enough or need a better queue storage)
-	UnificationQueue = make(chan profileModel.Profile, 1000)
+	UnificationQueue = make(chan profileModel.Profile, constants.DefaultQueueSize)
 
 	go func() {
 		for profile := range UnificationQueue {
@@ -320,7 +321,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 					} else {
 						// Case 2: Both temporary OR both permanent with same user_id
 						// In both cases, merge into existing master (no new master creation)
-						
+
 						if hasUserID_existing && hasUserID_new {
 							// Both permanent profiles
 							if existingMasterProfile.UserId != newProfile.UserId {
@@ -334,11 +335,11 @@ func unifyProfiles(newProfile profileModel.Profile) {
 							logger.Info(fmt.Sprintf("Both profiles are temporary profiles. Merging new profile %s into existing master: %s",
 								newProfile.ProfileId, existingMasterProfile.ProfileId))
 						}
-						
+
 						// Use the existing master profile ID and update it with merged data
 						newMasterProfile.ProfileId = existingMasterProfile.ProfileId
 						newMasterProfile.UserId = existingMasterProfile.UserId
-						
+
 						// Add new profile as a child
 						childProfile1 := profileModel.Reference{
 							ProfileId: newProfile.ProfileId,
