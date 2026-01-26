@@ -860,29 +860,6 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 	if profile.ProfileStatus.IsReferenceProfile && len(profile.ProfileStatus.References) > 0 {
 		//get all child profiles and delete
 		for _, childProfile := range profile.ProfileStatus.References {
-			//	profile, err := profileStore.GetProfile(childProfile.ProfileId)
-			//	if profile == nil {
-			//		errorMsg := fmt.Sprintf("Child profile with profile_id: %s that is being deleted is not found",
-			//			childProfile.ProfileId)
-			//		logger.Debug(errorMsg, log.Error(err))
-			//		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			//			Code:        errors2.DELETE_PROFILE.Code,
-			//			Message:     errors2.DELETE_PROFILE.Message,
-			//			Description: errorMsg,
-			//		}, err)
-			//		return serverError
-			//	}
-			//	if err != nil {
-			//		errorMsg := fmt.Sprintf("Error while deleting Child profile with profile_id: %s that is being deleted is not found",
-			//			childProfile.ProfileId)
-			//		logger.Debug(errorMsg, log.Error(err))
-			//		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			//			Code:        errors2.DELETE_PROFILE.Code,
-			//			Message:     errors2.DELETE_PROFILE.Message,
-			//			Description: errorMsg,
-			//		}, err)
-			//		return serverError
-			//	}
 			err = profileStore.DeleteProfile(childProfile.ProfileId)
 			logger.Info(fmt.Sprintf("Deleting child  profile: %s with of parent: %s",
 				childProfile.ProfileId, ProfileId))
@@ -1081,19 +1058,8 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 // GetAllProfilesWithFilter handles fetching all profiles with filter
 func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error) {
 
-	// Step 1: Fetch enrichment rules to extract value types
-	//rules, err := pss.GetProfileSchemaService()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//// Step 2: Build field → valueType mapping
 	propertyTypeMap := make(map[string]string)
-	//for _, rule := range rules {
-	//	propertyTypeMap[rule.PropertyName] = rule.ValueType
-	//}
 
-	// Step 3: Rewrite filters using typed conversion
 	var rewrittenFilters []string
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
