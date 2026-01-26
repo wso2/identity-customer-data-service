@@ -47,6 +47,7 @@ cloud:
         identityServer:
           host: dev.api.asgardeo.io
           port: ""
+          cookieDomain: ".asgardeo.io"
           introspectionEndpoint: "/oauth2/introspect"
           tokenEndpoint: "/oauth2/token"
           revocationEndpoint: "/oauth2/revoke"

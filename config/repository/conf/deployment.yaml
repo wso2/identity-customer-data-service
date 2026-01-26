@@ -23,6 +23,7 @@ addr:
 auth_server:
   host: "localhost"
   port : 9443
+  cookieDomain: "localhost"
   introspectionEndpoint: "/oauth2/introspect"
   tokenEndpoint: "/oauth2/token"
   revocationEndpoint: "/oauth2/revoke"

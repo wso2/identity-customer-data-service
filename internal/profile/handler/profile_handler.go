@@ -26,6 +26,7 @@ import (
 	"sync"
 
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -473,12 +474,18 @@ func setProfileCookie(w http.ResponseWriter, cookieId string, r *http.Request) e
 		Name:     constants.ProfileCookie,
 		Value:    cookieId,
 		Path:     "/",
+		Domain:   resolveDomain(),
 		HttpOnly: true,
 		Secure:   !strings.HasPrefix(r.Host, "localhost"),
 		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, cookie)
 	return nil
+}
+
+func resolveDomain() string {
+	authServerConfig := config.GetCDSRuntime().Config.AuthServer
+	return authServerConfig.CookieDomain
 }
 
 func detectScheme(r *http.Request) string {
