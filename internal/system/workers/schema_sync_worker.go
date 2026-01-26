@@ -20,6 +20,7 @@ package workers
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
@@ -27,20 +28,24 @@ import (
 )
 
 var SchemaSyncQueue chan model.ProfileSchemaSync
+var startOnce sync.Once
 
 const defaultQueueSize = 1000
 
 // StartSchemaSyncWorker initializes and starts the schema sync worker
+// This function can be called multiple times safely; it will only initialize once
 func StartSchemaSyncWorker() {
 
-	// Initialize the queue with a buffer size (configurable in future via config)
-	SchemaSyncQueue = make(chan model.ProfileSchemaSync, defaultQueueSize)
+	startOnce.Do(func() {
+		// Initialize the queue with a buffer size (configurable in future via config)
+		SchemaSyncQueue = make(chan model.ProfileSchemaSync, defaultQueueSize)
 
-	go func() {
-		for schemaSync := range SchemaSyncQueue {
-			processSchemaSyncJob(schemaSync)
-		}
-	}()
+		go func() {
+			for schemaSync := range SchemaSyncQueue {
+				processSchemaSyncJob(schemaSync)
+			}
+		}()
+	})
 }
 
 // EnqueueSchemaSyncJob adds a schema sync job to the queue

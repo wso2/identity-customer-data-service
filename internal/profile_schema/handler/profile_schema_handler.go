@@ -374,7 +374,7 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 		
 		// Enqueue the schema sync job for asynchronous processing
 		if !workers.EnqueueSchemaSyncJob(schemaSync) {
-			errMsg := fmt.Sprintf("Failed to enqueue schema sync job for tenant: %s. Queue may be full.", schemaSync.OrgId)
+			errMsg := fmt.Sprintf("Unable to process schema sync request for tenant: %s. The system is currently at capacity. Please try again in a few moments.", schemaSync.OrgId)
 			log.GetLogger().Error(errMsg)
 			serverError := errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
