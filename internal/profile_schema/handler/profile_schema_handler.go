@@ -358,7 +358,7 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 	logger := log.GetLogger()
 	if !isCDSEnabled(orgId) {
 		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + orgId
-		log.GetLogger().Info(errMsg)
+		logger.Info(errMsg)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
