@@ -56,6 +56,9 @@ func TestMain(m *testing.M) {
 
 	workers.StartProfileWorker() // Start the real enrichment queue worker
 
+	// Initialize Schema Sync worker
+	workers.StartSchemaSyncWorker()
+
 	provider.SetTestDB(pg.DB)
 	err = utils.CreateTablesFromFile(pg.DB, utils.GetSchemaPath())
 	if err != nil {

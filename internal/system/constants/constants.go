@@ -12,6 +12,7 @@ const ProfileCookie = "cds_profile" // Cookie name to store cookie that correspo
 const DefaultTenant = "carbon.super"
 const SpaceSeparator = " "
 const SystemAppHeader = "SystemApp"
+const DefaultQueueSize = 1000
 
 type contextKey string
 

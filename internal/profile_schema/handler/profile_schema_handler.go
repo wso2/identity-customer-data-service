@@ -27,6 +27,7 @@ import (
 
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
+	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -354,6 +355,7 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 		utils.HandleError(w, clientError)
 		return
 	}
+	logger := log.GetLogger()
 	if !isCDSEnabled(orgId) {
 		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + orgId
 		log.GetLogger().Info(errMsg)
@@ -365,21 +367,29 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 		utils.HandleError(w, clientError)
 		return
 	}
-	schemaProvider := provider.NewProfileSchemaProvider()
-	schemaService := schemaProvider.GetProfileSchemaService()
 
-	log.GetLogger().Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaSync.Event, schemaSync.OrgId))
+	logger.Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaSync.Event, schemaSync.OrgId))
 
 	if schemaSync.Event == constants.AddScimAttributeEvent || schemaSync.Event == constants.UpdateScimAttributeEvent ||
 		schemaSync.Event == constants.DeleteScimAttributeEvent || schemaSync.Event == constants.UpdateLocalAttributeEvent {
-		err := schemaService.SyncProfileSchema(orgId)
-		if err != nil {
-			utils.HandleError(w, err)
+		// Enqueue the schema sync job for asynchronous processing
+		if !workers.EnqueueSchemaSyncJob(schemaSync) {
+			errMsg := fmt.Sprintf("Unable to process schema sync request for tenant: %s. The system is currently at capacity. Please try again in a few moments.", schemaSync.OrgId)
+			logger.Error(errMsg)
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
+				Message:     errors2.SYNC_PROFILE_SCHEMA.Message,
+				Description: errMsg,
+			}, fmt.Errorf("error enqueuing schema sync job"))
+			utils.HandleError(w, serverError)
 			return
 		}
+
+		logger.Debug("Schema sync request enqueued successfully for tenant: " + schemaSync.OrgId)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Profile schema synced successfully"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Profile schema sync request accepted for processing."})
 		return
 	}
 
