@@ -66,7 +66,6 @@ func validateAdminCredentials(token string) (bool, error) {
 	username := strings.TrimSpace(authServerConfig.AdminUsername)
 	password := strings.TrimSpace(authServerConfig.AdminPassword)
 	logger := log.GetLogger()
-	logger.Debug("cds username:" + username + " cds password:" + password + " IS token:" + token)
 	if username == "" || password == "" || token == "" {
 		logger.Debug("Admin credentials are not set properly in the configuration.")
 		return false, nil

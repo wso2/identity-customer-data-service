@@ -256,7 +256,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 
 func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs map[string][]string) []model.ProfileListResponse {
 
-	var result []model.ProfileListResponse
+	result := make([]model.ProfileListResponse, 0, len(profiles))
 
 	for _, profile := range profiles {
 		profileRes := model.ProfileListResponse{
@@ -369,7 +369,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
 
 	if !isCDSEnabled(orgHandle) {
-		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + orgHandle
+		errMsg := "CDS is not enabled for tenant: " + orgHandle
 		log.GetLogger().Info(errMsg)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
@@ -745,9 +745,11 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 	if profileSync.Event == constants.AddUserEvent {
 		if profileSync.ProfileCookie != "" && profileSync.UserId != "" {
+			logger.Debug("Syncing profile for user id: " + profileSync.UserId + " with profile cookie: " + profileSync.ProfileCookie)
 			cookieObj, err := profilesService.GetProfileCookie(profileSync.ProfileCookie)
 			if err == nil && cookieObj != nil && cookieObj.IsActive {
 				profileId = cookieObj.ProfileId
+				logger.Debug("Found active profile cookie with profile id: " + profileId)
 			}
 
 			// This scenario is when the user anonymously tried and then trying to signup or login. So profile with profile id exists
@@ -783,7 +785,8 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 			}
 			return
-		} else if profileSync.ProfileCookie == "" {
+		} else if profileSync.ProfileCookie == "" && profileSync.UserId != "" {
+			logger.Debug("Syncing profile for user id: " + profileSync.UserId + " without profile cookie")
 			// this is when we create a profile for a new user created in IS
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if err != nil {
