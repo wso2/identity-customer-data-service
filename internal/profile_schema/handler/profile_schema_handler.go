@@ -35,6 +35,7 @@ import (
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
+	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 )
 
 type ProfileSchemaHandler struct {
@@ -365,21 +366,18 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 		utils.HandleError(w, clientError)
 		return
 	}
-	schemaProvider := provider.NewProfileSchemaProvider()
-	schemaService := schemaProvider.GetProfileSchemaService()
 
 	log.GetLogger().Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaSync.Event, schemaSync.OrgId))
 
 	if schemaSync.Event == constants.AddScimAttributeEvent || schemaSync.Event == constants.UpdateScimAttributeEvent ||
 		schemaSync.Event == constants.DeleteScimAttributeEvent || schemaSync.Event == constants.UpdateLocalAttributeEvent {
-		err := schemaService.SyncProfileSchema(orgId)
-		if err != nil {
-			utils.HandleError(w, err)
-			return
-		}
+		
+		// Enqueue the schema sync job for asynchronous processing
+		workers.EnqueueSchemaSyncJob(schemaSync)
+		
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Profile schema synced successfully"})
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Profile schema sync job has been queued for processing"})
 		return
 	}
 
