@@ -21,18 +21,18 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"net/http"
 	"strings"
 	"sync"
 
-	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-
+	adminConfigPkg "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
@@ -75,6 +75,26 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, err)
 		return
 	}
+
+	tenantId := utils.ExtractTenantIdFromPath(r)
+	filterParams := utils.ParseApplicationDataParams(r)
+	callerAppID := getCallerAppIDFromRequest(r)
+	isSystemApp := isCallerSystemApplication(tenantId, callerAppID)
+
+	logger := log.GetLogger()
+	logger.Info(fmt.Sprintf("GetProfile URL: %s, RawQuery: %s", r.URL.String(), r.URL.RawQuery))
+	logger.Info(fmt.Sprintf("GetProfile filtering - tenantId: %s, callerAppID: %s, isSystemApp: %v, filterParams: %+v, appDataSize: %d",
+		tenantId, callerAppID, isSystemApp, filterParams, len(profile.ApplicationData)))
+
+	profile.ApplicationData = utils.FilterApplicationData(
+		profile.ApplicationData,
+		callerAppID,
+		isSystemApp,
+		filterParams,
+	)
+
+	logger.Info(fmt.Sprintf("GetProfile filtered appData size: %d", len(profile.ApplicationData)))
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(profile)
@@ -1020,4 +1040,33 @@ func setNestedMapValue(m map[string]interface{}, path string, value interface{})
 func extractClaimKeyFromLocalURI(localURI string) string {
 	parts := strings.Split(localURI, "/")
 	return parts[len(parts)-1]
+}
+
+func getCallerAppIDFromRequest(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return ""
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	claims, ok := authn.GetCachedClaims(token)
+	if !ok {
+		return ""
+	}
+
+	sub, ok := claims["sub"].(string)
+	if !ok {
+		return ""
+	}
+
+	return sub
+}
+
+func isCallerSystemApplication(tenantId, appId string) bool {
+	if appId == "" {
+		return false
+	}
+	adminConfigProvider := adminConfigPkg.NewAdminConfigProvider()
+	adminConfigService := adminConfigProvider.GetAdminConfigService()
+	return adminConfigService.IsSystemApplication(tenantId, appId)
 }

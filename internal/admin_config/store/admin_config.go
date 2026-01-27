@@ -19,8 +19,10 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	model "github.com/wso2/identity-customer-data-service/internal/admin_config/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -54,20 +56,45 @@ func GetAdminConfig(tenantId string) (*model.AdminConfig, error) {
 		}, err)
 	}
 
+	config := &model.AdminConfig{
+		TenantId:              tenantId,
+		CDSEnabled:            false,
+		InitialSchemaSyncDone: false,
+		SystemApplications:    []string{},
+	}
+
 	if len(results) == 0 {
 		logger.Warn(fmt.Sprintf("No configurations found for organization: %s", tenantId))
-		return nil, nil
+		return config, nil
 	}
-	row := results[0]
-	config := model.AdminConfig{
-		TenantId:              row["tenant_id"].(string),
-		CDSEnabled:            row["cds_enabled"].(bool),
-		InitialSchemaSyncDone: row["initial_schema_sync_done"].(bool),
+
+	for _, row := range results {
+		configKey, ok := row["config"].(string)
+		if !ok {
+			continue
+		}
+		value, ok := row["value"].(string)
+		if !ok {
+			continue
+		}
+
+		switch configKey {
+		case constants.ConfigCDSEnabled:
+			config.CDSEnabled = value == "true"
+		case constants.ConfigInitialSchemaSyncDone:
+			config.InitialSchemaSyncDone = value == "true"
+		case constants.ConfigSystemApplications:
+			var apps []string
+			if err := json.Unmarshal([]byte(value), &apps); err == nil {
+				config.SystemApplications = apps
+			}
+		}
 	}
-	return &config, nil
+
+	return config, nil
 }
 
-// UpdateAdminConfig updates organization-level admin configuration (e.g., CDS enablement, schema sync flags).
+// UpdateAdminConfig updates organization-level admin configuration using key-value pairs.
 func UpdateAdminConfig(config model.AdminConfig, tenantId string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -94,11 +121,55 @@ func UpdateAdminConfig(config model.AdminConfig, tenantId string) error {
 		}, err)
 	}
 
-	query := scripts.UpdateOrgConfigurations[provider.NewDBProvider().GetDBType()]
-	_, err = tx.Exec(query, config.CDSEnabled, config.InitialSchemaSyncDone, tenantId)
+	query := scripts.UpdateOrgConfiguration[provider.NewDBProvider().GetDBType()]
+
+	cdsEnabledValue := "false"
+	if config.CDSEnabled {
+		cdsEnabledValue = "true"
+	}
+	_, err = tx.Exec(query, tenantId, constants.ConfigCDSEnabled, cdsEnabledValue)
 	if err != nil {
 		_ = tx.Rollback()
-		errorMsg := fmt.Sprintf("Failed to execute update for configurations for tenant: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to update cds_enabled for tenant: %s", tenantId)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	schemaSyncValue := "false"
+	if config.InitialSchemaSyncDone {
+		schemaSyncValue = "true"
+	}
+	_, err = tx.Exec(query, tenantId, constants.ConfigInitialSchemaSyncDone, schemaSyncValue)
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to update initial_schema_sync_done for tenant: %s", tenantId)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	systemAppsValue, err := json.Marshal(config.SystemApplications)
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to marshal system_applications for tenant: %s", tenantId)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	_, err = tx.Exec(query, tenantId, constants.ConfigSystemApplications, string(systemAppsValue))
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to update system_applications for tenant: %s", tenantId)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
@@ -137,8 +208,13 @@ func UpdateInitialSchemaSyncConfig(state bool, tenantId string) error {
 		}, err)
 	}
 
+	stateValue := "false"
+	if state {
+		stateValue = "true"
+	}
+
 	query := scripts.UpdateInitialSchemaSyncDoneConfig[provider.NewDBProvider().GetDBType()]
-	_, err = tx.Exec(query, state, tenantId)
+	_, err = tx.Exec(query, tenantId, stateValue)
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to execute update for configurations for tenant: %s", tenantId)
@@ -150,4 +226,20 @@ func UpdateInitialSchemaSyncConfig(state bool, tenantId string) error {
 		}, err)
 	}
 	return tx.Commit()
+}
+
+func IsSystemApplication(tenantId, appId string) (bool, error) {
+	config, err := GetAdminConfig(tenantId)
+	if err != nil {
+		return false, err
+	}
+	if config == nil {
+		return false, nil
+	}
+	for _, sysApp := range config.SystemApplications {
+		if sysApp == appId {
+			return true, nil
+		}
+	}
+	return false, nil
 }

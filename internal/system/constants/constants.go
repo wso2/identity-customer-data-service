@@ -151,3 +151,9 @@ var AllowedFilterFieldsForSchema = map[string]bool{
 	"application_identifier": true,
 	"value_type":             true,
 }
+
+const (
+	ConfigCDSEnabled            = "cds_enabled"
+	ConfigInitialSchemaSyncDone = "initial_schema_sync_done"
+	ConfigSystemApplications    = "system_applications"
+)

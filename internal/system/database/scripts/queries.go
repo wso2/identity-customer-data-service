@@ -333,22 +333,23 @@ var DeleteCookieByProfileId = map[string]string{
 }
 
 var GetOrgConfigurations = map[string]string{
-	"postgres": `SELECT * FROM cds_config WHERE tenant_id = $1`,
+	"postgres": `SELECT config, value FROM cds_config WHERE tenant_id = $1`,
 }
 
-var UpdateOrgConfigurations = map[string]string{
-	"postgres": `WITH updated AS (
-		UPDATE cds_config
-		SET cds_enabled = $1,
-		    initial_schema_sync_done = $2
-		WHERE tenant_id = $3
-		RETURNING tenant_id
-	)
-	INSERT INTO cds_config (tenant_id, cds_enabled, initial_schema_sync_done)
-	SELECT $3, $1, $2
-	WHERE NOT EXISTS (SELECT 1 FROM updated)`,
+var UpdateOrgConfiguration = map[string]string{
+	"postgres": `INSERT INTO cds_config (tenant_id, config, value) 
+                 VALUES ($1, $2, $3) 
+                 ON CONFLICT (tenant_id, config) 
+                 DO UPDATE SET value = EXCLUDED.value`,
+}
+
+var GetOrgConfiguration = map[string]string{
+	"postgres": `SELECT value FROM cds_config WHERE tenant_id = $1 AND config = $2`,
 }
 
 var UpdateInitialSchemaSyncDoneConfig = map[string]string{
-	"postgres": `UPDATE cds_config SET initial_schema_sync_done = $1  WHERE tenant_id = $2`,
+	"postgres": `INSERT INTO cds_config (tenant_id, config, value) 
+                 VALUES ($1, 'initial_schema_sync_done', $2) 
+                 ON CONFLICT (tenant_id, config) 
+                 DO UPDATE SET value = EXCLUDED.value`,
 }

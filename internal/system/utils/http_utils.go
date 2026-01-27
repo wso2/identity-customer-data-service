@@ -98,6 +98,10 @@ func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError
 func RewriteToDefaultTenant(apiBasePath string, mux *http.ServeMux, defaultTenant string) {
 	mux.HandleFunc(apiBasePath+"/", func(w http.ResponseWriter, r *http.Request) {
 		newPath := "/t/" + defaultTenant + r.URL.Path
+		// Preserve query string in redirect
+		if r.URL.RawQuery != "" {
+			newPath = newPath + "?" + r.URL.RawQuery
+		}
 		http.Redirect(w, r, newPath, http.StatusTemporaryRedirect)
 	})
 }

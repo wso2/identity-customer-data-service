@@ -49,8 +49,8 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	resp := model.AdminConfigAPI{
-		CDSEnabled:            config.CDSEnabled,
-		InitialSchemaSyncDone: config.InitialSchemaSyncDone,
+		CDSEnabled:         config.CDSEnabled,
+		SystemApplications: config.SystemApplications,
 	}
 	writeJSONResponse(w, http.StatusOK, resp)
 }
@@ -74,11 +74,26 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
+
+	existingConfig, err := adminConfigService.GetAdminConfig(orgId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	configToUpdate := model.AdminConfig{
-		TenantId:   orgId,
-		CDSEnabled: config.CDSEnabled,
-		// Preserving the existing value for InitialSchemaSyncDone as it is not editable via this endpoint.
-		InitialSchemaSyncDone: adminConfigService.IsInitialSchemaSyncDone(orgId),
+		TenantId:              orgId,
+		InitialSchemaSyncDone: existingConfig.InitialSchemaSyncDone,
+		CDSEnabled:            existingConfig.CDSEnabled,
+		SystemApplications:    existingConfig.SystemApplications,
+	}
+
+	// Update only if provided in request
+	if config.CDSEnabled != nil {
+		configToUpdate.CDSEnabled = *config.CDSEnabled
+	}
+	if config.SystemApplications != nil {
+		configToUpdate.SystemApplications = config.SystemApplications
 	}
 
 	err := adminConfigService.UpdateAdminConfig(configToUpdate, orgId)
@@ -86,6 +101,12 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		utils.HandleError(w, err)
 		return
 	}
+
+	resp := model.AdminConfigAPI{
+		CDSEnabled:         configToUpdate.CDSEnabled,
+		SystemApplications: configToUpdate.SystemApplications,
+	}
+	writeJSONResponse(w, http.StatusOK, resp)
 }
 
 // Helper for JSON responses
