@@ -514,13 +514,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: scope
-          in: path
-          required: true
-          description: Schema scope identifier (e.g., traits, application_data)
-          schema:
-            type: string
-            enum: [traits, application_data]
+        - $ref: '#/components/parameters/ScopePathParam'
       requestBody:
         required: true
         content:
@@ -554,13 +548,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: scope
-          in: path
-          required: true
-          description: Schema scope identifier
-          schema:
-            type: string
-            enum: [traits, application_data]
+        - $ref: '#/components/parameters/ScopePathParam'
       responses:
         '200':
           description: Attributes retrieved successfully
@@ -586,13 +574,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: scope
-          in: path
-          required: true
-          description: Schema scope identifier
-          schema:
-            type: string
-            enum: [traits, application_data]
+        - $ref: '#/components/parameters/ScopePathParam'
       responses:
         '204':
           description: Scope attributes deleted successfully
@@ -612,13 +594,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: scope
-          in: path
-          required: true
-          description: Schema scope identifier
-          schema:
-            type: string
-            enum: [traits, application_data]
+        - $ref: '#/components/parameters/ScopePathParam'
         - name: attribute_id
           in: path
           required: true
@@ -649,13 +625,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: scope
-          in: path
-          required: true
-          description: Schema scope identifier
-          schema:
-            type: string
-            enum: [traits, application_data]
+        - $ref: '#/components/parameters/ScopePathParam'
         - name: attribute_id
           in: path
           required: true
@@ -694,13 +664,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: scope
-          in: path
-          required: true
-          description: Schema scope identifier
-          schema:
-            type: string
-            enum: [traits, application_data]
+        - $ref: '#/components/parameters/ScopePathParam'
         - name: attribute_id
           in: path
           required: true
@@ -1535,6 +1499,19 @@ components:
       description: |
         Basic authentication using username and password.
         Only used for admin sync operations.
+
+  # =============================================================================
+  # Reusable Parameters
+  # =============================================================================
+  parameters:
+    ScopePathParam:
+      name: scope
+      in: path
+      required: true
+      description: Schema scope identifier (e.g., traits, application_data)
+      schema:
+        type: string
+        enum: [traits, application_data]
 
   # =============================================================================
   # Reusable Response Definitions
