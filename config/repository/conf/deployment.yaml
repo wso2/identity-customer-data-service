@@ -35,36 +35,36 @@ auth_server:
   isSystemAppGrantEnabled: false
   required_scopes:
     profile:create:
-      - "cds_profile_create"
+      - "internal_cds_profile_create"
     profile:update:
-      - "cds_profile_update"
+      - "internal_cds_profile_update"
     profile:view:
-      - "cds_profile_view"
+      - "internal_cds_profile_view"
     profile:delete:
-      - "cds_profile_delete"
+      - "internal_cds_profile_delete"
 
     unification_rules:view:
-      - "cds_unification_rule_view"
+      - "internal_cds_unification_rule_view"
     unification_rules:create:
-      - "cds_unification_rule_create"
+      - "internal_cds_unification_rule_create"
     unification_rules:update:
-      - "cds_unification_rule_update"
+      - "internal_cds_unification_rule_update"
     unification_rules:delete:
-      - "cds_unification_rule_delete"
+      - "internal_cds_unification_rule_delete"
 
     profile_schema:view:
-      - "cds_profile_schema_view"
+      - "internal_cds_profile_schema_view"
     profile_schema:create:
-      - "cds_profile_schema_create"
+      - "internal_cds_profile_schema_create"
     profile_schema:update:
-      - "cds_profile_schema_update"
+      - "internal_cds_profile_schema_update"
     profile_schema:delete:
-      - "cds_profile_schema_delete"
+      - "internal_cds_profile_schema_delete"
 
     admin_config:view:
-      - "cds_admin_config_view"
+      - "internal_cds_admin_config_view"
     admin_config:update:
-      - "cds_admin_config_update"
+      - "internal_cds_admin_config_update"
 
 
 sync:
@@ -78,7 +78,7 @@ datasource:
   port: 5432
   username: "postgres"
   password: "${DB_PASSWORD}"
-  name: "cds_db"
+  name: "internal_cds_db"
   sslmode: disable
 
 tls:
