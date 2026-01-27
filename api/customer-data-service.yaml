@@ -1,36 +1,245 @@
 openapi: 3.0.0
 info:
-  title: Custodian API
-  description: API documentation for customer data service.
-  version: 0.0.1
+  title: Customer Data Service API
+  description: |
+    Comprehensive API for managing customer profiles, events, consent, and data unification.
+    
+    The Customer Data Service (CDS) provides a unified platform for:
+    - Profile management with identity attributes and traits
+    - Event tracking and behavior analytics
+    - Consent management with category-based permissions
+    - Profile unification and enrichment rules
+    - Schema management for extensible profile attributes
+    
+    ## Authentication
+    - **Bearer Token (JWT)**: Required for most operations. Include scope-based permissions in JWT claims.
+    - **Basic Auth**: Required for admin sync operations only.
+    
+    ## Multi-tenancy
+    All endpoints (except health checks) require a tenant identifier in the path: `/t/{tenant}/cds/api/v1/...`
+  version: 1.0.0
+  contact:
+    name: WSO2
+    url: https://wso2.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
 servers:
-  - url: http://localhost:8080/{org_id}/api/v1
+  - url: http://localhost:8080/t/{tenant}/cds/api/v1
+    description: Local development server
+    variables:
+      tenant:
+        default: carbon.super
+        description: Tenant identifier
+  - url: https://api.example.com/t/{tenant}/cds/api/v1
+    description: Production server
+    variables:
+      tenant:
+        default: carbon.super
+        description: Tenant identifier
 
 paths:
+  # ============================================================================
+  # Profile Management Endpoints
+  # ============================================================================
   /profiles:
     get:
-      tags: [Profile]
-      summary: Get all profiles
-      operationId: getAllProfiles
+      tags: [Profile Management]
+      summary: List all profiles
+      description: |
+        Retrieve a list of profiles with optional filtering and selective attributes.
+        Supports pagination and filtering by various profile attributes.
+      operationId: listProfiles
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: attributes
+          in: query
+          description: Comma-separated list of attributes to include in response (e.g., "identity_attributes,traits")
+          schema:
+            type: string
+          example: "identity_attributes,traits"
+        - name: filter
+          in: query
+          description: Filter expression for profile attributes
+          schema:
+            type: string
+          example: "traits.shopper eq true"
+        - name: limit
+          in: query
+          description: Maximum number of profiles to return
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of profiles to skip for pagination
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
-          description: Successful response
+          description: Profiles retrieved successfully
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Profile'
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Profile'
+                  total_count:
+                    type: integer
+                    description: Total number of profiles matching the filter
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Profile Management]
+      summary: Create a new profile
+      description: Create a new customer profile with identity attributes and traits
+      operationId: createProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileCreate'
+      responses:
+        '201':
+          description: Profile created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profiles/Me:
+    get:
+      tags: [Profile Management]
+      summary: Get current user's profile
+      description: Retrieve the profile of the currently authenticated user
+      operationId: getCurrentUserProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [Profile Management]
+      summary: Update current user's profile
+      description: Partially update the profile of the currently authenticated user
+      operationId: updateCurrentUserProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profiles/sync:
+    post:
+      tags: [Profile Management - Admin]
+      summary: Sync profile data (Admin only)
+      description: |
+        Synchronize profile data with external systems. Requires Basic Authentication.
+        This is an administrative operation.
+      operationId: syncProfiles
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source:
+                  type: string
+                  description: Source system identifier
+                profiles:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Profile'
+      responses:
+        '200':
+          description: Sync completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  synced_count:
+                    type: integer
+                  failed_count:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /profiles/{profile_id}:
     get:
-      tags: [Profile]
-      summary: Retrieve profile by Id
+      tags: [Profile Management]
+      summary: Get profile by ID
+      description: Retrieve a specific profile by its unique identifier
       operationId: getProfile
+      security:
+        - bearerAuth: []
       parameters:
         - name: profile_id
           in: path
           required: true
+          description: Unique identifier of the profile
+          schema:
+            type: string
+            format: uuid
+        - name: attributes
+          in: query
+          description: Comma-separated list of attributes to include in response
           schema:
             type: string
       responses:
@@ -40,27 +249,488 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Profile'
-    delete:
-      tags: [Profile]
-      summary: Delete profile by Id
-      operationId: deleteProfile
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Profile Management]
+      summary: Replace profile
+      description: Completely replace an existing profile with new data
+      operationId: replaceProfile
+      security:
+        - bearerAuth: []
       parameters:
         - name: profile_id
           in: path
           required: true
+          description: Unique identifier of the profile
           schema:
             type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileCreate'
+      responses:
+        '200':
+          description: Profile replaced successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [Profile Management]
+      summary: Update profile
+      description: Partially update an existing profile
+      operationId: updateProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          description: Unique identifier of the profile
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Profile Management]
+      summary: Delete profile
+      description: Permanently delete a profile and all associated data
+      operationId: deleteProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          description: Unique identifier of the profile
+          schema:
+            type: string
+            format: uuid
       responses:
         '204':
           description: Profile deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
+  /profiles/{profile_id}/consents:
+    get:
+      tags: [Profile Management]
+      summary: Get profile consents
+      description: Retrieve all consent records for a specific profile
+      operationId: getProfileConsents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          description: Unique identifier of the profile
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Consents retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Consent'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Profile Management]
+      summary: Update profile consents
+      description: Update consent preferences for a specific profile
+      operationId: updateProfileConsents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          description: Unique identifier of the profile
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConsentUpdate'
+      responses:
+        '200':
+          description: Consents updated successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Consent'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ============================================================================
+  # Profile Schema Management Endpoints
+  # ============================================================================
+  /profile-schema:
+    get:
+      tags: [Profile Schema]
+      summary: Get complete profile schema
+      description: Retrieve the entire profile schema definition including all scopes and attributes
+      operationId: getProfileSchema
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Schema retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileSchema'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Profile Schema]
+      summary: Delete entire profile schema
+      description: Delete the complete profile schema definition (requires admin privileges)
+      operationId: deleteProfileSchema
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Schema deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profile-schema/sync:
+    post:
+      tags: [Profile Schema - Admin]
+      summary: Sync profile schema (Admin only)
+      description: |
+        Synchronize profile schema with external systems. Requires Basic Authentication.
+        This is an administrative operation.
+      operationId: syncProfileSchema
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileSchema'
+      responses:
+        '200':
+          description: Sync completed successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profile-schema/{scope}:
+    post:
+      tags: [Profile Schema]
+      summary: Add attributes to schema scope
+      description: |
+        Add new attributes to a specific schema scope (e.g., traits, application_data).
+        Scopes organize related profile attributes.
+      operationId: addSchemaAttributes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          description: Schema scope identifier (e.g., traits, application_data)
+          schema:
+            type: string
+            enum: [traits, application_data]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/SchemaAttribute'
+      responses:
+        '201':
+          description: Attributes added successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SchemaAttribute'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags: [Profile Schema]
+      summary: Get attributes by scope
+      description: Retrieve all attributes defined for a specific schema scope
+      operationId: getSchemaAttributesByScope
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          description: Schema scope identifier
+          schema:
+            type: string
+            enum: [traits, application_data]
+      responses:
+        '200':
+          description: Attributes retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SchemaAttribute'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Profile Schema]
+      summary: Delete scope attributes
+      description: Delete all attributes in a specific schema scope
+      operationId: deleteSchemaScope
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          description: Schema scope identifier
+          schema:
+            type: string
+            enum: [traits, application_data]
+      responses:
+        '204':
+          description: Scope attributes deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profile-schema/{scope}/{attribute_id}:
+    get:
+      tags: [Profile Schema]
+      summary: Get specific schema attribute
+      description: Retrieve details of a specific attribute within a scope
+      operationId: getSchemaAttribute
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          description: Schema scope identifier
+          schema:
+            type: string
+            enum: [traits, application_data]
+        - name: attribute_id
+          in: path
+          required: true
+          description: Unique identifier of the attribute
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Attribute retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaAttribute'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Profile Schema]
+      summary: Update schema attribute
+      description: Update an existing schema attribute definition
+      operationId: updateSchemaAttribute
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          description: Schema scope identifier
+          schema:
+            type: string
+            enum: [traits, application_data]
+        - name: attribute_id
+          in: path
+          required: true
+          description: Unique identifier of the attribute
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaAttribute'
+      responses:
+        '200':
+          description: Attribute updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaAttribute'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Profile Schema]
+      summary: Delete schema attribute
+      description: Remove a specific attribute from the schema
+      operationId: deleteSchemaAttribute
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          description: Schema scope identifier
+          schema:
+            type: string
+            enum: [traits, application_data]
+        - name: attribute_id
+          in: path
+          required: true
+          description: Unique identifier of the attribute
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Attribute deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ============================================================================
+  # Event Tracking Endpoints
+  # ============================================================================
   /events:
     post:
-      tags: [Events]
-      summary: Add a single event
-      operationId: addEvent
+      tags: [Event Tracking]
+      summary: Track an event
+      description: Record a single customer behavior event
+      operationId: trackEvent
       security:
-        - bearerAuth: [ ]
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -69,11 +739,59 @@ paths:
               $ref: '#/components/schemas/Event'
       responses:
         '201':
-          description: Event created successfully
+          description: Event tracked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     get:
-      tags: [Events]
-      summary: Get events
-      operationId: getEvents
+      tags: [Event Tracking]
+      summary: List events
+      description: Retrieve a list of tracked events with optional filtering
+      operationId: listEvents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: profile_id
+          in: query
+          description: Filter events by profile ID
+          schema:
+            type: string
+        - name: event_type
+          in: query
+          description: Filter events by type
+          schema:
+            type: string
+        - name: event_name
+          in: query
+          description: Filter events by name
+          schema:
+            type: string
+        - name: from_timestamp
+          in: query
+          description: Filter events from this timestamp (Unix epoch)
+          schema:
+            type: integer
+            format: int64
+        - name: to_timestamp
+          in: query
+          description: Filter events to this timestamp (Unix epoch)
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: Maximum number of events to return
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
       responses:
         '200':
           description: Events retrieved successfully
@@ -83,36 +801,63 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /events/write-key/{application_id}:
     get:
-        tags: [Events]
-        summary: Get write key
-        operationId: getWriteKey
-        parameters:
-          - name: application_id
-            in: path
-            required: true
-            schema:
-              type: string
-        responses:
-            '200':
-              description: Write key retrieved successfully
-              content:
-                  application/json:
-                    schema:
-                      type: string
+      tags: [Event Tracking]
+      summary: Get write key for application
+      description: Retrieve the write key used for event tracking by a specific application
+      operationId: getWriteKey
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          description: Application identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Write key retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  application_id:
+                    type: string
+                  write_key:
+                    type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /events/{event_id}:
     get:
-      tags: [Events]
-      summary: Get a specific event
+      tags: [Event Tracking]
+      summary: Get specific event
+      description: Retrieve details of a specific tracked event
       operationId: getEvent
+      security:
+        - bearerAuth: []
       parameters:
         - name: event_id
           in: path
           required: true
+          description: Unique identifier of the event
           schema:
             type: string
+            format: uuid
       responses:
         '200':
           description: Event retrieved successfully
@@ -120,63 +865,118 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Event'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
+  # ============================================================================
+  # Profile Unification Rules
+  # ============================================================================
   /unification-rules:
     post:
       tags: [Profile Unification]
-      summary: Add new unification rule
-      operationId: addUnificationRule
+      summary: Create unification rule
+      description: |
+        Create a new rule for unifying profiles based on matching attributes.
+        Rules with lower priority numbers are evaluated first.
+      operationId: createUnificationRule
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UnificationRule'
+              $ref: '#/components/schemas/UnificationRuleCreate'
       responses:
         '201':
-          description: Unification rule added successfully
+          description: Rule created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnificationRule'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     get:
       tags: [Profile Unification]
-      summary: Get all unification rules
-      operationId: getUnificationRules
+      summary: List unification rules
+      description: Retrieve all profile unification rules
+      operationId: listUnificationRules
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: Unification rules retrieved
+          description: Rules retrieved successfully
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/UnificationRule'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /unification-rules/{rule_id}:
     get:
       tags: [Profile Unification]
-      summary: Get unification rule rule by ID
+      summary: Get unification rule
+      description: Retrieve details of a specific unification rule
       operationId: getUnificationRule
+      security:
+        - bearerAuth: []
       parameters:
         - name: rule_id
           in: path
           required: true
+          description: Unique identifier of the rule
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Unification rule retrieved
+          description: Rule retrieved successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UnificationRule'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     patch:
-      tags: [ Profile Unification ]
-      summary: Patch unification rule
+      tags: [Profile Unification]
+      summary: Update unification rule
+      description: Partially update an existing unification rule
       operationId: patchUnificationRule
+      security:
+        - bearerAuth: []
       parameters:
         - name: rule_id
           in: path
           required: true
+          description: Unique identifier of the rule
           schema:
             type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -185,30 +985,61 @@ paths:
               $ref: '#/components/schemas/UnificationRulePatch'
       responses:
         '200':
-          description: Unification rule retrieved
+          description: Rule updated successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UnificationRule'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Profile Unification]
       summary: Delete unification rule
+      description: Permanently delete a unification rule
       operationId: deleteUnificationRule
+      security:
+        - bearerAuth: []
       parameters:
         - name: rule_id
           in: path
           required: true
+          description: Unique identifier of the rule
           schema:
             type: string
+            format: uuid
       responses:
         '204':
           description: Rule deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
+  # ============================================================================
+  # Profile Enrichment Rules
+  # ============================================================================
   /enrichment-rules:
     post:
       tags: [Profile Enrichment]
-      summary: Create profile enrichment rule
+      summary: Create enrichment rule
+      description: |
+        Create a rule for automatically enriching profiles with computed attributes.
+        Rules can extract data from events, count occurrences, or set static values.
       operationId: createEnrichmentRule
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -218,48 +1049,87 @@ paths:
       responses:
         '201':
           description: Rule created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnrichmentRule'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     get:
       tags: [Profile Enrichment]
-      summary: Get all profile enrichment rules
-      operationId: getEnrichmentRules
+      summary: List enrichment rules
+      description: Retrieve all profile enrichment rules
+      operationId: listEnrichmentRules
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: Rule retrieved
+          description: Rules retrieved successfully
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ProfileEnrichmentRule'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /enrichment-rules/{rule_id}:
     get:
       tags: [Profile Enrichment]
-      summary: Get profile enrichment rule by ID
+      summary: Get enrichment rule
+      description: Retrieve details of a specific enrichment rule
       operationId: getEnrichmentRule
+      security:
+        - bearerAuth: []
       parameters:
         - name: rule_id
           in: path
           required: true
+          description: Unique identifier of the rule
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Trait retrieved successfully
+          description: Rule retrieved successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProfileEnrichmentRule'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     put:
       tags: [Profile Enrichment]
-      summary: Replace profile enrichment rule
-      operationId: putEnrichmentRule
+      summary: Replace enrichment rule
+      description: Completely replace an existing enrichment rule
+      operationId: replaceEnrichmentRule
+      security:
+        - bearerAuth: []
       parameters:
         - name: rule_id
           in: path
           required: true
+          description: Unique identifier of the rule
           schema:
             type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -269,25 +1139,58 @@ paths:
       responses:
         '200':
           description: Rule updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnrichmentRule'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Profile Enrichment]
-      summary: Delete profile enrichment rule
+      summary: Delete enrichment rule
+      description: Permanently delete an enrichment rule
       operationId: deleteEnrichmentRule
+      security:
+        - bearerAuth: []
       parameters:
         - name: rule_id
           in: path
           required: true
+          description: Unique identifier of the rule
           schema:
             type: string
+            format: uuid
       responses:
         '204':
           description: Rule deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
+  # ============================================================================
+  # Consent Management
+  # ============================================================================
   /consents:
     post:
-      tags: [consent]
-      summary: Give or update consent
-      operationId: giveConsent
+      tags: [Consent Management]
+      summary: Record consent
+      description: Record or update consent preferences for a profile
+      operationId: recordConsent
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -296,285 +1199,923 @@ paths:
               $ref: '#/components/schemas/Consent'
       responses:
         '201':
-          description: Consent saved successfully
+          description: Consent recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consent'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
   /consents/{profile_id}:
     get:
-      tags: [consent]
-      summary: Get all consents for a user
+      tags: [Consent Management]
+      summary: Get user consents
+      description: Retrieve all consent records for a specific profile
       operationId: getUserConsents
+      security:
+        - bearerAuth: []
       parameters:
         - name: profile_id
           in: path
           required: true
+          description: Unique identifier of the profile
+          schema:
+            type: string
+        - name: category_identifier
+          in: query
+          description: Filter by consent category identifier
           schema:
             type: string
       responses:
         '200':
-          description: List of consents
+          description: Consents retrieved successfully
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Consent'
-
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
-      tags: [consent]
-      summary: Revoke all consents for a user
-      operationId: revokeAllConsents
+      tags: [Consent Management]
+      summary: Revoke consents
+      description: |
+        Revoke all consents for a user, optionally filtered by consent type or category.
+        Without filters, revokes all consents for the profile.
+      operationId: revokeConsents
+      security:
+        - bearerAuth: []
       parameters:
         - name: profile_id
           in: path
           required: true
+          description: Unique identifier of the profile
           schema:
             type: string
         - name: consent_type
           in: query
           required: false
+          description: Filter by consent type
           schema:
             type: string
         - name: category
           in: query
           required: false
+          description: Filter by category identifier
           schema:
             type: string
       responses:
         '204':
-          description: Consent(s) revoked
+          description: Consent(s) revoked successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
+  # ============================================================================
+  # Consent Category Configuration
+  # ============================================================================
   /consent-categories:
     get:
-      tags: [Consent Configurations]
-      summary: Get all consent categories
-      operationId: getAllConsentCategories
+      tags: [Consent Configuration]
+      summary: List consent categories
+      description: Retrieve all configured consent categories
+      operationId: listConsentCategories
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: List of consent categories
+          description: Categories retrieved successfully
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ConsentCategory'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
-      tags: [Consent Configurations]
-      summary: Add consent category
-      operationId: addConsentCategory
+      tags: [Consent Configuration]
+      summary: Create consent category
+      description: Create a new consent category for organizing consent preferences
+      operationId: createConsentCategory
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentCategoryCreate'
       responses:
-        '200':
-          description: Consent category added successfully
+        '201':
+          description: Category created successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConsentCategory'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /consent-categories/{id}:
     get:
-      tags: [Consent Configurations]
+      tags: [Consent Configuration]
       summary: Get consent category
+      description: Retrieve details of a specific consent category
       operationId: getConsentCategory
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
           required: true
+          description: Unique identifier of the consent category
           schema:
             type: string
+            format: uuid
       responses:
         '200':
-          description: Consent category
+          description: Category retrieved successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConsentCategory'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     put:
-      tags: [Consent Configurations]
+      tags: [Consent Configuration]
       summary: Update consent category
+      description: Update an existing consent category
       operationId: updateConsentCategory
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
           required: true
+          description: Unique identifier of the consent category
           schema:
             type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentCategoryCreate'
       responses:
         '200':
-          description: Consent category updated
+          description: Category updated successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConsentCategory'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Consent Configuration]
+      summary: Delete consent category
+      description: Permanently delete a consent category
+      operationId: deleteConsentCategory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique identifier of the consent category
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Category deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ============================================================================
+  # Health Check Endpoints (Non-tenanted)
+  # ============================================================================
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: |
+        Check the health status of the service.
+        Note: This endpoint is non-tenanted and available at /cds/api/v1/health
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, unhealthy]
+                    example: healthy
+                  timestamp:
+                    type: integer
+                    format: int64
+                    example: 1744338858
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unhealthy
+                  error:
+                    type: string
+
+  /ready:
+    get:
+      tags: [System]
+      summary: Readiness check
+      description: |
+        Check if the service is ready to accept traffic.
+        Note: This endpoint is non-tenanted and available at /cds/api/v1/ready
+      operationId: readinessCheck
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: true
+                  timestamp:
+                    type: integer
+                    format: int64
+                    example: 1744338858
+        '503':
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: false
+                  reason:
+                    type: string
 
 components:
+  # =============================================================================
+  # Security Schemes
+  # =============================================================================
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT Bearer token authentication. Include scope-based permissions in token claims.
+        Required scopes are documented per endpoint.
+    basicAuth:
+      type: http
+      scheme: basic
+      description: |
+        Basic authentication using username and password.
+        Only used for admin sync operations.
+
+  # =============================================================================
+  # Reusable Response Definitions
+  # =============================================================================
+  responses:
+    BadRequestError:
+      description: Bad request - Invalid input data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "BAD_REQUEST"
+            message: "Invalid request parameters"
+            description: "The provided request body contains invalid or missing fields"
+    
+    UnauthorizedError:
+      description: Unauthorized - Authentication required or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "UNAUTHORIZED"
+            message: "Authentication required"
+            description: "Valid authentication credentials are required to access this resource"
+    
+    ForbiddenError:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "FORBIDDEN"
+            message: "Insufficient permissions"
+            description: "You do not have the required permissions to perform this operation"
+    
+    NotFoundError:
+      description: Not found - Resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "NOT_FOUND"
+            message: "Resource not found"
+            description: "The requested resource does not exist"
+    
+    ConflictError:
+      description: Conflict - Resource already exists or state conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "CONFLICT"
+            message: "Resource conflict"
+            description: "A resource with the same identifier already exists"
+    
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "INTERNAL_SERVER_ERROR"
+            message: "An unexpected error occurred"
+            description: "The server encountered an unexpected condition"
+
+  # =============================================================================
+  # Schema Definitions
+  # =============================================================================
   schemas:
+    # -------------------------------------------------------------------------
+    # Error Schema
+    # -------------------------------------------------------------------------
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+          example: "PROFILE_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Profile not found"
+        description:
+          type: string
+          description: Detailed error description
+          example: "The profile with ID '123' does not exist in the system"
+        trace_id:
+          type: string
+          description: Request trace identifier for debugging
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    # -------------------------------------------------------------------------
+    # Profile Schemas
+    # -------------------------------------------------------------------------
     Profile:
       type: object
       properties:
         profile_id:
           type: string
+          format: uuid
+          description: Unique identifier for the profile
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          description: User identifier from identity provider
+          example: "user123"
+        tenant_id:
+          type: string
+          description: Tenant identifier
+          example: "carbon.super"
         origin_country:
           type: string
-        identityAttributes:
-          example: {"email":"random@work.com"}
+          description: Country of origin
+          example: "US"
+        identity_attributes:
+          type: object
+          description: Core identity attributes
+          example:
+            email: "user@example.com"
+            phone: "+1234567890"
+            first_name: "John"
+            last_name: "Doe"
         traits:
           type: object
-          example: {"shopper":"true"}
-        applicationData:
-          type: array
-          items:
+          description: Custom profile traits and characteristics
+          example:
+            shopper: true
+            loyalty_tier: "gold"
+            preference_category: "electronics"
+        application_data:
+          type: object
+          description: Application-specific data
+          additionalProperties:
             $ref: '#/components/schemas/ApplicationData'
         profile_hierarchy:
           $ref: '#/components/schemas/ProfileHierarchy'
+        created_at:
+          type: integer
+          format: int64
+          description: Creation timestamp (Unix epoch)
+          example: 1744176544
+        updated_at:
+          type: integer
+          format: int64
+          description: Last update timestamp (Unix epoch)
+          example: 1744176544
+
+    ProfileCreate:
+      type: object
+      required:
+        - user_id
+      properties:
+        user_id:
+          type: string
+          description: User identifier from identity provider
+        origin_country:
+          type: string
+          description: Country of origin
+        identity_attributes:
+          type: object
+          description: Core identity attributes
+        traits:
+          type: object
+          description: Custom profile traits
+        application_data:
+          type: object
+          description: Application-specific data
+
+    ProfileUpdate:
+      type: object
+      properties:
+        origin_country:
+          type: string
+          description: Country of origin
+        identity_attributes:
+          type: object
+          description: Core identity attributes to update
+        traits:
+          type: object
+          description: Custom profile traits to update
+        application_data:
+          type: object
+          description: Application-specific data to update
 
     ProfileHierarchy:
       type: object
+      description: Profile hierarchy for unified profiles
       properties:
         permanent_profile_id:
           type: string
+          format: uuid
+          description: ID of the permanent (unified) profile
+          example: "550e8400-e29b-41d4-a716-446655440000"
         is_permanent:
           type: boolean
+          description: Whether this is a permanent profile
+          example: true
         list_profile:
           type: boolean
+          description: Whether to list this profile
+          example: true
         temporary_profile_ids:
           type: array
+          description: List of temporary profiles unified into this one
           items:
             $ref: '#/components/schemas/TemporaryProfile'
-
-    ApplicationData:
-      type: object
-      properties:
-        application_id:
-          type: string
-          example: "40497337-e8bf-4d92-9545-711894ab2af3"
-        devices:
-          type: array
-          items:
-            $ref: '#/components/schemas/Device'
-
-    Device:
-      type: object
-      properties:
-        device_id:
-          type: string
-          format: uuid
-          example: "e8bf7337-4049-4d92-9545-711894ab2af3"
-        last_used:
-          type: integer
-          format: int64
-          description: Unix epoch timestamp
-          example: 1744338858
-        os:
-          type: string
-          example: "macOS"
-        browser:
-          type: string
-          example: "Chrome"
-      required:
-        - device_id
-        - last_used
-        - os
-        - browser
 
     TemporaryProfile:
       type: object
       properties:
         temporary_profile_id:
           type: string
+          format: uuid
+          description: ID of the temporary profile
+          example: "660e8400-e29b-41d4-a716-446655440001"
         rule_name:
           type: string
+          description: Name of the unification rule that merged this profile
+          example: "email_matching"
 
-    Event:
+
+    # -------------------------------------------------------------------------
+    # Application Data Schemas
+    # -------------------------------------------------------------------------
+    ApplicationData:
       type: object
       properties:
+        application_id:
+          type: string
+          format: uuid
+          description: Unique identifier of the application
+          example: "40497337-e8bf-4d92-9545-711894ab2af3"
+        devices:
+          type: array
+          description: Devices used by this profile in this application
+          items:
+            $ref: '#/components/schemas/Device'
+        custom_data:
+          type: object
+          description: Application-specific custom data
+          additionalProperties: true
+
+    Device:
+      type: object
+      required:
+        - device_id
+        - last_used
+        - os
+        - browser
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          description: Unique device identifier
+          example: "e8bf7337-4049-4d92-9545-711894ab2af3"
+        last_used:
+          type: integer
+          format: int64
+          description: Last usage timestamp (Unix epoch)
+          example: 1744338858
+        os:
+          type: string
+          description: Operating system
+          example: "macOS"
+        browser:
+          type: string
+          description: Browser name
+          example: "Chrome"
+        os_version:
+          type: string
+          description: Operating system version
+          example: "14.1"
+        browser_version:
+          type: string
+          description: Browser version
+          example: "120.0.0"
+
+
+    # -------------------------------------------------------------------------
+    # Event Schemas
+    # -------------------------------------------------------------------------
+    Event:
+      type: object
+      required:
+        - profile_id
+        - event_type
+        - event_name
+        - application_id
+        - org_id
+        - event_timestamp
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          description: Unique event identifier
+          example: "770e8400-e29b-41d4-a716-446655440002"
         profile_id:
           type: string
-          example: "abcd"
+          description: Profile identifier associated with the event
+          example: "550e8400-e29b-41d4-a716-446655440000"
         event_type:
           type: string
+          description: Type of event
+          enum: [track, page, identify, alias]
           example: "track"
         event_name:
           type: string
+          description: Name of the event
           example: "add_to_cart"
-        event_id:
-          type: string
-          example: "random uuid"
         application_id:
           type: string
-          example: "application id"
+          description: Application that generated the event
+          example: "app_12345"
         org_id:
           type: string
+          description: Organization/tenant identifier
           example: "vanheim"
         event_timestamp:
           type: integer
-          example: "1744338743"
+          format: int64
+          description: Event timestamp (Unix epoch)
+          example: 1744338743
         properties:
           type: object
-          example: {"action": "click",
-                    "object_name": "Educational #2",
-                    "object_type": "product",
-                    "value": "49.65"
-          }
+          description: Event-specific properties
+          additionalProperties: true
+          example:
+            action: "click"
+            object_name: "Educational #2"
+            object_type: "product"
+            value: 49.65
         context:
           type: object
-          example: {"browser": "Chrome",
-                    "device_id": "40497337-e8bf-4d92-9545-711894ab2af3",
-                    "locale": "en-US",
-                    "os": "macOS",
-                    "timezone": "Asia/Colombo",
-                    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
-          }
+          description: Event context (device, location, etc.)
+          properties:
+            browser:
+              type: string
+              example: "Chrome"
+            device_id:
+              type: string
+              format: uuid
+              example: "40497337-e8bf-4d92-9545-711894ab2af3"
+            locale:
+              type: string
+              example: "en-US"
+            os:
+              type: string
+              example: "macOS"
+            timezone:
+              type: string
+              example: "Asia/Colombo"
+            user_agent:
+              type: string
+              example: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            ip:
+              type: string
+              example: "192.168.1.10"
 
+
+    # -------------------------------------------------------------------------
+    # Profile Schema Management Schemas
+    # -------------------------------------------------------------------------
+    ProfileSchema:
+      type: object
+      description: Complete profile schema definition
+      properties:
+        schema_id:
+          type: string
+          format: uuid
+          description: Unique schema identifier
+        tenant_id:
+          type: string
+          description: Tenant identifier
+        scopes:
+          type: object
+          description: Schema organized by scopes
+          properties:
+            traits:
+              type: array
+              items:
+                $ref: '#/components/schemas/SchemaAttribute'
+            application_data:
+              type: array
+              items:
+                $ref: '#/components/schemas/SchemaAttribute'
+        created_at:
+          type: integer
+          format: int64
+          description: Creation timestamp
+        updated_at:
+          type: integer
+          format: int64
+          description: Last update timestamp
+
+    SchemaAttribute:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        attribute_id:
+          type: string
+          format: uuid
+          description: Unique attribute identifier
+          example: "880e8400-e29b-41d4-a716-446655440003"
+        name:
+          type: string
+          description: Attribute name
+          example: "loyalty_tier"
+        display_name:
+          type: string
+          description: Human-readable display name
+          example: "Loyalty Tier"
+        type:
+          type: string
+          description: Data type of the attribute
+          enum: [string, integer, number, boolean, object, array]
+          example: "string"
+        mutability:
+          type: string
+          description: Mutability level
+          enum: [READ_WRITE, READ_ONLY, IMMUTABLE]
+          default: READ_WRITE
+          example: "READ_WRITE"
+        required:
+          type: boolean
+          description: Whether the attribute is required
+          default: false
+        description:
+          type: string
+          description: Attribute description
+          example: "Customer loyalty program tier"
+        default_value:
+          description: Default value for the attribute
+        validation:
+          type: object
+          description: Validation rules
+          properties:
+            min:
+              type: number
+              description: Minimum value (for numbers)
+            max:
+              type: number
+              description: Maximum value (for numbers)
+            pattern:
+              type: string
+              description: Regex pattern (for strings)
+            enum:
+              type: array
+              description: Allowed values
+              items:
+                type: string
+        created_at:
+          type: integer
+          format: int64
+          description: Creation timestamp
+        updated_at:
+          type: integer
+          format: int64
+          description: Last update timestamp
+
+    # -------------------------------------------------------------------------
+    # Enrichment Rule Schemas
+    # -------------------------------------------------------------------------
     ProfileEnrichmentRule:
       type: object
+      required:
+        - property_name
+        - value_type
+        - computation_method
       properties:
         rule_id:
           type: string
+          format: uuid
+          description: Unique rule identifier
+          example: "990e8400-e29b-41d4-a716-446655440004"
         property_name:
           type: string
+          description: Name of the property to enrich
+          example: "total_purchases"
         description:
           type: string
+          description: Rule description
+          example: "Count total number of purchase events"
         value:
-          type: object
+          description: Static value (for static computation method)
+          example: "vip_customer"
         value_type:
           type: string
+          description: Data type of the enriched value
+          enum: [string, integer, number, boolean, object, array]
+          example: "integer"
         computation_method:
           type: string
-          enum: [static, extract, count]
+          description: How to compute the enriched value
+          enum: [static, extract, count, sum, average, min, max]
+          example: "count"
         source_field:
           type: string
+          description: Source field path for extract method
+          example: "properties.product_id"
         time_range:
           type: string
+          description: Time range for aggregations (e.g., "30d", "1y")
+          example: "30d"
         merge_strategy:
           type: string
+          description: How to merge with existing values
           enum: [overwrite, combine, ignore]
+          default: overwrite
+          example: "overwrite"
         trigger:
           $ref: '#/components/schemas/RuleTrigger'
+        is_active:
+          type: boolean
+          description: Whether the rule is active
+          default: true
+        tenant_id:
+          type: string
+          description: Tenant identifier
         created_at:
           type: integer
+          format: int64
+          description: Creation timestamp
         updated_at:
           type: integer
+          format: int64
+          description: Last update timestamp
 
     RuleTrigger:
       type: object
+      description: Conditions that trigger rule evaluation
       properties:
         event_type:
           type: string
+          description: Event type that triggers the rule
+          example: "track"
         event_name:
           type: string
+          description: Specific event name
+          example: "purchase_completed"
         conditions:
           type: array
+          description: Additional conditions
           items:
             $ref: '#/components/schemas/RuleCondition'
 
     RuleCondition:
       type: object
+      required:
+        - field
+        - operator
+        - value
       properties:
         field:
           type: string
+          description: Field path to evaluate
+          example: "properties.amount"
         operator:
           type: string
+          description: Comparison operator
+          enum: [eq, ne, gt, gte, lt, lte, in, contains, exists]
+          example: "gt"
         value:
-          type: string
+          description: Value to compare against
+          example: 100
 
+
+    # -------------------------------------------------------------------------
+    # Unification Rule Schemas
+    # -------------------------------------------------------------------------
     UnificationRule:
       type: object
       required:
@@ -586,24 +2127,30 @@ components:
         rule_id:
           type: string
           format: uuid
-          description: Unique identifier for the resolution rule
+          description: Unique identifier for the unification rule
           example: "5af4235d-b95e-4b5b-9429-c9021e653361"
         rule_name:
           type: string
           description: Descriptive name for the rule
-          example: "user id based"
+          example: "user_id_based"
+          minLength: 1
+          maxLength: 100
         attribute:
           type: string
-          description: Attribute path to be used for unification
-          example: "identity.user_id"
+          description: Attribute path to be used for unification (e.g., identity_attributes.email)
+          example: "identity_attributes.user_id"
         priority:
           type: integer
-          description: Priority of the rule (lower number = higher priority)
+          description: Priority of the rule (lower number = higher priority, must be >= 1)
+          minimum: 1
           example: 1
         is_active:
           type: boolean
           description: Whether the rule is currently active
           example: true
+        tenant_id:
+          type: string
+          description: Tenant identifier
         created_at:
           type: integer
           format: int64
@@ -615,21 +2162,142 @@ components:
           description: UNIX timestamp of last update
           example: 1744176544
 
-    UnificationRulePatch:
+    UnificationRuleCreate:
       type: object
+      required:
+        - rule_name
+        - attribute
+        - priority
       properties:
         rule_name:
           type: string
           description: Descriptive name for the rule
-          example: "user id based"
+          example: "email_matching"
+          minLength: 1
+          maxLength: 100
+        attribute:
+          type: string
+          description: Attribute path to be used for unification
+          example: "identity_attributes.email"
         priority:
           type: integer
           description: Priority of the rule (lower number = higher priority)
-          example: 1
+          minimum: 1
+          example: 2
+        is_active:
+          type: boolean
+          description: Whether the rule should be active
+          default: true
+
+    UnificationRulePatch:
+      type: object
+      description: Partial update for unification rule
+      properties:
+        rule_name:
+          type: string
+          description: Descriptive name for the rule
+          example: "updated_rule_name"
+          minLength: 1
+          maxLength: 100
+        priority:
+          type: integer
+          description: Priority of the rule (lower number = higher priority)
+          minimum: 1
+          example: 3
         is_active:
           type: boolean
           description: Whether the rule is currently active
+          example: false
+
+
+    # -------------------------------------------------------------------------
+    # Consent Schemas
+    # -------------------------------------------------------------------------
+    Consent:
+      type: object
+      required:
+        - profile_id
+        - application_id
+        - category_identifier
+        - granted
+        - consent_channel
+        - timestamp
+      properties:
+        consent_id:
+          type: string
+          format: uuid
+          description: Unique consent record identifier
+          example: "6d2ff26e-12aa-4b3d-b1d6-c7f7b6b7c7e1"
+        profile_id:
+          type: string
+          description: Profile identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        application_id:
+          type: string
+          description: Application identifier
+          example: "app_12345"
+        category_identifier:
+          type: string
+          description: Consent category identifier
+          example: "analytics"
+        granted:
+          type: boolean
+          description: Whether consent is granted or revoked
           example: true
+        consent_channel:
+          type: string
+          description: Channel through which consent was given
+          enum: [web, mobile, email, api, in_person]
+          example: "web"
+        timestamp:
+          type: integer
+          format: int64
+          description: Consent timestamp (Unix epoch)
+          example: 1744339000
+        source_ip:
+          type: string
+          description: IP address from which consent was given
+          example: "192.168.1.10"
+        user_agent:
+          type: string
+          description: User agent string
+          example: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+        geolocation:
+          type: object
+          description: Geographic location information
+          properties:
+            country:
+              type: string
+              example: "US"
+            region:
+              type: string
+              example: "California"
+            city:
+              type: string
+              example: "San Francisco"
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+
+    ConsentUpdate:
+      type: object
+      required:
+        - category_identifier
+        - granted
+      properties:
+        category_identifier:
+          type: string
+          description: Consent category identifier
+          example: "marketing"
+        granted:
+          type: boolean
+          description: Whether to grant or revoke consent
+          example: true
+        consent_channel:
+          type: string
+          description: Channel through which consent is being updated
+          example: "web"
 
     ConsentCategory:
       type: object
@@ -641,64 +2309,86 @@ components:
         id:
           type: string
           format: uuid
-          example: 7fa06d1e-688f-481b-8263-29c1f5ce1493
+          description: Unique category identifier
+          example: "7fa06d1e-688f-481b-8263-29c1f5ce1493"
         category_name:
           type: string
-          example: User behavior analytics
+          description: Human-readable category name
+          example: "User behavior analytics"
+          minLength: 1
+          maxLength: 100
         category_identifier:
           type: string
-          example: analytics
+          description: Machine-readable category identifier
+          example: "analytics"
+          pattern: '^[a-z0-9_]+$'
+          minLength: 1
+          maxLength: 50
         purpose:
           type: string
-          enum: [profiling, personalization, destination]
+          description: Purpose of the consent category
+          enum: [profiling, personalization, destination, analytics, marketing, necessary]
+          example: "analytics"
+        description:
+          type: string
+          description: Detailed description of the category
+          example: "Collect and analyze user behavior data to improve service quality"
         destinations:
           type: array
+          description: Data destination identifiers for this category
           items:
             type: string
-
-    Consent:
-      type: object
-      required:
-        - profile_id
-        - application_id
-        - consent_type
-        - granted
-        - categories
-        - consent_channel
-        - timestamp
-      properties:
-        consent_id:
+          example: ["google_analytics", "mixpanel"]
+        tenant_id:
           type: string
-          format: uuid
-          example: "6d2ff26e-12aa-4b3d-b1d6-c7f7b6b7c7e1"
-        profile_id:
-          type: string
-          example: "12345"
-        application_id:
-          type: string
-          example: "custodian_client_app"
-        category_identifier:
-          type: string
-          example: "analytics"
-        granted:
+          description: Tenant identifier
+        is_required:
           type: boolean
-          example: true
-        consent_channel:
-          type: string
-          description: Source of consent
-          example: "web"
-        timestamp:
+          description: Whether consent for this category is required
+          default: false
+        created_at:
           type: integer
           format: int64
-          example: 1744339000
-        source_ip:
+          description: Creation timestamp
+        updated_at:
+          type: integer
+          format: int64
+          description: Last update timestamp
+
+    ConsentCategoryCreate:
+      type: object
+      required:
+        - category_name
+        - category_identifier
+        - purpose
+      properties:
+        category_name:
           type: string
-          example: "192.168.1.10"
-        user_agent:
+          description: Human-readable category name
+          example: "Marketing communications"
+          minLength: 1
+          maxLength: 100
+        category_identifier:
           type: string
-          example: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-#        bearerFormat: JWT  # ⚠️ Optional. You can even remove this if you allow both JWT & opaque.
+          description: Machine-readable category identifier
+          example: "marketing"
+          pattern: '^[a-z0-9_]+$'
+          minLength: 1
+          maxLength: 50
+        purpose:
+          type: string
+          description: Purpose of the consent category
+          enum: [profiling, personalization, destination, analytics, marketing, necessary]
+          example: "marketing"
+        description:
+          type: string
+          description: Detailed description of the category
+        destinations:
+          type: array
+          description: Data destination identifiers
+          items:
+            type: string
+        is_required:
+          type: boolean
+          description: Whether consent is required
+          default: false
