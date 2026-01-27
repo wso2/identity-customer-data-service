@@ -169,7 +169,7 @@ var (
 
 	FORBIDDEN = ErrorMessage{
 		Code:        errorPrefix + "10003",
-		Message:     "ForBidden",
+		Message:     "Forbidden",
 		Description: "You do not have enough permission to access this resource.",
 	}
 
@@ -180,7 +180,7 @@ var (
 	}
 
 	ADD_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "110002",
+		Code:    errorPrefix + "11002",
 		Message: "Profile addition failed.",
 	}
 
@@ -199,57 +199,57 @@ var (
 		Message: "Creating profile cookie failed.",
 	}
 	GET_PROFILE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11005",
+		Code:    errorPrefix + "11006",
 		Message: "Fetching profile cookie failed.",
 	}
 
 	UPDATE_PROFILE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11006",
+		Code:    errorPrefix + "11007",
 		Message: "Updating profile cookie failed.",
 	}
 
 	PROFILE_COOKIE_NOT_FOUND = ErrorMessage{
-		Code:    errorPrefix + "11007",
+		Code:    errorPrefix + "11008",
 		Message: "Profile cookie not found.",
 	}
 
 	DELETE_PROFILE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11008",
+		Code:    errorPrefix + "11009",
 		Message: "Deleting profile cookie failed.",
 	}
 
 	FILTER_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11009",
+		Code:    errorPrefix + "11010",
 		Message: "Filtering profiles failed.",
 	}
 
 	UPDATE_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11010",
+		Code:    errorPrefix + "11011",
 		Message: "Profile update failed.",
 	}
 
 	DELETE_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11011",
+		Code:    errorPrefix + "11012",
 		Message: "Profile deletion failed.",
 	}
 
 	ADD_APP_DATA = ErrorMessage{
-		Code:    errorPrefix + "11012",
+		Code:    errorPrefix + "11013",
 		Message: "Add app data failed.",
 	}
 
 	GET_APP_DATA = ErrorMessage{
-		Code:    errorPrefix + "11013",
+		Code:    errorPrefix + "11014",
 		Message: "Fetching app data failed.",
 	}
 
 	UPDATE_APP_DATA = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "11015",
 		Message: "Updating app data failed.",
 	}
 
 	MULTIPLE_PROFILE_FOUND = ErrorMessage{
-		Code:        errorPrefix + "11015",
+		Code:        errorPrefix + "11016",
 		Message:     "Multiple Profiles found.",
 		Description: "Multiple user profiles record found for the given user_id",
 	}

@@ -78,7 +78,7 @@ datasource:
   port: 5432
   username: "postgres"
   password: "${DB_PASSWORD}"
-  name: "internal_cds_db"
+  name: "cds_db"
   sslmode: disable
 
 tls:
