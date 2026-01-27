@@ -89,6 +89,11 @@ var (
 		Message: "Error while fetching SCIM user.",
 	}
 
+	GET_APPLICATIONS_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15111",
+		Message: "Error while fetching applications.",
+	}
+
 	ADD_UNIFICATION_RULE = ErrorMessage{
 		Code:    errorPrefix + "15201",
 		Message: "Error while adding unification rules.",
@@ -292,6 +297,11 @@ var (
 	ATTRIBUTE_NOT_FOUND = ErrorMessage{
 		Code:    errorPrefix + "13004",
 		Message: "Attribute not found.",
+	}
+
+	INVALID_APP_IDENTIFIER = ErrorMessage{
+		Code:    errorPrefix + "13005",
+		Message: "Invalid application identifier.",
 	}
 
 	CONSENT_CAT_VALIDATION = ErrorMessage{

@@ -88,7 +88,7 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 			// For application_data attributes, check both attribute name AND application identifier
 			if scope == constants.ApplicationData {
 				if existing.ApplicationIdentifier == attr.ApplicationIdentifier {
-					errorMsg := fmt.Sprintf("Attribute '%s' already exists for application '%s' in org '%s'", 
+					errorMsg := fmt.Sprintf("Attribute '%s' already exists for application '%s' in org '%s'",
 						attr.AttributeName, attr.ApplicationIdentifier, attr.OrgId)
 					clientError := errors2.NewClientError(errors2.ErrorMessage{
 						Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
@@ -136,7 +136,6 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		return clientError, false
 	}
 
-	// todo: see if we need to follow any regex validation for the attribute name
 	scope := parts[0]
 	if !constants.AllowedAttributesScope[scope] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -154,6 +153,19 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
 				Description: "Application identifier is required for application_data scope",
+			}, http.StatusBadRequest)
+			return clientError, false
+		}
+
+		err, isValidApplicationIdentifier := isValidApplicationIdentifier(attr.ApplicationIdentifier, attr.OrgId)
+		if err != nil {
+			return err, false
+		}
+		if !isValidApplicationIdentifier {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_APP_IDENTIFIER.Code,
+				Message:     errors2.INVALID_APP_IDENTIFIER.Message,
+				Description: fmt.Sprintf("Invalid application identifier: %s", attr.ApplicationIdentifier),
 			}, http.StatusBadRequest)
 			return clientError, false
 		}
@@ -256,6 +268,19 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		return clientError, false
 	}
 	return nil, true
+}
+
+func isValidApplicationIdentifier(appID, orgHandle string) (error, bool) {
+	cfg := config.GetCDSRuntime().Config
+	identityClient := client.NewIdentityClient(cfg)
+
+	res, err := identityClient.FetchApplicationIdentifier(appID, orgHandle)
+	if err != nil {
+		return err, false
+	}
+
+	// must be exactly one match
+	return nil, len(res.Applications) == 1
 }
 
 func (s *ProfileSchemaService) GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error) {

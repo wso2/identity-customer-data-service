@@ -76,9 +76,8 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
 			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
-			Description: "Identity attributes cannot be created via this endpoint. Use the user management instead.",
+			Description: "Identity attributes cannot be created via this endpoint.",
 		}, http.StatusBadRequest)
-		//todo: decide on the status code
 		utils.WriteErrorResponse(w, clientError)
 		return
 	}

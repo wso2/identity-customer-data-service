@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	idpModel "github.com/wso2/identity-customer-data-service/internal/identity_provider/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 
 	"github.com/google/uuid"
@@ -271,6 +272,74 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 	}
 
 	return result.AccessToken, nil
+}
+
+// FetchApplicationIdentifier fetches the application ID for a given application identifier (clientId or issuer)
+func (c *IdentityClient) FetchApplicationIdentifier(applicationIdentifier, orgHandle string) (idpModel.ApplicationsListResponse, error) {
+
+	logger := log.GetLogger()
+	var result idpModel.ApplicationsListResponse
+	filter := fmt.Sprintf(`clientId eq "%s" or issuer eq "%s"`, applicationIdentifier, applicationIdentifier)
+	base := fmt.Sprintf("https://%s/t/%s/api/server/v1/applications", c.BaseURL, orgHandle)
+	u, err := url.Parse(base)
+	if err != nil {
+		return result, err
+	}
+
+	q := u.Query()
+	q.Set("filter", filter)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return result, err
+	}
+
+	token, err := c.FetchToken(orgHandle)
+	if err != nil {
+		logger.Debug(fmt.Sprintf("Failed to get token for org: %s", orgHandle), log.Error(err))
+		return result, err
+	}
+
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to fetch applications for org: %s", orgHandle)
+		return result, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APPLICATIONS_FAILED.Code,
+			Message:     errors2.GET_APPLICATIONS_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		errorMsg := fmt.Sprintf("Failed to fetch applications for org: %s", orgHandle)
+		return result, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APPLICATIONS_FAILED.Code,
+			Message:     errors2.GET_APPLICATIONS_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		errorMsg := fmt.Sprintf("Failed to parse applications response for org: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return result, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APPLICATIONS_FAILED.Code,
+			Message:     errors2.GET_APPLICATIONS_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	return result, nil
 }
 
 // IntrospectToken introspects an opaque token using the introspection endpoint.
