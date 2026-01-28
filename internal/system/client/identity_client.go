@@ -326,7 +326,7 @@ func (c *IdentityClient) FetchApplicationIdentifier(applicationIdentifier, orgHa
 			Code:        errors2.GET_APPLICATIONS_FAILED.Code,
 			Message:     errors2.GET_APPLICATIONS_FAILED.Message,
 			Description: errorMsg,
-		}, err)
+		}, fmt.Errorf("applications endpoint returned status: %d", resp.StatusCode))
 	}
 
 	if err := json.Unmarshal(body, &result); err != nil {
