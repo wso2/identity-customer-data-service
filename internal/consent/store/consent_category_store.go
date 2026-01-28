@@ -55,7 +55,7 @@ func AddConsentCategory(category model.ConsentCategory) error {
 		}, err)
 		return serverError
 	}
-	_, err = tx.Exec(query, category.CategoryName, category.CategoryIdentifier, category.TenantId, category.Purpose, pq.Array(category.Destinations))
+	_, err = tx.Exec(query, category.CategoryName, category.CategoryIdentifier, category.OrgHandle, category.Purpose, pq.Array(category.Destinations))
 	if err != nil {
 		errRollback := tx.Rollback()
 		if errRollback != nil {
@@ -112,7 +112,7 @@ func GetAllConsentCategories() ([]model.ConsentCategory, error) {
 		categories = append(categories, model.ConsentCategory{
 			CategoryName:       row["category_name"].(string),
 			CategoryIdentifier: row["category_identifier"].(string),
-			TenantId:           row["tenant_id"].(string),
+			OrgHandle:           row["org_handle"].(string),
 			Purpose:            row["purpose"].(string),
 			Destinations:       parseStringArray(row["destinations"]),
 		})
@@ -161,7 +161,7 @@ func GetConsentCategoryByID(id string) (*model.ConsentCategory, error) {
 	category := model.ConsentCategory{
 		CategoryName:       row["category_name"].(string),
 		CategoryIdentifier: row["category_identifier"].(string),
-		TenantId:           row["tenant_id"].(string),
+		OrgHandle:           row["org_handle"].(string),
 		Purpose:            row["purpose"].(string),
 		Destinations:       parseStringArray(row["destinations"]),
 	}
@@ -204,7 +204,7 @@ func GetConsentCategoryByName(name string) (*model.ConsentCategory, error) {
 	category := model.ConsentCategory{
 		CategoryName:       row["category_name"].(string),
 		CategoryIdentifier: row["category_identifier"].(string),
-		TenantId:           row["tenant_id"].(string),
+		OrgHandle:           row["org_handle"].(string),
 		Purpose:            row["purpose"].(string),
 		Destinations:       parseStringArray(row["destinations"]),
 	}

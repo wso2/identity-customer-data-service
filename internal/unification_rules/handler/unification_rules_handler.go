@@ -76,7 +76,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	now := time.Now().UTC().Unix()
 	rule := model.UnificationRule{
 		RuleId:       uuid.New().String(),
-		TenantId:     orgHandle,
+		OrgHandle:     orgHandle,
 		RuleName:     ruleInRequest.RuleName,
 		PropertyName: ruleInRequest.PropertyName,
 		Priority:     ruleInRequest.Priority,

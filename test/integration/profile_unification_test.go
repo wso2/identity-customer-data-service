@@ -103,7 +103,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	jsonData := []byte(`{
         "rule_name": "` + EmailBased + `",
 		"rule_id": "` + emailRuleId + `",
-		"tenant_id": "` + SuperTenantOrg + `",
+		"org_handle": "` + SuperTenantOrg + `",
         "property_name": "identity_attributes.email",
         "priority": 1,
         "is_active": true
@@ -122,7 +122,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	jsonData = []byte(`{
         "rule_name": "` + PhoneBased + `",
 		"rule_id": "` + phoneRuleId + `",
-		"tenant_id": "` + SuperTenantOrg + `",
+		"org_handle": "` + SuperTenantOrg + `",
         "property_name": "identity_attributes.phone_number",
         "priority": 2,
         "is_active": true
@@ -340,7 +340,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		jsonData := []byte(`{
 	   "rule_name": "` + EmailBased + `",
 		"rule_id": "` + emailRuleId + `",
-		"tenant_id": "` + OtherTenant + `",
+		"org_handle": "` + OtherTenant + `",
 	   "property_name": "identity_attributes.email",
 	   "priority": 1,
 	   "is_active": true

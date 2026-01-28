@@ -94,7 +94,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 	userIdRuleId := uuid.New().String()
 	userIdRule := model.UnificationRule{
 		RuleId:       userIdRuleId,
-		TenantId:     SuperTenantOrg,
+		OrgHandle:     SuperTenantOrg,
 		RuleName:     UserIdBased,
 		PropertyName: "identity_attributes.user_id",
 		Priority:     0,
@@ -107,7 +107,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 	emailRuleId := uuid.New().String()
 	emailRule := model.UnificationRule{
 		RuleId:       emailRuleId,
-		TenantId:     SuperTenantOrg,
+		OrgHandle:     SuperTenantOrg,
 		RuleName:     EmailBased,
 		PropertyName: "identity_attributes.email",
 		Priority:     1,
@@ -120,7 +120,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 	phoneRuleId := uuid.New().String()
 	phoneRule := model.UnificationRule{
 		RuleId:       phoneRuleId,
-		TenantId:     SuperTenantOrg,
+		OrgHandle:     SuperTenantOrg,
 		RuleName:     PhoneBased,
 		PropertyName: "identity_attributes.phone_number",
 		Priority:     2,

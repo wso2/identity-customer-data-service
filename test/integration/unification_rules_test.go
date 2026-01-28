@@ -46,7 +46,7 @@ func Test_UnificationRule(t *testing.T) {
 	jsonData := []byte(`{
         "rule_name": "Email based",
 		"rule_id": "` + uuid.New().String() + `",
-		"tenant_id": "` + SuperTenantOrg + `",
+		"org_handle": "` + SuperTenantOrg + `",
         "property_name": "identity_attributes.email",
         "priority": 1,
         "is_active": true
@@ -100,7 +100,7 @@ func Test_UnificationRule(t *testing.T) {
 		jsonData := []byte(`{
         "rule_name": "Email based",
 		"rule_id": "` + uuid.New().String() + `",
-		"tenant_id": "` + SuperTenantOrg + `",
+		"org_handle": "` + SuperTenantOrg + `",
         "property_name": "traits.orders.payment",
         "priority": 2,
         "is_active": true

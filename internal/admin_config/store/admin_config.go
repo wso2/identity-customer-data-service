@@ -27,12 +27,12 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
-func GetAdminConfig(tenantId string) (*model.AdminConfig, error) {
+func GetAdminConfig(orgHandle string) (*model.AdminConfig, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get db client for fetching configurations for the organization: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to get db client for fetching configurations for the organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_ADMIN_CONFIG.Code,
@@ -43,9 +43,9 @@ func GetAdminConfig(tenantId string) (*model.AdminConfig, error) {
 	defer dbClient.Close()
 
 	query := scripts.GetOrgConfigurations[provider.NewDBProvider().GetDBType()]
-	results, err := dbClient.ExecuteQuery(query, tenantId)
+	results, err := dbClient.ExecuteQuery(query, orgHandle)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to execute query for fetching configurations for organization: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to execute query for fetching configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_ADMIN_CONFIG.Code,
@@ -55,12 +55,12 @@ func GetAdminConfig(tenantId string) (*model.AdminConfig, error) {
 	}
 
 	if len(results) == 0 {
-		logger.Warn(fmt.Sprintf("No configurations found for organization: %s", tenantId))
+		logger.Warn(fmt.Sprintf("No configurations found for organization: %s", orgHandle))
 		return nil, nil
 	}
 	row := results[0]
 	config := model.AdminConfig{
-		TenantId:              row["tenant_id"].(string),
+		OrgHandle:              row["org_handle"].(string),
 		CDSEnabled:            row["cds_enabled"].(bool),
 		InitialSchemaSyncDone: row["initial_schema_sync_done"].(bool),
 	}
@@ -68,12 +68,12 @@ func GetAdminConfig(tenantId string) (*model.AdminConfig, error) {
 }
 
 // UpdateAdminConfig updates organization-level admin configuration (e.g., CDS enablement, schema sync flags).
-func UpdateAdminConfig(config model.AdminConfig, tenantId string) error {
+func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get DB client for updating configurations for tenant: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to get DB client for updating configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
@@ -85,7 +85,7 @@ func UpdateAdminConfig(config model.AdminConfig, tenantId string) error {
 
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to begin transaction for updating configurations for tenant: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to begin transaction for updating configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
@@ -95,10 +95,10 @@ func UpdateAdminConfig(config model.AdminConfig, tenantId string) error {
 	}
 
 	query := scripts.UpdateOrgConfigurations[provider.NewDBProvider().GetDBType()]
-	_, err = tx.Exec(query, config.CDSEnabled, config.InitialSchemaSyncDone, tenantId)
+	_, err = tx.Exec(query, config.CDSEnabled, config.InitialSchemaSyncDone, orgHandle)
 	if err != nil {
 		_ = tx.Rollback()
-		errorMsg := fmt.Sprintf("Failed to execute update for configurations for tenant: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to execute update for configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
@@ -111,12 +111,12 @@ func UpdateAdminConfig(config model.AdminConfig, tenantId string) error {
 }
 
 // UpdateInitialSchemaSyncConfig updates organization-level admin configuration (e.g., CDS enablement, schema sync flags).
-func UpdateInitialSchemaSyncConfig(state bool, tenantId string) error {
+func UpdateInitialSchemaSyncConfig(state bool, orgHandle string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get DB client for updating configurations for tenant: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to get DB client for updating configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
@@ -128,7 +128,7 @@ func UpdateInitialSchemaSyncConfig(state bool, tenantId string) error {
 
 	tx, err := dbClient.BeginTx()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to begin transaction for updating configurations for tenant: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to begin transaction for updating configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
@@ -138,10 +138,10 @@ func UpdateInitialSchemaSyncConfig(state bool, tenantId string) error {
 	}
 
 	query := scripts.UpdateInitialSchemaSyncDoneConfig[provider.NewDBProvider().GetDBType()]
-	_, err = tx.Exec(query, state, tenantId)
+	_, err = tx.Exec(query, state, orgHandle)
 	if err != nil {
 		_ = tx.Rollback()
-		errorMsg := fmt.Sprintf("Failed to execute update for configurations for tenant: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to execute update for configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
