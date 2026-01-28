@@ -31,6 +31,11 @@ func Test_ProfileSchemaService(t *testing.T) {
 	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 	svc := schemaService.GetProfileSchemaService()
 
+	restore := schemaService.OverrideValidateApplicationIdentifierForTest(
+		// bypass app verification with IDP
+		func(appID, org string) (error, bool) { return nil, true })
+	defer restore()
+
 	t.Run("Add Operations", func(t *testing.T) {
 
 		t.Run("Add_ValidAttributes_ShouldSucceed", func(t *testing.T) {
@@ -73,7 +78,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			err = svc.AddProfileSchemaAttributesForScope(appData, constants.ApplicationData, SuperTenantOrg)
 			require.NoError(t, err, "Failed to add application_data attributes")
 
-			_ = svc.DeleteProfileSchema(SuperTenantOrg)	
+			_ = svc.DeleteProfileSchema(SuperTenantOrg)
 			_ = svc.DeleteProfileSchemaAttributesByScope(SuperTenantOrg, constants.IdentityAttributes)
 		})
 
@@ -129,7 +134,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			schema, err := svc.GetProfileSchema(SuperTenantOrg)
 			require.NoError(t, err)
 			appDataSchemaMap := schema[constants.ApplicationData].(map[string][]model.ProfileSchemaAttribute)
-			
+
 			mobileThemeFound := false
 			webThemeFound := false
 			for _, attrs := range appDataSchemaMap {

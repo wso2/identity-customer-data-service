@@ -53,6 +53,11 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	AppB_Id := "app-B"
 	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 
+	restore := schemaService.OverrideValidateApplicationIdentifierForTest(
+		// bypass app verification with IDP
+		func(appID, org string) (error, bool) { return nil, true })
+	defer restore()
+
 	// Initialize Profile Schema Attributes
 	profileSchemaSvc := schemaService.GetProfileSchemaService()
 
@@ -416,7 +421,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 
 		require.NotNil(t, p2AppData[AppB_Id]["ui_mode"], "Profile 2 ui_mode should not be nil")
 		require.NotNil(t, p2AppData[AppA_Id]["ui_mode"], "Profile 2 ui_mode should not be nil")
-		
+
 		cleanProfiles(profileSvc, SuperTenantOrg)
 	})
 

@@ -41,7 +41,7 @@ func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]
 	var err error
 	logger := log.GetLogger()
 
-	// Detect if token is JWT or opaque (very naive check: JWT has two dots)
+	// Detect if token is JWT or opaque
 	if strings.Count(token, ".") == 2 {
 		claims, err = ParseJWTClaims(token)
 		if err != nil {
