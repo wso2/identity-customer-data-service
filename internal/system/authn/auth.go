@@ -39,6 +39,7 @@ func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]
 
 	var claims map[string]interface{}
 	var err error
+	logger := log.GetLogger()
 
 	// Detect if token is JWT or opaque (very naive check: JWT has two dots)
 	if strings.Count(token, ".") == 2 {
@@ -46,14 +47,20 @@ func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]
 		if err != nil {
 			return claims, unauthorizedError()
 		}
-	} else {
 		cfg := config.GetCDSRuntime().Config
 		identityClient := client.NewIdentityClient(cfg)
-
-		claims, err = identityClient.IntrospectToken(token)
+		introspectionClaims, err := identityClient.IntrospectToken(token)
 		if err != nil {
 			return claims, unauthorizedError()
 		}
+		active, ok := introspectionClaims["active"].(bool)
+		if !ok || !active {
+			logger.Debug("JWT token is not active according to introspection.")
+			return nil, unauthorizedError()
+		}
+	} else {
+		logger.Debug("Expecting a JWT token but received an opaque token.")
+		return claims, unauthorizedError()
 	}
 
 	if !validateClaims(orgHandle, claims) {
