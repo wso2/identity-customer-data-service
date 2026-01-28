@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -33,31 +34,37 @@ func HandleDecodeError(err error, resourceName string) string {
 		return ""
 	}
 
+	var ute *json.UnmarshalTypeError
+	var se *json.SyntaxError
+
 	switch {
 	case errors.Is(err, io.EOF):
 		return fmt.Sprintf("Request body for %s is empty.", resourceName)
 
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return fmt.Sprintf("Malformed JSON in %s request body (unexpected end of input).", resourceName)
+
 	case strings.HasPrefix(err.Error(), "json: unknown field "):
-		// Extract offending field name from the error
 		field := strings.TrimPrefix(err.Error(), "json: unknown field ")
 		return fmt.Sprintf("Unknown field %s in %s request body.", field, resourceName)
 
-	case errors.As(err, &json.UnmarshalTypeError{}):
-		var ute *json.UnmarshalTypeError
-		errors.As(err, &ute)
-		if ute != nil {
-			return fmt.Sprintf("Invalid type for field '%s'. Expected %s in %s request body.",
-				ute.Field, ute.Type, resourceName)
+	case errors.As(err, &ute):
+		// Top-level type mismatch (e.g., expected array but got object)
+		if ute.Field == "" {
+			if ute.Type != nil && ute.Type.Kind() == reflect.Slice {
+				return fmt.Sprintf("Request body for %s must be a JSON array.", resourceName)
+			}
+			return fmt.Sprintf("Invalid JSON type for %s request body.", resourceName)
 		}
-		return fmt.Sprintf("Invalid type in %s request body.", resourceName)
 
-	case errors.As(err, &json.SyntaxError{}):
-		var se *json.SyntaxError
-		errors.As(err, &se)
-		if se != nil {
-			return fmt.Sprintf("Malformed JSON at position %d in %s request body.", se.Offset, resourceName)
-		}
-		return fmt.Sprintf("Malformed JSON in %s request body.", resourceName)
+		return fmt.Sprintf(
+			"Invalid type for field '%s'. Expected %s in %s request body.", ute.Field, ute.Type, resourceName,
+		)
+
+	case errors.As(err, &se):
+		return fmt.Sprintf(
+			"Malformed JSON in %s request body.", resourceName,
+		)
 
 	default:
 		return fmt.Sprintf("Invalid JSON payload for %s.", resourceName)
