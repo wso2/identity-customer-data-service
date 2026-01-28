@@ -34,12 +34,12 @@ func ParseApplicationDataParams(r *http.Request) ApplicationDataFilterParams {
 		RequestedAppIDs: []string{},
 	}
 
-	appDataParam := r.URL.Query().Get("application_data")
+	appDataParam := r.URL.Query().Get("includeApplicationData")
 	if strings.ToLower(appDataParam) == "true" {
 		params.IncludeAppData = true
 	}
 
-	appIDParam := r.URL.Query().Get("application_id")
+	appIDParam := r.URL.Query().Get("application_identifier")
 	if appIDParam != "" {
 		if appIDParam == "*" {
 			params.RequestedAppIDs = []string{"*"}

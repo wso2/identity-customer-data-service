@@ -96,7 +96,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		configToUpdate.SystemApplications = config.SystemApplications
 	}
 
-	err := adminConfigService.UpdateAdminConfig(configToUpdate, orgId)
+	err = adminConfigService.UpdateAdminConfig(configToUpdate, orgId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
