@@ -72,7 +72,9 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 	}
 
 	var schemaAttributes []model.ProfileSchemaAttribute
-	if err := json.NewDecoder(r.Body).Decode(&schemaAttributes); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&schemaAttributes); err != nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
 			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
@@ -188,10 +190,19 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	attribute := model.ProfileSchemaAttribute{}
-	if constants.AllowedAttributesScope[scope] {
-		attribute, err = schemaService.GetProfileSchemaAttributeById(orgHandle, attributeId)
+
+	if !constants.AllowedAttributesScope[scope] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "Invalid scope for profile schema attribute: " + scope,
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
 	}
+
+	attribute, err := schemaService.GetProfileSchemaAttributeById(orgHandle, attributeId)
+
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -220,6 +231,17 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 		utils.HandleError(w, clientError)
 		return
 	}
+
+	if !constants.AllowedAttributesScope[scope] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "Invalid scope for profile schema attribute: " + scope,
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
+
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
 	var attributes interface{}
@@ -272,6 +294,16 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 			Description: "CDS is not enabled for tenant: " + orgHandle,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
+		return
+	}
+	scope := r.PathValue("scope")
+	if !constants.AllowedAttributesScope[scope] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "Invalid scope for profile schema attribute: " + scope,
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
 		return
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
@@ -349,6 +381,16 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.Respons
 		utils.HandleError(w, clientError)
 		return
 	}
+	scope := r.PathValue("scope")
+	if !constants.AllowedAttributesScope[scope] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "Invalid scope for profile schema attribute: " + scope,
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
 
@@ -381,6 +423,15 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.Res
 		return
 	}
 	scope := r.PathValue("scope")
+	if !constants.AllowedAttributesScope[scope] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "Invalid scope for profile schema attribute: " + scope,
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
 	if scope == constants.IdentityAttributes {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
