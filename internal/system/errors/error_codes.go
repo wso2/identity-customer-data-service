@@ -38,6 +38,10 @@ var (
 		Code:    errorPrefix + "15002",
 		Message: "Error while updating tenant configurations.",
 	}
+	ENCODE_ERROR = ErrorMessage{
+		Code:    errorPrefix + "15003",
+		Message: "Error while encoding data.",
+	}
 
 	ADD_PROFILE_SCHEMA = ErrorMessage{
 		Code:    errorPrefix + "15101",
@@ -163,7 +167,7 @@ var (
 	//   190xx - Other Client Errors
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "10001",
-		Message: "Invalid body.",
+		Message: "Invalid request body.",
 	}
 
 	UN_AUTHORIZED = ErrorMessage{
@@ -260,9 +264,8 @@ var (
 	}
 
 	UNIFICATION_RULE_NOT_FOUND = ErrorMessage{
-		Code:        errorPrefix + "12001",
-		Message:     "No unification rule found.",
-		Description: "No unification rule defined for this organization for the provided rule_id..",
+		Code:    errorPrefix + "12001",
+		Message: "No unification rule found.",
 	}
 
 	UNIFICATION_UPDATE_FAILED = ErrorMessage{

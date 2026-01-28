@@ -289,9 +289,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(listResponse)
+	utils.RespondJSON(w, http.StatusOK, listResponse, constants.ProfileResource)
 }
 
 func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs map[string][]string) []model.ProfileListResponse {
@@ -474,7 +472,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	)
 
 	w.Header().Set("Location", location)
-	respondJSON(w, http.StatusCreated, profileResponse)
+	utils.RespondJSON(w, http.StatusCreated, profileResponse, constants.ProfileResource)
 }
 
 // Handles existing cookie logic, returns true if response was already written
@@ -504,7 +502,7 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 	}
 
 	_ = setProfileCookie(w, profileResponse.ProfileId, r)
-	respondJSON(w, http.StatusOK, profileResponse)
+	utils.RespondJSON(w, http.StatusOK, profileResponse, constants.ProfileResource)
 	return true
 }
 
@@ -532,12 +530,6 @@ func detectScheme(r *http.Request) string {
 		return "http"
 	}
 	return "https"
-}
-
-func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
@@ -586,9 +578,18 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	writer.WriteHeader(http.StatusOK)
-	//todo: should we not return the updated profile?
-	_, _ = writer.Write([]byte(`{"status": "updated"}`))
+	profileResponse, err := profilesService.GetProfile(profileId)
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to update profile with profileId: %s", profileId)
+		log.GetLogger().Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errMsg,
+		}, err)
+		utils.HandleError(writer, serverError)
+	}
+	utils.RespondJSON(writer, http.StatusOK, profileResponse, constants.ProfileResource)
 }
 
 // PatchProfile handles partial updates to a profile
@@ -629,17 +630,14 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	updatedProfile, err := profilesService.PatchProfile(profileId, orgHandle, patchData)
+	_, err = profilesService.PatchProfile(profileId, orgHandle, patchData)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
-	//todo: should we not return the updated profile?
-	err = json.NewEncoder(w).Encode(updatedProfile)
+	profileResponse, err := profilesService.GetProfile(profileId)
 	if err != nil {
-		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
+		errMsg := fmt.Sprintf("Failed to update profile with profileId: %s", profileId)
 		log.GetLogger().Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
@@ -648,6 +646,7 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 		}, err)
 		utils.HandleError(w, serverError)
 	}
+	utils.RespondJSON(w, http.StatusOK, profileResponse, constants.ProfileResource)
 }
 
 // PatchCurrentUserProfile handles partial updates to the current user's profile

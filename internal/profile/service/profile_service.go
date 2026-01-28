@@ -120,7 +120,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	}
 
 	// convert profile request to model
-	createdTime := time.Now().UTC().Unix()
+	createdTime := time.Now().UTC()
 	profileId := uuid.New().String()
 	profile := profileModel.Profile{
 		ProfileId:          profileId,
@@ -139,7 +139,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	}
 
 	if err := profileStore.InsertProfile(profile); err != nil {
-		logger.Debug(fmt.Sprintf("Error insertinng profile: %s", profile.ProfileId), log.Error(err))
+		logger.Debug(fmt.Sprintf("Error inserting profile: %s", profile.ProfileId), log.Error(err))
 		return nil, err
 	}
 	profileFetched, errWait := ps.GetProfile(profileId)
@@ -157,9 +157,8 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 		profile.TenantId = tenantId
 		queue.Enqueue(profile)
 	}
-	//todo: handler admin/user workflows
 
-	logger.Info("Profile available after insert/update: " + profileFetched.ProfileId)
+	logger.Info(fmt.Sprintf("Profile created successfully with profile id: %s", profile.ProfileId))
 	return profileFetched, nil
 }
 
@@ -584,7 +583,7 @@ func (ps *ProfilesService) UpdateProfile(profileId, tenantId string, updatedProf
 	}
 
 	var profileToUpDate profileModel.Profile
-	updatedTime := time.Now().UTC().Unix()
+	updatedTime := time.Now().UTC()
 	if profile.ProfileStatus.IsReferenceProfile {
 		// convert profile request to model
 		profileToUpDate = profileModel.Profile{
@@ -704,19 +703,6 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		if len(alias) == 0 {
 			alias = nil
 		}
-		//
-		//if profile.UserId != "" {
-		//	scimData, err := client.GetSCIMUser(profile.UserId)
-		//	if err != nil {
-		//		log.GetLogger().Warn("Failed to fetch SCIM data", log.Error(err))
-		//	} else {
-		//		schemaAttrs, err := dbClient.GetSchemaAttributes(profile.TenantId, "identity_attributes")
-		//		if err != nil {
-		//			return nil, err
-		//		}
-		//		profile.IdentityAttributes = mergeSCIMWithSchema(scimData, profile.IdentityAttributes, schemaAttrs)
-		//	}
-		//}
 
 		profileResponse := &profileModel.ProfileResponse{
 			ProfileId:          profile.ProfileId,
@@ -735,7 +721,6 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 	} else {
 		// fetching merged master profile
 		masterProfile, err := profileStore.GetProfile(profile.ProfileStatus.ReferenceProfileId)
-		// todo: app context should be restricted for apps that is requesting these
 
 		if err != nil {
 			return nil, err
@@ -795,9 +780,9 @@ func (ps *ProfilesService) UpdateProfileConsents(profileId string, consents []pr
 	logger := log.GetLogger()
 
 	// Set the consent timestamp if not already set
-	currentTime := time.Now().UTC().Unix()
+	currentTime := time.Now().UTC()
 	for i := range consents {
-		if consents[i].ConsentedAt == 0 {
+		if consents[i].ConsentedAt.IsZero() {
 			consents[i].ConsentedAt = currentTime
 		}
 	}
@@ -983,8 +968,6 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 	if existingProfiles == nil {
 		return []profileModel.ProfileResponse{}, nil
 	}
-
-	// todo: app context should be restricted for apps that is requesting these
 
 	var result []profileModel.ProfileResponse
 	for _, profile := range existingProfiles {

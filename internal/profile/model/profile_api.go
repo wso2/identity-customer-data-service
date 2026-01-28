@@ -18,6 +18,8 @@
 
 package model
 
+import "time"
+
 type ProfileResponse struct {
 	ProfileId          string                            `json:"profile_id" bson:"profile_id"`
 	UserId             string                            `json:"user_id,omitempty" bson:"user_id,omitempty"`
@@ -39,9 +41,9 @@ type ProfileListResponse struct {
 }
 
 type Meta struct {
-	CreatedAt int64  `json:"created_at" bson:"created_at"`
-	UpdatedAt int64  `json:"updated_at" bson:"updated_at"`
-	Location  string `json:"location" bson:"location"`
+	CreatedAt time.Time `json:"created_at" bson:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
+	Location  string    `json:"location" bson:"location"`
 }
 
 type ProfileRequest struct {
@@ -58,4 +60,15 @@ type ProfileSync struct {
 	Event         string                 `json:"event" bson:"event"`
 	Claims        map[string]interface{} `json:"claims,omitempty" bson:"claims,omitempty"`
 	TenantId      string                 `json:"tenantId,omitempty" bson:"tenantId,omitempty"`
+}
+
+type Pagination struct {
+	Limit      int     `json:"limit"`
+	NextCursor *string `json:"next_cursor,omitempty"`
+	HasMore    bool    `json:"has_more"`
+}
+
+type ProfileListAPIResponse struct {
+	Items      []ProfileListResponse `json:"items"`
+	Pagination Pagination            `json:"pagination"`
 }

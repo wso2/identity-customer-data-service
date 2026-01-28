@@ -99,8 +99,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		PropertyName: "identity_attributes.user_id",
 		Priority:     0,
 		IsActive:     true,
-		CreatedAt:    time.Now().Unix(),
-		UpdatedAt:    time.Now().Unix(),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 	_ = unificationSvc.AddUnificationRule(userIdRule, SuperTenantOrg)
 
@@ -112,8 +112,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		PropertyName: "identity_attributes.email",
 		Priority:     1,
 		IsActive:     true,
-		CreatedAt:    time.Now().Unix(),
-		UpdatedAt:    time.Now().Unix(),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 	_ = unificationSvc.AddUnificationRule(emailRule, SuperTenantOrg)
 
@@ -125,8 +125,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		PropertyName: "identity_attributes.phone_number",
 		Priority:     2,
 		IsActive:     true,
-		CreatedAt:    time.Now().Unix(),
-		UpdatedAt:    time.Now().Unix(),
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 	_ = unificationSvc.AddUnificationRule(phoneRule, SuperTenantOrg)
 
@@ -433,8 +433,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		time.Sleep(1 * time.Second)
 
 		// Deactivate email rule
-		patchData := disableUnificationRule()
-		_ = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, patchData)
+		emailRule.IsActive = false
+		_ = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, emailRule)
 
 		// Create second profile while rule is inactive
 		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["reactivate@wso2.com"]},"traits":{"interests":["during_inactive"]}}`)
@@ -448,8 +448,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		require.Empty(t, check2.MergedTo.ProfileId, "Should not merge while rule inactive")
 
 		// Reactivate rule
-		enablePatch := enableUnificationRule()
-		_ = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, enablePatch)
+		emailRule.IsActive = true
+		_ = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, emailRule)
 
 		// Create third profile after reactivation
 		p3 := mustUnmarshalProfile(`{"identity_attributes":{"email":["reactivate@wso2.com"]},"traits":{"interests":["after_reactivate"]}}`)

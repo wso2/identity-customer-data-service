@@ -46,8 +46,8 @@ func mustUnmarshalProfile(jsonStr string) profileModel.ProfileRequest {
 
 func Test_Profile_Unification_Scenarios(t *testing.T) {
 
-	PhoneBased := "phone_based"
-	EmailBased := "email_based"
+	RuleNamePhoneBased := "phone_based"
+	RuleNameEmailBased := "email_based"
 	AppId := "test-app-001"
 	AppA_Id := "app-A"
 	AppB_Id := "app-B"
@@ -100,40 +100,29 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	unificationSvc := unificationService.GetUnificationRuleService()
 
 	emailRuleId := uuid.New().String()
-	jsonData := []byte(`{
-        "rule_name": "` + EmailBased + `",
-		"rule_id": "` + emailRuleId + `",
-		"tenant_id": "` + SuperTenantOrg + `",
-        "property_name": "identity_attributes.email",
-        "priority": 1,
-        "is_active": true
-    }`)
-
-	var emailBasedRule model.UnificationRule
-	unificationErr := json.Unmarshal(jsonData, &emailBasedRule)
-	require.NoError(t, unificationErr, "Failed to unmarshal rule JSON")
-
-	emailBasedRule.CreatedAt = time.Now().Unix()
-	emailBasedRule.UpdatedAt = time.Now().Unix()
-
+	emailBasedRule := model.UnificationRule{
+		RuleName:     RuleNameEmailBased,
+		RuleId:       emailRuleId,
+		TenantId:     SuperTenantOrg,
+		PropertyName: "identity_attributes.email",
+		Priority:     1,
+		IsActive:     true,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
 	_ = unificationSvc.AddUnificationRule(emailBasedRule, SuperTenantOrg)
 
 	phoneRuleId := uuid.New().String()
-	jsonData = []byte(`{
-        "rule_name": "` + PhoneBased + `",
-		"rule_id": "` + phoneRuleId + `",
-		"tenant_id": "` + SuperTenantOrg + `",
-        "property_name": "identity_attributes.phone_number",
-        "priority": 2,
-        "is_active": true
-    }`)
-
-	var phoneBasedRule model.UnificationRule
-	unificationErr = json.Unmarshal(jsonData, &phoneBasedRule)
-	require.NoError(t, unificationErr, "Failed to unmarshal rule JSON")
-
-	phoneBasedRule.CreatedAt = time.Now().Unix()
-	phoneBasedRule.UpdatedAt = time.Now().Unix()
+	phoneBasedRule := model.UnificationRule{
+		RuleName:     RuleNamePhoneBased,
+		RuleId:       phoneRuleId,
+		TenantId:     SuperTenantOrg,
+		PropertyName: "identity_attributes.phone_number",
+		Priority:     2,
+		IsActive:     true,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
 
 	_ = unificationSvc.AddUnificationRule(phoneBasedRule, SuperTenantOrg)
 
@@ -153,9 +142,9 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(prof3.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, EmailBased, merged1.MergedTo.Reason)
+		require.Equal(t, RuleNameEmailBased, merged1.MergedTo.Reason)
 		require.Equal(t, merged2.MergedTo.ProfileId, merged3.MergedTo.ProfileId)
-		require.Equal(t, PhoneBased, merged3.MergedTo.Reason)
+		require.Equal(t, RuleNamePhoneBased, merged3.MergedTo.Reason)
 
 		require.Contains(t, merged3.IdentityAttributes["email"].([]interface{}), "a@wso2.com")
 		require.Contains(t, merged1.IdentityAttributes["phone_number"].([]interface{}), "0771234567")
@@ -176,7 +165,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged2, _ := profileSvc.GetProfile(p2.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.ProfileId)
-		require.Equal(t, EmailBased, merged1.MergedTo.Reason)
+		require.Equal(t, RuleNameEmailBased, merged1.MergedTo.Reason)
 
 		require.Contains(t, merged1.IdentityAttributes["email"].([]interface{}), "b2@wso2.com")
 		require.ElementsMatch(t, []interface{}{"music", "sports"}, merged2.Traits["interests"].([]interface{}))
@@ -202,11 +191,11 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(p3.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, EmailBased, merged1.MergedTo.Reason)
+		require.Equal(t, RuleNameEmailBased, merged1.MergedTo.Reason)
 
 		require.Equal(t, merged2.MergedTo.ProfileId, merged3.ProfileId)
 		// todo: Verify if this is correct. Should it be PHONE_BASED since we merge perm to merged profiles of Temp using phone number?
-		require.Equal(t, EmailBased, merged2.MergedTo.Reason)
+		require.Equal(t, RuleNameEmailBased, merged2.MergedTo.Reason)
 
 		require.Equal(t, "perm-789", merged1.IdentityAttributes["user_id"])
 		require.ElementsMatch(t, []interface{}{"music", "art", "sports"}, merged3.Traits["interests"].([]interface{}))
@@ -232,9 +221,9 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(p3.ProfileId)
 
 		require.Equal(t, merged1.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, EmailBased, merged2.MergedTo.Reason)
+		require.Equal(t, RuleNameEmailBased, merged2.MergedTo.Reason)
 		require.Equal(t, merged1.ProfileId, merged3.MergedTo.ProfileId)
-		require.Equal(t, PhoneBased, merged3.MergedTo.Reason)
+		require.Equal(t, RuleNamePhoneBased, merged3.MergedTo.Reason)
 
 		require.ElementsMatch(t, []interface{}{"music", "art", "sports"}, merged3.Traits["interests"].([]interface{}))
 		require.Contains(t, merged1.IdentityAttributes["phone_number"].([]interface{}), "0775554444")
@@ -272,15 +261,15 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged2, _ := profileSvc.GetProfile(p2.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, EmailBased, merged2.MergedTo.Reason)
+		require.Equal(t, RuleNameEmailBased, merged2.MergedTo.Reason)
 
 		cleanProfiles(profileSvc, SuperTenantOrg)
 	})
 
 	t.Run("Scenario7_InactiveRule_ShouldPreventUnification", func(t *testing.T) {
 
-		patchData := disableUnificationRule()
-		err = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, patchData)
+		emailBasedRule.IsActive = false
+		err = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, emailBasedRule)
 		rule, _ := unificationSvc.GetUnificationRule(emailRuleId)
 		require.Equal(t, false, rule.IsActive)
 
@@ -297,8 +286,8 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		require.Empty(t, mergedProfile1.MergedTo)
 		require.Empty(t, mergedProfile2.MergedTo)
 
-		patchData = enableUnificationRule()
-		err = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, patchData)
+		emailBasedRule.IsActive = true
+		err = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, emailBasedRule)
 		cleanProfiles(profileSvc, SuperTenantOrg)
 
 	})
@@ -338,7 +327,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 
 		emailRuleId := uuid.New().String()
 		jsonData := []byte(`{
-	   "rule_name": "` + EmailBased + `",
+	   "rule_name": "` + RuleNameEmailBased + `",
 		"rule_id": "` + emailRuleId + `",
 		"tenant_id": "` + OtherTenant + `",
 	   "property_name": "identity_attributes.email",
@@ -350,8 +339,8 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		unificationErr := json.Unmarshal(jsonData, &emailBasedRule)
 		require.NoError(t, unificationErr, "Failed to unmarshal rule JSON")
 
-		emailBasedRule.CreatedAt = time.Now().Unix()
-		emailBasedRule.UpdatedAt = time.Now().Unix()
+		emailBasedRule.CreatedAt = time.Now().UTC()
+		emailBasedRule.UpdatedAt = time.Now().UTC()
 
 		_ = unificationSvc.AddUnificationRule(emailBasedRule, SuperTenantOrg)
 
@@ -443,22 +432,4 @@ func cleanProfiles(profileSvc profileService.ProfilesServiceInterface, org strin
 	for _, p := range profiles {
 		_ = profileSvc.DeleteProfile(p.ProfileId)
 	}
-}
-
-func disableUnificationRule() map[string]interface{} {
-	jsonData := []byte(`{
-        "is_active": false
-    	}`)
-	var patchData map[string]interface{}
-	_ = json.Unmarshal(jsonData, &patchData)
-	return patchData
-}
-
-func enableUnificationRule() map[string]interface{} {
-	jsonData := []byte(`{
-        "is_active": true
-    	}`)
-	var EnableData map[string]interface{}
-	_ = json.Unmarshal(jsonData, &EnableData)
-	return EnableData
 }

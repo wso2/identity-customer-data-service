@@ -20,20 +20,21 @@ package service
 
 import (
 	"fmt"
+	"net/http"
+
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
-	"net/http"
 )
 
 type UnificationRuleServiceInterface interface {
 	AddUnificationRule(rule model.UnificationRule, tenantId string) error
 	GetUnificationRules(tenantId string) ([]model.UnificationRule, error)
 	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
-	PatchUnificationRule(ruleId, tenantId string, updates map[string]interface{}) error
+	PatchUnificationRule(ruleId, tenantId string, updatedRule model.UnificationRule) error
 	DeleteUnificationRule(ruleId string) error
 }
 
@@ -138,30 +139,20 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 }
 
 // PatchUnificationRule Applies a partial update on a specific resolution rule.
-func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string, updates map[string]interface{}) error {
+func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string, updatedRule model.UnificationRule) error {
 
-	// Validate that all update fields are allowed
-	for field := range updates {
-		if !constants.AllowedFieldsForUnificationRulePatch[field] {
-			return errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.UNIFICATION_UPDATE_FAILED.Code,
-				Message:     errors2.UNIFICATION_UPDATE_FAILED.Message,
-				Description: fmt.Sprintf("Field '%s' cannot be updated. Rule Name, Active Status or PropertyName can only be updated", field),
-			}, http.StatusBadRequest)
-		}
+	if updatedRule.PropertyName == "user_id" {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UNIFICATION_RULE_ALREADY_EXISTS.Code,
+			Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
+			Description: "user_id based unification rule can not be updated.",
+		}, http.StatusBadRequest)
 	}
 
 	// Validate that the priority is not already in use
 	existingRules, _ := store.GetUnificationRules(tenantId)
 	for _, existingRule := range existingRules {
-		if existingRule.PropertyName == "user_id" {
-			return errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.UNIFICATION_RULE_ALREADY_EXISTS.Code,
-				Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
-				Description: "user_id based unification rule can not be updated.",
-			}, http.StatusConflict)
-		}
-		if existingRule.RuleId != ruleId && existingRule.Priority == updates["priority"] {
+		if existingRule.RuleId != ruleId && existingRule.Priority == updatedRule.Priority {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UNIFICATION_RULE_PRIORITY_EXISTS.Code,
 				Message:     errors2.UNIFICATION_RULE_PRIORITY_EXISTS.Message,
@@ -169,8 +160,7 @@ func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string,
 			}, http.StatusBadRequest)
 		}
 	}
-
-	return store.PatchUnificationRule(ruleId, updates)
+	return store.PatchUnificationRule(ruleId, updatedRule)
 }
 
 // DeleteUnificationRule Removes a unification rule.

@@ -13,6 +13,7 @@ const DefaultTenant = "carbon.super"
 const SpaceSeparator = " "
 const SystemAppHeader = "SystemApp"
 const DefaultQueueSize = 1000
+const DefaultLimit = 50
 
 type contextKey string
 
@@ -22,6 +23,12 @@ var AllowedFieldsForUnificationRulePatch = map[string]bool{
 	"is_active": true,
 	"priority":  true,
 }
+
+const (
+	ProfileResource         = "profile"
+	UnificationRuleResource = "unification rule"
+	SchemaAttribute         = "schema attribute"
+)
 
 const (
 	StringDataType   = "string"
