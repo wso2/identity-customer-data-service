@@ -16,7 +16,7 @@ const DefaultQueueSize = 1000
 
 type contextKey string
 
-const TenantContextKey contextKey = "tenant_id"
+const TenantContextKey contextKey = "org_handle"
 
 var AllowedFieldsForUnificationRulePatch = map[string]bool{
 	"is_active": true,

@@ -26,7 +26,7 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 
 	profile.ProfileId = row["profile_id"].(string)
 	profile.UserId = row["user_id"].(string)
-	profile.TenantId = row["tenant_id"].(string)
+	profile.OrgHandle = row["org_handle"].(string)
 	profile.CreatedAt = row["created_at"].(int64)
 	profile.UpdatedAt = row["updated_at"].(int64)
 	profile.Location = row["location"].(string)
@@ -120,7 +120,7 @@ func InsertProfile(profile model.Profile) error {
 	_, err = dbClient.ExecuteQuery(query,
 		profile.ProfileId,
 		profile.UserId,
-		profile.TenantId,
+		profile.OrgHandle,
 		profile.CreatedAt,
 		profile.UpdatedAt,
 		profile.Location,
@@ -148,8 +148,8 @@ func InsertProfile(profile model.Profile) error {
 		profileStatus,
 		profile.ProfileStatus.ReferenceProfileId,
 		profile.ProfileStatus.ReferenceReason,
-		profile.TenantId,
-		profile.TenantId,
+		profile.OrgHandle,
+		profile.OrgHandle,
 	)
 
 	if err != nil {
@@ -513,7 +513,7 @@ func UpdateProfile(profile model.Profile) error {
 }
 
 // GetAllProfiles retrieves all profiles
-func GetAllProfiles(tenantId string) ([]model.Profile, error) {
+func GetAllProfiles(orgHandle string) ([]model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -531,7 +531,7 @@ func GetAllProfiles(tenantId string) ([]model.Profile, error) {
 
 	query := scripts.GetProfilesByOrgId[provider.NewDBProvider().GetDBType()]
 
-	results, err := dbClient.ExecuteQuery(query, tenantId)
+	results, err := dbClient.ExecuteQuery(query, orgHandle)
 	if err != nil {
 		errorMsg := "Failed fetching all profiles"
 		logger.Debug(errorMsg, log.Error(err))
@@ -871,7 +871,7 @@ func MergeIdentityDataOfProfiles(profileId string, identityData map[string]inter
 	return UpdateProfile(*profile)
 }
 
-func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profile, error) {
+func GetAllProfilesWithFilter(orgHandle string, filters []string) ([]model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -894,9 +894,9 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 
 	baseSQL := scripts.GetAllProfilesWithFilter[provider.NewDBProvider().GetDBType()]
 
-	// Always ensure tenant_id condition first
-	conditions = append(conditions, fmt.Sprintf("p.tenant_id = $%d", argID))
-	args = append(args, tenantId)
+	// Always ensure org_handle condition first
+	conditions = append(conditions, fmt.Sprintf("p.org_handle = $%d", argID))
+	args = append(args, orgHandle)
 	argID++
 
 	// Always ensure list_profile = true
@@ -1013,7 +1013,7 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 	if len(conditions) > 0 {
 		whereClause = "WHERE " + strings.Join(conditions, " AND ")
 	}
-	// todo: need to add tenant id
+	// todo: need to add org_handle
 
 	finalSQL := baseSQL + "\n" + whereClause
 
@@ -1078,7 +1078,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 
 	query := scripts.GetAllReferenceProfileExceptCurrent[provider.NewDBProvider().GetDBType()]
 
-	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId, currentProfile.TenantId)
+	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId, currentProfile.OrgHandle)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed fetching all master profiles except for current profile: %s", currentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))

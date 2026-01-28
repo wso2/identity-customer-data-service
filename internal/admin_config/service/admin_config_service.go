@@ -26,40 +26,40 @@ import (
 
 // AdminConfigServiceInterface defines the service interface.
 type AdminConfigServiceInterface interface {
-	GetAdminConfig(tenantId string) (model.AdminConfig, error)
-	IsCDSEnabled(tenantId string) bool
-	IsInitialSchemaSyncDone(tenantId string) bool
-	UpdateAdminConfig(category model.AdminConfig, tenantId string) error
-	UpdateInitialSchemaSync(state bool, tenantId string) error
+	GetAdminConfig(orgHandle string) (model.AdminConfig, error)
+	IsCDSEnabled(orgHandle string) bool
+	IsInitialSchemaSyncDone(orgHandle string) bool
+	UpdateAdminConfig(category model.AdminConfig, orgHandle string) error
+	UpdateInitialSchemaSync(state bool, orgHandle string) error
 }
 
 // AdminConfigService is the default implementation.
 type AdminConfigService struct{}
 
-func (a AdminConfigService) IsCDSEnabled(tenantId string) bool {
-	config, err := store.GetAdminConfig(tenantId)
+func (a AdminConfigService) IsCDSEnabled(orgHandle string) bool {
+	config, err := store.GetAdminConfig(orgHandle)
 	if err != nil || config == nil {
 		return false
 	}
 	return config.CDSEnabled
 }
 
-func (a AdminConfigService) IsInitialSchemaSyncDone(tenantId string) bool {
-	config, err := store.GetAdminConfig(tenantId)
+func (a AdminConfigService) IsInitialSchemaSyncDone(orgHandle string) bool {
+	config, err := store.GetAdminConfig(orgHandle)
 	if err != nil || config == nil {
 		return false
 	}
 	return config.InitialSchemaSyncDone
 }
 
-func (a AdminConfigService) GetAdminConfig(tenantId string) (model.AdminConfig, error) {
+func (a AdminConfigService) GetAdminConfig(orgHandle string) (model.AdminConfig, error) {
 
 	defaultConfig := model.AdminConfig{
-		TenantId:              tenantId,
+		OrgHandle:              orgHandle,
 		CDSEnabled:            false,
 		InitialSchemaSyncDone: false,
 	}
-	config, err := store.GetAdminConfig(tenantId)
+	config, err := store.GetAdminConfig(orgHandle)
 	if err != nil || config == nil {
 		return defaultConfig, err
 	}
@@ -88,9 +88,9 @@ func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, o
 	return nil
 }
 
-func (a AdminConfigService) UpdateInitialSchemaSync(state bool, tenantId string) error {
+func (a AdminConfigService) UpdateInitialSchemaSync(state bool, orgHandle string) error {
 
-	return store.UpdateInitialSchemaSyncConfig(state, tenantId)
+	return store.UpdateInitialSchemaSyncConfig(state, orgHandle)
 }
 
 // GetAdminConfigService returns a new instance.

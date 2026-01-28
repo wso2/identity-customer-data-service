@@ -86,7 +86,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 
 	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
 	configToUpdate := model.AdminConfig{
-		TenantId:   orgHandle,
+		OrgHandle:   orgHandle,
 		CDSEnabled: config.CDSEnabled,
 		// Preserving the existing value for InitialSchemaSyncDone as it is not editable via this endpoint.
 		InitialSchemaSyncDone: adminConfigService.IsInitialSchemaSyncDone(orgHandle),
