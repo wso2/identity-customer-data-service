@@ -1054,12 +1054,16 @@ func getCallerAppIDFromRequest(r *http.Request) string {
 		return ""
 	}
 
-	sub, ok := claims["sub"].(string)
-	if !ok {
-		return ""
+	// The azp (Authorized Party) claim identify the specific application that initiated the request and was issued the token.
+	if azp, ok := claims["azp"].(string); ok && azp != "" {
+		return azp
 	}
 
-	return sub
+	if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
+		return clientID
+	}
+
+	return ""
 }
 
 func isCallerSystemApplication(tenantId, appId string) bool {
