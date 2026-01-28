@@ -345,7 +345,7 @@ var (
 	CDS_NOT_ENABLED = ErrorMessage{
 		Code:        errorPrefix + "16001",
 		Message:     "Not enabled.",
-		Description: "ustomer data service is not enabled for the organization",
+		Description: "Customer data service is not enabled for the organization",
 	}
 
 	INVALID_FILTER_FORMAT = ErrorMessage{

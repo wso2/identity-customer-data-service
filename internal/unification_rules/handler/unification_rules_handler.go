@@ -61,7 +61,12 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&ruleInRequest); err != nil {
-		utils.HandleDecodeError(err, "unification rule")
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.BAD_REQUEST.Code,
+			Message:     errors2.BAD_REQUEST.Message,
+			Description: utils.HandleDecodeError(err, "unification rule"),
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
 		return
 	}
 
@@ -238,16 +243,16 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		return
 	}
 
-	if ruleUpdateRequest.RuleName != "" {
-		updatedRule.RuleName = ruleUpdateRequest.RuleName
+	if ruleUpdateRequest.RuleName != nil {
+		updatedRule.RuleName = *ruleUpdateRequest.RuleName
 	}
 
-	if ruleUpdateRequest.Priority != 0 {
-		updatedRule.Priority = ruleUpdateRequest.Priority
+	if ruleUpdateRequest.Priority != nil {
+		updatedRule.Priority = *ruleUpdateRequest.Priority
 	}
 
-	if ruleUpdateRequest.IsActive != updatedRule.IsActive {
-		updatedRule.IsActive = ruleUpdateRequest.IsActive
+	if ruleUpdateRequest.IsActive != nil {
+		updatedRule.IsActive = *ruleUpdateRequest.IsActive
 	}
 
 	err = ruleService.PatchUnificationRule(ruleId, orgHandle, *updatedRule)

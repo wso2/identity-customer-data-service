@@ -150,7 +150,10 @@ func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string,
 	}
 
 	// Validate that the priority is not already in use
-	existingRules, _ := store.GetUnificationRules(tenantId)
+	existingRules, err := store.GetUnificationRules(tenantId)
+	if err != nil {
+		return err
+	}
 	for _, existingRule := range existingRules {
 		if existingRule.RuleId != ruleId && existingRule.Priority == updatedRule.Priority {
 			return errors2.NewClientError(errors2.ErrorMessage{

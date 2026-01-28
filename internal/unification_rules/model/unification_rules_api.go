@@ -34,7 +34,7 @@ type UnificationRuleAPIResponse struct {
 }
 
 type UnificationRuleUpdateRequest struct {
-	RuleName string `json:"rule_name" bson:"rule_name"`
-	Priority int    `json:"priority" bson:"priority"`
-	IsActive bool   `json:"is_active" bson:"is_active"`
+	RuleName *string `json:"rule_name" bson:"rule_name"`
+	Priority *int    `json:"priority" bson:"priority"`
+	IsActive *bool   `json:"is_active" bson:"is_active"`
 }
