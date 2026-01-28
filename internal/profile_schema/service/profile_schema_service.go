@@ -157,11 +157,11 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 			return clientError, false
 		}
 
-		err, isValidApplicationIdentifier := isValidApplicationIdentifier(attr.ApplicationIdentifier, attr.OrgId)
+		err, validApplicationIdentifier := validateApplicationIdentifierFn(attr.ApplicationIdentifier, attr.OrgId)
 		if err != nil {
 			return err, false
 		}
-		if !isValidApplicationIdentifier {
+		if !validApplicationIdentifier {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.INVALID_APP_IDENTIFIER.Code,
 				Message:     errors2.INVALID_APP_IDENTIFIER.Message,
@@ -270,7 +270,9 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	return nil, true
 }
 
-func isValidApplicationIdentifier(appID, orgHandle string) (error, bool) {
+var validateApplicationIdentifierFn = defaultValidateApplicationIdentifier
+
+func defaultValidateApplicationIdentifier(appID, orgHandle string) (error, bool) {
 	cfg := config.GetCDSRuntime().Config
 	identityClient := client.NewIdentityClient(cfg)
 
@@ -278,8 +280,6 @@ func isValidApplicationIdentifier(appID, orgHandle string) (error, bool) {
 	if err != nil {
 		return err, false
 	}
-
-	// must be exactly one match
 	return nil, len(res.Applications) == 1
 }
 

@@ -44,6 +44,11 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 	AppId := "test-app-complex-001"
 	SuperTenantOrg := fmt.Sprintf("carbon.super-complex-%d", time.Now().UnixNano())
 
+	restore := schemaService.OverrideValidateApplicationIdentifierForTest(
+		// bypass app verification with IDP
+		func(appID, org string) (error, bool) { return nil, true })
+	defer restore()
+
 	// Initialize Profile Schema Attributes
 	profileSchemaSvc := schemaService.GetProfileSchemaService()
 

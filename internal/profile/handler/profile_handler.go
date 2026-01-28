@@ -60,6 +60,17 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, err)
 		return
 	}
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 
 	profileId := r.PathValue("profileId")
 	if profileId == "" {
@@ -91,7 +102,16 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 		utils.HandleError(w, err)
 		return
 	}
-
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 	var profileId string
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
@@ -178,6 +198,16 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 		utils.HandleError(w, err)
 		return
 	}
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 	profileId := r.PathValue("profileId")
 	if profileId == "" {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -208,6 +238,15 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	}
 	logger := log.GetLogger()
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
@@ -509,6 +548,17 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 		return
 	}
 
+	orgHandle := utils.ExtractOrgHandleFromPath(request)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(writer, clientError)
+		return
+	}
+
 	profileId := request.PathValue("profileId")
 	if profileId == "" {
 		http.Error(writer, "Invalid path", http.StatusNotFound)
@@ -530,7 +580,6 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	orgHandle := utils.ExtractOrgHandleFromPath(request)
 	_, err = profilesService.UpdateProfile(profileId, orgHandle, profile)
 	if err != nil {
 		utils.HandleError(writer, err)
@@ -548,6 +597,17 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 	err := security.AuthnAndAuthz(r, "profile:update")
 	if err != nil {
 		utils.HandleError(w, err)
+		return
+	}
+
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
@@ -569,8 +629,7 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	orgHandler := utils.ExtractOrgHandleFromPath(r)
-	updatedProfile, err := profilesService.PatchProfile(profileId, orgHandler, patchData)
+	updatedProfile, err := profilesService.PatchProfile(profileId, orgHandle, patchData)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -597,6 +656,17 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 	logger := log.GetLogger()
 	if err := security.AuthnAndAuthz(r, "profile:update"); err != nil {
 		utils.HandleError(w, err)
+		return
+	}
+
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
@@ -672,7 +742,6 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 		return
 	}
 
-	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	// Apply patch
 	updatedProfile, err := profilesService.PatchProfile(profileId, orgHandle, patchData)
 	if err != nil {
@@ -923,6 +992,17 @@ func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
 	// Get the profiles provider and service
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
@@ -951,6 +1031,17 @@ func (ph *ProfileHandler) UpdateProfileConsents(w http.ResponseWriter, r *http.R
 	err := security.AuthnAndAuthz(r, "profile:update")
 	if err != nil {
 		utils.HandleError(w, err)
+		return
+	}
+
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 
