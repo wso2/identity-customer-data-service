@@ -132,7 +132,7 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 		return nil, errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UNIFICATION_RULE_NOT_FOUND.Code,
 			Message:     errors2.UNIFICATION_RULE_NOT_FOUND.Message,
-			Description: fmt.Sprintf("Unification rule: %s not found", ruleId),
+			Description: fmt.Sprintf("Unification rule: '%s' not found", ruleId),
 		}, http.StatusNotFound)
 	}
 	return unificationRule, err

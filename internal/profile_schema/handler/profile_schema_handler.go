@@ -65,7 +65,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -150,7 +150,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchema(w http.ResponseWriter, r *http
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -183,7 +183,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -226,7 +226,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -291,7 +291,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -344,7 +344,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchema(w http.ResponseWriter, r *h
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -376,7 +376,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.Respons
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -417,7 +417,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.Res
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return

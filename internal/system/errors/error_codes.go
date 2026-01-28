@@ -160,14 +160,14 @@ var (
 
 	//   100xx - Auth / Access
 	//   110xx - Profile & App Data & cookies
-	//   120xx - Profile Schema
-	//   130xx - Unification Rules
+	//   120xx - Unification Rules
+	//   130xx - Profile Schema
 	//   140xx - Consent Management
 	//   160xx - Admin Configurations
 	//   190xx - Other Client Errors
 	BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "10001",
-		Message: "Invalid request body.",
+		Message: "Invalid request.",
 	}
 
 	UN_AUTHORIZED = ErrorMessage{
@@ -282,6 +282,11 @@ var (
 		Message: "Unification priority already taken.",
 	}
 
+	GET_UNIFICATION_RULE_WITHOUT_ID = ErrorMessage{
+		Code:    errorPrefix + "12005",
+		Message: "Unification rule Id is required.",
+	}
+
 	PROFILE_SCHEMA_ADD_BAD_REQUEST = ErrorMessage{
 		Code:    errorPrefix + "13001",
 		Message: "Invalid request payload.",
@@ -338,8 +343,9 @@ var (
 	}
 
 	CDS_NOT_ENABLED = ErrorMessage{
-		Code:    errorPrefix + "16001",
-		Message: "Customer data service is not enabled for the tenant.",
+		Code:        errorPrefix + "16001",
+		Message:     "Not enabled.",
+		Description: "ustomer data service is not enabled for the organization",
 	}
 
 	INVALID_FILTER_FORMAT = ErrorMessage{

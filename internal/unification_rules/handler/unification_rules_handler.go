@@ -58,7 +58,9 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	}
 
 	var ruleInRequest model.UnificationRuleAPIRequest
-	if err := json.NewDecoder(r.Body).Decode(&ruleInRequest); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&ruleInRequest); err != nil {
 		utils.HandleDecodeError(err, "unification rule")
 		return
 	}
@@ -68,7 +70,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -123,7 +125,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -161,14 +163,19 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
 	}
 	ruleId := r.PathValue("ruleId")
 	if ruleId == "" {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_UNIFICATION_RULE_WITHOUT_ID.Code,
+			Message:     errors2.GET_UNIFICATION_RULE_WITHOUT_ID.Message,
+			Description: "Invalid path for unification rule retrieval",
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
 		return
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
@@ -206,7 +213,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -282,7 +289,7 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return

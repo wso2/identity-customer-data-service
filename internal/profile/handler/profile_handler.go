@@ -66,7 +66,7 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -89,15 +89,12 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(profile)
+	utils.RespondJSON(w, http.StatusOK, profile, constants.ProfileResource)
 }
 
 // GetCurrentUserProfile handles retrieval of the current user's profile
 func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.Request) {
 
-	logger := log.GetLogger()
 	if err := security.AuthnAndAuthz(r, "profile:view"); err != nil {
 		utils.HandleError(w, err)
 		return
@@ -107,7 +104,7 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -137,57 +134,65 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 				return
 			}
 
+			// Extract 'sub' claim and consider it as userId
 			sub, ok := claims["sub"]
 			if !ok {
-				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.GET_PROFILE.Code,
+					Message:     errors2.GET_PROFILE.Message,
+					Description: "Unable to resolve profile for current user",
+				}, http.StatusUnauthorized)
+				utils.HandleError(w, clientError)
 				return
 			}
 
 			// Lookup profile by username (sub)
 			subStr, ok := sub.(string)
 			if !ok || subStr == "" {
-				http.Error(w, "Missing 'sub' in token", http.StatusUnauthorized)
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.GET_PROFILE.Code,
+					Message:     errors2.GET_PROFILE.Message,
+					Description: "Unable to resolve profile for current user",
+				}, http.StatusUnauthorized)
+				utils.HandleError(w, clientError)
+				return
 			}
 			profile, err := profilesService.FindProfileByUserId(subStr)
-			if err != nil || profile == nil {
-				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
+			if err != nil {
+				utils.HandleError(w, err)
+				return
+			}
+			if profile == nil {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.GET_PROFILE.Code,
+					Message:     errors2.GET_PROFILE.Message,
+					Description: "Profile not found for current user",
+				}, http.StatusNotFound)
+				utils.HandleError(w, clientError)
 				return
 			}
 			profileId = profile.ProfileId
 		}
 	}
 
-	// If still not resolved, unauthorized
-	if profileId == "" {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.GET_PROFILE.Code,
-			Message:     errors2.GET_PROFILE.Message,
-			Description: "Unauthorized: no valid authentication method found",
-		}, http.StatusUnauthorized)
-		utils.HandleError(w, clientError)
-		return
-	}
-
 	// Fetch the profile using the resolved profile ID
 	profile, err := profilesService.GetProfile(profileId)
-	if err != nil || profile == nil {
-		logger.Debug(fmt.Sprintf("Profile not found for profileId: %s", profileId))
+	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
-	// Return profile JSON
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(profile); err != nil {
-		errMsg := fmt.Sprintf("Failed to encode profile response for profileId: %s", profileId)
-		logger.Debug(errMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
+	if profile == nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE.Code,
 			Message:     errors2.GET_PROFILE.Message,
-			Description: "Failed to encode profile response for profileId: " + profileId,
-		}, err)
-		utils.HandleError(w, serverError)
+			Description: "Profile not found for current user",
+		}, http.StatusNotFound)
+		utils.HandleError(w, clientError)
+		return
 	}
+
+	utils.RespondJSON(w, http.StatusOK, profile, constants.ProfileResource)
 }
 
 // DeleteProfile handles profile deletion
@@ -203,7 +208,7 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -242,7 +247,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -545,7 +550,7 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(writer, clientError)
 		return
@@ -606,7 +611,7 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -663,7 +668,7 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -996,7 +1001,7 @@ func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Requ
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
@@ -1038,7 +1043,7 @@ func (ph *ProfileHandler) UpdateProfileConsents(w http.ResponseWriter, r *http.R
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
 			Message:     errors2.CDS_NOT_ENABLED.Message,
-			Description: "CDS is not enabled for tenant: " + orgHandle,
+			Description: errors2.CDS_NOT_ENABLED.Description,
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return
