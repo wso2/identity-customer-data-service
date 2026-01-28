@@ -190,7 +190,6 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	attribute := model.ProfileSchemaAttribute{}
 
 	if !constants.AllowedAttributesScope[scope] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -202,7 +201,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 		return
 	}
 
-	attribute, err = schemaService.GetProfileSchemaAttributeById(orgHandle, attributeId)
+	attribute, err := schemaService.GetProfileSchemaAttributeById(orgHandle, attributeId)
 
 	if err != nil {
 		utils.HandleError(w, err)
