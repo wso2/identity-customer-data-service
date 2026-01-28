@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
@@ -48,6 +50,12 @@ func NewUnificationRulesHandler() *UnificationRulesHandler {
 // AddUnificationRule handles adding a new rule
 func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r *http.Request) {
 
+	err := security.AuthnAndAuthz(r, "unification_rules:create")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
 	var ruleInRequest model.UnificationRuleAPIRequest
 	if err := json.NewDecoder(r.Body).Decode(&ruleInRequest); err != nil {
 		utils.HandleDecodeError(err, "unification rule")
@@ -55,6 +63,15 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	}
 
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 	// Set timestamps
 	now := time.Now().UTC().Unix()
 	rule := model.UnificationRule{
@@ -70,7 +87,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	err := ruleService.AddUnificationRule(rule, orgHandle)
+	err = ruleService.AddUnificationRule(rule, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -103,6 +120,15 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 	rules, err := ruleService.GetUnificationRules(orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -131,6 +157,16 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 	err := security.AuthnAndAuthz(r, "unification_rules:view")
 	if err != nil {
 		utils.HandleError(w, err)
+		return
+	}
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
 		return
 	}
 	ruleId := r.PathValue("ruleId")
@@ -170,7 +206,16 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		utils.HandleDecodeError(err, "unification rule")
@@ -178,7 +223,6 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	err = ruleService.PatchUnificationRule(ruleId, orgHandle, updates)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -215,6 +259,16 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: "CDS is not enabled for tenant: " + orgHandle,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 	err = ruleService.DeleteUnificationRule(ruleId)
@@ -224,4 +278,9 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// isCDSEnabled checks if CDS is enabled for the given tenant
+func isCDSEnabled(tenantId string) bool {
+	return adminConfigService.GetAdminConfigService().IsCDSEnabled(tenantId)
 }

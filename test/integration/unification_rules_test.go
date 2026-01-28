@@ -21,6 +21,10 @@ func Test_UnificationRule(t *testing.T) {
 
 	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 	profileSchemaService := schemaService.GetProfileSchemaService()
+	restore := schemaService.OverrideValidateApplicationIdentifierForTest(
+		// bypass app verification with IDP
+		func(appID, org string) (error, bool) { return nil, true })
+	defer restore()
 
 	t.Run("Pre-requisite: Add_schema_attribute", func(t *testing.T) {
 		schemaAttributes := []profileSchema.ProfileSchemaAttribute{

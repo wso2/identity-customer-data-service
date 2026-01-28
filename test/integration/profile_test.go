@@ -40,6 +40,10 @@ func Test_Profile(t *testing.T) {
 	profileSvc := profileService.GetProfilesService()
 	profileSchemaSvc := schemaService.GetProfileSchemaService()
 	unificationSvc := unificationService.GetUnificationRuleService()
+	restore := schemaService.OverrideValidateApplicationIdentifierForTest(
+		// bypass app verification with IDP
+		func(appID, org string) (error, bool) { return nil, true })
+	defer restore()
 
 	t.Run("PreRequisite_AddProfileSchemaAttributes", func(t *testing.T) {
 
