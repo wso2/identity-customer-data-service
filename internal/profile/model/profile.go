@@ -41,7 +41,7 @@ type Reference struct {
 type Profile struct {
 	ProfileId          string                 `json:"profile_id" bson:"profile_id"`
 	UserId             string                 `json:"user_id" bson:"user_id"`
-	TenantId           string                 `json:"tenant_id" bson:"tenant_id"`
+	OrgHandle           string                 `json:"org_handle" bson:"org_handle"`
 	CreatedAt          time.Time              `json:"created_at" bson:"created_at"`
 	UpdatedAt          time.Time              `json:"updated_at" bson:"updated_at"`
 	Location           string                 `json:"location" bson:"location"`

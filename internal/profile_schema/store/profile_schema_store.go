@@ -365,7 +365,7 @@ func PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[stri
 	args = append(args, orgId, attributeId)
 
 	query := `UPDATE profile_schema SET ` + strings.Join(setClauses, ", ") +
-		` WHERE tenant_id = $` + strconv.Itoa(argIndex) + ` AND attribute_id = $` + strconv.Itoa(argIndex+1)
+		` WHERE org_handle = $` + strconv.Itoa(argIndex) + ` AND attribute_id = $` + strconv.Itoa(argIndex+1)
 
 	_, err = dbClient.ExecuteQuery(query, args...)
 	if err != nil {
