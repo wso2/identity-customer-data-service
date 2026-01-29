@@ -32,6 +32,7 @@ import (
 
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
+	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -90,11 +91,11 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filterParams := utils.ParseApplicationDataParams(r)
+	filterParams := parseApplicationDataParams(r)
 	callerAppID := getCallerAppIDFromRequest(r)
 	isSystemApp := isCallerSystemApplication(orgHandle, callerAppID)
 
-	profile.ApplicationData = utils.FilterApplicationData(
+	profile.ApplicationData = profileService.FilterApplicationData(
 		profile.ApplicationData,
 		callerAppID,
 		isSystemApp,
@@ -1147,7 +1148,11 @@ func isCallerSystemApplication(tenantId, appId string) bool {
 	}
 	adminConfigProvider := adminConfigPkg.NewAdminConfigProvider()
 	adminConfigService := adminConfigProvider.GetAdminConfigService()
-	return adminConfigService.IsSystemApplication(tenantId, appId)
+	isSystemApp, err := adminConfigService.IsSystemApplication(tenantId, appId)
+	if err != nil {
+		return false
+	}
+	return isSystemApp
 }
 
 // isCDSEnabled checks if CDS is enabled for the given tenant

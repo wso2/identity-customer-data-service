@@ -228,18 +228,3 @@ func UpdateInitialSchemaSyncConfig(state bool, tenantId string) error {
 	return tx.Commit()
 }
 
-func IsSystemApplication(tenantId, appId string) (bool, error) {
-	config, err := GetAdminConfig(tenantId)
-	if err != nil {
-		return false, err
-	}
-	if config == nil {
-		return false, nil
-	}
-	for _, sysApp := range config.SystemApplications {
-		if sysApp == appId {
-			return true, nil
-		}
-	}
-	return false, nil
-}

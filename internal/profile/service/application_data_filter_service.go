@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -16,45 +16,11 @@
  * under the License.
  */
 
-package utils
-
-import (
-	"net/http"
-	"strings"
-)
+package service
 
 type ApplicationDataFilterParams struct {
-	IncludeAppData  bool     // application_data=true
-	RequestedAppIDs []string // application_id=app1,app2 or * for all
-}
-
-func ParseApplicationDataParams(r *http.Request) ApplicationDataFilterParams {
-	params := ApplicationDataFilterParams{
-		IncludeAppData:  false,
-		RequestedAppIDs: []string{},
-	}
-
-	appDataParam := r.URL.Query().Get("includeApplicationData")
-	if strings.ToLower(appDataParam) == "true" {
-		params.IncludeAppData = true
-	}
-
-	appIDParam := r.URL.Query().Get("application_identifier")
-	if appIDParam != "" {
-		if appIDParam == "*" {
-			params.RequestedAppIDs = []string{"*"}
-		} else {
-			ids := strings.Split(appIDParam, ",")
-			for _, id := range ids {
-				trimmed := strings.TrimSpace(id)
-				if trimmed != "" {
-					params.RequestedAppIDs = append(params.RequestedAppIDs, trimmed)
-				}
-			}
-		}
-	}
-
-	return params
+	IncludeAppData  bool     // Whether to include application data
+	RequestedAppIDs []string // Specific app IDs to include, or "*" for all
 }
 
 func FilterApplicationData(
@@ -81,8 +47,6 @@ func FilterApplicationData(
 
 func filterForSystemApp(appData map[string]map[string]interface{}, requestedAppIDs []string) map[string]map[string]interface{} {
 	if len(requestedAppIDs) == 0 {
-		// If application_data=true but no application_id specified,
-		// return all data for system apps
 		return appData
 	}
 

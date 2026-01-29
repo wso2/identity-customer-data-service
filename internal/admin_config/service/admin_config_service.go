@@ -29,7 +29,7 @@ type AdminConfigServiceInterface interface {
 	GetAdminConfig(tenantId string) (model.AdminConfig, error)
 	IsCDSEnabled(tenantId string) bool
 	IsInitialSchemaSyncDone(tenantId string) bool
-	IsSystemApplication(tenantId, appId string) bool
+	IsSystemApplication(tenantId, appId string) (bool, error)
 	UpdateAdminConfig(category model.AdminConfig, tenantId string) error
 	UpdateInitialSchemaSync(state bool, tenantId string) error
 }
@@ -53,12 +53,20 @@ func (a AdminConfigService) IsInitialSchemaSyncDone(tenantId string) bool {
 	return config.InitialSchemaSyncDone
 }
 
-func (a AdminConfigService) IsSystemApplication(tenantId, appId string) bool {
-	isSystemApp, err := store.IsSystemApplication(tenantId, appId)
-	if err != nil {
-		return false
-	}
-	return isSystemApp
+func (a AdminConfigService) IsSystemApplication(tenantId, appId string) (bool, error) {
+    config, err := store.GetAdminConfig(tenantId)
+    if err != nil {
+        return false, err
+    }
+    if config == nil {
+        return false, nil
+    }
+    for _, sysApp := range config.SystemApplications {
+        if sysApp == appId {
+            return true, nil
+        }
+    }
+    return false, nil
 }
 
 func (a AdminConfigService) GetAdminConfig(tenantId string) (model.AdminConfig, error) {
