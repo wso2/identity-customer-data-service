@@ -1101,9 +1101,6 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []s
 			masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
 
 			// Override for visual reference to the child
-			masterProfile.ProfileId = profile.ProfileId
-			masterProfile.ProfileStatus.ReferenceProfileId = profile.ProfileId
-
 			profileResponse := &profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
 				UserId:             masterProfile.UserId,
@@ -1111,9 +1108,9 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []s
 				Traits:             masterProfile.Traits,
 				IdentityAttributes: masterProfile.IdentityAttributes,
 				Meta: profileModel.Meta{
-					CreatedAt: masterProfile.CreatedAt,
-					UpdatedAt: masterProfile.UpdatedAt,
-					Location:  masterProfile.Location,
+					CreatedAt: profile.CreatedAt,
+					UpdatedAt: profile.UpdatedAt,
+					Location:  profile.Location,
 				},
 				MergedTo: &profileModel.Reference{
 					ProfileId: masterProfile.ProfileId,

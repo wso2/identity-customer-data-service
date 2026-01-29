@@ -261,8 +261,12 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		// Verify they are NOT merged initially
 		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
 		merged2, _ := profileSvc.GetProfile(prof2.ProfileId)
-		require.Empty(t, merged1.MergedTo.ProfileId, "P1 should not be merged initially")
-		require.Empty(t, merged2.MergedTo.ProfileId, "P2 should not be merged initially")
+		if merged1.MergedTo != nil {
+			require.Empty(t, merged1.MergedTo.ProfileId, "P1 should not be merged initially")
+		}
+		if merged2.MergedTo != nil {
+			require.Empty(t, merged2.MergedTo.ProfileId, "P2 should not be merged initially")
+		}
 
 		// Update P1 to add email2
 		updateReq := profileModel.ProfileRequest{
