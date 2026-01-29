@@ -42,15 +42,15 @@ import (
 
 type ProfilesServiceInterface interface {
 	DeleteProfile(profileId string) error
-	GetAllProfiles(tenantId string) ([]profileModel.ProfileResponse, error)
-	CreateProfile(profile profileModel.ProfileRequest, tenantId string) (*profileModel.ProfileResponse, error)
-	UpdateProfile(profileId, tenantId string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
+	GetAllProfiles(orgHandle string) ([]profileModel.ProfileResponse, error)
+	CreateProfile(profile profileModel.ProfileRequest, orgHandle string) (*profileModel.ProfileResponse, error)
+	UpdateProfile(profileId, orgHandle string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
-	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
+	GetAllProfilesWithFilter(orgHandle string, filters []string) ([]profileModel.ProfileResponse, error)
 	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
 	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
-	PatchProfile(profileId, tenantId string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
+	PatchProfile(profileId, orgHandle string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
 	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
 	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
 	CreateProfileCookie(profileId string) (*profileModel.ProfileCookie, error)
@@ -86,12 +86,12 @@ func ConvertAppData(input map[string]map[string]interface{}) []profileModel.Appl
 }
 
 // CreateProfile creates a new profile.
-func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequest, tenantId string) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequest, orgHandle string) (*profileModel.ProfileResponse, error) {
 
-	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(tenantId)
+	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(orgHandle)
 	logger := log.GetLogger()
 	if err != nil {
-		errMsg := fmt.Sprintf("Error fetching profile schema for tenant: %s", tenantId)
+		errMsg := fmt.Sprintf("Error fetching profile schema for organization: %s", orgHandle)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_PROFILE.Code,
@@ -104,7 +104,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	var schema model.ProfileSchema
 	schemaBytes, _ := json.Marshal(rawSchema) // serialize
 	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
-		errMsg := fmt.Sprintf("Invalid schema format for tenant: %s while validating for profile creation.", tenantId)
+		errMsg := fmt.Sprintf("Invalid schema format for organization: %s while validating for profile creation.", orgHandle)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_PROFILE.Code,
@@ -124,7 +124,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	profileId := uuid.New().String()
 	profile := profileModel.Profile{
 		ProfileId:          profileId,
-		TenantId:           tenantId,
+		OrgHandle:           orgHandle,
 		UserId:             profileRequest.UserId,
 		ApplicationData:    ConvertAppData(profileRequest.ApplicationData),
 		Traits:             profileRequest.Traits,
@@ -135,7 +135,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 		},
 		CreatedAt: createdTime,
 		UpdatedAt: createdTime,
-		Location:  utils.BuildProfileLocation(tenantId, profileId),
+		Location:  utils.BuildProfileLocation(orgHandle, profileId),
 	}
 
 	if err := profileStore.InsertProfile(profile); err != nil {
@@ -153,8 +153,8 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	config := UnificationModel.DefaultConfig()
 
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
-		// Set tenant ID for the profile before enqueuing
-		profile.TenantId = tenantId
+		// Set organization handle for the profile before enqueuing
+		profile.OrgHandle = orgHandle
 		queue.Enqueue(profile)
 	}
 
@@ -534,7 +534,7 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 }
 
 // UpdateProfile creates or updates a profile
-func (ps *ProfilesService) UpdateProfile(profileId, tenantId string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
 
 	profile, err := profileStore.GetProfile(profileId) //todo: need to get the reference to see what to updatedProfile (see if its the master)
 	logger := log.GetLogger()
@@ -558,7 +558,7 @@ func (ps *ProfilesService) UpdateProfile(profileId, tenantId string, updatedProf
 		return nil, clientError
 	}
 
-	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(profile.TenantId)
+	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(profile.OrgHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -639,8 +639,8 @@ func (ps *ProfilesService) UpdateProfile(profileId, tenantId string, updatedProf
 	config := UnificationModel.DefaultConfig()
 	queue := &workers.ProfileWorkerQueue{}
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
-		// Set tenant ID for the profile before enqueuing
-		profileToUpDate.TenantId = tenantId
+		// Set organization handle for the profile before enqueuing
+		profileToUpDate.OrgHandle = orgHandle
 		queue.Enqueue(profileToUpDate)
 	}
 	logger.Info("Successfully updated profile: " + profileFetched.ProfileId)
@@ -959,9 +959,9 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 }
 
 // GetAllProfiles retrieves all profiles
-func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) GetAllProfiles(orgHandle string) ([]profileModel.ProfileResponse, error) {
 
-	existingProfiles, err := profileStore.GetAllProfiles(tenantId)
+	existingProfiles, err := profileStore.GetAllProfiles(orgHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -1039,7 +1039,7 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 }
 
 // GetAllProfilesWithFilter handles fetching all profiles with filter
-func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) GetAllProfilesWithFilter(orgHandle string, filters []string) ([]profileModel.ProfileResponse, error) {
 
 	propertyTypeMap := make(map[string]string)
 
@@ -1066,7 +1066,7 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []s
 	}
 
 	// Step 4: Fetch matching profiles with `list_profile = true`
-	filteredProfiles, err := profileStore.GetAllProfilesWithFilter(tenantId, rewrittenFilters)
+	filteredProfiles, err := profileStore.GetAllProfilesWithFilter(orgHandle, rewrittenFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -1146,12 +1146,12 @@ func parseTypedValueForFilters(valueType string, raw string) interface{} {
 }
 
 // FindProfileByUserName retrieves a profile by user_id
-func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
+func FindProfileByUserName(orgHandle, sub string) (interface{}, error) {
 
 	// TODO: Restrict app-specific fields via client_id from JWT (if available)
 	//  TODO: currently userId is defined as a string [] so CONTAINS - but need to decide
 	filter := fmt.Sprintf("identity_attributes.user_id co %s", sub)
-	profiles, err := profileStore.GetAllProfilesWithFilter(tenantId, []string{filter})
+	profiles, err := profileStore.GetAllProfilesWithFilter(orgHandle, []string{filter})
 	logger := log.GetLogger()
 	if err != nil {
 		return nil, err
@@ -1262,7 +1262,7 @@ func (ps *ProfilesService) FindProfileByUserId(userId string) (*profileModel.Pro
 }
 
 // PatchProfile applies a partial update to an existing profile
-func (ps *ProfilesService) PatchProfile(profileId, tenantId string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) PatchProfile(profileId, orgHandle string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
 
 	existingProfile, err := profileStore.GetProfile(profileId)
 	if err != nil {
@@ -1329,7 +1329,7 @@ func (ps *ProfilesService) PatchProfile(profileId, tenantId string, patch map[st
 	}
 
 	// Reuse the PUT logic to update the profile
-	return ps.UpdateProfile(profileId, tenantId, updatedProfileReq)
+	return ps.UpdateProfile(profileId, orgHandle, updatedProfileReq)
 }
 
 func (ps *ProfilesService) GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error) {

@@ -45,7 +45,7 @@ func Test_UnificationRule(t *testing.T) {
 	rule := model.UnificationRule{
 		RuleName:     "Email based",
 		RuleId:       uuid.New().String(),
-		TenantId:     SuperTenantOrg,
+		OrgHandle:     SuperTenantOrg,
 		PropertyName: "identity_attributes.email",
 		Priority:     1,
 		IsActive:     true,
@@ -93,7 +93,7 @@ func Test_UnificationRule(t *testing.T) {
 		rule := model.UnificationRule{
 			RuleName:     "Payment based",
 			RuleId:       uuid.New().String(),
-			TenantId:     SuperTenantOrg,
+			OrgHandle:     SuperTenantOrg,
 			PropertyName: "traits.orders.payment",
 			Priority:     2,
 			IsActive:     true,

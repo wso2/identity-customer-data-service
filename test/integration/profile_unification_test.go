@@ -103,7 +103,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	emailBasedRule := model.UnificationRule{
 		RuleName:     RuleNameEmailBased,
 		RuleId:       emailRuleId,
-		TenantId:     SuperTenantOrg,
+		OrgHandle:     SuperTenantOrg,
 		PropertyName: "identity_attributes.email",
 		Priority:     1,
 		IsActive:     true,
@@ -116,7 +116,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	phoneBasedRule := model.UnificationRule{
 		RuleName:     RuleNamePhoneBased,
 		RuleId:       phoneRuleId,
-		TenantId:     SuperTenantOrg,
+		OrgHandle:     SuperTenantOrg,
 		PropertyName: "identity_attributes.phone_number",
 		Priority:     2,
 		IsActive:     true,
@@ -331,7 +331,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		jsonData := []byte(`{
 	   "rule_name": "` + RuleNameEmailBased + `",
 		"rule_id": "` + emailRuleId + `",
-		"tenant_id": "` + OtherTenant + `",
+		"org_handle": "` + OtherTenant + `",
 	   "property_name": "identity_attributes.email",
 	   "priority": 1,
 	   "is_active": true

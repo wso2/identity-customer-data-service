@@ -479,7 +479,7 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 	}
 	logger := log.GetLogger()
 	if !isCDSEnabled(orgId) {
-		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + orgId
+		errMsg := "Unable to process profile sync event as CDS is not enabled for organization: " + orgId
 		logger.Info(errMsg)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
@@ -490,13 +490,13 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 		return
 	}
 
-	logger.Info(fmt.Sprintf("Received schema sync request: %s for tenant: %s ", schemaSync.Event, schemaSync.OrgId))
+	logger.Info(fmt.Sprintf("Received schema sync request: %s for organization: %s ", schemaSync.Event, schemaSync.OrgId))
 
 	if schemaSync.Event == constants.AddScimAttributeEvent || schemaSync.Event == constants.UpdateScimAttributeEvent ||
 		schemaSync.Event == constants.DeleteScimAttributeEvent || schemaSync.Event == constants.UpdateLocalAttributeEvent {
 		// Enqueue the schema sync job for asynchronous processing
 		if !workers.EnqueueSchemaSyncJob(schemaSync) {
-			errMsg := fmt.Sprintf("Unable to process schema sync request for tenant: %s. The system is currently at capacity. Please try again in a few moments.", schemaSync.OrgId)
+			errMsg := fmt.Sprintf("Unable to process schema sync request for organization: %s. The system is currently at capacity. Please try again in a few moments.", schemaSync.OrgId)
 			logger.Error(errMsg)
 			serverError := errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
@@ -507,7 +507,7 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 			return
 		}
 
-		logger.Debug("Schema sync request enqueued successfully for tenant: " + schemaSync.OrgId)
+		logger.Debug("Schema sync request enqueued successfully for organization: " + schemaSync.OrgId)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -521,7 +521,7 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 
 }
 
-// isCDSEnabled checks if CDS is enabled for the given tenant
-func isCDSEnabled(tenantId string) bool {
-	return adminConfigService.GetAdminConfigService().IsCDSEnabled(tenantId)
+// isCDSEnabled checks if CDS is enabled for the given organization
+func isCDSEnabled(orgHandle string) bool {
+	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
 }

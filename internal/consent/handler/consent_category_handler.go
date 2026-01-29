@@ -74,7 +74,7 @@ func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *ht
 	}
 
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
-	category.TenantId = orgHandle
+	category.OrgHandle = orgHandle
 
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()
 	consentCat, err := service.AddConsentCategory(category)

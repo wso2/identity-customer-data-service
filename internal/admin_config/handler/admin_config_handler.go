@@ -94,7 +94,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	configToUpdate := model.AdminConfig{
-		TenantId:              orgHandle,
+		OrgHandle:              orgHandle,
 		InitialSchemaSyncDone: existingConfig.InitialSchemaSyncDone,
 		CDSEnabled:            existingConfig.CDSEnabled,
 		SystemApplications:    existingConfig.SystemApplications,

@@ -114,11 +114,11 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 			return
 		}
 
-		tenantID := parts[0]
+		orgHandle := parts[0]
 		remainingPath := "/" + parts[1]
 
 		// Add tenant to request context and preserve remaining path (including API version)
-		ctx := context.WithValue(r.Context(), constants.TenantContextKey, tenantID)
+		ctx := context.WithValue(r.Context(), constants.TenantContextKey, orgHandle)
 		r = r.WithContext(ctx)
 		r.URL.Path = remainingPath
 
