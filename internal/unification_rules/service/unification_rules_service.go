@@ -21,6 +21,7 @@ package service
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -58,6 +59,14 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 			Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
 			Description: fmt.Sprintf("Unification rule with property %s already exists", rule.PropertyName),
 		}, http.StatusConflict)
+	}
+
+	if strings.HasPrefix(rule.PropertyName, constants.ApplicationData+".") {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ADD_UNIFICATION_RULE.Code,
+			Message:     errors2.ADD_UNIFICATION_RULE.Message,
+			Description: "Creating unification rules based on application data is not supported.",
+		}, http.StatusBadRequest)
 	}
 
 	profileSchemaService := provider.NewProfileSchemaProvider().GetProfileSchemaService()
