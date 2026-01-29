@@ -65,7 +65,7 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.ADD_UNIFICATION_RULE.Code,
 			Message:     errors2.ADD_UNIFICATION_RULE.Message,
-			Description: "Creating unification rules based on application data is not supported at this time.",
+			Description: "Creating unification rules based on application data is not supported.",
 		}, http.StatusBadRequest)
 	}
 
