@@ -78,7 +78,7 @@ func (a AdminConfigService) GetAdminConfig(tenantId string) (model.AdminConfig, 
 
 func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, orgHandle string) error {
 	isCDSEnabledInitialState := a.IsCDSEnabled(orgHandle)
-	isIsInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(orgHandle)
+	isInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(orgHandle)
   
 	// Schema sync status should not be changed via this method.
 	updatedConfig.InitialSchemaSyncDone = isInitialSchemaSyncDoneInitialState
