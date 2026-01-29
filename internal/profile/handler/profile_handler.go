@@ -25,16 +25,17 @@ import (
 	"strings"
 	"sync"
 
+	adminConfigPkg "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
-	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
+	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
@@ -89,7 +90,21 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, err)
 		return
 	}
-	utils.RespondJSON(w, http.StatusOK, profile, constants.ProfileResource)
+
+	filterParams := parseApplicationDataParams(r)
+	callerAppID := getCallerAppIDFromRequest(r)
+	isSystemApp := isCallerSystemApplication(orgHandle, callerAppID)
+
+	profile.ApplicationData = profileService.FilterApplicationData(
+		profile.ApplicationData,
+		callerAppID,
+		isSystemApp,
+		filterParams,
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(profile)
 }
 
 // GetCurrentUserProfile handles retrieval of the current user's profile
@@ -1101,6 +1116,43 @@ func setNestedMapValue(m map[string]interface{}, path string, value interface{})
 func extractClaimKeyFromLocalURI(localURI string) string {
 	parts := strings.Split(localURI, "/")
 	return parts[len(parts)-1]
+}
+
+func getCallerAppIDFromRequest(r *http.Request) string {
+    authHeader := r.Header.Get("Authorization")
+    if !strings.HasPrefix(authHeader, "Bearer ") {
+        return ""
+    }
+
+    token := strings.TrimPrefix(authHeader, "Bearer ")
+    claims, err := authn.ParseJWTClaims(token)
+    if err != nil {
+        return ""
+    }
+
+    // The azp (Authorized Party) claim identifies the application
+    if azp, ok := claims["azp"].(string); ok && azp != "" {
+        return azp
+    }
+
+    if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
+        return clientID
+    }
+
+    return ""
+}
+
+func isCallerSystemApplication(tenantId, appId string) bool {
+	if appId == "" {
+		return false
+	}
+	adminConfigProvider := adminConfigPkg.NewAdminConfigProvider()
+	adminConfigService := adminConfigProvider.GetAdminConfigService()
+	isSystemApp, err := adminConfigService.IsSystemApplication(tenantId, appId)
+	if err != nil {
+		return false
+	}
+	return isSystemApp
 }
 
 // isCDSEnabled checks if CDS is enabled for the given tenant

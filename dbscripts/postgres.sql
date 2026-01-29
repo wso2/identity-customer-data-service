@@ -113,7 +113,8 @@ ALTER TABLE application_data
 
 -- CDS Config Table
 CREATE TABLE cds_config (
-    tenant_id VARCHAR(255) ,
-    cds_enabled BOOLEAN DEFAULT FALSE,
-    initial_schema_sync_done BOOLEAN DEFAULT FALSE
+    tenant_id VARCHAR(255) NOT NULL,
+    config VARCHAR(255) NOT NULL,
+    value VARCHAR(500),
+    PRIMARY KEY (tenant_id, config)
 );

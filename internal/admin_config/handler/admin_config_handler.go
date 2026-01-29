@@ -26,6 +26,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 )
@@ -56,13 +57,13 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	resp := model.AdminConfigAPI{
-		CDSEnabled:            config.CDSEnabled,
-		InitialSchemaSyncDone: config.InitialSchemaSyncDone,
+		CDSEnabled:         config.CDSEnabled,
+		SystemApplications: config.SystemApplications,
 	}
-	writeJSONResponse(w, http.StatusOK, resp)
+	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }
 
-// UpdateAdminConfig handles PUT /admin/configs
+// UpdateAdminConfig handles PATCH /admin/configs
 func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Request) {
 
 	if err := security.AuthnAndAuthz(r, "admin_config:update"); err != nil {
@@ -85,24 +86,37 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
-	configToUpdate := model.AdminConfig{
-		TenantId:   orgHandle,
-		CDSEnabled: config.CDSEnabled,
-		// Preserving the existing value for InitialSchemaSyncDone as it is not editable via this endpoint.
-		InitialSchemaSyncDone: adminConfigService.IsInitialSchemaSyncDone(orgHandle),
-	}
 
-	err := adminConfigService.UpdateAdminConfig(configToUpdate, orgHandle)
+	existingConfig, err := adminConfigService.GetAdminConfig(orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
-}
 
-// Helper for JSON responses
-func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(data)
+	configToUpdate := model.AdminConfig{
+		TenantId:              orgHandle,
+		InitialSchemaSyncDone: existingConfig.InitialSchemaSyncDone,
+		CDSEnabled:            existingConfig.CDSEnabled,
+		SystemApplications:    existingConfig.SystemApplications,
+	}
+
+	// Update only if provided in request
+	if config.CDSEnabled != nil {
+		configToUpdate.CDSEnabled = *config.CDSEnabled
+	}
+	if config.SystemApplications != nil {
+		configToUpdate.SystemApplications = config.SystemApplications
+	}
+
+	err = adminConfigService.UpdateAdminConfig(configToUpdate, orgHandle)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	resp := model.AdminConfigAPI{
+		CDSEnabled:         configToUpdate.CDSEnabled,
+		SystemApplications: configToUpdate.SystemApplications,
+	}
+	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }
