@@ -104,7 +104,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	var schema model.ProfileSchema
 	schemaBytes, _ := json.Marshal(rawSchema) // serialize
 	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
-		errMsg := fmt.Sprintf("Invalid schema format for tenant: %s while validating for profile creation.", tenantId)
+		errMsg := fmt.Sprintf("Invalid schema format for organization: %s while validating for profile creation.", tenantId)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.ADD_PROFILE.Code,
@@ -743,11 +743,11 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 				Traits:             masterProfile.Traits,
 				IdentityAttributes: masterProfile.IdentityAttributes,
 				Meta: profileModel.Meta{
-					CreatedAt: masterProfile.CreatedAt,
-					UpdatedAt: masterProfile.UpdatedAt,
-					Location:  masterProfile.Location,
+					CreatedAt: profile.CreatedAt,
+					UpdatedAt: profile.UpdatedAt,
+					Location:  profile.Location,
 				},
-				MergedTo: *alias,
+				MergedTo: alias,
 			}
 
 			return profileResponse, nil
@@ -1029,7 +1029,7 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 					UpdatedAt: masterProfile.UpdatedAt,
 					Location:  masterProfile.Location,
 				},
-				MergedTo: *alias,
+				MergedTo: alias,
 			}
 
 			result = append(result, *profileResponse)
@@ -1115,9 +1115,9 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []s
 					UpdatedAt: masterProfile.UpdatedAt,
 					Location:  masterProfile.Location,
 				},
-				MergedTo: profileModel.Reference{
+				MergedTo: &profileModel.Reference{
 					ProfileId: masterProfile.ProfileId,
-					Reason:    profile.ProfileStatus.ReferenceReason, //todo: this has to be fetch from db
+					Reason:    profile.ProfileStatus.ReferenceReason,
 				},
 			}
 
