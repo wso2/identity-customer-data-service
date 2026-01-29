@@ -1118,27 +1118,27 @@ func extractClaimKeyFromLocalURI(localURI string) string {
 }
 
 func getCallerAppIDFromRequest(r *http.Request) string {
-	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return ""
-	}
+    authHeader := r.Header.Get("Authorization")
+    if !strings.HasPrefix(authHeader, "Bearer ") {
+        return ""
+    }
 
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	claims, ok := authn.GetCachedClaims(token)
-	if !ok {
-		return ""
-	}
+    token := strings.TrimPrefix(authHeader, "Bearer ")
+    claims, err := authn.ParseJWTClaims(token)
+    if err != nil {
+        return ""
+    }
 
-	// The azp (Authorized Party) claim identify the specific application that initiated the request and was issued the token.
-	if azp, ok := claims["azp"].(string); ok && azp != "" {
-		return azp
-	}
+    // The azp (Authorized Party) claim identifies the application
+    if azp, ok := claims["azp"].(string); ok && azp != "" {
+        return azp
+    }
 
-	if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
-		return clientID
-	}
+    if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
+        return clientID
+    }
 
-	return ""
+    return ""
 }
 
 func isCallerSystemApplication(tenantId, appId string) bool {
