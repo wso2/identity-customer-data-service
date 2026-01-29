@@ -305,7 +305,7 @@ func GetProfileSchemaAttributesForOrg(orgId string) ([]model.ProfileSchemaAttrib
 		return nil, serverError
 	}
 
-	var schema []model.ProfileSchemaAttribute
+	schema := make([]model.ProfileSchemaAttribute, 0)
 	for _, row := range results {
 		attr := mapRowToProfileAttribute(row)
 		schema = append(schema, attr)
@@ -753,7 +753,7 @@ func GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []s
 		}, err)
 	}
 
-	var attributes []model.ProfileSchemaAttribute
+	attributes := make([]model.ProfileSchemaAttribute, 0)
 	for _, row := range results {
 		attr := mapRowToProfileAttribute(row)
 		attributes = append(attributes, attr)
