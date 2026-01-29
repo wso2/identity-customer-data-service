@@ -73,3 +73,9 @@ type ConsentRecord struct {
 type ProfileConsentResponse struct {
 	Consents []ConsentRecord `json:"consents"`
 }
+
+type ProfileCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ProfileId string    `json:"profile_id"`
+	Direction string    `json:"direction,omitempty"` // "next" or "prev"
+}

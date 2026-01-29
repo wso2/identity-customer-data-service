@@ -25,25 +25,32 @@ import (
 )
 
 const (
-	defaultLimit = 5
-	maxLimit     = 200
+	defaultCount = 5
+	maxCount     = 200
 )
 
-func ParseLimit(r *http.Request) (int, error) {
-	limit := defaultLimit
-
-	if l := r.URL.Query().Get("limit"); l != "" {
-		v, err := strconv.Atoi(l)
-		if err != nil || v <= 0 {
-			return 0, fmt.Errorf("invalid limit")
-		}
-		if v > maxLimit {
-			v = maxLimit
-		}
-		limit = v
+func ParseCount(r *http.Request) (int, error) {
+	raw := r.URL.Query().Get("count")
+	if raw == "" {
+		raw = r.URL.Query().Get("limit")
 	}
 
-	return limit, nil
-}
+	if raw == "" {
+		return defaultCount, nil
+	}
 
-func StrPtr(s string) *string { return &s }
+	v, err := strconv.Atoi(raw)
+	if err != nil || v < 0 {
+		return 0, fmt.Errorf("invalid count")
+	}
+
+	// RFC9865 allows 0 (return empty page)
+	if v == 0 {
+		return 0, nil
+	}
+
+	if v > maxCount {
+		v = maxCount
+	}
+	return v, nil
+}

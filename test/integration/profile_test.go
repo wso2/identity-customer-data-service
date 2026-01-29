@@ -113,7 +113,7 @@ func Test_Profile(t *testing.T) {
 	})
 
 	t.Run("Get_Profile_Success", func(t *testing.T) {
-		profiles, err := profileSvc.GetAllProfiles(SuperTenantOrg)
+		profiles, _, err := profileSvc.GetAllProfilesCursor(SuperTenantOrg, 10, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, profiles)
 		profile, err := profileSvc.GetProfile(profiles[0].ProfileId)
@@ -137,7 +137,7 @@ func Test_Profile(t *testing.T) {
 	}`)
 		_ = json.Unmarshal(jsonData, &updatedRequest)
 
-		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
+		profiles, _, _ := profileSvc.GetAllProfilesCursor(SuperTenantOrg, 10, nil)
 		p := profiles[0]
 
 		updated, err := profileSvc.UpdateProfile(p.ProfileId, SuperTenantOrg, updatedRequest)
@@ -147,7 +147,7 @@ func Test_Profile(t *testing.T) {
 	})
 
 	t.Run("Delete_Profile_Success", func(t *testing.T) {
-		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
+		profiles, _, _ := profileSvc.GetAllProfilesCursor(SuperTenantOrg, 10, nil)
 		p := profiles[0]
 
 		err := profileSvc.DeleteProfile(p.ProfileId)
@@ -162,7 +162,7 @@ func Test_Profile(t *testing.T) {
 		for _, r := range rules {
 			_ = unificationSvc.DeleteUnificationRule(r.RuleId)
 		}
-		profiles, _ := profileSvc.GetAllProfiles(SuperTenantOrg)
+		profiles, _, _ := profileSvc.GetAllProfilesCursor(SuperTenantOrg, 10, nil)
 		for _, p := range profiles {
 			_ = profileSvc.DeleteProfile(p.ProfileId)
 		}

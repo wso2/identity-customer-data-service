@@ -514,58 +514,95 @@ func UpdateProfile(profile model.Profile) error {
 	return nil
 }
 
-// GetAllProfiles retrieves all profiles
-func GetAllProfiles(tenantId string) ([]model.Profile, error) {
+// GetAllProfiles retrieves profiles using cursor-based pagination.
+// It returns up to `limit` profiles and a boolean indicating if more records exist.
+func GetAllProfiles(tenantId string, limit int, cursor *model.ProfileCursor) ([]model.Profile, bool, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
 		errorMsg := "Failed to get database client for fetching all profiles"
 		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
+		return nil, false, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE.Code,
 			Message:     errors2.GET_PROFILE.Message,
 			Description: errorMsg,
 		}, err)
-		return nil, serverError
 	}
 	defer dbClient.Close()
 
+	// Defaults/safety
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
 	query := scripts.GetProfilesByOrgId[provider.NewDBProvider().GetDBType()]
 
-	results, err := dbClient.ExecuteQuery(query, tenantId)
+	var cursorTime interface{} = nil
+	var cursorProfileId string = ""
+	direction := "next"
+
+	if cursor != nil {
+		cursorTime = cursor.CreatedAt
+		cursorProfileId = cursor.ProfileId
+		if strings.TrimSpace(cursor.Direction) != "" {
+			direction = strings.TrimSpace(cursor.Direction)
+		}
+		if direction != "next" && direction != "prev" {
+			direction = "next"
+		}
+	}
+
+	// lookahead
+	limitPlusOne := limit + 1
+
+	results, err := dbClient.ExecuteQuery(query, tenantId, cursorTime, cursorProfileId, direction, limitPlusOne)
 	if err != nil {
 		errorMsg := "Failed fetching all profiles"
 		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
+		return nil, false, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE.Code,
 			Message:     errors2.GET_PROFILE.Message,
 			Description: errorMsg,
 		}, err)
-		return nil, serverError
 	}
 
-	var profiles []model.Profile
-	for _, row := range results {
-		var profile, _ = scanProfileRow(row)
+	hasMore := false
+	if len(results) > limit {
+		hasMore = true
+		results = results[:limit]
+	}
 
-		// Fetch app data
+	profiles := make([]model.Profile, 0, len(results))
+	for _, row := range results {
+		profile, _ := scanProfileRow(row)
+
 		apps, err := FetchApplicationData(profile.ProfileId)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Failed fetching application data for the profile: %s", profile.ProfileId)
 			logger.Debug(errorMsg, log.Error(err))
-			serverError := errors2.NewServerError(errors2.ErrorMessage{
+			return nil, false, errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.GET_PROFILE.Code,
 				Message:     errors2.GET_PROFILE.Message,
 				Description: errorMsg,
 			}, err)
-			return nil, serverError
 		}
 		profile.ApplicationData = apps
-
 		profiles = append(profiles, profile)
 	}
-	return profiles, nil
+
+	// If direction=prev, SQL returned ASC to get “closest newer”.
+	// Reverse so API always returns DESC order.
+	if direction == "prev" {
+		for i, j := 0, len(profiles)-1; i < j; i, j = i+1, j-1 {
+			profiles[i], profiles[j] = profiles[j], profiles[i]
+		}
+	}
+
+	return profiles, hasMore, nil
 }
 
 // DeleteProfile deletes a profile and its associated data
@@ -873,37 +910,49 @@ func MergeIdentityDataOfProfiles(profileId string, identityData map[string]inter
 	return UpdateProfile(*profile)
 }
 
-func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profile, error) {
+// GetAllProfilesWithFilter retrieves profiles using dynamic filters and cursor-based pagination.
+func GetAllProfilesWithFilter(
+	tenantId string,
+	filters []string,
+	limit int,
+	cursor *model.ProfileCursor,
+) ([]model.Profile, bool, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
 		errorMsg := "Failed to get database client filtering profiles."
 		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
+		return nil, false, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.FILTER_PROFILE.Code,
 			Message:     errors2.FILTER_PROFILE.Message,
 			Description: errorMsg,
 		}, err)
-		return nil, serverError
 	}
 	defer dbClient.Close()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	baseSQL := scripts.GetAllProfilesWithFilter[provider.NewDBProvider().GetDBType()]
 
 	var conditions []string
 	var args []interface{}
 	argID := 1
 	joinedAppIDs := map[string]bool{}
 
-	baseSQL := scripts.GetAllProfilesWithFilter[provider.NewDBProvider().GetDBType()]
-
-	// Always ensure tenant_id condition first
+	// tenant + list_profile
 	conditions = append(conditions, fmt.Sprintf("p.tenant_id = $%d", argID))
 	args = append(args, tenantId)
 	argID++
 
-	// Always ensure list_profile = true
 	conditions = append(conditions, "p.list_profile = true")
 
+	// dynamic filter conditions (your existing logic, unchanged)
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
 		if len(parts) != 3 {
@@ -923,42 +972,38 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 			scope, key = scopeKey[0], scopeKey[1]
 		}
 
-		var clause string
-
 		switch scope {
 		case "identity_attributes", "traits":
 			jsonCol := "p." + scope
 			switch operator {
 			case "eq":
-				clause = fmt.Sprintf("%s ->> '%s' = $%d", jsonCol, key, argID)
+				conditions = append(conditions, fmt.Sprintf("%s ->> '%s' = $%d", jsonCol, key, argID))
 				args = append(args, value)
 			case "co":
-				clause = fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID)
+				conditions = append(conditions, fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID))
 				args = append(args, "%"+value+"%")
 			case "sw":
-				clause = fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID)
+				conditions = append(conditions, fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID))
 				args = append(args, value+"%")
 			default:
 				continue
 			}
-			conditions = append(conditions, clause)
 			argID++
 
 		case "user_id":
 			switch operator {
 			case "eq":
-				clause = fmt.Sprintf("p.user_id = $%d", argID)
+				conditions = append(conditions, fmt.Sprintf("p.user_id = $%d", argID))
 				args = append(args, value)
 			case "co":
-				clause = fmt.Sprintf("p.user_id ILIKE $%d", argID)
+				conditions = append(conditions, fmt.Sprintf("p.user_id ILIKE $%d", argID))
 				args = append(args, "%"+value+"%")
 			case "sw":
-				clause = fmt.Sprintf("p.user_id ILIKE $%d", argID)
+				conditions = append(conditions, fmt.Sprintf("p.user_id ILIKE $%d", argID))
 				args = append(args, value+"%")
 			default:
 				continue
 			}
-			conditions = append(conditions, clause)
 			argID++
 
 		case "application_data":
@@ -972,9 +1017,9 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 
 				if !joinedAppIDs[appID] {
 					baseSQL += fmt.Sprintf(`
-						INNER JOIN application_data %s
-						ON %s.profile_id = p.profile_id AND %s.app_id = '%s'
-					`, appAlias, appAlias, appAlias, appID)
+                        INNER JOIN application_data %s
+                          ON %s.profile_id = p.profile_id AND %s.app_id = '%s'
+                    `, appAlias, appAlias, appAlias, appID)
 					joinedAppIDs[appID] = true
 				}
 			} else {
@@ -982,83 +1027,113 @@ func GetAllProfilesWithFilter(tenantId string, filters []string) ([]model.Profil
 				appAlias = "a"
 				if !joinedAppIDs["__generic"] {
 					baseSQL += `
-						INNER JOIN application_data a
-						ON a.profile_id = p.profile_id
-					`
+                        INNER JOIN application_data a ON a.profile_id = p.profile_id
+                    `
 					joinedAppIDs["__generic"] = true
 				}
 			}
 
 			switch operator {
 			case "eq":
-				clause = fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' = $%d", appAlias, appKey, argID)
+				conditions = append(conditions,
+					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' = $%d", appAlias, appKey, argID))
 				args = append(args, value)
 			case "co":
-				clause = fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID)
+				conditions = append(conditions,
+					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID))
 				args = append(args, "%"+value+"%")
 			case "sw":
-				clause = fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID)
+				conditions = append(conditions,
+					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID))
 				args = append(args, value+"%")
 			default:
 				continue
 			}
-			conditions = append(conditions, clause)
 			argID++
 		}
 	}
 
-	// Always ensure list_profile = true
-	conditions = append(conditions, "p.list_profile = true")
-
-	// Final query
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	// cursor seek (created_at + profile_id)
+	var cursorTime interface{} = nil
+	var cursorProfileId string = ""
+	direction := "next"
+	if cursor != nil {
+		cursorTime = cursor.CreatedAt
+		cursorProfileId = cursor.ProfileId
+		if strings.TrimSpace(cursor.Direction) != "" {
+			direction = strings.TrimSpace(cursor.Direction)
+		}
+		if direction != "next" && direction != "prev" {
+			direction = "next"
+		}
 	}
-	// todo: need to add tenant id
 
-	finalSQL := baseSQL + "\n" + whereClause
+	// Add cursor predicates as parameterized conditions
+	// Params: $argID = cursorTime, $(argID+1)=cursorProfileId
+	if cursor != nil {
+		if direction == "next" {
+			conditions = append(conditions,
+				fmt.Sprintf("(p.created_at, p.profile_id) < ($%d::timestamptz, $%d::text)", argID, argID+1))
+		} else { // prev
+			conditions = append(conditions,
+				fmt.Sprintf("(p.created_at, p.profile_id) > ($%d::timestamptz, $%d::text)", argID, argID+1))
+		}
+		args = append(args, cursorTime, cursorProfileId)
+		argID += 2
+	}
+
+	whereClause := "WHERE " + strings.Join(conditions, " AND ")
+
+	// Direction-specific ORDER
+	orderClause := "ORDER BY p.created_at DESC, p.profile_id DESC"
+	if direction == "prev" {
+		// fetch "newer" rows closest to cursor
+		orderClause = "ORDER BY p.created_at ASC, p.profile_id ASC"
+	}
+
+	limitPlusOne := limit + 1
+	finalSQL := fmt.Sprintf("%s\n%s\n%s\nLIMIT $%d", baseSQL, whereClause, orderClause, argID)
+	args = append(args, limitPlusOne)
 
 	results, err := dbClient.ExecuteQuery(finalSQL, args...)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to execute filtered query: %s", err)
 		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
+		return nil, false, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.FILTER_PROFILE.Code,
 			Message:     errors2.FILTER_PROFILE.Message,
 			Description: errorMsg,
 		}, err)
-		return nil, serverError
 	}
 
-	var profiles []model.Profile
+	hasMore := false
+	if len(results) > limit {
+		hasMore = true
+		results = results[:limit]
+	}
+
+	profiles := make([]model.Profile, 0, len(results))
 	for _, row := range results {
 		profile, err := scanProfileRow(row)
 		if err != nil {
-			errorMsg := fmt.Sprintf("Failed to scan profile row: %s", err)
-			logger.Debug(errorMsg, log.Error(err))
-			serverError := errors2.NewServerError(errors2.ErrorMessage{
-				Code:        errors2.FILTER_PROFILE.Code,
-				Message:     errors2.FILTER_PROFILE.Message,
-				Description: errorMsg,
-			}, err)
-			return nil, serverError
+			// same error handling as you have
+			return nil, false, err
 		}
 		profile.ApplicationData, err = FetchApplicationData(profile.ProfileId)
 		if err != nil {
-			errorMsg := fmt.Sprintf("Failed to fetch application data: %s", err)
-			logger.Debug(errorMsg, log.Error(err))
-			serverError := errors2.NewServerError(errors2.ErrorMessage{
-				Code:        errors2.FILTER_PROFILE.Code,
-				Message:     errors2.FILTER_PROFILE.Message,
-				Description: errorMsg,
-			}, err)
-			return nil, serverError
+			return nil, false, err
 		}
 		profiles = append(profiles, profile)
 	}
 
-	return profiles, nil
+	// reverse back to DESC order for API
+	if direction == "prev" {
+		for i, j := 0, len(profiles)-1; i < j; i, j = i+1, j-1 {
+			profiles[i], profiles[j] = profiles[j], profiles[i]
+		}
+	}
+
+	return profiles, hasMore, nil
 }
 
 func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {

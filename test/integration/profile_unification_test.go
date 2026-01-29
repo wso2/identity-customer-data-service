@@ -430,7 +430,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 
 func cleanProfiles(profileSvc profileService.ProfilesServiceInterface, org string) {
 
-	profiles, _ := profileSvc.GetAllProfiles(org)
+	profiles, _, _ := profileSvc.GetAllProfilesCursor(org, 10, nil)
 	for _, p := range profiles {
 		_ = profileSvc.DeleteProfile(p.ProfileId)
 	}

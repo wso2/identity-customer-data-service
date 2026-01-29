@@ -19,6 +19,7 @@
 package model
 
 import "time"
+import "github.com/wso2/identity-customer-data-service/internal/system/pagination"
 
 type ProfileResponse struct {
 	ProfileId          string                            `json:"profile_id" bson:"profile_id"`
@@ -62,13 +63,7 @@ type ProfileSync struct {
 	TenantId      string                 `json:"tenantId,omitempty" bson:"tenantId,omitempty"`
 }
 
-type Pagination struct {
-	Limit      int     `json:"limit"`
-	NextCursor *string `json:"next_cursor,omitempty"`
-	HasMore    bool    `json:"has_more"`
-}
-
 type ProfileListAPIResponse struct {
-	Items      []ProfileListResponse `json:"items"`
-	Pagination Pagination            `json:"pagination"`
+	Items      []ProfileListResponse `json:"profiles"`
+	Pagination pagination.Pagination `json:"pagination"`
 }

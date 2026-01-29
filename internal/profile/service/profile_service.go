@@ -42,12 +42,12 @@ import (
 
 type ProfilesServiceInterface interface {
 	DeleteProfile(profileId string) error
-	GetAllProfiles(tenantId string) ([]profileModel.ProfileResponse, error)
+	GetAllProfilesCursor(tenantId string, limit int, cursor *profileModel.ProfileCursor) ([]profileModel.ProfileResponse, bool, error)
 	CreateProfile(profile profileModel.ProfileRequest, tenantId string) (*profileModel.ProfileResponse, error)
 	UpdateProfile(profileId, tenantId string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
-	GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error)
+	GetAllProfilesWithFilterCursor(tenantId string, filters []string, limit int, cursor *profileModel.ProfileCursor) ([]profileModel.ProfileResponse, bool, error)
 	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
 	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
 	PatchProfile(profileId, tenantId string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
@@ -957,20 +957,36 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 
 	return nil
 }
+func (ps *ProfilesService) GetAllProfilesCursor(
+	tenantId string,
+	limit int,
+	cursor *profileModel.ProfileCursor,
+) ([]profileModel.ProfileResponse, bool, error) {
 
-// GetAllProfiles retrieves all profiles
-func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.ProfileResponse, error) {
-
-	existingProfiles, err := profileStore.GetAllProfiles(tenantId)
+	existingProfiles, hasMore, err := profileStore.GetAllProfiles(tenantId, limit, cursor)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if existingProfiles == nil {
-		return []profileModel.ProfileResponse{}, nil
+		return []profileModel.ProfileResponse{}, false, nil
 	}
 
-	var result []profileModel.ProfileResponse
+	if len(existingProfiles) > limit {
+		hasMore = true
+		existingProfiles = existingProfiles[:limit]
+	}
+
+	result := make([]profileModel.ProfileResponse, 0, len(existingProfiles))
+
 	for _, profile := range existingProfiles {
+
+		//  Base row meta must be preserved for cursor correctness
+		baseMeta := profileModel.Meta{
+			CreatedAt: profile.CreatedAt,
+			UpdatedAt: profile.UpdatedAt,
+			Location:  profile.Location,
+		}
+
 		alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Error fetching references for profile: %s", profile.ProfileId)
@@ -981,69 +997,64 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 				Message:     errors2.GET_PROFILE.Message,
 				Description: errorMsg,
 			}, err)
-			return nil, serverError
+			return nil, false, serverError
 		}
 		if len(alias) == 0 {
 			alias = nil
 		}
+
 		if profile.ProfileStatus.IsReferenceProfile {
-			profileResponse := &profileModel.ProfileResponse{
+			result = append(result, profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
 				UserId:             profile.UserId,
 				ApplicationData:    ConvertAppDataToMap(profile.ApplicationData),
 				Traits:             profile.Traits,
 				IdentityAttributes: profile.IdentityAttributes,
-				Meta: profileModel.Meta{
-					CreatedAt: profile.CreatedAt,
-					UpdatedAt: profile.UpdatedAt,
-					Location:  profile.Location,
-				},
-				MergedFrom: alias,
-			}
-			result = append(result, *profileResponse)
-		} else {
-			// Fetch master and assign current profile ID
-			masterProfile, err := profileStore.GetProfile(profile.ProfileStatus.ReferenceProfileId)
-			if err != nil || masterProfile == nil {
-				continue
-			}
-
-			masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
-
-			// building the hierarchy
-			masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
-
-			alias := &profileModel.Reference{
-				ProfileId: profile.ProfileStatus.ReferenceProfileId,
-				Reason:    profile.ProfileStatus.ReferenceReason,
-			}
-
-			profileResponse := &profileModel.ProfileResponse{
-				ProfileId:          profile.ProfileId,
-				UserId:             masterProfile.UserId,
-				ApplicationData:    ConvertAppDataToMap(masterProfile.ApplicationData),
-				Traits:             masterProfile.Traits,
-				IdentityAttributes: masterProfile.IdentityAttributes,
-				Meta: profileModel.Meta{
-					CreatedAt: masterProfile.CreatedAt,
-					UpdatedAt: masterProfile.UpdatedAt,
-					Location:  masterProfile.Location,
-				},
-				MergedTo: *alias,
-			}
-
-			result = append(result, *profileResponse)
+				Meta:               baseMeta,
+				MergedFrom:         alias,
+			})
+			continue
 		}
+
+		// Non-master: fetch master and return master’s identity/traits/app data
+		masterProfile, err := profileStore.GetProfile(profile.ProfileStatus.ReferenceProfileId)
+		if err != nil || masterProfile == nil {
+			continue
+		}
+
+		masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
+		masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
+
+		ref := profileModel.Reference{
+			ProfileId: profile.ProfileStatus.ReferenceProfileId,
+			Reason:    profile.ProfileStatus.ReferenceReason,
+		}
+
+		result = append(result, profileModel.ProfileResponse{
+			ProfileId:          profile.ProfileId,
+			UserId:             masterProfile.UserId,
+			ApplicationData:    ConvertAppDataToMap(masterProfile.ApplicationData),
+			Traits:             masterProfile.Traits,
+			IdentityAttributes: masterProfile.IdentityAttributes,
+			Meta:               baseMeta,
+			MergedTo:           ref,
+		})
 	}
-	return result, nil
+
+	return result, hasMore, nil
 }
 
-// GetAllProfilesWithFilter handles fetching all profiles with filter
-func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
+	tenantId string,
+	filters []string,
+	limit int,
+	cursor *profileModel.ProfileCursor,
+) ([]profileModel.ProfileResponse, bool, error) {
 
 	propertyTypeMap := make(map[string]string)
 
-	var rewrittenFilters []string
+	// Rewrite filters (keep your logic)
+	rewrittenFilters := make([]string, 0, len(filters))
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
 		if len(parts) != 3 {
@@ -1065,67 +1076,74 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []s
 		rewrittenFilters = append(rewrittenFilters, fmt.Sprintf("%s %s %s", field, operator, valueStr))
 	}
 
-	// Step 4: Fetch matching profiles with `list_profile = true`
-	filteredProfiles, err := profileStore.GetAllProfilesWithFilter(tenantId, rewrittenFilters)
+	// Fetch matching profiles WITH cursor + limit
+	filteredProfiles, hasMore, err := profileStore.GetAllProfilesWithFilter(tenantId, rewrittenFilters, limit, cursor)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if filteredProfiles == nil {
-		filteredProfiles = []profileModel.Profile{}
+		return []profileModel.ProfileResponse{}, false, nil
 	}
 
-	var result []profileModel.ProfileResponse
+	// Optional safety if store forgot trimming
+	if len(filteredProfiles) > limit {
+		hasMore = true
+		filteredProfiles = filteredProfiles[:limit]
+	}
+
+	result := make([]profileModel.ProfileResponse, 0, len(filteredProfiles))
+
 	for _, profile := range filteredProfiles {
+
+		// meta data must be preserved for cursor correctness
+		baseMeta := profileModel.Meta{
+			CreatedAt: profile.CreatedAt,
+			UpdatedAt: profile.UpdatedAt,
+			Location:  profile.Location,
+		}
+
 		if profile.ProfileStatus.IsReferenceProfile {
-			profileResponse := &profileModel.ProfileResponse{
+			result = append(result, profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
 				UserId:             profile.UserId,
 				ApplicationData:    ConvertAppDataToMap(profile.ApplicationData),
 				Traits:             profile.Traits,
 				IdentityAttributes: profile.IdentityAttributes,
-				Meta: profileModel.Meta{
-					CreatedAt: profile.CreatedAt,
-					UpdatedAt: profile.UpdatedAt,
-					Location:  profile.Location,
-				},
-			}
-			result = append(result, *profileResponse)
-		} else {
-			// Fetch master and attach current profile context
-			masterProfile, err := profileStore.GetProfile(profile.ProfileStatus.ReferenceProfileId)
-			if err != nil || masterProfile == nil {
-				continue
-			}
-
-			masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
-			masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
-
-			// Override for visual reference to the child
-			masterProfile.ProfileId = profile.ProfileId
-			masterProfile.ProfileStatus.ReferenceProfileId = profile.ProfileId
-
-			profileResponse := &profileModel.ProfileResponse{
-				ProfileId:          profile.ProfileId,
-				UserId:             masterProfile.UserId,
-				ApplicationData:    ConvertAppDataToMap(masterProfile.ApplicationData),
-				Traits:             masterProfile.Traits,
-				IdentityAttributes: masterProfile.IdentityAttributes,
-				Meta: profileModel.Meta{
-					CreatedAt: masterProfile.CreatedAt,
-					UpdatedAt: masterProfile.UpdatedAt,
-					Location:  masterProfile.Location,
-				},
-				MergedTo: profileModel.Reference{
-					ProfileId: masterProfile.ProfileId,
-					Reason:    profile.ProfileStatus.ReferenceReason, //todo: this has to be fetch from db
-				},
-			}
-
-			result = append(result, *profileResponse)
+				Meta:               baseMeta,
+			})
+			continue
 		}
+
+		// Non-master: fetch master and return master's data
+		masterProfile, err := profileStore.GetProfile(profile.ProfileStatus.ReferenceProfileId)
+		if err != nil || masterProfile == nil {
+			continue
+		}
+
+		masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
+		masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
+
+		// Override for visual reference to the child
+		masterProfile.ProfileId = profile.ProfileId
+		masterProfile.ProfileStatus.ReferenceProfileId = profile.ProfileId
+
+		ref := profileModel.Reference{
+			ProfileId: masterProfile.ProfileId,
+			Reason:    profile.ProfileStatus.ReferenceReason,
+		}
+
+		result = append(result, profileModel.ProfileResponse{
+			ProfileId:          profile.ProfileId,
+			UserId:             masterProfile.UserId,
+			ApplicationData:    ConvertAppDataToMap(masterProfile.ApplicationData),
+			Traits:             masterProfile.Traits,
+			IdentityAttributes: masterProfile.IdentityAttributes,
+			Meta:               baseMeta,
+			MergedTo:           ref,
+		})
 	}
 
-	return result, nil
+	return result, hasMore, nil
 }
 
 func parseTypedValueForFilters(valueType string, raw string) interface{} {
@@ -1143,82 +1161,6 @@ func parseTypedValueForFilters(valueType string, raw string) interface{} {
 	default:
 		return raw
 	}
-}
-
-// FindProfileByUserName retrieves a profile by user_id
-func FindProfileByUserName(tenantId, sub string) (interface{}, error) {
-
-	// TODO: Restrict app-specific fields via client_id from JWT (if available)
-	//  TODO: currently userId is defined as a string [] so CONTAINS - but need to decide
-	filter := fmt.Sprintf("identity_attributes.user_id co %s", sub)
-	profiles, err := profileStore.GetAllProfilesWithFilter(tenantId, []string{filter})
-	logger := log.GetLogger()
-	if err != nil {
-		return nil, err
-	}
-
-	if len(profiles) == 0 {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.PROFILE_NOT_FOUND.Code,
-			Message:     errors2.PROFILE_NOT_FOUND.Message,
-			Description: errors2.PROFILE_NOT_FOUND.Description,
-		}, http.StatusNotFound)
-		return nil, clientError
-	}
-
-	//  Track unique parent profile IDs
-	parentProfileIDSet := make(map[string]struct{})
-
-	for _, profile := range profiles {
-		if profile.ProfileStatus.IsReferenceProfile {
-			parentProfileIDSet[profile.ProfileId] = struct{}{}
-		} else {
-			parentProfileIDSet[profile.ProfileStatus.ReferenceProfileId] = struct{}{}
-		}
-	}
-
-	if len(parentProfileIDSet) > 1 {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.MULTIPLE_PROFILE_FOUND.Code,
-			Message:     errors2.MULTIPLE_PROFILE_FOUND.Message,
-			Description: errors2.MULTIPLE_PROFILE_FOUND.Description,
-		}, http.StatusConflict)
-		return nil, clientError
-	}
-
-	// Extract the single master profile ID
-	var masterProfileID string
-	for id := range parentProfileIDSet {
-		masterProfileID = id
-		break
-	}
-
-	master, err := profileStore.GetProfile(masterProfileID)
-	if err != nil {
-		errorMsg := fmt.Sprintf("Error fetching master profile by user_id: %s", sub)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.MULTIPLE_PROFILE_FOUND.Code,
-			Message:     errors2.MULTIPLE_PROFILE_FOUND.Message,
-			Description: errors2.MULTIPLE_PROFILE_FOUND.Description,
-		}, err)
-		return nil, serverError
-	}
-	if master == nil {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.PROFILE_NOT_FOUND.Code,
-			Message:     errors2.PROFILE_NOT_FOUND.Message,
-			Description: errors2.PROFILE_NOT_FOUND.Description,
-		}, http.StatusNotFound)
-		return nil, clientError
-	}
-	//  Load app context (if any)
-	master.ApplicationData, _ = profileStore.FetchApplicationData(master.ProfileId)
-
-	//  Wipe hierarchy for the /me response
-	master.ProfileStatus = &profileModel.ProfileStatus{}
-
-	return master, nil
 }
 
 // FindProfileByUserId retrieves a profile by user_id

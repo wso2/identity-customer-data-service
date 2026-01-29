@@ -188,26 +188,38 @@ var UpdateProfileReference = map[string]string{
 
 var GetProfilesByOrgId = map[string]string{
 	"postgres": `
-    SELECT 
-        p.profile_id, 
-        p.tenant_id, 
-        p.created_at, 
-        p.updated_at, 
-        p.location, 
-        p.user_id, 
-        r.profile_status, 
-        r.reference_profile_id, 
-        r.reference_reason, 
-        p.list_profile, 
-        p.traits, 
-        p.identity_attributes
-    FROM 
-        profiles p
-    LEFT JOIN 
-        profile_reference r ON p.profile_id = r.profile_id
-    WHERE 
-        p.list_profile = true 
-        AND p.tenant_id = $1;`,
+		SELECT 
+			p.profile_id, 
+			p.tenant_id, 
+			p.created_at, 
+			p.updated_at, 
+			p.location, 
+			p.user_id, 
+			r.profile_status, 
+			r.reference_profile_id, 
+			r.reference_reason, 
+			p.list_profile, 
+			p.traits, 
+			p.identity_attributes
+		FROM profiles p
+		LEFT JOIN profile_reference r ON p.profile_id = r.profile_id
+		WHERE 
+			p.list_profile = true
+			AND p.tenant_id = $1
+			AND (
+				$2::timestamptz IS NULL
+				OR (
+					($4 = 'next' AND (p.created_at, p.profile_id) < ($2::timestamptz, $3::text))
+					OR
+					($4 = 'prev' AND (p.created_at, p.profile_id) > ($2::timestamptz, $3::text))
+				)
+			)
+		ORDER BY 
+			CASE WHEN $4 = 'prev' THEN p.created_at END ASC,
+			CASE WHEN $4 = 'prev' THEN p.profile_id END ASC,
+			CASE WHEN $4 <> 'prev' THEN p.created_at END DESC,
+			CASE WHEN $4 <> 'prev' THEN p.profile_id END DESC
+		LIMIT $5;`,
 }
 
 var DeleteProfileByProfileId = map[string]string{
