@@ -1118,7 +1118,6 @@ func extractClaimKeyFromLocalURI(localURI string) string {
 	return parts[len(parts)-1]
 }
 
-<<<<<<< HEAD
 func getCallerAppIDFromRequest(r *http.Request) string {
     authHeader := r.Header.Get("Authorization")
     if !strings.HasPrefix(authHeader, "Bearer ") {

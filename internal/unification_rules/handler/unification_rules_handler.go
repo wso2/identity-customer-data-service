@@ -311,6 +311,6 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 }
 
 // isCDSEnabled checks if CDS is enabled for the given tenant
-func isCDSEnabled(tenantId string) bool {
-	return adminConfigService.GetAdminConfigService().IsCDSEnabled(tenantId)
+func isCDSEnabled(orgHandle string) bool {
+	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
 }

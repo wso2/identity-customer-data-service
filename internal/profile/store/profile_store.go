@@ -28,7 +28,7 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 
 	profile.ProfileId = row["profile_id"].(string)
 	profile.UserId = row["user_id"].(string)
-	profile.TenantId = row["org_handle"].(string)
+	profile.OrgHandle = row["org_handle"].(string)
 	profile.CreatedAt = row["created_at"].(time.Time)
 	profile.UpdatedAt = row["updated_at"].(time.Time)
 	profile.Location = row["location"].(string)
