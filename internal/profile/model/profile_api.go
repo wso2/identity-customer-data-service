@@ -61,14 +61,3 @@ type ProfileSync struct {
 	Claims        map[string]interface{} `json:"claims,omitempty" bson:"claims,omitempty"`
 	TenantId      string                 `json:"tenantId,omitempty" bson:"tenantId,omitempty"`
 }
-
-type Pagination struct {
-	Limit      int     `json:"limit"`
-	NextCursor *string `json:"next_cursor,omitempty"`
-	HasMore    bool    `json:"has_more"`
-}
-
-type ProfileListAPIResponse struct {
-	Items      []ProfileListResponse `json:"items"`
-	Pagination Pagination            `json:"pagination"`
-}

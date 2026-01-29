@@ -22,8 +22,8 @@ CREATE TABLE profiles
     profile_id          VARCHAR(255) PRIMARY KEY,
     user_id             VARCHAR(255),
     tenant_id           VARCHAR(255),
-    created_at          TIMESTAMPTZ,
-    updated_at          TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     location            VARCHAR(255),
     origin_country      VARCHAR(255),
     list_profile        BOOLEAN DEFAULT TRUE,
@@ -67,8 +67,8 @@ CREATE TABLE unification_rules
     property_id  VARCHAR(255) REFERENCES profile_schema(attribute_id) ON DELETE CASCADE,
     priority      INT          NOT NULL,
     is_active     BOOLEAN      NOT NULL,
-    created_at    TIMESTAMPTZ,
-    updated_at    TIMESTAMPTZ
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 -- Application Data Table
@@ -96,15 +96,15 @@ CREATE TABLE profile_consents
     id      SERIAL PRIMARY KEY,
     profile_id       VARCHAR(255) REFERENCES profiles (profile_id) ON DELETE CASCADE,
     category_id      VARCHAR (255) REFERENCES consent_categories (category_identifier) ON DELETE CASCADE,
-    consent_status   BOOLEAN NOT NULL,
-    consented_at     TIMESTAMPTZ,
+    consent_status   BOOLEAN     NOT NULL,
+    consented_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (profile_id, category_id)
 );
 
 CREATE TABLE profile_cookies (
-    cookie_id VARCHAR (255) PRIMARY KEY,
-    profile_id VARCHAR (255) NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
-    is_active BOOLEAN NOT NULL DEFAULT true
+                                 cookie_id VARCHAR (255) PRIMARY KEY,
+                                 profile_id VARCHAR (255) NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
+                                 is_active BOOLEAN NOT NULL DEFAULT true
 );
 
 -- Prevents duplicate entries for the same profile and app (it generally does upsert)
