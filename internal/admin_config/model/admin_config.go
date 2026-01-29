@@ -19,16 +19,18 @@
 package model
 
 type AdminConfig struct {
-	TenantId              string `json:"tenant_id" bson:"tenant_id"`
-	CDSEnabled            bool   `json:"cds_enabled" bson:"cds_enabled"`
-	InitialSchemaSyncDone bool   `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
+	OrgHandle             string   `json:"org_handle" bson:"org_handle"`
+	CDSEnabled            bool     `json:"cds_enabled" bson:"cds_enabled"`
+	InitialSchemaSyncDone bool     `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
+	SystemApplications    []string `json:"system_applications" bson:"system_applications"`
 }
 
 type AdminConfigAPI struct {
-	CDSEnabled            bool `json:"cds_enabled" bson:"cds_enabled"`
-	InitialSchemaSyncDone bool `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
+	CDSEnabled         bool     `json:"cds_enabled" bson:"cds_enabled"`
+	SystemApplications []string `json:"system_applications,omitempty" bson:"system_applications,omitempty"`
 }
 
 type AdminConfigUpdateAPI struct {
-	CDSEnabled bool `json:"cds_enabled" bson:"cds_enabled"`
+	CDSEnabled         *bool    `json:"cds_enabled" bson:"cds_enabled"`
+	SystemApplications []string `json:"system_applications,omitempty"`
 }

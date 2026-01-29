@@ -1,16 +1,16 @@
 CREATE TABLE profile_unification_modes
 (
     id         SERIAL PRIMARY KEY,
-    tenant_id  VARCHAR(255) NOT NULL,
+    org_handle  VARCHAR(255) NOT NULL,
     merge_type VARCHAR(255) NOT NULL,
     rule       VARCHAR(255) NOT NULL,
-    UNIQUE (tenant_id, merge_type, rule)
+    UNIQUE (org_handle, merge_type, rule)
 );
 
 CREATE TABLE profile_unification_triggers
 (
     id           SERIAL PRIMARY KEY,
-    tenant_id    VARCHAR(255) NOT NULL UNIQUE,
+    org_handle    VARCHAR(255) NOT NULL UNIQUE,
     trigger_type VARCHAR(255) NOT NULL,
     last_trigger BIGINT DEFAULT 0,
     duration     BIGINT DEFAULT 0
@@ -21,7 +21,7 @@ CREATE TABLE profiles
 (
     profile_id          VARCHAR(255) PRIMARY KEY,
     user_id             VARCHAR(255),
-    tenant_id           VARCHAR(255),
+    org_handle           VARCHAR(255),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     location            VARCHAR(255),
@@ -35,10 +35,10 @@ CREATE TABLE profiles
 CREATE TABLE profile_reference
 (
     profile_id                  VARCHAR(255) PRIMARY KEY,
-    tenant_id                   VARCHAR(255) NOT NULL,
+    org_handle                   VARCHAR(255) NOT NULL,
     profile_status              VARCHAR(255),
     reference_profile_id        VARCHAR(255),
-    reference_profile_tenant_id VARCHAR(255),
+    reference_profile_org_handle VARCHAR(255),
     reference_reason            VARCHAR(255)
 );
 
@@ -46,7 +46,7 @@ CREATE TABLE profile_schema
 (
     attribute_id           VARCHAR(255) NOT NULL PRIMARY KEY,
     scope                  VARCHAR(255),
-    tenant_id              VARCHAR(255) NOT NULL,
+    org_handle              VARCHAR(255) NOT NULL,
     attribute_name         VARCHAR(255) NOT NULL,
     value_type             VARCHAR(255) NOT NULL,
     merge_strategy         VARCHAR(255) NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE profile_schema
 CREATE TABLE unification_rules
 (
     rule_id       VARCHAR(255) PRIMARY KEY,
-    tenant_id     VARCHAR(255) NOT NULL,
+    org_handle     VARCHAR(255) NOT NULL,
     rule_name     VARCHAR(255) NOT NULL,
     property_name VARCHAR(255) NOT NULL,
     property_id   VARCHAR(255) REFERENCES profile_schema(attribute_id) ON DELETE CASCADE,
@@ -84,7 +84,7 @@ CREATE TABLE application_data
 CREATE TABLE consent_categories
 (
     id                  SERIAL PRIMARY KEY,
-    tenant_id           VARCHAR(255)        NOT NULL,
+    org_handle           VARCHAR(255)        NOT NULL,
     category_name       VARCHAR(255)        NOT NULL,
     category_identifier VARCHAR(255) UNIQUE NOT NULL,
     purpose             VARCHAR(255)        NOT NULL,
@@ -113,7 +113,8 @@ ALTER TABLE application_data
 
 -- CDS Config Table
 CREATE TABLE cds_config (
-    tenant_id VARCHAR(255) ,
-    cds_enabled BOOLEAN DEFAULT FALSE,
-    initial_schema_sync_done BOOLEAN DEFAULT FALSE
+    org_handle VARCHAR(255) NOT NULL,
+    config VARCHAR(255) NOT NULL,
+    value VARCHAR(500),
+    PRIMARY KEY (org_handle, config)
 );

@@ -20,37 +20,37 @@ package scripts
 
 var DeleteProfileSchemaForOrg = map[string]string{
 	"postgres": `
-        DELETE FROM profile_schema WHERE tenant_id = $1 AND scope != 'identity_attributes' `,
+        DELETE FROM profile_schema WHERE org_handle = $1 AND scope != 'identity_attributes' `,
 }
 
 var GetProfileSchemaByOrg = map[string]string{
 	"postgres": `SELECT attribute_id, attribute_name, value_type, merge_strategy , application_identifier, mutability, 
-       multi_valued, sub_attributes::text, canonical_values::text FROM profile_schema WHERE tenant_id = $1`,
+       multi_valued, sub_attributes::text, canonical_values::text FROM profile_schema WHERE org_handle = $1`,
 }
 
 var DeleteIdentityClaimsOfProfileSchema = map[string]string{
-	"postgres": `DELETE FROM profile_schema WHERE tenant_id = $1 AND scope = 'identity_attributes'`,
+	"postgres": `DELETE FROM profile_schema WHERE org_handle = $1 AND scope = 'identity_attributes'`,
 }
 
 var InsertIdentityClaimsForProfileSchema = map[string]string{
 	"postgres": `INSERT INTO profile_schema 
-	(tenant_id, attribute_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, 
+	(org_handle, attribute_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, 
 	 multi_valued, canonical_values, sub_attributes, scim_dialect, scope) VALUES `,
 }
 
 var GetProfileSchemaAttributeByName = map[string]string{
 	"postgres": `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability , application_identifier, 
-       multi_valued, sub_attributes::text, canonical_values::text FROM profile_schema WHERE tenant_id = $1 
+       multi_valued, sub_attributes::text, canonical_values::text FROM profile_schema WHERE org_handle = $1 
        AND attribute_name = $2 LIMIT 1`,
 }
 
 var InsertProfileSchemaAttributesForScope = map[string]string{
-	"postgres": `INSERT INTO profile_schema (tenant_id, attribute_id, attribute_name, value_type, merge_strategy, 
+	"postgres": `INSERT INTO profile_schema (org_handle, attribute_id, attribute_name, value_type, merge_strategy, 
                             application_identifier, mutability, multi_valued, sub_attributes, canonical_values, scope) VALUES `,
 }
 var GetProfileSchemaAttributeByScope = map[string]string{
-	"postgres": `SELECT attribute_id, tenant_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued,   sub_attributes::text,
-  canonical_values::text FROM profile_schema WHERE tenant_id = $1 AND scope = $2`,
+	"postgres": `SELECT attribute_id, org_handle, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued,   sub_attributes::text,
+  canonical_values::text FROM profile_schema WHERE org_handle = $1 AND scope = $2`,
 }
 
 var UpdateProfileSchemaAttributesForSchema = map[string]string{
@@ -64,32 +64,32 @@ var UpdateProfileSchemaAttributesForSchema = map[string]string{
 			multi_valued = $6,
 			canonical_values = $7,
 			sub_attributes = $8
-		WHERE tenant_id = $9 AND attribute_id = $10 AND scope = $11
+		WHERE org_handle = $9 AND attribute_id = $10 AND scope = $11
 	`,
 }
 
 var DeleteProfileSchemaAttributeForScope = map[string]string{
-	"postgres": `DELETE FROM profile_schema WHERE tenant_id = $1 AND scope =  $2`,
+	"postgres": `DELETE FROM profile_schema WHERE org_handle = $1 AND scope =  $2`,
 }
 
 var GetProfileSchemaAttributeById = map[string]string{
 	"postgres": `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability , application_identifier, multi_valued,   sub_attributes::text,
   canonical_values::text
-	          FROM profile_schema WHERE tenant_id = $1 AND attribute_id = $2`,
+	          FROM profile_schema WHERE org_handle = $1 AND attribute_id = $2`,
 }
 
 var FilterProfileSchemaAttributes = map[string]string{
-	"postgres": `SELECT attribute_id, tenant_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued, sub_attributes::text,
-  canonical_values::text FROM profile_schema WHERE tenant_id = $1`,
+	"postgres": `SELECT attribute_id, org_handle, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued, sub_attributes::text,
+  canonical_values::text FROM profile_schema WHERE org_handle = $1`,
 }
 
 var DeleteProfileSchemaAttributeById = map[string]string{
-	"postgres": `DELETE FROM profile_schema WHERE tenant_id = $1 AND attribute_id = $2`,
+	"postgres": `DELETE FROM profile_schema WHERE org_handle = $1 AND attribute_id = $2`,
 }
 
 var GetUnificationRules = map[string]string{
 	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at 
-FROM unification_rules WHERE tenant_id = $1`,
+FROM unification_rules WHERE org_handle = $1`,
 }
 
 var GetUnificationRule = map[string]string{
@@ -100,7 +100,7 @@ var DeleteUnificationRule = map[string]string{
 	"postgres": `DELETE FROM unification_rules WHERE rule_id = $1`,
 }
 var InsertUnificationRule = map[string]string{
-	"postgres": `INSERT INTO unification_rules (rule_id, tenant_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at) 
+	"postgres": `INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, created_at, updated_at) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 }
 
@@ -112,21 +112,21 @@ var UpdateUnificationRule = map[string]string{
 var InsertProfile = map[string]string{
 	"postgres": `
 		INSERT INTO profiles (
-		profile_id, user_id, tenant_id, created_at, updated_at, location, list_profile, delete_profile, traits, identity_attributes
+		profile_id, user_id, org_handle, created_at, updated_at, location, list_profile, delete_profile, traits, identity_attributes
 	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	ON CONFLICT (profile_id) DO NOTHING;`,
 }
 
 var InsertProfileReference = map[string]string{
 	"postgres": `
-		INSERT INTO profile_reference (profile_id, profile_status, reference_profile_id, reference_reason, tenant_id, reference_profile_tenant_id)
+		INSERT INTO profile_reference (profile_id, profile_status, reference_profile_id, reference_reason, org_handle, reference_profile_org_handle)
 		VALUES ($1,$2,$3,$4, $5,$6)
 		ON CONFLICT (profile_id) DO NOTHING;`,
 }
 
 var GetProfileById = map[string]string{
 	"postgres": `
-		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.tenant_id, p.list_profile, p.delete_profile, 
+		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.org_handle, p.list_profile, p.delete_profile, 
 		       p.traits, p.identity_attributes, r.profile_status, r.reference_profile_id, r.reference_reason
 		FROM 
 			profiles p
@@ -190,7 +190,7 @@ var GetProfilesByOrgId = map[string]string{
 	"postgres": `
 		SELECT 
 			p.profile_id, 
-			p.tenant_id, 
+			p.org_handle, 
 			p.created_at, 
 			p.updated_at, 
 			p.location, 
@@ -205,7 +205,7 @@ var GetProfilesByOrgId = map[string]string{
 		LEFT JOIN profile_reference r ON p.profile_id = r.profile_id
 		WHERE 
 			p.list_profile = true
-			AND p.tenant_id = $1
+			AND p.org_handle = $1
 			AND (
 				$2::timestamptz IS NULL
 				OR (
@@ -242,7 +242,7 @@ var DeleteProfileReference = map[string]string{
 var GetAllProfilesWithFilter = map[string]string{
 	"postgres": `SELECT DISTINCT p.profile_id,
                 p.user_id,
-                p.tenant_id,
+                p.org_handle,
                 p.created_at,
                 p.updated_at,
                 p.location,
@@ -265,7 +265,7 @@ var GetAllReferenceProfileExceptCurrent = map[string]string{
 		r.profile_status, 
 		r.reference_profile_id, 
 		r.reference_reason, 
-		p.tenant_id,
+		p.org_handle,
 		p.delete_profile,
 		p.list_profile, 
 		p.traits, 
@@ -277,7 +277,7 @@ var GetAllReferenceProfileExceptCurrent = map[string]string{
 	WHERE 
 		r.profile_status = 'REFERENCE_PROFILE'
 		AND p.profile_id != $1
-		AND p.tenant_id = $2;`,
+		AND p.org_handle = $2;`,
 }
 
 var FetchReferencedProfiles = map[string]string{
@@ -289,7 +289,7 @@ var FetchReferencedProfiles = map[string]string{
 
 var GetProfileByUserId = map[string]string{
 	"postgres": `
-		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.tenant_id, p.list_profile, p.delete_profile, 
+		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.org_handle, p.list_profile, p.delete_profile, 
 		       p.traits, p.identity_attributes, r.profile_status, r.reference_profile_id, r.reference_reason
 		FROM 
 			profiles p
@@ -301,20 +301,20 @@ var GetProfileByUserId = map[string]string{
 }
 
 var InsertConsentCategory = map[string]string{
-	"postgres": `INSERT INTO consent_categories (category_name, category_identifier, tenant_id, purpose, destinations)
+	"postgres": `INSERT INTO consent_categories (category_name, category_identifier, org_handle, purpose, destinations)
 				VALUES ($1, $2, $3, $4, $5)`,
 }
 
 var GetAllConsentCategories = map[string]string{
-	"postgres": `SELECT category_name, category_identifier, tenant_id, purpose, destinations FROM consent_categories`,
+	"postgres": `SELECT category_name, category_identifier, org_handle, purpose, destinations FROM consent_categories`,
 }
 
 var GetConsentCategoryById = map[string]string{
-	"postgres": `SELECT category_name, category_identifier, tenant_id, purpose, destinations FROM consent_categories WHERE category_identifier = $1`,
+	"postgres": `SELECT category_name, category_identifier, org_handle, purpose, destinations FROM consent_categories WHERE category_identifier = $1`,
 }
 
 var GetConsentCategoryByName = map[string]string{
-	"postgres": `SELECT category_name, category_identifier, tenant_id, purpose, destinations FROM consent_categories WHERE category_name = $1`,
+	"postgres": `SELECT category_name, category_identifier, org_handle, purpose, destinations FROM consent_categories WHERE category_name = $1`,
 }
 
 var UpdateConsentCategory = map[string]string{
@@ -350,22 +350,23 @@ var DeleteCookieByProfileId = map[string]string{
 }
 
 var GetOrgConfigurations = map[string]string{
-	"postgres": `SELECT * FROM cds_config WHERE tenant_id = $1`,
+	"postgres": `SELECT config, value FROM cds_config WHERE org_handle = $1`,
 }
 
-var UpdateOrgConfigurations = map[string]string{
-	"postgres": `WITH updated AS (
-		UPDATE cds_config
-		SET cds_enabled = $1,
-		    initial_schema_sync_done = $2
-		WHERE tenant_id = $3
-		RETURNING tenant_id
-	)
-	INSERT INTO cds_config (tenant_id, cds_enabled, initial_schema_sync_done)
-	SELECT $3, $1, $2
-	WHERE NOT EXISTS (SELECT 1 FROM updated)`,
+var UpdateOrgConfiguration = map[string]string{
+	"postgres": `INSERT INTO cds_config (org_handle, config, value) 
+                 VALUES ($1, $2, $3) 
+                 ON CONFLICT (org_handle, config) 
+                 DO UPDATE SET value = EXCLUDED.value`,
+}
+
+var GetOrgConfiguration = map[string]string{
+	"postgres": `SELECT value FROM cds_config WHERE org_handle = $1 AND config = $2`,
 }
 
 var UpdateInitialSchemaSyncDoneConfig = map[string]string{
-	"postgres": `UPDATE cds_config SET initial_schema_sync_done = $1  WHERE tenant_id = $2`,
+	"postgres": `INSERT INTO cds_config (org_handle, config, value) 
+                 VALUES ($1, 'initial_schema_sync_done', $2) 
+                 ON CONFLICT (org_handle, config) 
+                 DO UPDATE SET value = EXCLUDED.value`,
 }

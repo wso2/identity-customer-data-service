@@ -23,7 +23,7 @@ import "time"
 // UnificationRule represents rules for merging user profiles
 type UnificationRule struct {
 	RuleId       string    `json:"rule_id" bson:"rule_id" binding:"required"`
-	TenantId     string    `json:"tenant_id" bson:"tenant_id" binding:"required"`
+	OrgHandle    string    `json:"org_handle" bson:"org_handle" binding:"required"`
 	RuleName     string    `json:"rule_name" bson:"rule_name" binding:"required"`
 	PropertyName string    `json:"property_name" bson:"property_name" binding:"required"`
 	PropertyId   string    `json:"property_id" bson:"property_id" binding:"required"`

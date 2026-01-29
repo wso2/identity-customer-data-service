@@ -21,6 +21,7 @@ package service
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -31,10 +32,10 @@ import (
 )
 
 type UnificationRuleServiceInterface interface {
-	AddUnificationRule(rule model.UnificationRule, tenantId string) error
-	GetUnificationRules(tenantId string) ([]model.UnificationRule, error)
+	AddUnificationRule(rule model.UnificationRule, orgHandle string) error
+	GetUnificationRules(orgHandle string) ([]model.UnificationRule, error)
 	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
-	PatchUnificationRule(ruleId, tenantId string, updatedRule model.UnificationRule) error
+	PatchUnificationRule(ruleId, orgHandle string, updatedRule model.UnificationRule) error
 	DeleteUnificationRule(ruleId string) error
 }
 
@@ -48,7 +49,7 @@ func GetUnificationRuleService() UnificationRuleServiceInterface {
 }
 
 // AddUnificationRule Adds a new unification rule.
-func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule, tenantId string) error {
+func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule, orgHandle string) error {
 
 	logger := log.GetLogger()
 	// Need to specifically prevent
@@ -60,8 +61,16 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		}, http.StatusConflict)
 	}
 
+	if strings.HasPrefix(rule.PropertyName, constants.ApplicationData+".") {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ADD_UNIFICATION_RULE.Code,
+			Message:     errors2.ADD_UNIFICATION_RULE.Message,
+			Description: "Creating unification rules based on application data is not supported.",
+		}, http.StatusBadRequest)
+	}
+
 	profileSchemaService := provider.NewProfileSchemaProvider().GetProfileSchemaService()
-	schemaAttribute, err := profileSchemaService.GetProfileSchemaAttributeByName(rule.PropertyName, rule.TenantId)
+	schemaAttribute, err := profileSchemaService.GetProfileSchemaAttributeByName(rule.PropertyName, rule.OrgHandle)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while checking for the property: %s", rule.PropertyName)
@@ -91,7 +100,7 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 	}
 
 	// Check if a similar unification rule already exists
-	existingRules, err := store.GetUnificationRules(tenantId)
+	existingRules, err := store.GetUnificationRules(orgHandle)
 	if err != nil {
 		return err
 	}
@@ -112,13 +121,12 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		}
 	}
 	rule.PropertyId = schemaAttribute.AttributeId
-	return store.AddUnificationRule(rule, tenantId)
+	return store.AddUnificationRule(rule, orgHandle)
 }
 
 // GetUnificationRules Fetches all resolution rules.
-func (urs *UnificationRuleService) GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
-
-	return store.GetUnificationRules(tenantId)
+func (urs *UnificationRuleService) GetUnificationRules(orgHandle string) ([]model.UnificationRule, error) {
+	return store.GetUnificationRules(orgHandle)
 }
 
 // GetUnificationRule Fetches a specific resolution rule.
@@ -139,7 +147,7 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 }
 
 // PatchUnificationRule Applies a partial update on a specific resolution rule.
-func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string, updatedRule model.UnificationRule) error {
+func (urs *UnificationRuleService) PatchUnificationRule(ruleId, orgHandle string, updatedRule model.UnificationRule) error {
 
 	if updatedRule.PropertyName == "user_id" {
 		return errors2.NewClientError(errors2.ErrorMessage{
@@ -150,7 +158,7 @@ func (urs *UnificationRuleService) PatchUnificationRule(ruleId, tenantId string,
 	}
 
 	// Validate that the priority is not already in use
-	existingRules, err := store.GetUnificationRules(tenantId)
+	existingRules, err := store.GetUnificationRules(orgHandle)
 	if err != nil {
 		return err
 	}

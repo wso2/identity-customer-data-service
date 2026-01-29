@@ -28,7 +28,7 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 
 	profile.ProfileId = row["profile_id"].(string)
 	profile.UserId = row["user_id"].(string)
-	profile.TenantId = row["tenant_id"].(string)
+	profile.OrgHandle = row["org_handle"].(string)
 	profile.CreatedAt = row["created_at"].(time.Time)
 	profile.UpdatedAt = row["updated_at"].(time.Time)
 	profile.Location = row["location"].(string)
@@ -122,7 +122,7 @@ func InsertProfile(profile model.Profile) error {
 	_, err = dbClient.ExecuteQuery(query,
 		profile.ProfileId,
 		profile.UserId,
-		profile.TenantId,
+		profile.OrgHandle,
 		profile.CreatedAt,
 		profile.UpdatedAt,
 		profile.Location,
@@ -150,8 +150,8 @@ func InsertProfile(profile model.Profile) error {
 		profileStatus,
 		profile.ProfileStatus.ReferenceProfileId,
 		profile.ProfileStatus.ReferenceReason,
-		profile.TenantId,
-		profile.TenantId,
+		profile.OrgHandle,
+		profile.OrgHandle,
 	)
 
 	if err != nil {
@@ -516,7 +516,7 @@ func UpdateProfile(profile model.Profile) error {
 
 // GetAllProfiles retrieves profiles using cursor-based pagination.
 // It returns up to `limit` profiles and a boolean indicating if more records exist.
-func GetAllProfiles(tenantId string, limit int, cursor *model.ProfileCursor) ([]model.Profile, bool, error) {
+func GetAllProfiles(orgHandle string, limit int, cursor *model.ProfileCursor) ([]model.Profile, bool, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -559,7 +559,7 @@ func GetAllProfiles(tenantId string, limit int, cursor *model.ProfileCursor) ([]
 	// lookahead
 	limitPlusOne := limit + 1
 
-	results, err := dbClient.ExecuteQuery(query, tenantId, cursorTime, cursorProfileId, direction, limitPlusOne)
+	results, err := dbClient.ExecuteQuery(query, orgHandle, cursorTime, cursorProfileId, direction, limitPlusOne)
 	if err != nil {
 		errorMsg := "Failed fetching all profiles"
 		logger.Debug(errorMsg, log.Error(err))
@@ -912,7 +912,7 @@ func MergeIdentityDataOfProfiles(profileId string, identityData map[string]inter
 
 // GetAllProfilesWithFilter retrieves profiles using dynamic filters and cursor-based pagination.
 func GetAllProfilesWithFilter(
-	tenantId string,
+	orgHandle string,
 	filters []string,
 	limit int,
 	cursor *model.ProfileCursor,
@@ -946,8 +946,8 @@ func GetAllProfilesWithFilter(
 	joinedAppIDs := map[string]bool{}
 
 	// tenant + list_profile
-	conditions = append(conditions, fmt.Sprintf("p.tenant_id = $%d", argID))
-	args = append(args, tenantId)
+	conditions = append(conditions, fmt.Sprintf("p.org_handle = $%d", argID))
+	args = append(args, orgHandle)
 	argID++
 
 	conditions = append(conditions, "p.list_profile = true")
@@ -1155,7 +1155,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 
 	query := scripts.GetAllReferenceProfileExceptCurrent[provider.NewDBProvider().GetDBType()]
 
-	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId, currentProfile.TenantId)
+	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId, currentProfile.OrgHandle)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed fetching all master profiles except for current profile: %s", currentProfile.ProfileId)
 		logger.Debug(errorMsg, log.Error(err))

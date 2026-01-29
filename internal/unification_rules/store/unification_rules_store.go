@@ -67,12 +67,12 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 }
 
 // GetUnificationRules fetches all unification rules from the database
-func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
+func GetUnificationRules(orgHandle string) ([]model.UnificationRule, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for fetching unification rules for organization: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed to get database client for fetching unification rules for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_UNIFICATION_RULE.Code,
@@ -84,9 +84,9 @@ func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 	defer dbClient.Close()
 
 	query := scripts.GetUnificationRules[provider.NewDBProvider().GetDBType()]
-	results, err := dbClient.ExecuteQuery(query, tenantId)
+	results, err := dbClient.ExecuteQuery(query, orgHandle)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed in fetching all unification rules for organization: %s", tenantId)
+		errorMsg := fmt.Sprintf("Failed in fetching all unification rules for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_UNIFICATION_RULE.Code,
@@ -111,7 +111,7 @@ func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 		rules = append(rules, rule)
 	}
 
-	logger.Info(fmt.Sprintf("Successfully fetched all unification rules for organization: %s", tenantId))
+	logger.Info(fmt.Sprintf("Successfully fetched all unification rules for organization: %s", orgHandle))
 	return rules, nil
 }
 

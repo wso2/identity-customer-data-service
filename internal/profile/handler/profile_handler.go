@@ -25,17 +25,18 @@ import (
 	"strings"
 	"sync"
 
+	adminConfigPkg "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
-	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile/provider"
+	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
@@ -90,7 +91,21 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, err)
 		return
 	}
-	utils.RespondJSON(w, http.StatusOK, profile, constants.ProfileResource)
+
+	filterParams := parseApplicationDataParams(r)
+	callerAppID := getCallerAppIDFromRequest(r)
+	isSystemApp := isCallerSystemApplication(orgHandle, callerAppID)
+
+	profile.ApplicationData = profileService.FilterApplicationData(
+		profile.ApplicationData,
+		callerAppID,
+		isSystemApp,
+		filterParams,
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(profile)
 }
 
 // GetCurrentUserProfile handles retrieval of the current user's profile
@@ -504,7 +519,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
 
 	if !isCDSEnabled(orgHandle) {
-		errMsg := "CDS is not enabled for tenant: " + orgHandle
+		errMsg := "CDS is not enabled for organization: " + orgHandle
 		log.GetLogger().Info(errMsg)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
@@ -886,12 +901,12 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 	profileId := profileSync.ProfileId
 	identityClaims := profileSync.Claims
-	tenantId := profileSync.TenantId
+	orgHandle := profileSync.OrgHandle
 
-	if tenantId == "" {
-		//tenantId = utils.ExtractOrgHandleFromPath(request)
-		//todo: should we expect tenant id in the path or as body param
-		errMsg := fmt.Sprintf("Tenant id cannot be empty in profile sync event: %s", profileSync.Event)
+	if orgHandle == "" {
+		//orgHandle = utils.ExtractOrgHandleFromPath(request)
+		//todo: should we expect orgHandle in the path or as body param
+		errMsg := fmt.Sprintf("Organization handle cannot be empty in profile sync event: %s", profileSync.Event)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
 			Message:     errors2.UPDATE_PROFILE.Message,
@@ -901,8 +916,8 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		return
 	}
 
-	if !isCDSEnabled(tenantId) {
-		errMsg := "Unable to process profile sync event as CDS is not enabled for tenant: " + tenantId
+	if !isCDSEnabled(orgHandle) {
+		errMsg := "Unable to process profile sync event as CDS is not enabled for organization: " + orgHandle
 		log.GetLogger().Info(errMsg)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
@@ -949,7 +964,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 
 				// Save updated profile
-				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, tenantId, profileRequest)
+				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, orgHandle, profileRequest)
 				if err != nil {
 					utils.HandleError(writer, err)
 					return
@@ -978,7 +993,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 					UserId:             profileSync.UserId,
 					IdentityAttributes: identityAttributes,
 				}
-				_, err := profilesService.CreateProfile(profileRequest, tenantId)
+				_, err := profilesService.CreateProfile(profileRequest, orgHandle)
 				if err != nil {
 					utils.HandleError(writer, err)
 					return
@@ -1028,7 +1043,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 					UserId:             profileSync.UserId,
 					IdentityAttributes: identityAttributes,
 				}
-				_, err := profilesService.CreateProfile(profileRequest, tenantId)
+				_, err := profilesService.CreateProfile(profileRequest, orgHandle)
 
 				if err != nil {
 					return
@@ -1054,7 +1069,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 
 				// Save updated profile
-				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, tenantId, profileRequest)
+				_, err = profilesService.UpdateProfile(existingProfile.ProfileId, orgHandle, profileRequest)
 				if err != nil {
 					utils.HandleError(writer, err)
 					return
@@ -1195,7 +1210,44 @@ func extractClaimKeyFromLocalURI(localURI string) string {
 	return parts[len(parts)-1]
 }
 
-// isCDSEnabled checks if CDS is enabled for the given tenant
-func isCDSEnabled(tenantId string) bool {
-	return adminConfigService.GetAdminConfigService().IsCDSEnabled(tenantId)
+func getCallerAppIDFromRequest(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return ""
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	claims, err := authn.ParseJWTClaims(token)
+	if err != nil {
+		return ""
+	}
+
+	// The azp (Authorized Party) claim identifies the application
+	if azp, ok := claims["azp"].(string); ok && azp != "" {
+		return azp
+	}
+
+	if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
+		return clientID
+	}
+
+	return ""
+}
+
+func isCallerSystemApplication(orgHandle, appId string) bool {
+	if appId == "" {
+		return false
+	}
+	adminConfigProvider := adminConfigPkg.NewAdminConfigProvider()
+	adminConfigService := adminConfigProvider.GetAdminConfigService()
+	isSystemApp, err := adminConfigService.IsSystemApplication(orgHandle, appId)
+	if err != nil {
+		return false
+	}
+	return isSystemApp
+}
+
+// isCDSEnabled checks if CDS is enabled for the given organization
+func isCDSEnabled(orgHandle string) bool {
+	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
 }

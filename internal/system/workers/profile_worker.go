@@ -58,10 +58,10 @@ func unifyProfiles(newProfile profileModel.Profile) {
 	// Step 1: Fetch all unification rules
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	unificationRules, err := ruleService.GetUnificationRules(newProfile.TenantId)
+	unificationRules, err := ruleService.GetUnificationRules(newProfile.OrgHandle)
 	logger := log.GetLogger()
 	if len(unificationRules) == 0 {
-		logger.Info(fmt.Sprintf("No unification rules found for tenant: %s", newProfile.TenantId))
+		logger.Info(fmt.Sprintf("No unification rules found for tenant: %s", newProfile.OrgHandle))
 		return
 	}
 	logger.Info(fmt.Sprintf("Beginning to evaluate unification for profile: %s", newProfile.ProfileId))
@@ -93,7 +93,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 				existingMasterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(existingMasterProfile.ProfileId)
 
 				//  Merge the existing master to the old master of current
-				schemaRules, _ := schemaStore.GetProfileSchemaAttributesForOrg(newProfile.TenantId)
+				schemaRules, _ := schemaStore.GetProfileSchemaAttributesForOrg(newProfile.OrgHandle)
 				newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, schemaRules)
 
 				if len(existingMasterProfile.ProfileStatus.References) == 0 {
@@ -179,7 +179,7 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						}
 						newMasterProfile.ProfileId = uuid.New().String()
 						newMasterProfile.UserId = userId
-						newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.TenantId, newMasterProfile.ProfileId)
+						newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.OrgHandle, newMasterProfile.ProfileId)
 						childProfile1 := profileModel.Reference{
 							ProfileId: newProfile.ProfileId,
 							Reason:    rule.RuleName,
@@ -470,7 +470,7 @@ func MergeProfiles(existingProfile profileModel.Profile, incomingProfile profile
 		merged.UserId = existingProfile.UserId // todo: need to decide on this as we are also focusing on perm-perm
 	}
 
-	merged.TenantId = incomingProfile.TenantId
+	merged.OrgHandle = incomingProfile.OrgHandle // todo: need to
 	merged.CreatedAt = existingProfile.CreatedAt // todo: need to decide on this too.
 	merged.UpdatedAt = time.Now().UTC()
 
