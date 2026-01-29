@@ -26,6 +26,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 )
@@ -59,10 +60,10 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 		CDSEnabled:         config.CDSEnabled,
 		SystemApplications: config.SystemApplications,
 	}
-	writeJSONResponse(w, http.StatusOK, resp)
+	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }
 
-// UpdateAdminConfig handles PUT /admin/configs
+// UpdateAdminConfig handles PATCH /admin/configs
 func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Request) {
 
 	if err := security.AuthnAndAuthz(r, "admin_config:update"); err != nil {
@@ -117,12 +118,5 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		CDSEnabled:         configToUpdate.CDSEnabled,
 		SystemApplications: configToUpdate.SystemApplications,
 	}
-	writeJSONResponse(w, http.StatusOK, resp)
-}
-
-// Helper for JSON responses
-func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(data)
+	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }
