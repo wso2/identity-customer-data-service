@@ -86,7 +86,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 
 	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
 
-	existingConfig, err := adminConfigService.GetAdminConfig(orgId)
+	existingConfig, err := adminConfigService.GetAdminConfig(orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
