@@ -68,7 +68,7 @@ func FilterApplicationData(
 		return make(map[string]map[string]interface{})
 	}
 
-	if appData == nil || len(appData) == 0 {
+	if len(appData) == 0 {
 		return make(map[string]map[string]interface{})
 	}
 
