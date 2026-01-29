@@ -270,6 +270,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 
 		emailBasedRule.IsActive = false
 		err = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, emailBasedRule)
+		require.NoError(t, err, "Failed to deactivate email based unification rule")
 		rule, _ := unificationSvc.GetUnificationRule(emailRuleId)
 		require.Equal(t, false, rule.IsActive)
 
@@ -288,6 +289,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 
 		emailBasedRule.IsActive = true
 		err = unificationSvc.PatchUnificationRule(emailRuleId, SuperTenantOrg, emailBasedRule)
+		require.NoError(t, err, "Failed to reactivate email based unification rule")
 		cleanProfiles(profileSvc, SuperTenantOrg)
 
 	})
