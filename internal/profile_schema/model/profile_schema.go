@@ -18,6 +18,8 @@
 
 package model
 
+import "github.com/wso2/identity-customer-data-service/internal/system/constants"
+
 type ProfileSchemaAttribute struct {
 	OrgId                 string           `json:"org_id,omitempty" bson:"org_id,omitempty"`
 	AttributeId           string           `json:"attribute_id" bson:"attribute_id"`
@@ -59,23 +61,23 @@ type ProfileSchema struct {
 
 var CoreSchema = map[string]map[string]string{
 	"profile_id": {
-		"value_type": "string",
-		"mutability": "immutable",
+		"value_type": constants.StringDataType,
+		"mutability": constants.MutabilityImmutable,
 	},
 	"user_id": {
-		"value_type": "string",
-		"mutability": "writeOnce",
+		"value_type": constants.StringDataType,
+		"mutability": constants.MutabilityWriteOnce,
 	},
 	"meta.created_at": {
-		"value_type": "int",
-		"mutability": "readOnly",
+		"value_type": constants.DateTimeDataType,
+		"mutability": constants.MutabilityReadOnly,
 	},
 	"meta.updated_at": {
-		"value_type": "int",
-		"mutability": "readOnly",
+		"value_type": constants.DateTimeDataType,
+		"mutability": constants.MutabilityReadOnly,
 	},
 	"meta.location": {
-		"value_type": "string",
-		"mutability": "readOnly",
+		"value_type": constants.StringDataType,
+		"mutability": constants.MutabilityReadOnly,
 	},
 }

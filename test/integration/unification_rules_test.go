@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -43,22 +42,16 @@ func Test_UnificationRule(t *testing.T) {
 
 	unificationRuleService := service.GetUnificationRuleService()
 
-	jsonData := []byte(`{
-        "rule_name": "Email based",
-		"rule_id": "` + uuid.New().String() + `",
-		"tenant_id": "` + SuperTenantOrg + `",
-        "property_name": "identity_attributes.email",
-        "priority": 1,
-        "is_active": true
-    }`)
-
-	var rule model.UnificationRule
-	err := json.Unmarshal(jsonData, &rule)
-	require.NoError(t, err, "Failed to unmarshal rule JSON")
-
-	// Add timestamps programmatically
-	rule.CreatedAt = time.Now().Unix()
-	rule.UpdatedAt = time.Now().Unix()
+	rule := model.UnificationRule{
+		RuleName:     "Email based",
+		RuleId:       uuid.New().String(),
+		TenantId:     SuperTenantOrg,
+		PropertyName: "identity_attributes.email",
+		Priority:     1,
+		IsActive:     true,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
 
 	t.Run("Add_unification_rule", func(t *testing.T) {
 		err := unificationRuleService.AddUnificationRule(rule, SuperTenantOrg)
@@ -97,22 +90,16 @@ func Test_UnificationRule(t *testing.T) {
 		require.NoError(t, err, "Failed to add complex attribute to schema")
 
 		// Try creating a unification rule with that complex attribute
-		jsonData := []byte(`{
-        "rule_name": "Email based",
-		"rule_id": "` + uuid.New().String() + `",
-		"tenant_id": "` + SuperTenantOrg + `",
-        "property_name": "traits.orders.payment",
-        "priority": 2,
-        "is_active": true
-    }`)
-
-		var rule model.UnificationRule
-		err = json.Unmarshal(jsonData, &rule)
-		require.NoError(t, err, "Failed to unmarshal rule JSON")
-
-		// Add timestamps programmatically
-		rule.CreatedAt = time.Now().Unix()
-		rule.UpdatedAt = time.Now().Unix()
+		rule := model.UnificationRule{
+			RuleName:     "Payment based",
+			RuleId:       uuid.New().String(),
+			TenantId:     SuperTenantOrg,
+			PropertyName: "traits.orders.payment",
+			Priority:     2,
+			IsActive:     true,
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
+		}
 
 		err = unificationRuleService.AddUnificationRule(rule, SuperTenantOrg)
 		errDesc := utils.ExtractErrorDescription(err)
@@ -126,10 +113,8 @@ func Test_UnificationRule(t *testing.T) {
 	})
 
 	t.Run("Update_unification_rule", func(t *testing.T) {
-		updates := map[string]interface{}{
-			"is_active": false,
-		}
-		err := unificationRuleService.PatchUnificationRule(rule.RuleId, SuperTenantOrg, updates)
+		rule.IsActive = false // reflect change in local object
+		err := unificationRuleService.PatchUnificationRule(rule.RuleId, SuperTenantOrg, rule)
 		require.NoError(t, err, "Failed to patch unification rule")
 
 		updated, err := unificationRuleService.GetUnificationRule(rule.RuleId)

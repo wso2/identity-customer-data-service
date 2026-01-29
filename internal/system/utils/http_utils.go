@@ -19,9 +19,11 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors" // Standard Go errors package
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -122,4 +124,26 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 
 		handlerFunc(w, r)
 	})
+}
+
+// RespondJSON sends a JSON response with the given status code and payload
+func RespondJSON(w http.ResponseWriter, status int, payload any, resource string) {
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+
+	if err := enc.Encode(payload); err != nil {
+		serverError := error2.NewServerError(error2.ErrorMessage{
+			Code:        error2.ENCODE_ERROR.Code,
+			Message:     error2.ENCODE_ERROR.Message,
+			Description: fmt.Sprintf("Failed to encode %s response", resource),
+		}, err)
+		HandleError(w, serverError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(buf.Bytes())
 }

@@ -18,6 +18,8 @@
 
 package model
 
+import "time"
+
 type ProfileStatus struct {
 	ReferenceProfileId string `json:"reference_profile_id,omitempty" bson:"reference_profile_id,omitempty"`
 	IsReferenceProfile bool   `json:"is_reference_profile,omitempty" bson:"is_reference_profile,omitempty"`
@@ -40,8 +42,8 @@ type Profile struct {
 	ProfileId          string                 `json:"profile_id" bson:"profile_id"`
 	UserId             string                 `json:"user_id" bson:"user_id"`
 	TenantId           string                 `json:"tenant_id" bson:"tenant_id"`
-	CreatedAt          int64                  `json:"created_at" bson:"created_at"`
-	UpdatedAt          int64                  `json:"updated_at" bson:"updated_at"`
+	CreatedAt          time.Time              `json:"created_at" bson:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at" bson:"updated_at"`
 	Location           string                 `json:"location" bson:"location"`
 	IdentityAttributes map[string]interface{} `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
 	Traits             map[string]interface{} `json:"traits,omitempty" bson:"traits,omitempty"`
@@ -62,9 +64,9 @@ type ProfileConsent struct {
 
 // ConsentRecord represents an individual consent record for a profile
 type ConsentRecord struct {
-	CategoryIdentifier string `json:"category_identifier" bson:"category_identifier"` // References the consent category
-	IsConsented        bool   `json:"is_consented" bson:"is_consented"`               // Whether the user has given consent
-	ConsentedAt        int64  `json:"consented_at" bson:"consented_at"`               // Timestamp when consent was given/updated
+	CategoryIdentifier string    `json:"category_identifier" bson:"category_identifier"` // References the consent category
+	IsConsented        bool      `json:"is_consented" bson:"is_consented"`               // Whether the user has given consent
+	ConsentedAt        time.Time `json:"consented_at" bson:"consented_at"`               // Timestamp when consent was given/updated
 }
 
 // ProfileConsentResponse is the response model for profile consents API
