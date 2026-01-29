@@ -490,10 +490,10 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 		return false
 	}
 
-	var profileResponse *model.ProfileResponse
-	if cookieObj.IsActive {
-		profileResponse, err = profilesService.GetProfile(cookieObj.ProfileId)
+	if !cookieObj.IsActive {
+		return false
 	}
+	profileResponse, err := profilesService.GetProfile(cookieObj.ProfileId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return true
