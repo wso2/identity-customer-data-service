@@ -20,12 +20,13 @@ package handler
 
 import (
 	"encoding/json"
+	"net/http"
+
 	consentModel "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/consent/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
-	"net/http"
 )
 
 type ConsentCategoryHandler struct{}
@@ -72,8 +73,8 @@ func (h *ConsentCategoryHandler) AddConsentCategory(w http.ResponseWriter, r *ht
 		return
 	}
 
-	orgId := utils.ExtractTenantIdFromPath(r)
-	category.TenantId = orgId
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	category.TenantId = orgHandle
 
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()
 	consentCat, err := service.AddConsentCategory(category)

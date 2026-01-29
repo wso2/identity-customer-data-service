@@ -20,6 +20,7 @@ addr:
 auth_server:
   host: {{ .Values.cloud.deployment.cds.config.identityServer.host }}
   port : {{ .Values.cloud.deployment.cds.config.identityServer.port }}
+  cookieDomain: {{ .Values.cloud.deployment.cds.config.identityServer.cookieDomain }}
   introspectionEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.introspectionEndpoint }}
   tokenEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.tokenEndpoint }}
   revocationEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.revocationEndpoint }}
@@ -31,31 +32,36 @@ auth_server:
   isSystemAppGrantEnabled: {{ .Values.cloud.deployment.cds.config.identityServer.isSystemAppGrantEnabled }}
   required_scopes:
     profile:create:
-      - "internal_cdm_profile_create"
+      - "internal_cds_profile_create"
     profile:update:
-      - "internal_cdm_profile_update"
+      - "internal_cds_profile_update"
     profile:view:
-      - "internal_cdm_profile_view"
+      - "internal_cds_profile_view"
     profile:delete:
-      - "internal_cdm_profile_delete"
+      - "internal_cds_profile_delete"
 
     unification_rules:view:
-      - "internal_cdm_unification_rule_view"
+      - "internal_cds_unification_rule_view"
     unification_rules:create:
-      - "internal_cdm_unification_rule_create"
+      - "internal_cds_unification_rule_create"
     unification_rules:update:
-      - "internal_cdm_unification_rule_update"
+      - "internal_cds_unification_rule_update"
     unification_rules:delete:
-      - "internal_cdm_unification_rule_delete"
+      - "internal_cds_unification_rule_delete"
 
     profile_schema:view:
-      - "internal_cdm_profile_schema_view"
+      - "internal_cds_profile_schema_view"
     profile_schema:create:
-      - "internal_cdm_profile_schema_create"
+      - "internal_cds_profile_schema_create"
     profile_schema:update:
-      - "internal_cdm_profile_schema_update"
+      - "internal_cds_profile_schema_update"
     profile_schema:delete:
-      - "internal_cdm_profile_schema_delete"
+      - "internal_cds_profile_schema_delete"
+
+    admin_config:view:
+      - "internal_cds_admin_config_view"
+    admin_config:update:
+      - "internal_cds_admin_config_update"
 
 datasource:
   type: {{ .Values.cloud.deployment.cds.config.datasource.type }}
@@ -67,9 +73,9 @@ datasource:
   sslmode: {{ .Values.cloud.deployment.cds.config.datasource.sslmode | quote }}
 
 tls:
-  mtls_enabled: "{{ .Values.cloud.deployment.cds.config.tls.mtls_enabled }}"
-  cert_dir: "{{ .Values.cloud.deployment.cds.config.tls.cert_dir }}"
-  server_cert: "{{ .Values.cloud.deployment.cds.config.tls.server_cert }}"
-  server_key: "{{ .Values.cloud.deployment.cds.config.tls.server_key }}"
-  client_cert: "{{ .Values.cloud.deployment.cds.config.tls.client_cert }}"
-  client_key: "{{ .Values.cloud.deployment.cds.config.tls.client_key }}"
+  mtls_enabled: {{ .Values.cloud.deployment.cds.tls.mtls_enabled }}
+  cert_dir: "{{ .Values.cloud.deployment.cds.tls.cert_dir }}"
+  server_cert: "{{ .Values.cloud.deployment.cds.tls.server_cert }}"
+  server_key: "{{ .Values.cloud.deployment.cds.tls.server_key }}"
+  client_cert: "{{ .Values.cloud.deployment.cds.tls.client_cert }}"
+  trust_store: "{{ .Values.cloud.deployment.cds.tls.trust_store }}"

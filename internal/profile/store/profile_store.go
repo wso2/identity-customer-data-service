@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"strconv"
-	"strings"
 )
 
 // Unmarshal JSONB fields separately
@@ -27,8 +29,8 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 	profile.ProfileId = row["profile_id"].(string)
 	profile.UserId = row["user_id"].(string)
 	profile.TenantId = row["tenant_id"].(string)
-	profile.CreatedAt = row["created_at"].(int64)
-	profile.UpdatedAt = row["updated_at"].(int64)
+	profile.CreatedAt = row["created_at"].(time.Time)
+	profile.UpdatedAt = row["updated_at"].(time.Time)
 	profile.Location = row["location"].(string)
 	profileStatus := row["profile_status"].(string)
 	if profileStatus != "" && profileStatus != "null" {
@@ -81,7 +83,7 @@ func scanProfileConsentRow(row map[string]interface{}) (model.ConsentRecord, err
 
 	profileConsent.CategoryIdentifier = row["category_id"].(string)
 	profileConsent.IsConsented = row["consent_status"].(bool)
-	profileConsent.ConsentedAt = row["consented_at"].(int64)
+	profileConsent.ConsentedAt = row["consented_at"].(time.Time)
 	return profileConsent, nil
 }
 
@@ -1545,7 +1547,7 @@ func GetProfileCookie(cookie string) (*model.ProfileCookie, error) {
 }
 
 // UpdateProfileCookie updates the status of a profile cookie
-func UpdateProfileCookie(profileId string, status bool) error {
+func UpdateProfileCookie(profileId string, isActive bool) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -1563,7 +1565,7 @@ func UpdateProfileCookie(profileId string, status bool) error {
 
 	query := scripts.UpdateCookieStatusByProfileId[provider.NewDBProvider().GetDBType()]
 
-	_, err = dbClient.ExecuteQuery(query, status, profileId)
+	_, err = dbClient.ExecuteQuery(query, isActive, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed updating the profile cookie with profile Id: %s", profileId)
 		logger.Debug(errorMsg, log.Error(err))

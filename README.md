@@ -19,6 +19,8 @@ Lightweight, extensible Customer Data Server built to power personalized experie
         - Subscribe to Claim Management APIs.
     - Under **Protocol** section
         - Copy the Client ID and Client Secret.
+        - Select JWT as Access Token type.
+        - Add "iam-cds" to the Audience.
 
 2. Create an Admin user
     - Go to WSO2 Identity Server Console .

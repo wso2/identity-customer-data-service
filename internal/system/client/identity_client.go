@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -20,9 +20,9 @@ package client
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"io"
 	"net/http"
 	"net/url"
@@ -30,6 +30,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	idpModel "github.com/wso2/identity-customer-data-service/internal/identity_provider/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -80,21 +83,41 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 		}
 	}
 
-	// Client cert/key for mTLS (optional)
-	var clientCerts []tls.Certificate
-	if tlsCfg.MTLSEnabled {
-		clientCrt := filepath.Join(certDir, tlsCfg.ClientCert)
-		clientKey := filepath.Join(certDir, tlsCfg.ClientKey)
-		pair, err := tls.LoadX509KeyPair(clientCrt, clientKey)
+	// Root CAs: start with system roots, then append trust store if provided.
+	rootCAs, err := x509.SystemCertPool()
+	if err != nil || rootCAs == nil {
+		rootCAs = x509.NewCertPool()
+	}
+
+	trustFile := tlsCfg.TrustStore
+
+	if trustFile != "" {
+		trustPath := filepath.Join(certDir, trustFile)
+		trustPEM, err := os.ReadFile(trustPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load client cert/key (%s, %s): %w", clientCrt, clientKey, err)
+			return nil, fmt.Errorf("failed to read trust_store at %s: %w", trustPath, err)
 		}
-		clientCerts = []tls.Certificate{pair}
+		if ok := rootCAs.AppendCertsFromPEM(trustPEM); !ok {
+			return nil, fmt.Errorf("failed to append certs from trust_store: %s", trustPath)
+		}
+	}
+
+	// Client cert/key for mTLS (optional)
+	var certificates []tls.Certificate
+	if tlsCfg.MTLSEnabled {
+		cdsPublicCrt := filepath.Join(certDir, tlsCfg.CDSPublicCert)
+		cdsPrivatekey := filepath.Join(certDir, tlsCfg.CDSPrivateKey)
+		pair, err := tls.LoadX509KeyPair(cdsPublicCrt, cdsPrivatekey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load cert/key (%s, %s): %w", cdsPublicCrt, cdsPrivatekey, err)
+		}
+		certificates = []tls.Certificate{pair}
 	}
 
 	tcfg := &tls.Config{
 		MinVersion:   tls.VersionTLS12,
-		Certificates: clientCerts,      // empty if mTLS disabled
+		RootCAs:      rootCAs,          // nil means use system CA certs
+		Certificates: certificates,     // empty if mTLS disabled
 		ServerName:   serverHostForSNI, // ensure hostname verification (SNI)
 	}
 
@@ -114,7 +137,7 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 // FetchToken retrieves an access token for the given org.
 // If system app grant is enabled, it uses system_app_grant
 // Otherwise, it falls back to client_credentials per org.
-func (c *IdentityClient) FetchToken(orgId string) (string, error) {
+func (c *IdentityClient) FetchToken(orgHandle string) (string, error) {
 	logger := log.GetLogger()
 	authCfg := config.GetCDSRuntime().Config.AuthServer
 
@@ -127,12 +150,12 @@ func (c *IdentityClient) FetchToken(orgId string) (string, error) {
 	}, constants.SpaceSeparator)
 
 	if authCfg.IsSystemAppGrantEnabled {
-		logger.Debug(fmt.Sprintf("Fetching token using system_app_grant for org: %s", orgId))
-		return c.fetchOrganizationToken(orgId, authCfg, scope)
+		logger.Debug(fmt.Sprintf("Fetching token using system_app_grant for org: %s", orgHandle))
+		return c.fetchOrganizationToken(orgHandle, authCfg, scope)
 	}
 
-	logger.Debug(fmt.Sprintf("Fetching token using client_credentials for org: %s", orgId))
-	return c.fetchClientCredentialsToken(orgId, authCfg, scope)
+	logger.Debug(fmt.Sprintf("Fetching token using client_credentials for org: %s", orgHandle))
+	return c.fetchClientCredentialsToken(orgHandle, authCfg, scope)
 }
 
 func (c *IdentityClient) buildTokenEndpoint(orgId, tokenEndpoint string) string {
@@ -141,7 +164,7 @@ func (c *IdentityClient) buildTokenEndpoint(orgId, tokenEndpoint string) string 
 
 // fetchOrganizationToken obtains an organization-scoped token via system_app_grant.
 func (c *IdentityClient) fetchOrganizationToken(
-	orgId string,
+	orgHandle string,
 	authCfg config.AuthServerConfig,
 	scope string,
 ) (string, error) {
@@ -152,37 +175,20 @@ func (c *IdentityClient) fetchOrganizationToken(
 	baseForm := url.Values{}
 	baseForm.Set("grant_type", "system_app_grant")
 	baseForm.Set("scope", scope)
+	baseForm.Set("organizationHandle", orgHandle)
 	endpoint := c.buildTokenEndpoint("carbon.super", authCfg.TokenEndpoint)
-	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgId))
+	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgHandle))
 	// Note: The super-tenant token is not used directly — the grant exchange happens using client credentials.
-	_, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgId)
+	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgHandle)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgHandle)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
 			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
 		}, err)
 	}
-
-	//  Exchange for organization token
-	exchangeForm := url.Values{}
-	exchangeForm.Set("grant_type", "system_app_grant")
-	exchangeForm.Set("scope", scope)
-	exchangeForm.Set("organizationId", orgId)
-
-	logger.Debug(fmt.Sprintf("Exchanging system_app_grant token for organization: %s", orgId))
-	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, exchangeForm, orgId)
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to exchange token for the organization:%s", orgId)
-		return "", errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.TOKEN_FETCH_FAILED.Code,
-			Message:     errors2.TOKEN_FETCH_FAILED.Message,
-			Description: errorMsg,
-		}, err)
-	}
-
-	logger.Debug(fmt.Sprintf("Successfully obtained organization-scoped token for org: %s", orgId))
+	logger.Debug(fmt.Sprintf("Successfully obtained organization-scoped token for org: %s", orgHandle))
 	return orgToken, nil
 }
 
@@ -205,7 +211,7 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 
 	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to create token request for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to create token request for the organization:%s in system_app_grant", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
@@ -218,8 +224,8 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to fetch token for the organization:%s", orgId)
-		logger.Debug(errorMsg, log.Error(err))
+		errorMsg := fmt.Sprintf("Failed to fetch token for the organization:%s in system_app_grant", orgId)
+		logger.Debug(err.Error())
 		// This is an internal communication. So for the clients of CDS, we treat this as a server error.
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
@@ -230,19 +236,24 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		errorMsg := fmt.Sprintf("Token endpoint returned status %d: for the organization:%s", resp.StatusCode, orgId)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		errorMsg := fmt.Sprintf(
+			"Token endpoint returned status %d for org:%s. Endpoint: %s. Response: %s",
+			resp.StatusCode, orgId, endpoint, strings.TrimSpace(string(bodyBytes)),
+		)
+		logger.Debug(errorMsg)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
 			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
-		}, err)
+		}, fmt.Errorf("token endpoint non-200: %d", resp.StatusCode))
 	}
 
 	var result struct {
 		AccessToken string `json:"access_token"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		errorMsg := fmt.Sprintf("Failed to parse token response for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to parse token response for the organization:%s in system_app_grant", orgId)
 		logger.Debug(errorMsg, log.Error(err))
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
@@ -251,7 +262,7 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 		}, err)
 	}
 	if result.AccessToken == "" {
-		errorMsg := fmt.Sprintf("Failed to read token response for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to read token response for the organization:%s in system_app_grant", orgId)
 		logger.Debug(errorMsg)
 		return "", errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
@@ -261,6 +272,74 @@ func (c *IdentityClient) requestToken(endpoint, clientID, clientSecret string,
 	}
 
 	return result.AccessToken, nil
+}
+
+// FetchApplicationIdentifier fetches the application ID for a given application identifier (clientId or issuer)
+func (c *IdentityClient) FetchApplicationIdentifier(applicationIdentifier, orgHandle string) (idpModel.ApplicationsListResponse, error) {
+
+	logger := log.GetLogger()
+	var result idpModel.ApplicationsListResponse
+	filter := fmt.Sprintf(`clientId eq "%s" or issuer eq "%s"`, applicationIdentifier, applicationIdentifier)
+	base := fmt.Sprintf("https://%s/t/%s/api/server/v1/applications", c.BaseURL, orgHandle)
+	u, err := url.Parse(base)
+	if err != nil {
+		return result, err
+	}
+
+	q := u.Query()
+	q.Set("filter", filter)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return result, err
+	}
+
+	token, err := c.FetchToken(orgHandle)
+	if err != nil {
+		logger.Debug(fmt.Sprintf("Failed to get token for org: %s", orgHandle), log.Error(err))
+		return result, err
+	}
+
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to fetch applications for org: %s", orgHandle)
+		return result, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APPLICATIONS_FAILED.Code,
+			Message:     errors2.GET_APPLICATIONS_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		errorMsg := fmt.Sprintf("Failed to fetch applications for org: %s", orgHandle)
+		return result, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APPLICATIONS_FAILED.Code,
+			Message:     errors2.GET_APPLICATIONS_FAILED.Message,
+			Description: errorMsg,
+		}, fmt.Errorf("applications endpoint returned status: %d", resp.StatusCode))
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		errorMsg := fmt.Sprintf("Failed to parse applications response for org: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return result, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APPLICATIONS_FAILED.Code,
+			Message:     errors2.GET_APPLICATIONS_FAILED.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	return result, nil
 }
 
 // IntrospectToken introspects an opaque token using the introspection endpoint.
@@ -318,21 +397,21 @@ func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, 
 	return result, nil
 }
 
-func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAttribute, error) {
+func (c *IdentityClient) GetProfileSchema(orgHandle string) ([]model.ProfileSchemaAttribute, error) {
 
 	logger := log.GetLogger()
-	localClaimsMap, err := c.GetLocalClaimsMap(orgId)
+	localClaimsMap, err := c.GetLocalClaimsMap(orgHandle)
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Failed to fetch local claims for the organization:%s", orgId), log.Error(err))
+		logger.Debug(fmt.Sprintf("Failed to fetch local claims for the organization:%s", orgHandle), log.Error(err))
 		return nil, err
 	}
 
-	dialects, err := c.GetAllDialects(orgId)
+	dialects, err := c.GetAllDialects(orgHandle)
 	if err != nil {
-		logger.Debug(fmt.Sprintf("Failed to fetch dialects for the organization:%s", orgId), log.Error(err))
+		logger.Debug(fmt.Sprintf("Failed to fetch dialects for the organization:%s", orgHandle), log.Error(err))
 		return nil, err
 	}
-	logger.Info(fmt.Sprintf("Fetched %d dialects for the organization:%s", len(dialects), orgId))
+	logger.Info(fmt.Sprintf("Fetched %d dialects for the organization:%s", len(dialects), orgHandle))
 	var result []model.ProfileSchemaAttribute
 	for _, dialect := range dialects {
 		logger.Info("Processing dialect", log.String("dialectURI", fmt.Sprintf("%v", dialect["dialectURI"])))
@@ -348,7 +427,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 			continue
 		}
 
-		claims, err := c.GetClaimsByDialect(dialectID, orgId)
+		claims, err := c.GetClaimsByDialect(dialectID, orgHandle)
 		if err != nil {
 			logger.Warn(fmt.Sprintf("Failed to fetch claims for dialect %s", dialectURI))
 			continue
@@ -365,7 +444,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 				continue
 			}
 
-			attr, subAttr, parent := ConvertSCIMClaimWithLocal(scimClaim, localClaim, claims, orgId, dialectURI)
+			attr, subAttr, parent := ConvertSCIMClaimWithLocal(scimClaim, localClaim, claims, orgHandle, dialectURI)
 			result = append(result, attr)
 			existingAttrs[attr.AttributeName] = true
 
@@ -393,7 +472,7 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 				}
 				logger.Warn(fmt.Sprintf("Adding synthetic parent attribute: %s", parent))
 				result = append(result, model.ProfileSchemaAttribute{
-					OrgId:         orgId,
+					OrgId:         orgHandle,
 					AttributeId:   uuid.New().String(),
 					AttributeName: parent,
 					ValueType:     constants.ComplexDataType,
@@ -406,26 +485,31 @@ func (c *IdentityClient) GetProfileSchema(orgId string) ([]model.ProfileSchemaAt
 		}
 	}
 
-	logger.Info(fmt.Sprintf("Successfully built %d profile schema attributes for org: %s", len(result), orgId))
+	logger.Info(fmt.Sprintf("Successfully built %d profile schema attributes for org: %s", len(result), orgHandle))
 	return result, nil
 }
 
-func (c *IdentityClient) GetAllDialects(orgId string) ([]map[string]interface{}, error) {
-	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects", c.BaseURL, orgId)
+func (c *IdentityClient) GetAllDialects(orgHandle string) ([]map[string]interface{}, error) {
+	endpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/claim-dialects", c.BaseURL, orgHandle)
 	req, _ := http.NewRequest("GET", endpoint, nil)
 	logger := log.GetLogger()
-	token, err := c.FetchToken(orgId)
+	token, err := c.FetchToken(orgHandle)
 	if err != nil {
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the all dialects of the organization:%s",
-			orgId), log.Error(err))
+			orgHandle), log.Error(err))
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		// This is an internal communication. So for the clients of CDS, we treat this as a server error.
-		errorMsg := fmt.Sprintf("Failed to fetch all dialects for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to fetch all dialects for the organization:%s", orgHandle)
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_SCIM_DIALECTS.Code,
 			Message:     errors2.GET_SCIM_DIALECTS.Message,
@@ -438,7 +522,7 @@ func (c *IdentityClient) GetAllDialects(orgId string) ([]map[string]interface{},
 	body, _ := io.ReadAll(resp.Body)
 	err = json.Unmarshal(body, &dialects)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to parse dialects response for the organization:%s", orgId)
+		errorMsg := fmt.Sprintf("Failed to parse dialects response for the organization:%s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.GET_SCIM_DIALECTS.Code,
@@ -458,7 +542,12 @@ func (c *IdentityClient) GetClaimsByDialect(dialectID, orgId string) ([]map[stri
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the claims of dialectID:%s of the organization:%s", dialectID, orgId), log.Error(err))
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -499,8 +588,12 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 			orgId), log.Error(err))
 		return nil, err
 	}
-	logger.Info("Fetching local claims from token: " + token)
-	req.Header.Set("Authorization", "Bearer "+token)
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -682,7 +775,12 @@ func (c *IdentityClient) GetSCIMUser(orgId, userId string) (map[string]interface
 			userId, orgId), log.Error(err))
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {

@@ -19,9 +19,11 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors" // Standard Go errors package
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -61,7 +63,7 @@ func HandleError(w http.ResponseWriter, err error) {
 	}
 }
 
-func ExtractTenantIdFromPath(r *http.Request) string {
+func ExtractOrgHandleFromPath(r *http.Request) string {
 	tenant := r.Context().Value(constants.TenantContextKey).(string)
 	if tenant == "" {
 		// If tenant is not found in context, fallback to default tenant
@@ -94,18 +96,6 @@ func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError
 	_ = json.NewEncoder(w).Encode("Invalid erquest format")
 }
 
-// RewriteToDefaultTenant Rewrite `/api/v1/...` to `/t/carbon.super/api/v1/...`
-func RewriteToDefaultTenant(apiBasePath string, mux *http.ServeMux, defaultTenant string) {
-	mux.HandleFunc(apiBasePath+"/", func(w http.ResponseWriter, r *http.Request) {
-		newPath := "/t/" + defaultTenant + r.URL.Path
-		// Preserve query string in redirect
-		if r.URL.RawQuery != "" {
-			newPath = newPath + "?" + r.URL.RawQuery
-		}
-		http.Redirect(w, r, newPath, http.StatusTemporaryRedirect)
-	})
-}
-
 // MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
 // with the tenant added to the context. It preserves the remaining path (e.g., /api/v1/...).
 func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
@@ -134,4 +124,26 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 
 		handlerFunc(w, r)
 	})
+}
+
+// RespondJSON sends a JSON response with the given status code and payload
+func RespondJSON(w http.ResponseWriter, status int, payload any, resource string) {
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+
+	if err := enc.Encode(payload); err != nil {
+		serverError := error2.NewServerError(error2.ErrorMessage{
+			Code:        error2.ENCODE_ERROR.Code,
+			Message:     error2.ENCODE_ERROR.Message,
+			Description: fmt.Sprintf("Failed to encode %s response", resource),
+		}, err)
+		HandleError(w, serverError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(buf.Bytes())
 }

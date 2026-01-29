@@ -25,14 +25,14 @@ cloud:
       containerPort: 8900
       config:
         env: "dev"
-        logLevel: "INFO" # Log level: "INFO", "WARN", "ERROR", "DEBUG"
+        logLevel: "DEBUG" # Log level: "INFO", "WARN", "ERROR", "DEBUG"
         cache:
           enabled: true
           defaultCacheTimeout: 15
         auth:
           corsAllowedOrigins: []
         addr:
-          host: "cds.local.com"
+          host: "localhost"
         sync:
           schema:
             enabled: true
@@ -42,24 +42,26 @@ cloud:
           hostname: "localhost"
           port: 5432
           name: "cds_db"
-          sslmode: "disable"
+          sslmode: require
 
         identityServer:
-          host: identity-service
-          port: 9443
+          host: localhost
+          port: ""
+          cookieDomain: "localhost"
           introspectionEndpoint: "/oauth2/introspect"
           tokenEndpoint: "/oauth2/token"
           revocationEndpoint: "/oauth2/revoke"
           claimsEndpoint: "api/server/v1/claim-dialects"
           isSystemAppGrantEnabled: true
+          certName: "wso2carbontls.cer"
 
       tls:
-        mtls_enabled: true
+        mtls_enabled: false
         cert_dir : "/app/repository/certs"
-        server_cert: "server.crt" # server cert path
-        server_key: "server.key" # server key path
-        client_cert: "client.crt"
-        client_key: "client.key"
+        server_cert: "client.cer"
+        server_key: "customer-data-service-client-key.pem"
+        client_cert: "wso2carbontls.cer"
+        trust_store: "trust-store.pem"
 
       secrets:
         authServerClientId: "" # Add the auth server client ID
@@ -69,7 +71,6 @@ cloud:
         databaseUsername: "" # Add the database admin username
         databasePassword: "" # Add the database admin password
       replicas: 2
-      annotations: {}
       progressDeadlineSeconds: 300
       minReadySeconds: 30
       strategy:
@@ -104,7 +105,7 @@ cloud:
   ingress:
     ratelimit:
       cds:
-        zoneName: "cds"
+        zoneName: "customerDataService"
         burstLimit: 50
     hostName: "cds.local.com"
     ingressClassName: "nginx"

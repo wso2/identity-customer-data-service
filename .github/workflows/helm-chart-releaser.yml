@@ -46,13 +46,13 @@ jobs:
       # Checks-out the repository from main(default) branch under $GITHUB_WORKSPACE.
       - uses: actions/checkout@v2
         with:
-          token: ${{secrets.GITHUB_BOT_TOKEN}}
+          token: ${{secrets.CDS_DEPLOYMENT_PAT}}
 
       # Define a step to execute the script.
       - name: Run the helm-chart-releaser script
         env:
-          TOKEN: ${{secrets.GITHUB_BOT_TOKEN}}
-          GITHUB_BOT_NAME: ${{secrets.GITHUB_BOT_NAME}}
-          GITHUB_BOT_EMAIL: ${{secrets.GITHUB_BOT_EMAIL}}
+          TOKEN: ${{secrets.CDS_DEPLOYMENT_PAT}}
+          GITHUB_BOT_NAME: ${{secrets.IAM_CLOUD_BOT_USERNAME}}
+          GITHUB_BOT_EMAIL: ${{secrets.IAM_CLOUD_BOT_EMAIL}}
         run: bash .github/workflows/utils/helm-release-builder.sh $GITHUB_BOT_NAME $GITHUB_BOT_EMAIL $TOKEN $GITHUB_WORKSPACE
         id: release-builder

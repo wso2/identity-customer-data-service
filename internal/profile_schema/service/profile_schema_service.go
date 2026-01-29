@@ -21,6 +21,9 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	psstr "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
@@ -28,14 +31,12 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"net/http"
-	"strings"
 )
 
 type ProfileSchemaServiceInterface interface {
 	GetProfileSchema(orgId string) (map[string]interface{}, error)
 	DeleteProfileSchema(orgId string) error
-	AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope string) error
+	AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope, orgId string) error
 	GetProfileSchemaAttributesByScope(orgId, scope string) (interface{}, error)
 	GetProfileSchemaAttributesByScopeAndFilter(id, scope string, filters []string) (interface{}, error)
 	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
@@ -56,7 +57,7 @@ func GetProfileSchemaService() ProfileSchemaServiceInterface {
 }
 
 // AddProfileSchemaAttributesForScope adds profile schema attributes to the specific scope.
-func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttributes []model.ProfileSchemaAttribute, scope string) error {
+func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttributes []model.ProfileSchemaAttribute, scope, orgId string) error {
 
 	validAttrs := make([]model.ProfileSchemaAttribute, 0, len(schemaAttributes))
 	for _, attr := range schemaAttributes {
@@ -84,17 +85,32 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 			return err
 		}
 		if existing != nil {
-			errorMsg := fmt.Sprintf("Attribute '%s' already exists for org '%s'", attr.AttributeName, attr.OrgId)
-			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
-				Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
-				Description: errorMsg,
-			}, http.StatusConflict)
-			return clientError
+			// For application_data attributes, check both attribute name AND application identifier
+			if scope == constants.ApplicationData {
+				if existing.ApplicationIdentifier == attr.ApplicationIdentifier {
+					errorMsg := fmt.Sprintf("Attribute '%s' already exists for application '%s' in org '%s'",
+						attr.AttributeName, attr.ApplicationIdentifier, attr.OrgId)
+					clientError := errors2.NewClientError(errors2.ErrorMessage{
+						Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
+						Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
+						Description: errorMsg,
+					}, http.StatusConflict)
+					return clientError
+				}
+			} else {
+				// For non-application attributes, duplicate names are not allowed
+				errorMsg := fmt.Sprintf("Attribute '%s' already exists for org '%s'", attr.AttributeName, attr.OrgId)
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
+					Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
+					Description: errorMsg,
+				}, http.StatusConflict)
+				return clientError
+			}
 		}
 	}
 
-	return psstr.AddProfileSchemaAttributesForScope(validAttrs, scope)
+	return psstr.AddProfileSchemaAttributesForScope(validAttrs, scope, orgId)
 }
 
 func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaAttribute) (error, bool) {
@@ -120,7 +136,6 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		return clientError, false
 	}
 
-	// todo: see if we need to follow any regex validation for the attribute name
 	scope := parts[0]
 	if !constants.AllowedAttributesScope[scope] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -138,6 +153,19 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
 				Description: "Application identifier is required for application_data scope",
+			}, http.StatusBadRequest)
+			return clientError, false
+		}
+
+		err, validApplicationIdentifier := validateApplicationIdentifierFn(attr.ApplicationIdentifier, attr.OrgId)
+		if err != nil {
+			return err, false
+		}
+		if !validApplicationIdentifier {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_APP_IDENTIFIER.Code,
+				Message:     errors2.INVALID_APP_IDENTIFIER.Message,
+				Description: fmt.Sprintf("Invalid application identifier: %s", attr.ApplicationIdentifier),
 			}, http.StatusBadRequest)
 			return clientError, false
 		}
@@ -240,6 +268,19 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		return clientError, false
 	}
 	return nil, true
+}
+
+var validateApplicationIdentifierFn = defaultValidateApplicationIdentifier
+
+func defaultValidateApplicationIdentifier(appID, orgHandle string) (error, bool) {
+	cfg := config.GetCDSRuntime().Config
+	identityClient := client.NewIdentityClient(cfg)
+
+	res, err := identityClient.FetchApplicationIdentifier(appID, orgHandle)
+	if err != nil {
+		return err, false
+	}
+	return nil, len(res.Applications) == 1
 }
 
 func (s *ProfileSchemaService) GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error) {
@@ -563,15 +604,15 @@ func matches(attr model.ProfileSchemaAttribute, field, op, val string) bool {
 	return false
 }
 
-func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
+func (s *ProfileSchemaService) SyncProfileSchema(orgHandle string) error {
 
 	cfg := config.GetCDSRuntime().Config
 	identityClient := client.NewIdentityClient(cfg)
 
-	claims, err := identityClient.GetProfileSchema(orgId)
+	claims, err := identityClient.GetProfileSchema(orgHandle)
 	logger := log.GetLogger()
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to fetch profile schema from identity server for organization %s:", orgId)
+		errMsg := fmt.Sprintf("failed to fetch profile schema from identity server for organization %s:", orgHandle)
 		logger.Debug(errMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
@@ -581,9 +622,9 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
 	}
 
 	if len(claims) > 0 {
-		err := psstr.UpsertIdentityAttributes(orgId, claims)
+		err := psstr.UpsertIdentityAttributes(orgHandle, claims)
 		if err != nil {
-			errMsg := fmt.Sprintf("failed to persist profile schema for organization %s:", orgId)
+			errMsg := fmt.Sprintf("failed to persist profile schema for organization %s:", orgHandle)
 			logger.Debug(errMsg, log.Error(err))
 			return errors2.NewServerError(errors2.ErrorMessage{
 				Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
@@ -591,7 +632,7 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgId string) error {
 				Description: errMsg,
 			}, err)
 		}
-		logger.Info("Profile schema successfully updated for org: " + orgId)
+		logger.Info("Profile schema successfully updated for org: " + orgHandle)
 	}
 	return nil
 }

@@ -20,10 +20,12 @@ package handler
 
 import (
 	"encoding/json"
+	"net/http"
+
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
-	"net/http"
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 )
@@ -39,13 +41,18 @@ func NewAdminConfigHandler() *AdminConfigHandler {
 // GetAdminConfig handles GET /admin/configs
 func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Request) {
 
-	orgId := utils.ExtractTenantIdFromPath(r)
+	if err := security.AuthnAndAuthz(r, "admin_config:view"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	adminConfigProvider := provider.NewAdminConfigProvider()
 	adminConfigService := adminConfigProvider.GetAdminConfigService()
-	config, err := adminConfigService.GetAdminConfig(orgId)
+	config, err := adminConfigService.GetAdminConfig(orgHandle)
 
 	if err != nil {
 		utils.HandleError(w, err)
+		return
 	}
 
 	resp := model.AdminConfigAPI{
@@ -58,7 +65,11 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 // UpdateAdminConfig handles PUT /admin/configs
 func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Request) {
 
-	orgId := utils.ExtractTenantIdFromPath(r)
+	if err := security.AuthnAndAuthz(r, "admin_config:update"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	var config model.AdminConfigUpdateAPI
 
 	decoder := json.NewDecoder(r.Body)
@@ -82,7 +93,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	configToUpdate := model.AdminConfig{
-		TenantId:              orgId,
+		TenantId:              orgHandle,
 		InitialSchemaSyncDone: existingConfig.InitialSchemaSyncDone,
 		CDSEnabled:            existingConfig.CDSEnabled,
 		SystemApplications:    existingConfig.SystemApplications,
@@ -96,7 +107,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		configToUpdate.SystemApplications = config.SystemApplications
 	}
 
-	err = adminConfigService.UpdateAdminConfig(configToUpdate, orgId)
+	err = adminConfigService.UpdateAdminConfig(configToUpdate, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

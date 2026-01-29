@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -18,7 +18,16 @@
 
 package model
 
-type ProfileSchemaSync struct {
-	OrgId string `json:"tenantId" bson:"tenantId"`
-	Event string `json:"event" bson:"event"`
+type ApplicationsListResponse struct {
+	TotalResults int               `json:"totalResults"`
+	StartIndex   int               `json:"startIndex"`
+	Count        int               `json:"count"`
+	Applications []ApplicationItem `json:"applications"`
+}
+
+type ApplicationItem struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	ClientId string `json:"clientId"`
+	Issuer   string `json:"issuer"`
 }

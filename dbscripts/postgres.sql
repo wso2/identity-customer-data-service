@@ -22,8 +22,8 @@ CREATE TABLE profiles
     profile_id          VARCHAR(255) PRIMARY KEY,
     user_id             VARCHAR(255),
     tenant_id           VARCHAR(255),
-    created_at          BIGINT,
-    updated_at          BIGINT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     location            VARCHAR(255),
     origin_country      VARCHAR(255),
     list_profile        BOOLEAN DEFAULT TRUE,
@@ -64,11 +64,11 @@ CREATE TABLE unification_rules
     tenant_id     VARCHAR(255) NOT NULL,
     rule_name     VARCHAR(255) NOT NULL,
     property_name VARCHAR(255) NOT NULL,
-    property_id  VARCHAR(255) REFERENCES profile_schema(attribute_id) ON DELETE CASCADE,
+    property_id   VARCHAR(255) REFERENCES profile_schema(attribute_id) ON DELETE CASCADE,
     priority      INT          NOT NULL,
     is_active     BOOLEAN      NOT NULL,
-    created_at    BIGINT       NOT NULL,
-    updated_at    BIGINT       NOT NULL
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 -- Application Data Table
@@ -96,8 +96,8 @@ CREATE TABLE profile_consents
     id      SERIAL PRIMARY KEY,
     profile_id       VARCHAR(255) REFERENCES profiles (profile_id) ON DELETE CASCADE,
     category_id      VARCHAR (255) REFERENCES consent_categories (category_identifier) ON DELETE CASCADE,
-    consent_status   BOOLEAN NOT NULL,
-    consented_at     BIGINT NOT NULL,
+    consent_status   BOOLEAN     NOT NULL,
+    consented_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (profile_id, category_id)
 );
 

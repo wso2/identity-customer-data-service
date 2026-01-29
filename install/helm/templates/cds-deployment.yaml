@@ -23,10 +23,8 @@ kind: Deployment
 metadata:
   name: cds
   namespace: {{ .Release.Namespace }}
-{{- with .Values.cloud.deployment.cds.annotations }}
   annotations:
-{{ toYaml . | indent 4 }}
-{{- end }}
+    asgardeo.io/minimum-replica-count: {{ .Values.cloud.deployment.cds.replicas | quote }}
 spec:
   progressDeadlineSeconds: {{ .Values.cloud.deployment.cds.progressDeadlineSeconds }}
   replicas: {{ default 1 .Values.cloud.deployment.cds.replicas }}
@@ -75,14 +73,14 @@ spec:
           image: "{{ .Values.cloud.deployment.cds.dockerRegistry }}/{{ .Values.cloud.deployment.cds.imageName }}@{{ .Values.cloud.deployment.cds.digest }}"
           livenessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /cds/api/v1/health
               port: {{ .Values.cloud.deployment.cds.containerPort }}
               scheme: HTTPS
             initialDelaySeconds: {{ .Values.cloud.deployment.cds.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.cloud.deployment.cds.livenessProbe.periodSeconds }}
           readinessProbe:
             httpGet:
-              path: /api/v1/ready
+              path: /cds/api/v1/ready
               port: {{ .Values.cloud.deployment.cds.containerPort }}
               scheme: HTTPS
             initialDelaySeconds: {{ .Values.cloud.deployment.cds.readinessProbe.initialDelaySeconds }}
@@ -114,18 +112,20 @@ spec:
               mountPath: /app/repository/conf/deployment.yaml
               subPath: deployment.yaml
               readOnly: true
-            - name: cds-application-properties
-              mountPath: /app/repository/conf/deployment.yaml
-              subPath: deployment.yaml
+            - name: cds-mtls-volume
+              mountPath: /app/repository/certs/client.cer
+              subPath: client.cer
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/server.cer
-              subPath: server.cer
-              readOnly: true
+              mountPath: /app/repository/certs/customer-data-service-client-key.pem
+              subPath: customer-data-service-client-key.pem
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/server.key
-              subPath: server.pem
+              mountPath: /app/repository/certs/{{ .Values.cloud.deployment.cds.tls.trust_store}}
+              subPath: {{ .Values.cloud.deployment.cds.tls.trust_store}}
               readOnly: true
+            - name: is-public-cert
+              mountPath: /app/repository/certs/{{ .Values.cloud.deployment.cds.config.identityServer.certName }}
+              subPath: {{ .Values.cloud.deployment.cds.config.identityServer.certName }}
           envFrom:
             - secretRef:
                 name: cds-env-secret
@@ -138,9 +138,12 @@ spec:
                path: deployment.yaml
         - name: cds-mtls-volume
           secret:
-            secretName: server.crt
-        - name: cds-mtls-volume
-          secret:
-            secretName: cds-mtls-secret
+            secretName: customer-data-service-keys
+        - name: is-public-cert
+          configMap:
+              name: identity-server-public-cert
+              items:
+                - key: {{ .Values.cloud.deployment.cds.config.identityServer.certName }}
+                  path: {{ .Values.cloud.deployment.cds.config.identityServer.certName }}
 
 

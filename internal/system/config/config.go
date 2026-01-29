@@ -34,6 +34,7 @@ type AuthConfig struct {
 type AuthServerConfig struct {
 	Host                    string              `yaml:"host"`
 	Port                    string              `yaml:"port"`
+	CookieDomain            string              `yaml:"cookieDomain"`
 	IntrospectionEndPoint   string              `yaml:"introspectionEndpoint"`
 	TokenEndpoint           string              `yaml:"tokenEndpoint"`
 	RevocationEndpoint      string              `yaml:"revocationEndpoint"`
@@ -66,10 +67,10 @@ type Config struct {
 }
 
 type TLSConfig struct {
-	MTLSEnabled bool   `yaml:"mtls_enabled"`
-	CertDir     string `yaml:"cert_dir"`
-	ServerCert  string `yaml:"server_cert"`
-	ServerKey   string `yaml:"server_key"`
-	ClientCert  string `yaml:"client_cert"`
-	ClientKey   string `yaml:"client_key"`
+	MTLSEnabled             bool   `yaml:"mtls_enabled"`
+	CertDir                 string `yaml:"cert_dir"`
+	CDSPublicCert           string `yaml:"server_cert"`
+	CDSPrivateKey           string `yaml:"server_key"`
+	IdentityServerPublicKey string `yaml:"client_cert"`
+	TrustStore              string `yaml:"trust_store"`
 }

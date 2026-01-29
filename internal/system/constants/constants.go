@@ -1,16 +1,19 @@
 package constants
 
-const ApiBasePath = "/api"
+const ApiBasePath = "/cds/api"
 const ProfileApiPath = "profiles"
 const UnificationRulesApiPath = "unification-rules"
 const ConsentApiPath = "consent"
 const ProfileSchemaApiPath = "profile-schema"
 const IdentityServerDialectsPath = "/api/server/v1/claim-dialects"
 const Filter = "filter"
-const Attributes = "attributes"        // Query parameter to filter attributes in the request.
-const ProfileCookie = "cdm_profile_id" // Cookie name to store the profile ID in the browser.
+const Attributes = "attributes"     // Query parameter to filter attributes in the request.
+const ProfileCookie = "cds_profile" // Cookie name to store cookie that corresponds to profile ID.
 const DefaultTenant = "carbon.super"
 const SpaceSeparator = " "
+const SystemAppHeader = "SystemApp"
+const DefaultQueueSize = 1000
+const DefaultLimit = 50
 
 type contextKey string
 
@@ -22,16 +25,31 @@ var AllowedFieldsForUnificationRulePatch = map[string]bool{
 }
 
 const (
+	ProfileResource         = "profile"
+	UnificationRuleResource = "unification rule"
+	SchemaAttribute         = "schema attribute"
+)
+
+const (
 	StringDataType   = "string"
 	IntegerDataType  = "integer"
 	DecimalDataType  = "decimal"
 	BooleanDataType  = "boolean"
 	DateTimeDataType = "date_time"
+	DateDataType     = "date"
 	ComplexDataType  = "complex"
+	EpochDataType    = "epoch"
 )
 
 const (
-	SchemaInitEvent = "schema-initialization"
+	AddScimAttributeEvent     = "POST_ADD_EXTERNAL_CLAIM"
+	UpdateScimAttributeEvent  = "POST_UPDATE_EXTERNAL_CLAIM"
+	DeleteScimAttributeEvent  = "POST_DELETE_EXTERNAL_CLAIM"
+	UpdateLocalAttributeEvent = "POST_UPDATE_LOCAL_CLAIM"
+	AddUserEvent              = "POST_ADD_USER"
+	DeleteUserEvent           = "POST_DELETE_USER_WITH_ID"
+	UpdateUserClaimEvent      = "POST_SET_USER_CLAIM_VALUE_WITH_ID"
+	UpdateUserClaimsEvent     = "POST_SET_USER_CLAIM_VALUES_WITH_ID"
 )
 
 var AllowedValueTypes = map[string]bool{
@@ -41,6 +59,8 @@ var AllowedValueTypes = map[string]bool{
 	BooleanDataType:  true,
 	DateTimeDataType: true,
 	ComplexDataType:  true,
+	EpochDataType:    true,
+	DateDataType:     true,
 }
 
 // Mutability values define how an attribute can be created, read, or updated.

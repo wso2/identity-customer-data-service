@@ -48,7 +48,6 @@ func NewProfileService(mux *http.ServeMux) *ProfileService {
 	// Routes with path variables
 	ps.mux.HandleFunc("GET "+base+"/profiles/{profileId}", ps.profileHandler.GetProfile)
 	ps.mux.HandleFunc("PATCH "+base+"/profiles/{profileId}", ps.profileHandler.PatchProfile)
-	ps.mux.HandleFunc("PUT "+base+"/profiles/{profileId}", ps.profileHandler.UpdateProfile)
 	ps.mux.HandleFunc("DELETE "+base+"/profiles/{profileId}", ps.profileHandler.DeleteProfile)
 	ps.mux.HandleFunc("GET "+base+"/profiles/{profileId}/consents", ps.profileHandler.GetProfileConsents)
 	ps.mux.HandleFunc("PUT "+base+"/profiles/{profileId}/consents", ps.profileHandler.UpdateProfileConsents)

@@ -104,6 +104,11 @@ var InsertUnificationRule = map[string]string{
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 }
 
+var UpdateUnificationRule = map[string]string{
+	"postgres": `UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3,updated_at = $4
+		 WHERE rule_id = $5;`,
+}
+
 var InsertProfile = map[string]string{
 	"postgres": `
 		INSERT INTO profiles (

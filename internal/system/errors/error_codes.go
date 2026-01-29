@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -21,368 +21,335 @@ package errors
 const errorPrefix = "CDS-"
 
 var (
-	// Server error codes
 
-	ADD_UNIFICATION_RULE = ErrorMessage{
-		Code:    errorPrefix + "15009",
-		Message: "Error while adding unification rules.",
+	// Server (15xxx) sub-grouping
+	//   150xx - Admin Config & Server Operations
+	//   151xx - Profile Schema & Schema Sync / IS Integration
+	//   152xx - Unification Rules Management
+	//   153xx - Consent Management
+	//   154xx - Profiles & Cookie Management
+	//   159xx - Other Server Errors
+
+	GET_ADMIN_CONFIG = ErrorMessage{
+		Code:    errorPrefix + "15001",
+		Message: "Error while fetching tenant configurations.",
 	}
-
-	GET_UNIFICATION_RULE = ErrorMessage{
-		Code:    errorPrefix + "15010",
-		Message: "Error while fetching unification rules.",
+	UPDATE_ADMIN_CONFIG = ErrorMessage{
+		Code:    errorPrefix + "15002",
+		Message: "Error while updating tenant configurations.",
 	}
-
-	UPDATE_UNIFICATION_RULE = ErrorMessage{
-		Code:    errorPrefix + "15011",
-		Message: "Error while updating unification rules.",
-	}
-
-	DELETE_UNIFICATION_RULE = ErrorMessage{
-		Code:    errorPrefix + "15011",
-		Message: "Error while deleting unification rule(s).",
-	}
-
-	INVALID_TYPE = ErrorMessage{
-		Code:    errorPrefix + "15019",
-		Message: "Invalid type.",
-	}
-
-	ADD_CONSENT_CATEGORY = ErrorMessage{
-		Code:    errorPrefix + "15019",
-		Message: "Adding consent category failed.",
-	}
-
-	ADD_CONSENT_CATEGORY_BAD_REQUEST = ErrorMessage{
-		Code:    errorPrefix + "15019",
-		Message: "Invalid request payload for adding consent category.",
-	}
-
-	UPDATE_CONSENT_CATEGORY_BAD_REQUEST = ErrorMessage{
-		Code:    errorPrefix + "15019",
-		Message: "Invalid request payload for updating consent category.",
-	}
-
-	FETCH_CONSENT_CATEGORIES = ErrorMessage{
-		Code:    errorPrefix + "15020",
-		Message: "Fetching consent category failed.",
-	}
-
-	UPDATE_CONSENT_CATEGORY = ErrorMessage{
-		Code:    errorPrefix + "15021",
-		Message: "Updating consent category failed.",
-	}
-
-	INTROSPECTION_FAILED = ErrorMessage{
-		Code:    errorPrefix + "15022",
-		Message: "Introspection failed.",
-	}
-
-	PARSING_ERROR = ErrorMessage{
-		Code:    errorPrefix + "15023",
-		Message: "Parsing token failed.",
+	ENCODE_ERROR = ErrorMessage{
+		Code:    errorPrefix + "15003",
+		Message: "Error while encoding data.",
 	}
 
 	ADD_PROFILE_SCHEMA = ErrorMessage{
-		Code:    errorPrefix + "15024",
+		Code:    errorPrefix + "15101",
 		Message: "Error while adding profile schema.",
 	}
 
 	GET_PROFILE_SCHEMA = ErrorMessage{
-		Code:    errorPrefix + "15025",
+		Code:    errorPrefix + "15102",
 		Message: "Error while fetching profile schema.",
 	}
 
 	UPDATE_PROFILE_SCHEMA = ErrorMessage{
-		Code:    errorPrefix + "15025",
+		Code:    errorPrefix + "15103",
 		Message: "Error while updating profile schema.",
 	}
 
 	DELETE_PROFILE_SCHEMA = ErrorMessage{
-		Code:    errorPrefix + "15025",
+		Code:    errorPrefix + "15104",
 		Message: "Error while deleting profile schema attribute(s).",
 	}
 
 	SYNC_PROFILE_SCHEMA = ErrorMessage{
-		Code:    errorPrefix + "15025",
+		Code:    errorPrefix + "15105",
 		Message: "Error while syncing identity attributes of profile schema.",
 	}
 
-	GET_CONFIG = ErrorMessage{
-		Code:    errorPrefix + "15027",
-		Message: "Error while fetching config.",
-	}
-
-	UPDATE_CONFIG = ErrorMessage{
-		Code:    errorPrefix + "15028",
-		Message: "Error while updating config.",
-	}
-
 	TOKEN_FETCH_FAILED = ErrorMessage{
-		Code:    errorPrefix + "15029",
+		Code:    errorPrefix + "15106",
 		Message: "Fetching token failed.",
 	}
 
 	GET_SCIM_DIALECTS = ErrorMessage{
-		Code:    errorPrefix + "15030",
+		Code:    errorPrefix + "15107",
 		Message: "Error while fetching SCIM dialects.",
 	}
 
 	GET_DIALECT_CLAIMS = ErrorMessage{
-		Code:    errorPrefix + "15031",
+		Code:    errorPrefix + "15108",
 		Message: "Error while fetching dialect claims.",
 	}
 
 	GET_LOCAL_CLAIMS_FAILED = ErrorMessage{
-		Code:    errorPrefix + "15032",
+		Code:    errorPrefix + "15109",
 		Message: "Error while fetching local claims.",
 	}
 
 	GET_SCIM_USER_FAILED = ErrorMessage{
-		Code:    errorPrefix + "15033",
+		Code:    errorPrefix + "15110",
 		Message: "Error while fetching SCIM user.",
 	}
 
-	GET_ADMIN_CONFIG = ErrorMessage{
-		Code:    errorPrefix + "15034",
-		Message: "Error while fetching tenant configurations.",
+	GET_APPLICATIONS_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15111",
+		Message: "Error while fetching applications.",
 	}
-	UPDATE_ADMIN_CONFIG = ErrorMessage{
-		Code:    errorPrefix + "15035",
-		Message: "Error while updating tenant configurations.",
+
+	ADD_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15201",
+		Message: "Error while adding unification rules.",
+	}
+
+	GET_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15202",
+		Message: "Error while fetching unification rules.",
+	}
+
+	UPDATE_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15203",
+		Message: "Error while updating unification rules.",
+	}
+
+	DELETE_UNIFICATION_RULE = ErrorMessage{
+		Code:    errorPrefix + "15204",
+		Message: "Error while deleting unification rule(s).",
+	}
+
+	ADD_CONSENT_CATEGORY = ErrorMessage{
+		Code:    errorPrefix + "15301",
+		Message: "Adding consent category failed.",
+	}
+
+	ADD_CONSENT_CATEGORY_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "15302",
+		Message: "Invalid request payload for adding consent category.",
+	}
+
+	FETCH_CONSENT_CATEGORIES = ErrorMessage{
+		Code:    errorPrefix + "15303",
+		Message: "Fetching consent category failed.",
+	}
+
+	UPDATE_CONSENT_CATEGORY = ErrorMessage{
+		Code:    errorPrefix + "15304",
+		Message: "Updating consent category failed.",
 	}
 
 	GET_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "15401",
 		Message: "Fetching profile cookie failed.",
 	}
 
 	UPDATE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "15402",
 		Message: "Updating profile cookie failed.",
 	}
 
 	DELETE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "15403",
 		Message: "Updating profile cookie failed.",
 	}
 
-	// Client error codes
+	PARSING_ERROR = ErrorMessage{
+		Code:    errorPrefix + "15901",
+		Message: "Parsing token failed.",
+	}
+
+	//   100xx - Auth / Access
+	//   110xx - Profile & App Data & cookies
+	//   120xx - Unification Rules
+	//   130xx - Profile Schema
+	//   140xx - Consent Management
+	//   160xx - Admin Configurations
+	//   190xx - Other Client Errors
 	BAD_REQUEST = ErrorMessage{
-		Code:    errorPrefix + "11001",
-		Message: "Invalid body.",
+		Code:    errorPrefix + "10001",
+		Message: "Invalid request.",
 	}
 
 	UN_AUTHORIZED = ErrorMessage{
-		Code:        errorPrefix + "11002",
+		Code:        errorPrefix + "10002",
 		Message:     "Unauthorized",
 		Description: "Authorization failure. Authorization information was invalid or missing from your request.",
 	}
 
+	FORBIDDEN = ErrorMessage{
+		Code:        errorPrefix + "10003",
+		Message:     "Forbidden",
+		Description: "You do not have enough permission to access this resource.",
+	}
+
 	PROFILE_NOT_FOUND = ErrorMessage{
-		Code:        errorPrefix + "11005",
+		Code:        errorPrefix + "11001",
 		Message:     "Profile not found.",
 		Description: "No user profile record found for the given profile_id",
 	}
 
-	MULTIPLE_PROFILES_FOUND = ErrorMessage{
-		Code:    errorPrefix + "11005",
-		Message: "Multiple profiles found.",
-	}
-
 	ADD_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11013",
+		Code:    errorPrefix + "11002",
 		Message: "Profile addition failed.",
 	}
 
 	GET_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "11003",
 		Message: "Fetching profile(s) failed.",
 	}
 
 	GET_PROFILE_CONSENT = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "11004",
 		Message: "Fetching profile consent failed.",
 	}
 
 	CREATE_PROFILE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "11005",
 		Message: "Creating profile cookie failed.",
 	}
 	GET_PROFILE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "11006",
 		Message: "Fetching profile cookie failed.",
 	}
 
 	UPDATE_PROFILE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "11007",
 		Message: "Updating profile cookie failed.",
 	}
 
 	PROFILE_COOKIE_NOT_FOUND = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "11008",
 		Message: "Profile cookie not found.",
 	}
 
 	DELETE_PROFILE_COOKIE = ErrorMessage{
-		Code:    errorPrefix + "11014",
+		Code:    errorPrefix + "11009",
 		Message: "Deleting profile cookie failed.",
 	}
 
 	FILTER_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11015",
+		Code:    errorPrefix + "11010",
 		Message: "Filtering profiles failed.",
 	}
 
 	UPDATE_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11016",
+		Code:    errorPrefix + "11011",
 		Message: "Profile update failed.",
 	}
 
 	DELETE_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11017",
+		Code:    errorPrefix + "11012",
 		Message: "Profile deletion failed.",
 	}
 
 	ADD_APP_DATA = ErrorMessage{
-		Code:    errorPrefix + "11018",
+		Code:    errorPrefix + "11013",
 		Message: "Add app data failed.",
 	}
 
 	GET_APP_DATA = ErrorMessage{
-		Code:    errorPrefix + "11019",
+		Code:    errorPrefix + "11014",
 		Message: "Fetching app data failed.",
 	}
 
 	UPDATE_APP_DATA = ErrorMessage{
-		Code:    errorPrefix + "11020",
+		Code:    errorPrefix + "11015",
 		Message: "Updating app data failed.",
 	}
 
-	UPDATE_IDENTITY_ATT = ErrorMessage{
-		Code:    errorPrefix + "11021",
-		Message: "Updating identity attribute failed.",
-	}
-
-	UPDATE_TRAIT = ErrorMessage{
-		Code:    errorPrefix + "11022",
-		Message: "Updating trait failed.",
-	}
-
 	MULTIPLE_PROFILE_FOUND = ErrorMessage{
-		Code:        errorPrefix + "11023",
+		Code:        errorPrefix + "11016",
 		Message:     "Multiple Profiles found.",
 		Description: "Multiple user profiles record found for the given user_id",
 	}
 
-	INVALID_EVENT = ErrorMessage{
-		Code:    errorPrefix + "11024",
-		Message: "Invalid event.",
-	}
-
-	CONSENT_CAT_VALIDATION = ErrorMessage{
-		Code:    errorPrefix + "10015",
-		Message: "Consent category validation failed",
-	}
-
-	CONSENT_CAT_ALREADY_EXISTS = ErrorMessage{
-		Code:    errorPrefix + "10015",
-		Message: "Consent category already exist.",
-	}
-
-	CONSENT_CAT_NOT_FOUND = ErrorMessage{
-		Code:    errorPrefix + "10015",
-		Message: "Consent category not found.",
-	}
-
-	CONSENT_CAT_ID = ErrorMessage{
-		Code:    errorPrefix + "10015",
-		Message: "Consent category Id is required.",
-	}
-
-	FORBIDDEN = ErrorMessage{
-		Code:        errorPrefix + "11025",
-		Message:     "ForBidden",
-		Description: "You do not have permission to access this resource.",
-	}
-
-	INVALID_PROFILE = ErrorMessage{
-		Code:    errorPrefix + "11030",
-		Message: "Invalid profile body.",
-	}
-
-	GET_CONFIGURATION = ErrorMessage{
-		Code:    errorPrefix + "11031",
-		Message: "Error while fetching config.",
-	}
-
-	UPDATE_CONFIGURATION = ErrorMessage{
-		Code:    errorPrefix + "11032",
-		Message: "Error while updating config.",
-	}
-
-	INVALID_OPERATION = ErrorMessage{
-		Code:    errorPrefix + "1133",
-		Message: "Invalid Operation.",
-	}
-
-	PROFILE_SCHEMA_ADD_BAD_REQUEST = ErrorMessage{
-		Code:    errorPrefix + "12001",
-		Message: "Invalid request payload.",
-	}
-
-	INVALID_ATTRIBUTE_NAME = ErrorMessage{
-		Code:    errorPrefix + "12002",
-		Message: "Invalid attribute name.",
-	}
-
-	SCHEMA_ATTRIBUTE_ALREADY_EXISTS = ErrorMessage{
-		Code:    errorPrefix + "12003",
-		Message: "Schema attribute already exists.",
-	}
-
-	PROFILE_SCHEMA_UPDATE_BAD_REQUEST = ErrorMessage{
-		Code:    errorPrefix + "12004",
-		Message: "Invalid schema update.",
-	}
-
-	ATTRIBUTE_NOT_FOUND = ErrorMessage{
-		Code:    errorPrefix + "12005",
-		Message: "Attribute not found.",
-	}
-
 	UNIFICATION_RULE_NOT_FOUND = ErrorMessage{
-		Code:        errorPrefix + "12201",
-		Message:     "No unification rule found.",
-		Description: "No unification rule defined for this organization for the provided rule_id..",
+		Code:    errorPrefix + "12001",
+		Message: "No unification rule found.",
 	}
 
 	UNIFICATION_UPDATE_FAILED = ErrorMessage{
-		Code:    errorPrefix + "12202",
+		Code:    errorPrefix + "12002",
 		Message: "Validation failed for unification rule update.",
 	}
 
 	UNIFICATION_RULE_ALREADY_EXISTS = ErrorMessage{
-		Code:    errorPrefix + "12203",
+		Code:    errorPrefix + "12003",
 		Message: "Unification already exist.",
 	}
 	UNIFICATION_RULE_PRIORITY_EXISTS = ErrorMessage{
-		Code:    errorPrefix + "12204",
+		Code:    errorPrefix + "12004",
 		Message: "Unification priority already taken.",
 	}
 
-	INVALID_FILTER_FORMAT = ErrorMessage{
-		Code:    errorPrefix + "13001",
-		Message: "Invalid filter format.",
+	GET_UNIFICATION_RULE_WITHOUT_ID = ErrorMessage{
+		Code:    errorPrefix + "12005",
+		Message: "Unification rule Id is required.",
 	}
 
-	FETCH_TOKEN_FAILED = ErrorMessage{
-		Code:    errorPrefix + "15029",
-		Message: "Fetching token failed.",
+	PROFILE_SCHEMA_ADD_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "13001",
+		Message: "Invalid request payload.",
+	}
+
+	INVALID_ATTRIBUTE_NAME = ErrorMessage{
+		Code:    errorPrefix + "13002",
+		Message: "Invalid attribute name.",
+	}
+
+	SCHEMA_ATTRIBUTE_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "13003",
+		Message: "Schema attribute already exists.",
+	}
+
+	ATTRIBUTE_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "13004",
+		Message: "Attribute not found.",
+	}
+
+	INVALID_APP_IDENTIFIER = ErrorMessage{
+		Code:    errorPrefix + "13005",
+		Message: "Invalid application identifier.",
+	}
+
+	CONSENT_CAT_VALIDATION = ErrorMessage{
+		Code:    errorPrefix + "14001",
+		Message: "Consent category validation failed",
+	}
+
+	CONSENT_CAT_ALREADY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "14002",
+		Message: "Consent category already exist.",
+	}
+
+	CONSENT_CAT_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "14003",
+		Message: "Consent category not found.",
+	}
+
+	CONSENT_CAT_ID = ErrorMessage{
+		Code:    errorPrefix + "14004",
+		Message: "Consent category Id is required.",
+	}
+
+	UPDATE_CONSENT_CATEGORY_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "14005",
+		Message: "Invalid request payload for updating consent category.",
 	}
 
 	UPDATE_CONFIG_BAD_REQUEST = ErrorMessage{
-		Code:    errorPrefix + "13001",
+		Code:    errorPrefix + "16002",
 		Message: "Invalid request payload for updating admin configuration.",
+	}
+
+	CDS_NOT_ENABLED = ErrorMessage{
+		Code:        errorPrefix + "16001",
+		Message:     "Not enabled.",
+		Description: "Customer data service is not enabled for the organization",
+	}
+
+	INVALID_FILTER_FORMAT = ErrorMessage{
+		Code:    errorPrefix + "19001",
+		Message: "Invalid filter format.",
 	}
 )

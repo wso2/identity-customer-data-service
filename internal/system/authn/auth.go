@@ -19,56 +19,54 @@
 package authn
 
 import (
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/wso2/identity-customer-data-service/internal/system/cache"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-	"net/http"
-	"strings"
-	"time"
 )
 
 var (
-	//todo: fetch cache from config
-	tokenCache       = cache.NewCache(15 * time.Minute)
 	expectedAudience = "iam-cds"
 )
 
 // ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
-func ValidateAuthenticationAndReturnClaims(token, orgId string) (map[string]interface{}, error) {
-	// Try cache
-	if cached, found := tokenCache.Get(token); found {
-		if claims, ok := cached.(map[string]interface{}); ok && validateClaims(claims) {
-			return claims, nil
-		}
-	}
+func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]interface{}, error) {
 
 	var claims map[string]interface{}
 	var err error
+	logger := log.GetLogger()
 
-	// Detect if token is JWT or opaque (very naive check: JWT has two dots)
+	// Detect if token is JWT or opaque
 	if strings.Count(token, ".") == 2 {
 		claims, err = ParseJWTClaims(token)
 		if err != nil {
 			return claims, unauthorizedError()
 		}
-	} else {
 		cfg := config.GetCDSRuntime().Config
 		identityClient := client.NewIdentityClient(cfg)
-
-		claims, err = identityClient.IntrospectToken(token)
+		introspectionClaims, err := identityClient.IntrospectToken(token)
 		if err != nil {
 			return claims, unauthorizedError()
 		}
-	}
-
-	if !validateClaims(claims) {
+		active, ok := introspectionClaims["active"].(bool)
+		if !ok || !active {
+			logger.Debug("JWT token is not active according to introspection.")
+			return nil, unauthorizedError()
+		}
+	} else {
+		logger.Debug("Expecting a JWT token but received an opaque token.")
 		return claims, unauthorizedError()
 	}
 
-	tokenCache.Set(token, claims)
+	if !validateClaims(orgHandle, claims) {
+		return claims, unauthorizedError()
+	}
+
 	return claims, nil
 }
 
@@ -91,30 +89,41 @@ func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 	return claims, nil
 }
 
-// validateClaims ensures the token has `active: true` and the expected audience
-func validateClaims(claims map[string]interface{}) bool {
+// validateClaims ensures the token has `active: true` and the expected audience and org_handle
+func validateClaims(orgHandle string, claims map[string]interface{}) bool {
 
 	logger := log.GetLogger()
+	orgHandleInClaimRaw, ok := claims["org_handle"]
+	if !ok || orgHandleInClaimRaw != orgHandle {
+		logger.Debug("Token does not have the expected org_handle claim.")
+		return false
+	}
+	orgHandleInClaim, ok := orgHandleInClaimRaw.(string)
+	if !ok || orgHandleInClaim != orgHandle {
+		logger.Debug("Token org_handle claim is not valid.")
+		return false
+	}
+
 	expRaw, ok := claims["exp"]
 	if !ok {
-		logger.Info("Token does not have an expiration time.")
+		logger.Debug("Token does not have an expiration time.")
 		return false
 	}
 	expFloat, ok := expRaw.(float64)
 	if !ok {
-		logger.Info("Token does not have a valid expiration time.", log.Any("exp", expRaw))
+		logger.Debug("Token does not have a valid expiration time.", log.Any("exp", expRaw))
 		return false
 	}
 	expUnix := int64(expFloat)
 	currentTime := time.Now().Unix()
 	if expUnix < currentTime {
-		logger.Info("Token has expired.", log.String("exp", time.Unix(expUnix, 0).String()))
+		logger.Debug("Token has expired.", log.String("exp", time.Unix(expUnix, 0).String()))
 		return false
 	}
 
 	audRaw, ok := claims["aud"]
 	if !ok {
-		logger.Info("Token does not have an audience claim.")
+		logger.Debug("Token does not have an audience claim.")
 		return false
 	}
 
@@ -135,18 +144,8 @@ func validateClaims(claims map[string]interface{}) bool {
 			return true
 		}
 	}
-	logger.Info("Token audience does not match expected audience.")
+	logger.Debug("Token audience does not match expected audience.")
 	return false
-}
-
-// GetCachedClaims returns claims from cache if available
-func GetCachedClaims(token string) (map[string]interface{}, bool) {
-	cached, found := tokenCache.Get(token)
-	if !found {
-		return nil, false
-	}
-	claims, ok := cached.(map[string]interface{})
-	return claims, ok
 }
 
 func unauthorizedError() error {

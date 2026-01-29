@@ -54,7 +54,7 @@ type ProfilesServiceInterface interface {
 	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
 	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
 	CreateProfileCookie(profileId string) (*profileModel.ProfileCookie, error)
-	UpdateCookieStatus(profileId string, status bool) error
+	UpdateCookieStatus(profileId string, isActive bool) error
 	DeleteCookieByProfileId(profileId string) error
 }
 
@@ -120,7 +120,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	}
 
 	// convert profile request to model
-	createdTime := time.Now().UTC().Unix()
+	createdTime := time.Now().UTC()
 	profileId := uuid.New().String()
 	profile := profileModel.Profile{
 		ProfileId:          profileId,
@@ -139,7 +139,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	}
 
 	if err := profileStore.InsertProfile(profile); err != nil {
-		logger.Debug(fmt.Sprintf("Error insertinng profile: %s", profile.ProfileId), log.Error(err))
+		logger.Debug(fmt.Sprintf("Error inserting profile: %s", profile.ProfileId), log.Error(err))
 		return nil, err
 	}
 	profileFetched, errWait := ps.GetProfile(profileId)
@@ -157,9 +157,8 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 		profile.TenantId = tenantId
 		queue.Enqueue(profile)
 	}
-	//todo: handler admin/user workflows
 
-	logger.Info("Profile available after insert/update: " + profileFetched.ProfileId)
+	logger.Info(fmt.Sprintf("Profile created successfully with profile id: %s", profile.ProfileId))
 	return profileFetched, nil
 }
 
@@ -463,6 +462,22 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 		_, ok := value.(bool)
 		return ok
 
+	case constants.EpochDataType:
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if _, ok := v.(string); !ok {
+					return false
+				}
+			}
+			return true
+		}
+		_, ok := value.(string)
+		return ok
+
 	case constants.DateTimeDataType:
 		if multiValued {
 			arr, ok := value.([]interface{})
@@ -477,6 +492,22 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 			return true
 		}
 		_, ok := value.(string) // optionally: validate ISO 8601
+		return ok
+
+	case constants.DateDataType:
+		if multiValued {
+			arr, ok := value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range arr {
+				if _, ok := v.(string); !ok {
+					return false
+				}
+			}
+			return true
+		}
+		_, ok := value.(string)
 		return ok
 
 	case constants.ComplexDataType:
@@ -552,7 +583,7 @@ func (ps *ProfilesService) UpdateProfile(profileId, tenantId string, updatedProf
 	}
 
 	var profileToUpDate profileModel.Profile
-	updatedTime := time.Now().UTC().Unix()
+	updatedTime := time.Now().UTC()
 	if profile.ProfileStatus.IsReferenceProfile {
 		// convert profile request to model
 		profileToUpDate = profileModel.Profile{
@@ -672,19 +703,6 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 		if len(alias) == 0 {
 			alias = nil
 		}
-		//
-		//if profile.UserId != "" {
-		//	scimData, err := client.GetSCIMUser(profile.UserId)
-		//	if err != nil {
-		//		log.GetLogger().Warn("Failed to fetch SCIM data", log.Error(err))
-		//	} else {
-		//		schemaAttrs, err := dbClient.GetSchemaAttributes(profile.TenantId, "identity_attributes")
-		//		if err != nil {
-		//			return nil, err
-		//		}
-		//		profile.IdentityAttributes = mergeSCIMWithSchema(scimData, profile.IdentityAttributes, schemaAttrs)
-		//	}
-		//}
 
 		profileResponse := &profileModel.ProfileResponse{
 			ProfileId:          profile.ProfileId,
@@ -703,7 +721,6 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 	} else {
 		// fetching merged master profile
 		masterProfile, err := profileStore.GetProfile(profile.ProfileStatus.ReferenceProfileId)
-		// todo: app context should be restricted for apps that is requesting these
 
 		if err != nil {
 			return nil, err
@@ -763,9 +780,9 @@ func (ps *ProfilesService) UpdateProfileConsents(profileId string, consents []pr
 	logger := log.GetLogger()
 
 	// Set the consent timestamp if not already set
-	currentTime := time.Now().UTC().Unix()
+	currentTime := time.Now().UTC()
 	for i := range consents {
-		if consents[i].ConsentedAt == 0 {
+		if consents[i].ConsentedAt.IsZero() {
 			consents[i].ConsentedAt = currentTime
 		}
 	}
@@ -828,29 +845,6 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 	if profile.ProfileStatus.IsReferenceProfile && len(profile.ProfileStatus.References) > 0 {
 		//get all child profiles and delete
 		for _, childProfile := range profile.ProfileStatus.References {
-			//	profile, err := profileStore.GetProfile(childProfile.ProfileId)
-			//	if profile == nil {
-			//		errorMsg := fmt.Sprintf("Child profile with profile_id: %s that is being deleted is not found",
-			//			childProfile.ProfileId)
-			//		logger.Debug(errorMsg, log.Error(err))
-			//		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			//			Code:        errors2.DELETE_PROFILE.Code,
-			//			Message:     errors2.DELETE_PROFILE.Message,
-			//			Description: errorMsg,
-			//		}, err)
-			//		return serverError
-			//	}
-			//	if err != nil {
-			//		errorMsg := fmt.Sprintf("Error while deleting Child profile with profile_id: %s that is being deleted is not found",
-			//			childProfile.ProfileId)
-			//		logger.Debug(errorMsg, log.Error(err))
-			//		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			//			Code:        errors2.DELETE_PROFILE.Code,
-			//			Message:     errors2.DELETE_PROFILE.Message,
-			//			Description: errorMsg,
-			//		}, err)
-			//		return serverError
-			//	}
 			err = profileStore.DeleteProfile(childProfile.ProfileId)
 			logger.Info(fmt.Sprintf("Deleting child  profile: %s with of parent: %s",
 				childProfile.ProfileId, ProfileId))
@@ -975,8 +969,6 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 		return []profileModel.ProfileResponse{}, nil
 	}
 
-	// todo: app context should be restricted for apps that is requesting these
-
 	var result []profileModel.ProfileResponse
 	for _, profile := range existingProfiles {
 		alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
@@ -1049,19 +1041,8 @@ func (ps *ProfilesService) GetAllProfiles(tenantId string) ([]profileModel.Profi
 // GetAllProfilesWithFilter handles fetching all profiles with filter
 func (ps *ProfilesService) GetAllProfilesWithFilter(tenantId string, filters []string) ([]profileModel.ProfileResponse, error) {
 
-	// Step 1: Fetch enrichment rules to extract value types
-	//rules, err := pss.GetProfileSchemaService()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//// Step 2: Build field → valueType mapping
 	propertyTypeMap := make(map[string]string)
-	//for _, rule := range rules {
-	//	propertyTypeMap[rule.PropertyName] = rule.ValueType
-	//}
 
-	// Step 3: Rewrite filters using typed conversion
 	var rewrittenFilters []string
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
@@ -1425,9 +1406,9 @@ func (ps *ProfilesService) CreateProfileCookie(profileId string) (*profileModel.
 }
 
 // UpdateCookieStatus updates the status of a profile cookie
-func (ps *ProfilesService) UpdateCookieStatus(profileId string, status bool) error {
+func (ps *ProfilesService) UpdateCookieStatus(profileId string, isActive bool) error {
 
-	err := profileStore.UpdateProfileCookie(profileId, status)
+	err := profileStore.UpdateProfileCookie(profileId, isActive)
 	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("Error creating profile cookie by profile_id: %s", profileId)

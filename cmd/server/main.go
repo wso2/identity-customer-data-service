@@ -22,6 +22,11 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
@@ -29,10 +34,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	"net/http"
-	"os"
-	"path/filepath"
-	"time"
 )
 
 func initDatabaseFromConfig(config *config.Config) {
@@ -89,6 +90,9 @@ func main() {
 	// Initialize Profile worker
 	workers.StartProfileWorker()
 
+	// Initialize Schema Sync worker
+	workers.StartSchemaSyncWorker()
+
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
 
@@ -100,13 +104,13 @@ func main() {
 		certDir = filepath.Join(cdsHome, "etc", "certs")
 	}
 
-	if cdsConfig.TLS.ServerCert == "" || cdsConfig.TLS.ServerKey == "" {
+	if cdsConfig.TLS.CDSPublicCert == "" || cdsConfig.TLS.CDSPrivateKey == "" {
 		logger.Error("TLS configuration is missing server certificate or key.")
 		os.Exit(1)
 	}
 
-	serverCertPath := cdsConfig.TLS.ServerCert
-	serverKeyPath := cdsConfig.TLS.ServerKey
+	serverCertPath := filepath.Join(certDir, cdsConfig.TLS.CDSPublicCert)
+	serverKeyPath := filepath.Join(certDir, cdsConfig.TLS.CDSPrivateKey)
 
 	// Check cert files before starting
 	if _, err := os.Stat(serverCertPath); err != nil {
@@ -124,26 +128,6 @@ func main() {
 			logger.Error(fmt.Sprintf("Error accessing server key at %s: %v", serverKeyPath, err))
 		}
 		os.Exit(1)
-	}
-
-	if cdsConfig.TLS.MTLSEnabled {
-		if cdsConfig.TLS.ClientCert == "" || cdsConfig.TLS.ClientKey == "" {
-			logger.Error("mTLS is enabled but client certificate or key is missing in the configuration.")
-			os.Exit(1)
-		}
-
-		clientCertPath := filepath.Join(certDir, cdsConfig.TLS.ClientCert)
-		clientKeyPath := filepath.Join(certDir, cdsConfig.TLS.ClientKey)
-
-		// Check cert files before starting
-		if _, err := os.Stat(clientCertPath); os.IsNotExist(err) {
-			logger.Error(fmt.Sprintf("Client certificate not found at %s", clientCertPath))
-			os.Exit(1)
-		}
-		if _, err := os.Stat(clientKeyPath); os.IsNotExist(err) {
-			logger.Error(fmt.Sprintf("Client key not found at %s", clientKeyPath))
-			os.Exit(1)
-		}
 	}
 
 	server := &http.Server{

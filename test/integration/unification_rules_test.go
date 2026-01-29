@@ -1,13 +1,13 @@
 package integration
 
 import (
-	"encoding/json"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
-	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	profileSchema "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -20,6 +20,10 @@ func Test_UnificationRule(t *testing.T) {
 
 	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 	profileSchemaService := schemaService.GetProfileSchemaService()
+	restore := schemaService.OverrideValidateApplicationIdentifierForTest(
+		// bypass app verification with IDP
+		func(appID, org string) (error, bool) { return nil, true })
+	defer restore()
 
 	t.Run("Pre-requisite: Add_schema_attribute", func(t *testing.T) {
 		schemaAttributes := []profileSchema.ProfileSchemaAttribute{
@@ -32,28 +36,22 @@ func Test_UnificationRule(t *testing.T) {
 				Mutability:    constants.MutabilityReadWrite,
 			},
 		}
-		err := profileSchemaService.AddProfileSchemaAttributesForScope(schemaAttributes, constants.IdentityAttributes)
+		err := profileSchemaService.AddProfileSchemaAttributesForScope(schemaAttributes, constants.IdentityAttributes, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add enrichment rule dependency")
 	})
 
 	unificationRuleService := service.GetUnificationRuleService()
 
-	jsonData := []byte(`{
-        "rule_name": "Email based",
-		"rule_id": "` + uuid.New().String() + `",
-		"tenant_id": "` + SuperTenantOrg + `",
-        "property_name": "identity_attributes.email",
-        "priority": 1,
-        "is_active": true
-    }`)
-
-	var rule model.UnificationRule
-	err := json.Unmarshal(jsonData, &rule)
-	require.NoError(t, err, "Failed to unmarshal rule JSON")
-
-	// Add timestamps programmatically
-	rule.CreatedAt = time.Now().Unix()
-	rule.UpdatedAt = time.Now().Unix()
+	rule := model.UnificationRule{
+		RuleName:     "Email based",
+		RuleId:       uuid.New().String(),
+		TenantId:     SuperTenantOrg,
+		PropertyName: "identity_attributes.email",
+		Priority:     1,
+		IsActive:     true,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
 
 	t.Run("Add_unification_rule", func(t *testing.T) {
 		err := unificationRuleService.AddUnificationRule(rule, SuperTenantOrg)
@@ -70,7 +68,7 @@ func Test_UnificationRule(t *testing.T) {
 			MergeStrategy: "combine",
 			Mutability:    constants.MutabilityReadWrite,
 		}
-		err := profileSchemaService.AddProfileSchemaAttributesForScope([]profileSchema.ProfileSchemaAttribute{subAttr}, constants.Traits)
+		err := profileSchemaService.AddProfileSchemaAttributesForScope([]profileSchema.ProfileSchemaAttribute{subAttr}, constants.Traits, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add sub-attribute to schema")
 
 		//  Add parent complex attribute referencing sub-attribute
@@ -88,26 +86,20 @@ func Test_UnificationRule(t *testing.T) {
 				},
 			},
 		}
-		err = profileSchemaService.AddProfileSchemaAttributesForScope([]profileSchema.ProfileSchemaAttribute{parentAttr}, constants.Traits)
+		err = profileSchemaService.AddProfileSchemaAttributesForScope([]profileSchema.ProfileSchemaAttribute{parentAttr}, constants.Traits, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add complex attribute to schema")
 
 		// Try creating a unification rule with that complex attribute
-		jsonData := []byte(`{
-        "rule_name": "Email based",
-		"rule_id": "` + uuid.New().String() + `",
-		"tenant_id": "` + SuperTenantOrg + `",
-        "property_name": "traits.orders.payment",
-        "priority": 2,
-        "is_active": true
-    }`)
-
-		var rule model.UnificationRule
-		err = json.Unmarshal(jsonData, &rule)
-		require.NoError(t, err, "Failed to unmarshal rule JSON")
-
-		// Add timestamps programmatically
-		rule.CreatedAt = time.Now().Unix()
-		rule.UpdatedAt = time.Now().Unix()
+		rule := model.UnificationRule{
+			RuleName:     "Payment based",
+			RuleId:       uuid.New().String(),
+			TenantId:     SuperTenantOrg,
+			PropertyName: "traits.orders.payment",
+			Priority:     2,
+			IsActive:     true,
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
+		}
 
 		err = unificationRuleService.AddUnificationRule(rule, SuperTenantOrg)
 		errDesc := utils.ExtractErrorDescription(err)
@@ -121,10 +113,8 @@ func Test_UnificationRule(t *testing.T) {
 	})
 
 	t.Run("Update_unification_rule", func(t *testing.T) {
-		updates := map[string]interface{}{
-			"is_active": false,
-		}
-		err := unificationRuleService.PatchUnificationRule(rule.RuleId, SuperTenantOrg, updates)
+		rule.IsActive = false // reflect change in local object
+		err := unificationRuleService.PatchUnificationRule(rule.RuleId, SuperTenantOrg, rule)
 		require.NoError(t, err, "Failed to patch unification rule")
 
 		updated, err := unificationRuleService.GetUnificationRule(rule.RuleId)

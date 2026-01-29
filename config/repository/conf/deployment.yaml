@@ -23,6 +23,7 @@ addr:
 auth_server:
   host: "localhost"
   port : 9443
+  cookieDomain: "localhost"
   introspectionEndpoint: "/oauth2/introspect"
   tokenEndpoint: "/oauth2/token"
   revocationEndpoint: "/oauth2/revoke"
@@ -34,31 +35,37 @@ auth_server:
   isSystemAppGrantEnabled: false
   required_scopes:
     profile:create:
-      - "internal_cdm_profile_create"
+      - "internal_cds_profile_create"
     profile:update:
-      - "internal_cdm_profile_update"
+      - "internal_cds_profile_update"
     profile:view:
-      - "internal_cdm_profile_view"
+      - "internal_cds_profile_view"
     profile:delete:
-      - "internal_cdm_profile_delete"
+      - "internal_cds_profile_delete"
 
     unification_rules:view:
-      - "internal_cdm_unification_rule_view"
+      - "internal_cds_unification_rule_view"
     unification_rules:create:
-      - "internal_cdm_unification_rule_create"
+      - "internal_cds_unification_rule_create"
     unification_rules:update:
-      - "internal_cdm_unification_rule_update"
+      - "internal_cds_unification_rule_update"
     unification_rules:delete:
-      - "internal_cdm_unification_rule_delete"
+      - "internal_cds_unification_rule_delete"
 
     profile_schema:view:
-      - "internal_cdm_profile_schema_view"
+      - "internal_cds_profile_schema_view"
     profile_schema:create:
-      - "internal_cdm_profile_schema_create"
+      - "internal_cds_profile_schema_create"
     profile_schema:update:
-      - "internal_cdm_profile_schema_update"
+      - "internal_cds_profile_schema_update"
     profile_schema:delete:
-      - "internal_cdm_profile_schema_delete"
+      - "internal_cds_profile_schema_delete"
+
+    admin_config:view:
+      - "internal_cds_admin_config_view"
+    admin_config:update:
+      - "internal_cds_admin_config_update"
+
 
 sync:
   schema:
@@ -77,7 +84,7 @@ datasource:
 tls:
   mtls_enabled: true
   cert_dir: "/etc/certs"
-  server_cert: "/etc/certs/server.crt"
-  server_key: "/etc/certs/server.key"
-  client_cert: "client.crt"
-  client_key: "client.key"
+  server_cert: "server.crt" #filename
+  server_key: "server.key" #filename
+  client_cert: "client.crt"   #filename
+  trust_store: "trust-store.pem"      #filename

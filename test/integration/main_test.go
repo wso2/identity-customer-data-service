@@ -21,15 +21,16 @@ package integration
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"testing"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
 	"github.com/wso2/identity-customer-data-service/test/setup"
-	"os"
-	"os/exec"
-	"testing"
 )
 
 func TestMain(m *testing.M) {
@@ -54,6 +55,9 @@ func TestMain(m *testing.M) {
 	}
 
 	workers.StartProfileWorker() // Start the real enrichment queue worker
+
+	// Initialize Schema Sync worker
+	workers.StartSchemaSyncWorker()
 
 	provider.SetTestDB(pg.DB)
 	err = utils.CreateTablesFromFile(pg.DB, utils.GetSchemaPath())

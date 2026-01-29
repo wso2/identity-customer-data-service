@@ -21,14 +21,13 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"time"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // AddUnificationRule adds a new unification rule to the database
@@ -106,8 +105,8 @@ func GetUnificationRules(tenantId string) ([]model.UnificationRule, error) {
 		rule.PropertyId = row["property_id"].(string)
 		rule.Priority = int(row["priority"].(int64))
 		rule.IsActive = row["is_active"].(bool)
-		rule.CreatedAt = row["created_at"].(int64)
-		rule.UpdatedAt = row["updated_at"].(int64)
+		rule.CreatedAt = row["created_at"].(time.Time)
+		rule.UpdatedAt = row["updated_at"].(time.Time)
 
 		rules = append(rules, rule)
 	}
@@ -163,15 +162,15 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 	rule.PropertyId = row["property_id"].(string)
 	rule.Priority = int(row["priority"].(int64))
 	rule.IsActive = row["is_active"].(bool)
-	rule.CreatedAt = row["created_at"].(int64)
-	rule.UpdatedAt = row["updated_at"].(int64)
+	rule.CreatedAt = row["created_at"].(time.Time)
+	rule.UpdatedAt = row["updated_at"].(time.Time)
 
 	logger.Info("Successfully fetched unification rule for rule_id: " + ruleId)
 	return &rule, nil
 }
 
 // PatchUnificationRule applies partial updates to a unification rule.
-func PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
+func PatchUnificationRule(ruleId string, updatedRule model.UnificationRule) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -187,18 +186,9 @@ func PatchUnificationRule(ruleId string, updates map[string]interface{}) error {
 	}
 	defer dbClient.Close()
 
-	setClauses := []string{}
-	args := []interface{}{}
-	argIndex := 1
-	for key, value := range updates {
-		setClauses = append(setClauses, key+" = $"+strconv.Itoa(argIndex))
-		args = append(args, value)
-		argIndex++
-	}
-	args = append(args, time.Now().Unix(), ruleId)
+	query := scripts.UpdateUnificationRule[provider.NewDBProvider().GetDBType()]
+	_, err = dbClient.ExecuteQuery(query, updatedRule.RuleName, updatedRule.Priority, updatedRule.IsActive, time.Now().UTC(), ruleId)
 
-	query := `UPDATE unification_rules SET ` + strings.Join(setClauses, ", ") + `, updated_at = $` + strconv.Itoa(argIndex) + ` WHERE rule_id = $` + strconv.Itoa(argIndex+1)
-	_, err = dbClient.ExecuteQuery(query, args...)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while updating unification rule for rule_id: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))
