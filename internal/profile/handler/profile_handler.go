@@ -505,23 +505,16 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 		return false
 	}
 
-	var profileResponse *model.ProfileResponse
-	if cookieObj.IsActive {
-		profileResponse, err = profilesService.GetProfile(cookieObj.ProfileId)
-	} else {
-		profile := model.ProfileRequest{}
-		profileResponse, err = profilesService.CreateProfile(profile, utils.ExtractOrgHandleFromPath(r))
-		if err == nil {
-			//todo: Revisit this logic
-			_, err = profilesService.CreateProfileCookie(profileResponse.ProfileId)
-		}
+	if !cookieObj.IsActive {
+		return false
 	}
+	profileResponse, err := profilesService.GetProfile(cookieObj.ProfileId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return true
 	}
 
-	_ = setProfileCookie(w, profileResponse.ProfileId, r)
+	_ = setProfileCookie(w, cookieObj.CookieId, r)
 	utils.RespondJSON(w, http.StatusOK, profileResponse, constants.ProfileResource)
 	return true
 }

@@ -292,7 +292,7 @@ func GetProfileConsents(profileId string) ([]model.ConsentRecord, error) {
 			return nil, nil
 		}
 	}
-	var profileConsents []model.ConsentRecord
+	profileConsents := make([]model.ConsentRecord, 0)
 	for _, row := range results {
 
 		profileConsent, err := scanProfileConsentRow(row)
@@ -340,7 +340,7 @@ func FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
 		return nil, serverError
 	}
 
-	var apps []model.ApplicationData
+	apps := make([]model.ApplicationData, 0)
 	for _, row := range results {
 		var (
 			appId     string

@@ -743,11 +743,11 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 				Traits:             masterProfile.Traits,
 				IdentityAttributes: masterProfile.IdentityAttributes,
 				Meta: profileModel.Meta{
-					CreatedAt: masterProfile.CreatedAt,
-					UpdatedAt: masterProfile.UpdatedAt,
-					Location:  masterProfile.Location,
+					CreatedAt: profile.CreatedAt,
+					UpdatedAt: profile.UpdatedAt,
+					Location:  profile.Location,
 				},
-				MergedTo: *alias,
+				MergedTo: alias,
 			}
 
 			return profileResponse, nil
@@ -1029,7 +1029,7 @@ func (ps *ProfilesService) GetAllProfiles(orgHandle string) ([]profileModel.Prof
 					UpdatedAt: masterProfile.UpdatedAt,
 					Location:  masterProfile.Location,
 				},
-				MergedTo: *alias,
+				MergedTo: alias,
 			}
 
 			result = append(result, *profileResponse)
@@ -1101,9 +1101,6 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(orgHandle string, filters []
 			masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
 
 			// Override for visual reference to the child
-			masterProfile.ProfileId = profile.ProfileId
-			masterProfile.ProfileStatus.ReferenceProfileId = profile.ProfileId
-
 			profileResponse := &profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
 				UserId:             masterProfile.UserId,
@@ -1111,13 +1108,13 @@ func (ps *ProfilesService) GetAllProfilesWithFilter(orgHandle string, filters []
 				Traits:             masterProfile.Traits,
 				IdentityAttributes: masterProfile.IdentityAttributes,
 				Meta: profileModel.Meta{
-					CreatedAt: masterProfile.CreatedAt,
-					UpdatedAt: masterProfile.UpdatedAt,
-					Location:  masterProfile.Location,
+					CreatedAt: profile.CreatedAt,
+					UpdatedAt: profile.UpdatedAt,
+					Location:  profile.Location,
 				},
-				MergedTo: profileModel.Reference{
+				MergedTo: &profileModel.Reference{
 					ProfileId: masterProfile.ProfileId,
-					Reason:    profile.ProfileStatus.ReferenceReason, //todo: this has to be fetch from db
+					Reason:    profile.ProfileStatus.ReferenceReason,
 				},
 			}
 

@@ -261,8 +261,12 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		// Verify they are NOT merged initially
 		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
 		merged2, _ := profileSvc.GetProfile(prof2.ProfileId)
-		require.Empty(t, merged1.MergedTo.ProfileId, "P1 should not be merged initially")
-		require.Empty(t, merged2.MergedTo.ProfileId, "P2 should not be merged initially")
+		if merged1.MergedTo != nil {
+			require.Empty(t, merged1.MergedTo.ProfileId, "P1 should not be merged initially")
+		}
+		if merged2.MergedTo != nil {
+			require.Empty(t, merged2.MergedTo.ProfileId, "P2 should not be merged initially")
+		}
 
 		// Update P1 to add email2
 		updateReq := profileModel.ProfileRequest{
@@ -379,7 +383,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		mergedT3, _ := profileSvc.GetProfile(profT3.ProfileId)
 
 		// Permanent profile should be the master
-		require.Empty(t, mergedPerm.MergedTo.ProfileId, "Permanent profile should be master")
+		require.Empty(t, mergedPerm.MergedTo, "Permanent profile should be master")
 		require.NotEmpty(t, mergedPerm.MergedFrom, "Permanent profile should have merged children")
 
 		// T1 should merge to permanent via email
@@ -444,8 +448,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		// Verify no unification happened
 		check1, _ := profileSvc.GetProfile(prof1.ProfileId)
 		check2, _ := profileSvc.GetProfile(prof2.ProfileId)
-		require.Empty(t, check1.MergedTo.ProfileId, "Should not merge while rule inactive")
-		require.Empty(t, check2.MergedTo.ProfileId, "Should not merge while rule inactive")
+		require.Empty(t, check1.MergedTo, "Should not merge while rule inactive")
+		require.Empty(t, check2.MergedTo, "Should not merge while rule inactive")
 
 		// Reactivate rule
 		emailRule.IsActive = true
