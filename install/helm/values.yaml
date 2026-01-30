@@ -59,9 +59,9 @@ cloud:
         mtls_enabled: false
         cert_dir : "/app/repository/certs"
         server_cert: "client.cer"
-        server_key: "customer-data-service-client-key.pem"
+        server_key: "client-key.pem"
         client_cert: "wso2carbontls.cer"
-        trust_store: "trust-store.pem"
+        trust_store: "truststore.pem"
 
       secrets:
         authServerClientId: "" # Add the auth server client ID
