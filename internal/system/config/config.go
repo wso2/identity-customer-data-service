@@ -32,19 +32,22 @@ type AuthConfig struct {
 }
 
 type AuthServerConfig struct {
-	Host                    string              `yaml:"host"`
-	Port                    string              `yaml:"port"`
-	CookieDomain            string              `yaml:"cookieDomain"`
-	IntrospectionEndPoint   string              `yaml:"introspectionEndpoint"`
-	TokenEndpoint           string              `yaml:"tokenEndpoint"`
-	RevocationEndpoint      string              `yaml:"revocationEndpoint"`
-	ClaimEndpoint           string              `yaml:"claim_endpoint"`
-	ClientID                string              `yaml:"client_id"`
-	ClientSecret            string              `yaml:"client_secret"`
-	AdminUsername           string              `yaml:"admin_username"`
-	AdminPassword           string              `yaml:"admin_password"`
-	RequiredScopes          map[string][]string `yaml:"required_scopes"`
-	IsSystemAppGrantEnabled bool                `yaml:"isSystemAppGrantEnabled"`
+	Host                      string              `yaml:"host"`
+	Port                      string              `yaml:"port"`
+	ADUISHostname             string              `yaml:"adu_is_hostname"`
+	CookieDomain              string              `yaml:"cookieDomain"`
+	IntrospectionEndPoint     string              `yaml:"introspectionEndpoint"`
+	TokenEndpoint             string              `yaml:"tokenEndpoint"`
+	RevocationEndpoint        string              `yaml:"revocationEndpoint"`
+	ClaimEndpoint             string              `yaml:"claim_endpoint"`
+	ClientID                  string              `yaml:"client_id"`
+	ClientSecret              string              `yaml:"client_secret"`
+	IntrospectionClientId     string              `yaml:"introspection_client_id"`
+	IntrospectionClientSecret string              `yaml:"introspection_client_secret"`
+	AdminUsername             string              `yaml:"admin_username"`
+	AdminPassword             string              `yaml:"admin_password"`
+	RequiredScopes            map[string][]string `yaml:"required_scopes"`
+	IsSystemAppGrantEnabled   bool                `yaml:"isSystemAppGrantEnabled"`
 }
 
 type DataSourceConfig struct {
