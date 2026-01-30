@@ -417,6 +417,8 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 
 		if requestedAttrs == nil {
 			// If no specific attributes requested, return only metadata.
+			// But Merged From References becomes because what we return is the merged profile
+			profileRes.MergedFrom = profile.MergedFrom
 			result = append(result, profileRes)
 			continue
 		}
@@ -476,6 +478,7 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 					}
 				}
 			}
+			// Note: Filter out the allowed application data only if not it is a system app.
 
 			if len(filteredAppData) > 0 {
 				profileRes.ApplicationData = filteredAppData

@@ -39,6 +39,7 @@ type ProfileListResponse struct {
 	IdentityAttributes map[string]interface{}            `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
 	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
 	ApplicationData    map[string]map[string]interface{} `json:"application_data,omitempty" bson:"application_data,omitempty"`
+	MergedFrom         []Reference                       `json:"merged_from,omitempty" bson:"merged_from,omitempty"`
 }
 
 type Meta struct {

@@ -957,6 +957,9 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 
 	return nil
 }
+
+// GetAllProfilesCursor retrieves all master profiles with pagination using cursor.
+// Merged profiles are not included in list but provided in the reference
 func (ps *ProfilesService) GetAllProfilesCursor(
 	orgHandle string,
 	limit int,
@@ -1015,35 +1018,13 @@ func (ps *ProfilesService) GetAllProfilesCursor(
 			})
 			continue
 		}
-
-		// Non-master: fetch master and return master’s identity/traits/app data
-		masterProfile, err := profileStore.GetProfile(profile.ProfileStatus.ReferenceProfileId)
-		if err != nil || masterProfile == nil {
-			continue
-		}
-
-		masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
-		masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
-
-		ref := profileModel.Reference{
-			ProfileId: profile.ProfileStatus.ReferenceProfileId,
-			Reason:    profile.ProfileStatus.ReferenceReason,
-		}
-
-		result = append(result, profileModel.ProfileResponse{
-			ProfileId:          profile.ProfileId,
-			UserId:             masterProfile.UserId,
-			ApplicationData:    ConvertAppDataToMap(masterProfile.ApplicationData),
-			Traits:             masterProfile.Traits,
-			IdentityAttributes: masterProfile.IdentityAttributes,
-			Meta:               baseMeta,
-			MergedTo:           ref,
-		})
 	}
 
 	return result, hasMore, nil
 }
 
+// GetAllProfilesCursor retrieves filtered master profiles with pagination using cursor.
+// Merged profiles are not included in list but provided in the reference
 func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
 	orgHandle string,
 	filters []string,
@@ -1102,6 +1083,10 @@ func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
 			Location:  profile.Location,
 		}
 
+		alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
+		if err != nil {
+			return result, false, err
+		}
 		if profile.ProfileStatus.IsReferenceProfile {
 			result = append(result, profileModel.ProfileResponse{
 				ProfileId:          profile.ProfileId,
@@ -1110,37 +1095,10 @@ func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
 				Traits:             profile.Traits,
 				IdentityAttributes: profile.IdentityAttributes,
 				Meta:               baseMeta,
+				MergedFrom:         alias,
 			})
 			continue
 		}
-
-		// Non-master: fetch master and return master's data
-		masterProfile, err := profileStore.GetProfile(profile.ProfileStatus.ReferenceProfileId)
-		if err != nil || masterProfile == nil {
-			continue
-		}
-
-		masterProfile.ApplicationData, _ = profileStore.FetchApplicationData(masterProfile.ProfileId)
-		masterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(masterProfile.ProfileId)
-
-		// Override for visual reference to the child
-		masterProfile.ProfileId = profile.ProfileId
-		masterProfile.ProfileStatus.ReferenceProfileId = profile.ProfileId
-
-		ref := profileModel.Reference{
-			ProfileId: masterProfile.ProfileId,
-			Reason:    profile.ProfileStatus.ReferenceReason,
-		}
-
-		result = append(result, profileModel.ProfileResponse{
-			ProfileId:          profile.ProfileId,
-			UserId:             masterProfile.UserId,
-			ApplicationData:    ConvertAppDataToMap(masterProfile.ApplicationData),
-			Traits:             masterProfile.Traits,
-			IdentityAttributes: masterProfile.IdentityAttributes,
-			Meta:               baseMeta,
-			MergedTo:           ref,
-		})
 	}
 
 	return result, hasMore, nil
