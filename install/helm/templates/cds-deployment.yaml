@@ -113,19 +113,16 @@ spec:
               subPath: deployment.yaml
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/client.cer
-              subPath: client.cer
+              mountPath: {{ .Values.cloud.deployment.cds.tls.cert_dir }}/{{ .Values.cloud.deployment.cds.tls.server_cert }}
+              subPath: {{ .Values.cloud.deployment.cds.tls.server_cert }}
               readOnly: true
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/customer-data-service-client-key.pem
-              subPath: customer-data-service-client-key.pem
+              mountPath: {{ .Values.cloud.deployment.cds.tls.cert_dir }}/{{ .Values.cloud.deployment.cds.tls.server_key }}
+              subPath: {{ .Values.cloud.deployment.cds.tls.server_key }}
             - name: cds-mtls-volume
-              mountPath: /app/repository/certs/{{ .Values.cloud.deployment.cds.tls.trust_store}}
+              mountPath: {{ .Values.cloud.deployment.cds.tls.cert_dir }}/{{ .Values.cloud.deployment.cds.tls.trust_store}}
               subPath: {{ .Values.cloud.deployment.cds.tls.trust_store}}
               readOnly: true
-            - name: is-public-cert
-              mountPath: /app/repository/certs/{{ .Values.cloud.deployment.cds.config.identityServer.certName }}
-              subPath: {{ .Values.cloud.deployment.cds.config.identityServer.certName }}
           envFrom:
             - secretRef:
                 name: cds-env-secret
