@@ -358,7 +358,7 @@ func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, 
 		return nil, err
 	}
 
-	req.SetBasicAuth(authConfig.AdminUsername, authConfig.AdminPassword)
+	req.SetBasicAuth(authConfig.ClientID, authConfig.ClientSecret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.HTTPClient.Do(req)
