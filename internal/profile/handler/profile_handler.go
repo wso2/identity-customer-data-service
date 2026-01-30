@@ -306,9 +306,9 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Add ?userId= filter if present
-	userID := strings.TrimSpace(r.URL.Query().Get("userId"))
+	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
 	if userID != "" {
-		filters = append(filters, fmt.Sprintf(`identity_attributes.userid eq "%s"`, userID))
+		filters = append(filters, fmt.Sprintf(`user_id eq %s`, userID))
 	}
 
 	requestedAttrs := parseRequestedAttributes(r)

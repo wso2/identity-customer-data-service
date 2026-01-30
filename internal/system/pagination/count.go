@@ -30,7 +30,7 @@ const (
 )
 
 func ParsePageSize(r *http.Request) (int, error) {
-	raw := r.URL.Query().Get("pageSize")
+	raw := r.URL.Query().Get("page_size")
 
 	if raw == "" {
 		return defaultPageSize, nil
