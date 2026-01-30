@@ -33,6 +33,8 @@ auth_server:
   admin_username: "admin"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
   isSystemAppGrantEnabled: false
+  introspection_client_id : "cds_introspection_client"
+  introspection_client_secret: "${INTROSPECTION_CLIENT_SECRET}"
   required_scopes:
     profile:create:
       - "internal_cds_profile_create"
@@ -82,9 +84,9 @@ datasource:
   sslmode: disable
 
 tls:
-  mtls_enabled: true
-  cert_dir: "/etc/certs"
+  mtls_enabled: false
+  cert_dir: "/Users/admin/Documents/Repos/OnPrem/identity-customer-data-service/etc/certs"
   server_cert: "server.crt" #filename
   server_key: "server.key" #filename
   client_cert: "client.crt"   #filename
-  trust_store: "trust-store.pem"      #filename
+  trust_store: "trust_store.pem"      #filename

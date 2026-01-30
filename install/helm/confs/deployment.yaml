@@ -29,6 +29,8 @@ auth_server:
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
   admin_username: "${AUTH_SERVER_ADMIN_USERNAME}"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
+  introspection_client_id: "${INTROSPECTION_CLIENT_ID}"
+  introspection_client_secret: "${INTROSPECTION_CLIENT_SECRET}"
   isSystemAppGrantEnabled: {{ .Values.cloud.deployment.cds.config.identityServer.isSystemAppGrantEnabled }}
   required_scopes:
     profile:create:

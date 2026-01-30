@@ -70,6 +70,8 @@ cloud:
         authServerAdminPassword: "" # Add the auth server admin password
         databaseUsername: "" # Add the database admin username
         databasePassword: "" # Add the database admin password
+        introspectionClientId: ""
+        introspectionClientSecret: "" # Add the introspection client secret
       replicas: 2
       progressDeadlineSeconds: 300
       minReadySeconds: 30
