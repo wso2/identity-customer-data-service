@@ -47,6 +47,7 @@ cloud:
         identityServer:
           host: localhost
           port: ""
+          internalHost : "identity-server"
           cookieDomain: "localhost"
           introspectionEndpoint: "/oauth2/introspect"
           tokenEndpoint: "/oauth2/token"

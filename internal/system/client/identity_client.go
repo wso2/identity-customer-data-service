@@ -349,10 +349,15 @@ func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, 
 	form.Set("token", token)
 
 	authConfig := config.GetCDSRuntime().Config.AuthServer
-	// It is possible to introspect any token against super tenant introspection endpoint and super tenant client credentials
-	introspectionEndpoint := "https://" + c.BaseURL + "/t/carbon.super" + authConfig.IntrospectionEndPoint
+	var introspectionEndpoint string
+	if authConfig.IsSystemAppGrantEnabled {
+		log.GetLogger().Debug("Token introspection with IS through internal host as system_app_grant is enabled")
+		introspectionEndpoint = "https://" + authConfig.InternalHost + authConfig.IntrospectionEndPoint
+	} else {
+		// It is possible to introspect any token against super tenant introspection endpoint and super tenant client credentials
+		introspectionEndpoint = "https://" + c.BaseURL + "/t/carbon.super" + authConfig.IntrospectionEndPoint
+	}
 	log.GetLogger().Info("Introspecting token at endpoint: " + introspectionEndpoint)
-
 	req, err := http.NewRequest("POST", introspectionEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err

@@ -20,6 +20,7 @@ addr:
 auth_server:
   host: {{ .Values.cloud.deployment.cds.config.identityServer.host }}
   port : {{ .Values.cloud.deployment.cds.config.identityServer.port }}
+  internalHost: {{ .Values.cloud.deployment.cds.config.identityServer.internalHost }}
   cookieDomain: {{ .Values.cloud.deployment.cds.config.identityServer.cookieDomain }}
   introspectionEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.introspectionEndpoint }}
   tokenEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.tokenEndpoint }}

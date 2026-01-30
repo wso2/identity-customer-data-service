@@ -34,6 +34,7 @@ type AuthConfig struct {
 type AuthServerConfig struct {
 	Host                      string              `yaml:"host"`
 	Port                      string              `yaml:"port"`
+	InternalHost              string              `yaml:"internal_host"`
 	CookieDomain              string              `yaml:"cookieDomain"`
 	IntrospectionEndPoint     string              `yaml:"introspectionEndpoint"`
 	TokenEndpoint             string              `yaml:"tokenEndpoint"`
