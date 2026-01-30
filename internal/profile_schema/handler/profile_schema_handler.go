@@ -133,9 +133,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 	for i := range schemaAttributesNew {
 		schemaAttributesNew[i].OrgId = ""
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(schemaAttributes)
+	utils.RespondJSON(w, http.StatusCreated, schemaAttributes, constants.SchemaAttribute)
 }
 
 // GetProfileSchema handles fetching the entire profile schema.
@@ -164,9 +162,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchema(w http.ResponseWriter, r *http
 		utils.HandleError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(profileSchema)
+	utils.RespondJSON(w, http.StatusOK, profileSchema, constants.SchemaAttribute)
 }
 
 // GetProfileSchemaAttributeById handles fetching the entire profile schema.
@@ -208,9 +204,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeById(w http.ResponseWr
 		utils.HandleError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(attribute)
+	utils.RespondJSON(w, http.StatusOK, attribute, constants.SchemaAttribute)
 }
 
 // GetProfileSchemaAttributeForScope handles fetching the entire profile schema for the scope.
@@ -273,9 +267,7 @@ func (psh *ProfileSchemaHandler) GetProfileSchemaAttributeForScope(w http.Respon
 		utils.HandleError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(attributes)
+	utils.RespondJSON(w, http.StatusOK, attributes, constants.SchemaAttribute)
 }
 
 // PatchProfileSchemaAttributeById updates a profile schema attribute.

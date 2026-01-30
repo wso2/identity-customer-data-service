@@ -440,11 +440,13 @@ func MergeProfiles(existingProfile profileModel.Profile, incomingProfile profile
 			}
 		}
 
-		// todo: FOR now when over-writing,existing is considered as the base profile
-
 		// Perform merge based on strategy
 		mergedVal := MergeTraitValue(existingVal, newVal, rule.MergeStrategy, rule.ValueType, rule.MultiValued)
 
+		if mergedVal == nil || mergedVal == "" {
+			// keep it absent instead of "key": null
+			continue
+		}
 		// Apply merged result
 		switch traitNamespace {
 		case "traits":

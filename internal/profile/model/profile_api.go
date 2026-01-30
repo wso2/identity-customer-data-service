@@ -27,8 +27,8 @@ type ProfileResponse struct {
 	Meta               Meta                              `json:"meta" bson:"meta"`
 	IdentityAttributes map[string]interface{}            `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
 	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
-	ApplicationData    map[string]map[string]interface{} `json:"application_data"`
-	MergedTo           Reference                         `json:"merged_to,omitempty" bson:"merged_to,omitempty"`
+	ApplicationData    map[string]map[string]interface{} `json:"application_data,omitempty" bson:"application_data,omitempty"`
+	MergedTo           *Reference                        `json:"merged_to,omitempty" bson:"merged_to,omitempty"`
 	MergedFrom         []Reference                       `json:"merged_from,omitempty" bson:"merged_from,omitempty"`
 }
 
