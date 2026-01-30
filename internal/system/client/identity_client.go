@@ -352,7 +352,7 @@ func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, 
 	var introspectionEndpoint string
 	if authConfig.IsSystemAppGrantEnabled {
 		log.GetLogger().Debug("Token introspection with IS through internal host as system_app_grant is enabled")
-		introspectionEndpoint = "https://" + authConfig.InternalHost + authConfig.IntrospectionEndPoint
+		introspectionEndpoint = "https://" + authConfig.ADUISHostname + authConfig.IntrospectionEndPoint
 	} else {
 		// It is possible to introspect any token against super tenant introspection endpoint and super tenant client credentials
 		introspectionEndpoint = "https://" + c.BaseURL + "/t/carbon.super" + authConfig.IntrospectionEndPoint

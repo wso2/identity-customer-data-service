@@ -23,7 +23,7 @@ addr:
 auth_server:
   host: "localhost"
   port : 9443
-  internalHost : "localhost"
+  adu_is_hostname : "localhost"
   cookieDomain: "localhost"
   introspectionEndpoint: "/oauth2/introspect"
   tokenEndpoint: "/oauth2/token"
