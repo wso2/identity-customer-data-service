@@ -86,9 +86,9 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 	// Validate the scope
 	if scope == constants.IdentityAttributes {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:    errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
-			Message: errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
-			Description: "Identity attributes cannot be created in this service. " +
+			Code:    errors2.ATTRIBUTE_UPATE_NOT_SUPPORTED.Code,
+			Message: errors2.ATTRIBUTE_UPATE_NOT_SUPPORTED.Message,
+			Description: "Identity attributes cannot be created. " +
 				"Use Identity Provider to define and manage identity attributes.",
 		}, http.StatusBadRequest)
 		utils.WriteErrorResponse(w, clientError)
@@ -301,8 +301,8 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 	}
 	if scope == constants.IdentityAttributes {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.ATTRIBUTE_UPATE_NOT_SUPPORTED.Code,
+			Message:     errors2.ATTRIBUTE_UPATE_NOT_SUPPORTED.Message,
 			Description: "Identity attributes cannot be created or modified. Please update through the Identity Provider.",
 		}, http.StatusBadRequest)
 		utils.WriteErrorResponse(w, clientError)

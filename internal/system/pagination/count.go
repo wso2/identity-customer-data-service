@@ -25,23 +25,20 @@ import (
 )
 
 const (
-	defaultCount = 5
-	maxCount     = 200
+	defaultPageSize = 5
+	maxPageSize     = 200
 )
 
-func ParseCount(r *http.Request) (int, error) {
-	raw := r.URL.Query().Get("count")
-	if raw == "" {
-		raw = r.URL.Query().Get("limit")
-	}
+func ParsePageSize(r *http.Request) (int, error) {
+	raw := r.URL.Query().Get("pageSize")
 
 	if raw == "" {
-		return defaultCount, nil
+		return defaultPageSize, nil
 	}
 
 	v, err := strconv.Atoi(raw)
 	if err != nil || v < 0 {
-		return 0, fmt.Errorf("invalid count")
+		return 0, fmt.Errorf("invalid page size")
 	}
 
 	// RFC9865 allows 0 (return empty page)
@@ -49,8 +46,8 @@ func ParseCount(r *http.Request) (int, error) {
 		return 0, nil
 	}
 
-	if v > maxCount {
-		v = maxCount
+	if v > maxPageSize {
+		v = maxPageSize
 	}
 	return v, nil
 }

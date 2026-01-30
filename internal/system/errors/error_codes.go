@@ -312,6 +312,11 @@ var (
 		Message: "Invalid application identifier.",
 	}
 
+	ATTRIBUTE_UPATE_NOT_SUPPORTED = ErrorMessage{
+		Code:    errorPrefix + "13006",
+		Message: "Attribute add/update not supported.",
+	}
+
 	CONSENT_CAT_VALIDATION = ErrorMessage{
 		Code:    errorPrefix + "14001",
 		Message: "Consent category validation failed",

@@ -65,6 +65,6 @@ type ProfileSync struct {
 }
 
 type ProfileListAPIResponse struct {
-	Items      []ProfileListResponse `json:"profiles"`
 	Pagination pagination.Pagination `json:"pagination"`
+	Items      []ProfileListResponse `json:"profiles"`
 }

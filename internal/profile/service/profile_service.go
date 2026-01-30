@@ -747,7 +747,7 @@ func (ps *ProfilesService) GetProfile(ProfileId string) (*profileModel.ProfileRe
 					UpdatedAt: masterProfile.UpdatedAt,
 					Location:  masterProfile.Location,
 				},
-				MergedTo: *alias,
+				MergedTo: alias,
 			}
 
 			return profileResponse, nil

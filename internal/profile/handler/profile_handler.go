@@ -269,7 +269,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	limit, lerr := pagination.ParseCount(r)
+	limit, lerr := pagination.ParsePageSize(r)
 	if lerr != nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.GET_PROFILE.Code,
@@ -392,13 +392,13 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	}
 
 	resp := model.ProfileListAPIResponse{
-		Items: items,
 		Pagination: pagination.Pagination{
 			Count:          len(items),
 			PageSize:       limit,
 			NextCursor:     nextCursorStr,
 			PreviousCursor: prevCursorStr,
 		},
+		Items: items,
 	}
 
 	utils.RespondJSON(w, http.StatusOK, resp, constants.ProfileResource)
