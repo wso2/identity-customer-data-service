@@ -84,8 +84,8 @@ datasource:
   sslmode: disable
 
 tls:
-  mtls_enabled: false
-  cert_dir: "/Users/admin/Documents/Repos/OnPrem/identity-customer-data-service/etc/certs"
+  mtls_enabled: true
+  cert_dir: "/etc/certs"
   server_cert: "server.crt" #filename
   server_key: "server.key" #filename
   client_cert: "client.crt"   #filename
