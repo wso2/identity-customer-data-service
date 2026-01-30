@@ -137,7 +137,8 @@ func Test_Profile(t *testing.T) {
 	}`)
 		_ = json.Unmarshal(jsonData, &updatedRequest)
 
-		profiles, _, _ := profileSvc.GetAllProfilesCursor(SuperTenantOrg, 10, nil)
+		profiles, _, err := profileSvc.GetAllProfilesCursor(SuperTenantOrg, 10, nil)
+		require.NoError(t, err)
 		p := profiles[0]
 
 		updated, err := profileSvc.UpdateProfile(p.ProfileId, SuperTenantOrg, updatedRequest)
@@ -147,10 +148,11 @@ func Test_Profile(t *testing.T) {
 	})
 
 	t.Run("Delete_Profile_Success", func(t *testing.T) {
-		profiles, _, _ := profileSvc.GetAllProfilesCursor(SuperTenantOrg, 10, nil)
+		profiles, _, err := profileSvc.GetAllProfilesCursor(SuperTenantOrg, 10, nil)
+		require.NoError(t, err)
 		p := profiles[0]
 
-		err := profileSvc.DeleteProfile(p.ProfileId)
+		err = profileSvc.DeleteProfile(p.ProfileId)
 		require.NoError(t, err)
 
 		_, err = profileSvc.GetProfile(p.ProfileId)
