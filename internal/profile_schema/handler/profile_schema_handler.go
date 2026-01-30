@@ -86,9 +86,10 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 	// Validate the scope
 	if scope == constants.IdentityAttributes {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
-			Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
-			Description: "Identity attributes cannot be created via this endpoint.",
+			Code:    errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+			Message: errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+			Description: "Identity attributes cannot be created in this service. " +
+				"Use Identity Provider to define and manage identity attributes.",
 		}, http.StatusBadRequest)
 		utils.WriteErrorResponse(w, clientError)
 		return
@@ -306,13 +307,20 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 		utils.WriteErrorResponse(w, clientError)
 		return
 	}
+	if scope == constants.IdentityAttributes {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Description: "Identity attributes cannot be created or modified. Please update through the Identity Provider.",
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		// todo: validate whats there in updates. Need to restrict certain fields from being updated
-		// todo: name can
 		return
 	}
 	err = schemaService.PatchProfileSchemaAttributeById(orgHandle, attributeId, updates)

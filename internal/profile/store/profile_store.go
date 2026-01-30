@@ -938,19 +938,16 @@ func GetAllProfilesWithFilter(
 		limit = 200
 	}
 
-	baseSQL := scripts.GetAllProfilesWithFilter[provider.NewDBProvider().GetDBType()]
+	baseSQL := scripts.GetAllProfilesWithFilterBase[provider.NewDBProvider().GetDBType()]
 
 	var conditions []string
 	var args []interface{}
 	argID := 1
 	joinedAppIDs := map[string]bool{}
 
-	// tenant + list_profile
 	conditions = append(conditions, fmt.Sprintf("p.org_handle = $%d", argID))
 	args = append(args, orgHandle)
 	argID++
-
-	conditions = append(conditions, "p.list_profile = true")
 
 	// dynamic filter conditions (your existing logic, unchanged)
 	for _, f := range filters {
@@ -1081,6 +1078,8 @@ func GetAllProfilesWithFilter(
 		args = append(args, cursorTime, cursorProfileId)
 		argID += 2
 	}
+
+	conditions = append(conditions, "r.profile_status = 'REFERENCE_PROFILE'")
 
 	whereClause := "WHERE " + strings.Join(conditions, " AND ")
 

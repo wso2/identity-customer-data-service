@@ -204,7 +204,7 @@ var GetProfilesByOrgId = map[string]string{
 		FROM profiles p
 		LEFT JOIN profile_reference r ON p.profile_id = r.profile_id
 		WHERE 
-			p.list_profile = true
+			r.profile_status = 'REFERENCE_PROFILE'
 			AND p.org_handle = $1
 			AND (
 				$2::timestamptz IS NULL
@@ -239,7 +239,7 @@ var DeleteProfileReference = map[string]string{
 	"postgres": `DELETE FROM profile_reference WHERE reference_profile_id = $1 AND profile_id = $2;`,
 }
 
-var GetAllProfilesWithFilter = map[string]string{
+var GetAllProfilesWithFilterBase = map[string]string{
 	"postgres": `SELECT DISTINCT p.profile_id,
                 p.user_id,
                 p.org_handle,
