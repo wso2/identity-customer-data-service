@@ -1023,7 +1023,7 @@ func (ps *ProfilesService) GetAllProfilesCursor(
 	return result, hasMore, nil
 }
 
-// GetAllProfilesCursor retrieves filtered master profiles with pagination using cursor.
+// GetAllProfilesWithFilterCursor retrieves filtered master profiles with pagination using cursor.
 // Merged profiles are not included in list but provided in the reference
 func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
 	orgHandle string,
@@ -1085,7 +1085,7 @@ func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
 
 		alias, err := profileStore.FetchReferencedProfiles(profile.ProfileId)
 		if err != nil {
-			return result, false, err
+			return nil, false, err
 		}
 		if profile.ProfileStatus.IsReferenceProfile {
 			result = append(result, profileModel.ProfileResponse{

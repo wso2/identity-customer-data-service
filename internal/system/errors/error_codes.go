@@ -153,6 +153,11 @@ var (
 		Message: "Updating profile cookie failed.",
 	}
 
+	GET_PROFILE_SERVER_ERROR = ErrorMessage{
+		Code:    errorPrefix + "15404",
+		Message: "Fetching profile(s) failed.",
+	}
+
 	PARSING_ERROR = ErrorMessage{
 		Code:    errorPrefix + "15901",
 		Message: "Parsing token failed.",

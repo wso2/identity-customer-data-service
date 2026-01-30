@@ -577,21 +577,29 @@ func GetAllProfiles(orgHandle string, limit int, cursor *model.ProfileCursor) ([
 	}
 
 	profiles := make([]model.Profile, 0, len(results))
+	profileIDs := make([]string, 0, len(results))
 	for _, row := range results {
-		profile, _ := scanProfileRow(row)
-
-		apps, err := FetchApplicationData(profile.ProfileId)
+		profile, err := scanProfileRow(row)
 		if err != nil {
-			errorMsg := fmt.Sprintf("Failed fetching application data for the profile: %s", profile.ProfileId)
-			logger.Debug(errorMsg, log.Error(err))
-			return nil, false, errors2.NewServerError(errors2.ErrorMessage{
-				Code:        errors2.GET_PROFILE.Code,
-				Message:     errors2.GET_PROFILE.Message,
-				Description: errorMsg,
-			}, err)
+			return nil, false, err
 		}
-		profile.ApplicationData = apps
 		profiles = append(profiles, profile)
+		profileIDs = append(profileIDs, profile.ProfileId)
+	}
+
+	appDataMap, err := FetchApplicationDataBatch(profileIDs)
+	if err != nil {
+		errorMsg := "Failed fetching application data for profiles."
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, false, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	for i := range profiles {
+		profiles[i].ApplicationData = appDataMap[profiles[i].ProfileId]
 	}
 
 	// If direction=prev, SQL returned ASC to get “closest newer”.
@@ -603,6 +611,79 @@ func GetAllProfiles(orgHandle string, limit int, cursor *model.ProfileCursor) ([
 	}
 
 	return profiles, hasMore, nil
+}
+
+func FetchApplicationDataBatch(profileIDs []string) (map[string][]model.ApplicationData, error) {
+	result := make(map[string][]model.ApplicationData)
+	if len(profileIDs) == 0 {
+		return result, nil
+	}
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := "Failed getting db client for fetching application data batch."
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APP_DATA.Code,
+			Message:     errors2.GET_APP_DATA.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer dbClient.Close()
+
+	// Build placeholders: $1,$2,... for Postgres
+	placeholders := make([]string, 0, len(profileIDs))
+	args := make([]interface{}, 0, len(profileIDs))
+	for i, id := range profileIDs {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+		args = append(args, id)
+	}
+
+	base := scripts.GetAppDataByProfileIds[provider.NewDBProvider().GetDBType()]
+	query := fmt.Sprintf(base, strings.Join(placeholders, ","))
+
+	rows, err := dbClient.ExecuteQuery(query, args...)
+	if err != nil {
+		errorMsg := "Failed fetching application data batch."
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APP_DATA.Code,
+			Message:     errors2.GET_APP_DATA.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	for _, row := range rows {
+		pid := row["profile_id"].(string)
+		appID := row["app_id"].(string)
+		appBlob := row["application_data"].([]byte)
+
+		var parsed model.ApplicationData
+		if err := json.Unmarshal(appBlob, &parsed); err != nil {
+			errorMsg := fmt.Sprintf("Failed to unmarshal application data for profile: %s", pid)
+			logger.Debug(errorMsg, log.Error(err))
+			return nil, errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.GET_APP_DATA.Code,
+				Message:     errors2.GET_APP_DATA.Message,
+				Description: errorMsg,
+			}, err)
+		}
+
+		result[pid] = append(result[pid], model.ApplicationData{
+			AppId:           appID,
+			AppSpecificData: parsed.AppSpecificData,
+		})
+	}
+
+	// ensure empty slice for profiles with no app rows
+	for _, pid := range profileIDs {
+		if _, ok := result[pid]; !ok {
+			result[pid] = []model.ApplicationData{}
+		}
+	}
+
+	return result, nil
 }
 
 // DeleteProfile deletes a profile and its associated data
@@ -931,7 +1012,10 @@ func GetAllProfilesWithFilter(
 	}
 	defer dbClient.Close()
 
-	if limit <= 0 {
+	if limit == 0 {
+		return []model.Profile{}, false, nil
+	}
+	if limit < 0 {
 		limit = 50
 	}
 	if limit > 200 {
@@ -1112,17 +1196,29 @@ func GetAllProfilesWithFilter(
 	}
 
 	profiles := make([]model.Profile, 0, len(results))
+	profileIDs := make([]string, 0, len(results))
 	for _, row := range results {
 		profile, err := scanProfileRow(row)
-		if err != nil {
-			// same error handling as you have
-			return nil, false, err
-		}
-		profile.ApplicationData, err = FetchApplicationData(profile.ProfileId)
 		if err != nil {
 			return nil, false, err
 		}
 		profiles = append(profiles, profile)
+		profileIDs = append(profileIDs, profile.ProfileId)
+	}
+
+	appDataMap, err := FetchApplicationDataBatch(profileIDs)
+	if err != nil {
+		errorMsg := "Failed fetching application data for profiles."
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, false, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	for i := range profiles {
+		profiles[i].ApplicationData = appDataMap[profiles[i].ProfileId]
 	}
 
 	// reverse back to DESC order for API

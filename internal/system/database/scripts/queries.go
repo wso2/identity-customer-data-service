@@ -152,6 +152,10 @@ var GetAppDataByProfileId = map[string]string{
 	"postgres": `SELECT app_id, application_data FROM application_data WHERE profile_id = $1;`,
 }
 
+var GetAppDataByProfileIds = map[string]string{
+	"postgres": `SELECT profile_id, app_id, application_data FROM application_data WHERE profile_id IN (%s);`,
+}
+
 var GetAppDataByAppId = map[string]string{
 	"postgres": `SELECT app_id, application_data FROM application_data WHERE profile_id = $1 AND app_id = $2;`,
 }
