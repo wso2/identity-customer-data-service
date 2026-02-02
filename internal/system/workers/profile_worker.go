@@ -472,7 +472,7 @@ func MergeProfiles(existingProfile profileModel.Profile, incomingProfile profile
 		merged.UserId = existingProfile.UserId // todo: need to decide on this as we are also focusing on perm-perm
 	}
 
-	merged.OrgHandle = incomingProfile.OrgHandle   // todo: need to 
+	merged.OrgHandle = incomingProfile.OrgHandle // todo: need to
 	merged.CreatedAt = existingProfile.CreatedAt // todo: need to decide on this too.
 	merged.UpdatedAt = time.Now().UTC()
 

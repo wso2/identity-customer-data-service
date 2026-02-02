@@ -19,6 +19,7 @@
 package model
 
 import "time"
+import "github.com/wso2/identity-customer-data-service/internal/system/pagination"
 
 type ProfileResponse struct {
 	ProfileId          string                            `json:"profile_id" bson:"profile_id"`
@@ -38,6 +39,7 @@ type ProfileListResponse struct {
 	IdentityAttributes map[string]interface{}            `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
 	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
 	ApplicationData    map[string]map[string]interface{} `json:"application_data,omitempty" bson:"application_data,omitempty"`
+	MergedFrom         []Reference                       `json:"merged_from,omitempty" bson:"merged_from,omitempty"`
 }
 
 type Meta struct {
@@ -59,5 +61,10 @@ type ProfileSync struct {
 	ProfileId     string                 `json:"profileId,omitempty" bson:"profileId,omitempty"`
 	Event         string                 `json:"event" bson:"event"`
 	Claims        map[string]interface{} `json:"claims,omitempty" bson:"claims,omitempty"`
-	OrgHandle      string                 `json:"orgHandle,omitempty" bson:"orgHandle,omitempty"`
+	OrgHandle     string                 `json:"orgHandle,omitempty" bson:"orgHandle,omitempty"`
+}
+
+type ProfileListAPIResponse struct {
+	Pagination pagination.Pagination `json:"pagination"`
+	Items      []ProfileListResponse `json:"profiles"`
 }

@@ -28,7 +28,7 @@ const (
 	ProfileResource         = "profile"
 	UnificationRuleResource = "unification rule"
 	SchemaAttribute         = "schema attribute"
-	AdminConfigResource    = "admin config"
+	AdminConfigResource     = "admin config"
 )
 
 const (

@@ -112,7 +112,7 @@ func GetAllConsentCategories() ([]model.ConsentCategory, error) {
 		categories = append(categories, model.ConsentCategory{
 			CategoryName:       row["category_name"].(string),
 			CategoryIdentifier: row["category_identifier"].(string),
-			OrgHandle:           row["org_handle"].(string),
+			OrgHandle:          row["org_handle"].(string),
 			Purpose:            row["purpose"].(string),
 			Destinations:       parseStringArray(row["destinations"]),
 		})
@@ -161,7 +161,7 @@ func GetConsentCategoryByID(id string) (*model.ConsentCategory, error) {
 	category := model.ConsentCategory{
 		CategoryName:       row["category_name"].(string),
 		CategoryIdentifier: row["category_identifier"].(string),
-		OrgHandle:           row["org_handle"].(string),
+		OrgHandle:          row["org_handle"].(string),
 		Purpose:            row["purpose"].(string),
 		Destinations:       parseStringArray(row["destinations"]),
 	}
@@ -204,7 +204,7 @@ func GetConsentCategoryByName(name string) (*model.ConsentCategory, error) {
 	category := model.ConsentCategory{
 		CategoryName:       row["category_name"].(string),
 		CategoryIdentifier: row["category_identifier"].(string),
-		OrgHandle:           row["org_handle"].(string),
+		OrgHandle:          row["org_handle"].(string),
 		Purpose:            row["purpose"].(string),
 		Destinations:       parseStringArray(row["destinations"]),
 	}

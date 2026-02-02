@@ -57,7 +57,7 @@ func GetAdminConfig(orgHandle string) (*model.AdminConfig, error) {
 	}
 
 	config := &model.AdminConfig{
-		OrgHandle:              orgHandle,
+		OrgHandle:             orgHandle,
 		CDSEnabled:            false,
 		InitialSchemaSyncDone: false,
 		SystemApplications:    []string{},
@@ -170,7 +170,7 @@ func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to update system_applications for organization: %s", orgHandle)
-		
+
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
@@ -228,4 +228,3 @@ func UpdateInitialSchemaSyncConfig(state bool, orgHandle string) error {
 	}
 	return tx.Commit()
 }
-

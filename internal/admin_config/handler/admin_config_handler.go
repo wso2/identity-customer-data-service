@@ -23,10 +23,10 @@ import (
 	"net/http"
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 )
@@ -94,7 +94,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	configToUpdate := model.AdminConfig{
-		OrgHandle:              orgHandle,
+		OrgHandle:             orgHandle,
 		InitialSchemaSyncDone: existingConfig.InitialSchemaSyncDone,
 		CDSEnabled:            existingConfig.CDSEnabled,
 		SystemApplications:    existingConfig.SystemApplications,

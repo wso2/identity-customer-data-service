@@ -103,7 +103,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	emailBasedRule := model.UnificationRule{
 		RuleName:     RuleNameEmailBased,
 		RuleId:       emailRuleId,
-		OrgHandle:     SuperTenantOrg,
+		OrgHandle:    SuperTenantOrg,
 		PropertyName: "identity_attributes.email",
 		Priority:     1,
 		IsActive:     true,
@@ -116,7 +116,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 	phoneBasedRule := model.UnificationRule{
 		RuleName:     RuleNamePhoneBased,
 		RuleId:       phoneRuleId,
-		OrgHandle:     SuperTenantOrg,
+		OrgHandle:    SuperTenantOrg,
 		PropertyName: "identity_attributes.phone_number",
 		Priority:     2,
 		IsActive:     true,
@@ -430,7 +430,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 
 func cleanProfiles(profileSvc profileService.ProfilesServiceInterface, org string) {
 
-	profiles, _ := profileSvc.GetAllProfiles(org)
+	profiles, _, _ := profileSvc.GetAllProfilesCursor(org, 10, nil)
 	for _, p := range profiles {
 		_ = profileSvc.DeleteProfile(p.ProfileId)
 	}

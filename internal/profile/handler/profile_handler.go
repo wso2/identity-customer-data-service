@@ -28,6 +28,7 @@ import (
 	adminConfigPkg "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
@@ -248,16 +249,16 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GetAllProfiles handles profile retrieval with and without filters
 func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request) {
 
-	err := security.AuthnAndAuthz(r, "profile:view")
-	if err != nil {
+	if err := security.AuthnAndAuthz(r, "profile:view"); err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+
 	logger := log.GetLogger()
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
+
 	if !isCDSEnabled(orgHandle) {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.CDS_NOT_ENABLED.Code,
@@ -267,12 +268,33 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		utils.HandleError(w, clientError)
 		return
 	}
-	profilesProvider := provider.NewProfilesProvider()
-	profilesService := profilesProvider.GetProfilesService()
+
+	limit, lerr := pagination.ParsePageSize(r)
+	if lerr != nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: lerr.Error(),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
+	cursorStr := strings.TrimSpace(r.URL.Query().Get("cursor"))
+	cursor, cerr := model.DecodeProfileCursor(cursorStr)
+	if cerr != nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.GET_PROFILE.Code,
+			Message:     errors2.GET_PROFILE.Message,
+			Description: cerr.Error(),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
 
 	// Parse filters
 	queryFilters := r.URL.Query()[constants.Filter]
-	var filters []string
+	filters := make([]string, 0)
 	for _, f := range queryFilters {
 		splitFilters := strings.Split(f, " and ")
 		for _, sf := range splitFilters {
@@ -284,32 +306,102 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Add ?userId= filter if present
-	userID := r.URL.Query().Get("userId")
+	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
 	if userID != "" {
-		filters = append(filters, fmt.Sprintf("identity_attributes.userid eq %s", userID))
+		filters = append(filters, fmt.Sprintf(`user_id eq %s`, userID))
 	}
 
-	// Parse selective attributes (e.g., ?attributes=identity_attributes.username,application_data.cart_items)
 	requestedAttrs := parseRequestedAttributes(r)
 
-	var profiles []model.ProfileResponse
-	if len(filters) > 0 {
-		// Fall back to full response if filters are used
-		logger.Info("Fetching profiles with filters")
-		profiles, err = profilesService.GetAllProfilesWithFilter(orgHandle, filters)
-	} else {
-		logger.Info("Fetching all profiles with requested attributes")
-		profiles, err = profilesService.GetAllProfiles(orgHandle)
-	}
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
 
-	listResponse := buildProfileListResponse(profiles, requestedAttrs)
+	var (
+		profiles []model.ProfileResponse
+		hasMore  bool
+		err      error
+	)
+
+	if len(filters) > 0 {
+		logger.Info("Fetching profiles with filters + cursor pagination")
+		profiles, hasMore, err = profilesService.GetAllProfilesWithFilterCursor(orgHandle, filters, limit, cursor)
+	} else {
+		logger.Info("Fetching all profiles + cursor pagination")
+		profiles, hasMore, err = profilesService.GetAllProfilesCursor(orgHandle, limit, cursor)
+	}
 
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
-	utils.RespondJSON(w, http.StatusOK, listResponse, constants.ProfileResource)
+	items := buildProfileListResponse(profiles, requestedAttrs)
+
+	var nextCursorStr, prevCursorStr string
+
+	if len(profiles) > 0 {
+		first := profiles[0]
+		last := profiles[len(profiles)-1]
+
+		// Determine request direction (first page behaves like "next")
+		reqDir := "next"
+		if cursor != nil && strings.TrimSpace(cursor.Direction) != "" {
+			reqDir = strings.TrimSpace(cursor.Direction)
+		}
+
+		// next cursor (go older): only if there are more results in "next" direction
+		// - When reqDir == "next": hasMore means more older pages
+		// - When reqDir == "prev": we don't know from hasMore; but user can still go older from here
+		//   so return next cursor if the request had a cursor (you navigated) OR if hasMore in next mode.
+		if reqDir == "next" {
+			if hasMore {
+				nextCursorStr = model.EncodeProfileCursor(model.ProfileCursor{
+					CreatedAt: last.Meta.CreatedAt,
+					ProfileId: last.ProfileId,
+					Direction: "next",
+				})
+			}
+			// prev cursor (go newer): exists whenever this was not the first request
+			if cursor != nil {
+				prevCursorStr = model.EncodeProfileCursor(model.ProfileCursor{
+					CreatedAt: first.Meta.CreatedAt,
+					ProfileId: first.ProfileId,
+					Direction: "prev",
+				})
+			}
+		} else { // reqDir == "prev"
+			// prev cursor (go newer): ONLY if there are more newer rows (hasMore in prev mode)
+			if hasMore {
+				prevCursorStr = model.EncodeProfileCursor(model.ProfileCursor{
+					CreatedAt: first.Meta.CreatedAt,
+					ProfileId: first.ProfileId,
+					Direction: "prev",
+				})
+			}
+
+			// next cursor (go older): always provide it if we navigated using a cursor
+			// (lets you go forward again after going back)
+			if cursor != nil {
+				nextCursorStr = model.EncodeProfileCursor(model.ProfileCursor{
+					CreatedAt: last.Meta.CreatedAt,
+					ProfileId: last.ProfileId,
+					Direction: "next",
+				})
+			}
+		}
+	}
+
+	resp := model.ProfileListAPIResponse{
+		Pagination: pagination.Pagination{
+			Count:          len(items),
+			PageSize:       limit,
+			NextCursor:     nextCursorStr,
+			PreviousCursor: prevCursorStr,
+		},
+		Items: items,
+	}
+
+	utils.RespondJSON(w, http.StatusOK, resp, constants.ProfileResource)
 }
 
 func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs map[string][]string) []model.ProfileListResponse {
@@ -325,6 +417,8 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 
 		if requestedAttrs == nil {
 			// If no specific attributes requested, return only metadata.
+			// MergedFrom references are always included since the response represents the merged profile
+			profileRes.MergedFrom = profile.MergedFrom
 			result = append(result, profileRes)
 			continue
 		}
@@ -384,6 +478,7 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 					}
 				}
 			}
+			// Note: Filter out the allowed application data only if it is not a system app."
 
 			if len(filteredAppData) > 0 {
 				profileRes.ApplicationData = filteredAppData
@@ -1112,27 +1207,27 @@ func extractClaimKeyFromLocalURI(localURI string) string {
 }
 
 func getCallerAppIDFromRequest(r *http.Request) string {
-    authHeader := r.Header.Get("Authorization")
-    if !strings.HasPrefix(authHeader, "Bearer ") {
-        return ""
-    }
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return ""
+	}
 
-    token := strings.TrimPrefix(authHeader, "Bearer ")
-    claims, err := authn.ParseJWTClaims(token)
-    if err != nil {
-        return ""
-    }
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	claims, err := authn.ParseJWTClaims(token)
+	if err != nil {
+		return ""
+	}
 
-    // The azp (Authorized Party) claim identifies the application
-    if azp, ok := claims["azp"].(string); ok && azp != "" {
-        return azp
-    }
+	// The azp (Authorized Party) claim identifies the application
+	if azp, ok := claims["azp"].(string); ok && azp != "" {
+		return azp
+	}
 
-    if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
-        return clientID
-    }
+	if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
+		return clientID
+	}
 
-    return ""
+	return ""
 }
 
 func isCallerSystemApplication(orgHandle, appId string) bool {

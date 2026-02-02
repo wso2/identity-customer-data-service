@@ -54,25 +54,25 @@ func (a AdminConfigService) IsInitialSchemaSyncDone(orgHandle string) bool {
 }
 
 func (a AdminConfigService) IsSystemApplication(orgHandle, appId string) (bool, error) {
-    config, err := store.GetAdminConfig(orgHandle)
-    if err != nil {
-        return false, err
-    }
-    if config == nil {
-        return false, nil
-    }
-    for _, sysApp := range config.SystemApplications {
-        if sysApp == appId {
-            return true, nil
-        }
-    }
-    return false, nil
+	config, err := store.GetAdminConfig(orgHandle)
+	if err != nil {
+		return false, err
+	}
+	if config == nil {
+		return false, nil
+	}
+	for _, sysApp := range config.SystemApplications {
+		if sysApp == appId {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (a AdminConfigService) GetAdminConfig(orgHandle string) (model.AdminConfig, error) {
 
 	defaultConfig := model.AdminConfig{
-		OrgHandle:              orgHandle,
+		OrgHandle:             orgHandle,
 		CDSEnabled:            false,
 		InitialSchemaSyncDone: false,
 		SystemApplications:    []string{},
@@ -87,7 +87,7 @@ func (a AdminConfigService) GetAdminConfig(orgHandle string) (model.AdminConfig,
 func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, orgHandle string) error {
 	isCDSEnabledInitialState := a.IsCDSEnabled(orgHandle)
 	isInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(orgHandle)
-  
+
 	// Schema sync status should not be changed via this method.
 	updatedConfig.InitialSchemaSyncDone = isInitialSchemaSyncDoneInitialState
 

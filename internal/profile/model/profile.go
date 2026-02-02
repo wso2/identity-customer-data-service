@@ -41,7 +41,7 @@ type Reference struct {
 type Profile struct {
 	ProfileId          string                 `json:"profile_id" bson:"profile_id"`
 	UserId             string                 `json:"user_id" bson:"user_id"`
-	OrgHandle           string                 `json:"org_handle" bson:"org_handle"`
+	OrgHandle          string                 `json:"org_handle" bson:"org_handle"`
 	CreatedAt          time.Time              `json:"created_at" bson:"created_at"`
 	UpdatedAt          time.Time              `json:"updated_at" bson:"updated_at"`
 	Location           string                 `json:"location" bson:"location"`
@@ -72,4 +72,10 @@ type ConsentRecord struct {
 // ProfileConsentResponse is the response model for profile consents API
 type ProfileConsentResponse struct {
 	Consents []ConsentRecord `json:"consents"`
+}
+
+type ProfileCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ProfileId string    `json:"profile_id"`
+	Direction string    `json:"direction,omitempty"` // "next" or "prev"
 }

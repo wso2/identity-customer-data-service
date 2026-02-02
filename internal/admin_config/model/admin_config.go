@@ -19,7 +19,7 @@
 package model
 
 type AdminConfig struct {
-	OrgHandle              string   `json:"org_handle" bson:"org_handle"`
+	OrgHandle             string   `json:"org_handle" bson:"org_handle"`
 	CDSEnabled            bool     `json:"cds_enabled" bson:"cds_enabled"`
 	InitialSchemaSyncDone bool     `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
 	SystemApplications    []string `json:"system_applications" bson:"system_applications"`
