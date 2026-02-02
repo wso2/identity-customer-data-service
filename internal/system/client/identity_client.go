@@ -116,9 +116,8 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 
 	tcfg := &tls.Config{
 		MinVersion:   tls.VersionTLS12,
-		RootCAs:      rootCAs,          // nil means use system CA certs
-		Certificates: certificates,     // empty if mTLS disabled
-		ServerName:   serverHostForSNI, // ensure hostname verification (SNI)
+		RootCAs:      rootCAs,      // nil means use system CA certs
+		Certificates: certificates, // empty if mTLS disabled
 	}
 
 	tr := &http.Transport{
