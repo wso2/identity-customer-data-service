@@ -342,7 +342,7 @@ func (c *IdentityClient) FetchApplicationIdentifier(applicationIdentifier, orgHa
 }
 
 // IntrospectToken introspects an opaque token using the introspection endpoint.
-func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, error) {
+func (c *IdentityClient) IntrospectToken(token, orgHandle string) (map[string]interface{}, error) {
 
 	form := url.Values{}
 	form.Set("token", token)
@@ -356,6 +356,18 @@ func (c *IdentityClient) IntrospectToken(token string) (map[string]interface{}, 
 		// It is possible to introspect any token against super tenant introspection endpoint and super tenant client credentials
 		introspectionEndpoint = "https://" + c.BaseURL + "/t/carbon.super" + authConfig.IntrospectionEndPoint
 	}
+
+	if authConfig.IsSystemAppGrantEnabled {
+		u, err := url.Parse(introspectionEndpoint)
+		if err != nil {
+			return nil, err
+		}
+		q := u.Query()
+		q.Set("appTenant", "carbon.super")
+		u.RawQuery = q.Encode()
+		introspectionEndpoint = u.String()
+	}
+
 	log.GetLogger().Info("Introspecting token at endpoint: " + introspectionEndpoint)
 	req, err := http.NewRequest("POST", introspectionEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
