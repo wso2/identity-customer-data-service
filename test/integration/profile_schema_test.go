@@ -401,8 +401,8 @@ func Test_ProfileSchemaService(t *testing.T) {
 			updates := map[string]interface{}{
 				"attribute_name": "identity_attributes.temp_field",
 				"attribute_id":   attrId,
-				"value_type":     "integer", // todo: ensure if we are allowing such changes
-				"merge_strategy": "latest",
+				"value_type":     "integer",
+				"merge_strategy": constants.MergeStrategyOverwrite,
 				"mutability":     constants.MutabilityReadWrite,
 			}
 
@@ -413,7 +413,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			patched, err := svc.GetProfileSchemaAttributeById(SuperTenantOrg, attrId)
 			require.NoError(t, err)
 			require.Equal(t, "integer", patched.ValueType)
-			require.Equal(t, "latest", patched.MergeStrategy)
+			require.Equal(t, constants.MergeStrategyOverwrite, patched.MergeStrategy)
 		})
 	})
 

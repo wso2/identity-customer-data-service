@@ -20,6 +20,7 @@ package authz
 
 import (
 	"fmt"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 
@@ -44,9 +45,9 @@ func ValidatePermission(scopeStr string, operation string) bool {
 	}
 
 	grantedScopes := strings.Split(scopeStr, " ")
-	logger.Info(fmt.Sprintf("grantedScopes scopes: %s", grantedScopes))
+	logger.Debug(fmt.Sprintf("granted scopes: %s", grantedScopes))
 	expectedScopes, err := requiredScopes[operation]
-	logger.Info(fmt.Sprintf("expectedScopes scopes: %s", expectedScopes))
+	logger.Debug(fmt.Sprintf("expected scopes: %s", expectedScopes))
 	if !err {
 		return false
 	}

@@ -108,9 +108,7 @@ const (
 )
 
 var AllowedMergeStrategies = map[string]bool{
-	"latest":    true, // Use the latest value from the profiles being merged - rely on the updated_at field
 	"combine":   true, // Combine values from both profiles (the value type has to be arrayOfString or arrayOfInt)
-	"oldest":    true, // Use the oldest value from the profiles being merged - rely on the updated_at field
 	"overwrite": true, // todo: Remove later.
 }
 
