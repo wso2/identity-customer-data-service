@@ -278,7 +278,7 @@ func (c *IdentityClient) FetchApplicationIdentifier(applicationIdentifier, orgHa
 
 	logger := log.GetLogger()
 	var result idpModel.ApplicationsListResponse
-	filter := fmt.Sprintf(`clientId eq "%s" or issuer eq "%s"`, applicationIdentifier, applicationIdentifier)
+	filter := fmt.Sprintf(`clientId eq %s or issuer eq %s`, applicationIdentifier, applicationIdentifier)
 	base := fmt.Sprintf("https://%s/t/%s/api/server/v1/applications", c.BaseURL, orgHandle)
 	u, err := url.Parse(base)
 	if err != nil {
@@ -307,6 +307,7 @@ func (c *IdentityClient) FetchApplicationIdentifier(applicationIdentifier, orgHa
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
+	log.GetLogger().Info("Filtering applications at:" + u.String())
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to fetch applications for org: %s", orgHandle)
