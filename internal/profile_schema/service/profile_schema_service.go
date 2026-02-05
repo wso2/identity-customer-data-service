@@ -466,6 +466,8 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 		logger.Info(fmt.Sprintf("Schema migration triggered for attribute %s in org %s", attributeId, orgId))
 		
 		// Perform the migration asynchronously to avoid blocking the schema update
+		// Note: Capturing function parameters (orgId, attributeId, oldSchema, newSchema) is safe
+		// as they are not loop variables and won't be reused
 		go func() {
 			if err := MigrateProfileData(orgId, attributeId, oldSchema, newSchema); err != nil {
 				logger.Error(fmt.Sprintf("Schema migration failed for attribute %s", attributeId), log.Error(err))

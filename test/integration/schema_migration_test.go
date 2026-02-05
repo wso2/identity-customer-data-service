@@ -17,7 +17,7 @@ import (
 )
 
 func Test_SchemaUpdate_Migration(t *testing.T) {
-	SuperTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
+	superTenantOrg := fmt.Sprintf("carbon.super-%d", time.Now().UnixNano())
 	svc := schemaService.GetProfileSchemaService()
 	profileSvc := profileService.GetProfilesService()
 
@@ -28,28 +28,28 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 
 	// Cleanup at the end
 	defer func() {
-		_ = svc.DeleteProfileSchema(SuperTenantOrg)
+		_ = svc.DeleteProfileSchema(superTenantOrg)
 	}()
 
 	t.Run("TypeChange_String_To_Integer", func(t *testing.T) {
 		// Step 1: Create schema with string type
 		attrId := uuid.New().String()
 		attr := model.ProfileSchemaAttribute{
-			OrgId:         SuperTenantOrg,
+			OrgId:         superTenantOrg,
 			AttributeId:   attrId,
 			AttributeName: "identity_attributes.age",
 			ValueType:     constants.StringDataType,
 			MergeStrategy: "combine",
 			Mutability:    constants.MutabilityReadWrite,
 		}
-		err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.IdentityAttributes, SuperTenantOrg)
+		err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.IdentityAttributes, superTenantOrg)
 		require.NoError(t, err, "Failed to add attribute")
 
 		// Step 2: Create a profile with string value
 		profileId := uuid.New().String()
 		profile := profileModel.Profile{
 			ProfileId: profileId,
-			OrgHandle: SuperTenantOrg,
+			OrgHandle: superTenantOrg,
 			UserId:    "test-user-" + uuid.New().String(),
 			IdentityAttributes: map[string]interface{}{
 				"age": "25", // String value
@@ -60,7 +60,7 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
-			Location:  utils.BuildProfileLocation(SuperTenantOrg, profileId),
+			Location:  utils.BuildProfileLocation(superTenantOrg, profileId),
 		}
 		err = profileStore.InsertProfile(profile)
 		require.NoError(t, err, "Failed to insert profile")
@@ -72,7 +72,7 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			"merge_strategy": "combine",
 			"mutability":     constants.MutabilityReadWrite,
 		}
-		err = svc.PatchProfileSchemaAttributeById(SuperTenantOrg, attrId, updates)
+		err = svc.PatchProfileSchemaAttributeById(superTenantOrg, attrId, updates)
 		require.NoError(t, err, "Failed to update schema")
 
 		// Wait for async migration to complete
@@ -93,14 +93,14 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 
 		// Cleanup
 		_ = profileStore.DeleteProfile(profileId)
-		_ = svc.DeleteProfileSchemaAttributeById(SuperTenantOrg, attrId)
+		_ = svc.DeleteProfileSchemaAttributeById(superTenantOrg, attrId)
 	})
 
 	t.Run("MultiValuedChange_Single_To_Array", func(t *testing.T) {
 		// Step 1: Create schema with single value
 		attrId := uuid.New().String()
 		attr := model.ProfileSchemaAttribute{
-			OrgId:         SuperTenantOrg,
+			OrgId:         superTenantOrg,
 			AttributeId:   attrId,
 			AttributeName: "identity_attributes.favorite_color",
 			ValueType:     constants.StringDataType,
@@ -108,14 +108,14 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			Mutability:    constants.MutabilityReadWrite,
 			MultiValued:   false,
 		}
-		err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.IdentityAttributes, SuperTenantOrg)
+		err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.IdentityAttributes, superTenantOrg)
 		require.NoError(t, err, "Failed to add attribute")
 
 		// Step 2: Create a profile with single value
 		profileId := uuid.New().String()
 		profile := profileModel.Profile{
 			ProfileId: profileId,
-			OrgHandle: SuperTenantOrg,
+			OrgHandle: superTenantOrg,
 			UserId:    "test-user-" + uuid.New().String(),
 			IdentityAttributes: map[string]interface{}{
 				"favorite_color": "blue", // Single value
@@ -126,7 +126,7 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
-			Location:  utils.BuildProfileLocation(SuperTenantOrg, profileId),
+			Location:  utils.BuildProfileLocation(superTenantOrg, profileId),
 		}
 		err = profileStore.InsertProfile(profile)
 		require.NoError(t, err, "Failed to insert profile")
@@ -139,7 +139,7 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			"mutability":     constants.MutabilityReadWrite,
 			"multi_valued":   true,
 		}
-		err = svc.PatchProfileSchemaAttributeById(SuperTenantOrg, attrId, updates)
+		err = svc.PatchProfileSchemaAttributeById(superTenantOrg, attrId, updates)
 		require.NoError(t, err, "Failed to update schema")
 
 		// Wait for async migration to complete
@@ -161,14 +161,14 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 
 		// Cleanup
 		_ = profileStore.DeleteProfile(profileId)
-		_ = svc.DeleteProfileSchemaAttributeById(SuperTenantOrg, attrId)
+		_ = svc.DeleteProfileSchemaAttributeById(superTenantOrg, attrId)
 	})
 
 	t.Run("TypeAndMultiValuedChange_StringSingle_To_IntegerArray", func(t *testing.T) {
 		// Step 1: Create schema with single string value
 		attrId := uuid.New().String()
 		attr := model.ProfileSchemaAttribute{
-			OrgId:         SuperTenantOrg,
+			OrgId:         superTenantOrg,
 			AttributeId:   attrId,
 			AttributeName: "traits.score",
 			ValueType:     constants.StringDataType,
@@ -176,14 +176,14 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			Mutability:    constants.MutabilityReadWrite,
 			MultiValued:   false,
 		}
-		err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.Traits, SuperTenantOrg)
+		err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.Traits, superTenantOrg)
 		require.NoError(t, err, "Failed to add attribute")
 
 		// Step 2: Create a profile with single string value
 		profileId := uuid.New().String()
 		profile := profileModel.Profile{
 			ProfileId: profileId,
-			OrgHandle: SuperTenantOrg,
+			OrgHandle: superTenantOrg,
 			UserId:    "test-user-" + uuid.New().String(),
 			Traits: map[string]interface{}{
 				"score": "100", // String value
@@ -194,7 +194,7 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			},
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
-			Location:  utils.BuildProfileLocation(SuperTenantOrg, profileId),
+			Location:  utils.BuildProfileLocation(superTenantOrg, profileId),
 		}
 		err = profileStore.InsertProfile(profile)
 		require.NoError(t, err, "Failed to insert profile")
@@ -207,7 +207,7 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			"mutability":     constants.MutabilityReadWrite,
 			"multi_valued":   true,
 		}
-		err = svc.PatchProfileSchemaAttributeById(SuperTenantOrg, attrId, updates)
+		err = svc.PatchProfileSchemaAttributeById(superTenantOrg, attrId, updates)
 		require.NoError(t, err, "Failed to update schema")
 
 		// Wait for async migration to complete
@@ -232,21 +232,21 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 
 		// Cleanup
 		_ = profileStore.DeleteProfile(profileId)
-		_ = svc.DeleteProfileSchemaAttributeById(SuperTenantOrg, attrId)
+		_ = svc.DeleteProfileSchemaAttributeById(superTenantOrg, attrId)
 	})
 
 	t.Run("NoMigration_When_Schema_Unchanged", func(t *testing.T) {
 		// Step 1: Create schema
 		attrId := uuid.New().String()
 		attr := model.ProfileSchemaAttribute{
-			OrgId:         SuperTenantOrg,
+			OrgId:         superTenantOrg,
 			AttributeId:   attrId,
 			AttributeName: "identity_attributes.email",
 			ValueType:     constants.StringDataType,
 			MergeStrategy: "combine",
 			Mutability:    constants.MutabilityReadWrite,
 		}
-		err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.IdentityAttributes, SuperTenantOrg)
+		err := svc.AddProfileSchemaAttributesForScope([]model.ProfileSchemaAttribute{attr}, constants.IdentityAttributes, superTenantOrg)
 		require.NoError(t, err, "Failed to add attribute")
 
 		// Step 2: Update schema without changing type or multi_valued
@@ -256,12 +256,12 @@ func Test_SchemaUpdate_Migration(t *testing.T) {
 			"merge_strategy": "overwrite",               // Changed
 			"mutability":     constants.MutabilityReadWrite,
 		}
-		err = svc.PatchProfileSchemaAttributeById(SuperTenantOrg, attrId, updates)
+		err = svc.PatchProfileSchemaAttributeById(superTenantOrg, attrId, updates)
 		require.NoError(t, err, "Failed to update schema")
 
 		// No migration should be triggered (no need to wait or verify data)
 
 		// Cleanup
-		_ = svc.DeleteProfileSchemaAttributeById(SuperTenantOrg, attrId)
+		_ = svc.DeleteProfileSchemaAttributeById(superTenantOrg, attrId)
 	})
 }

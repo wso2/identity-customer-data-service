@@ -257,7 +257,8 @@ func isAlreadyTyped(value interface{}, valueType string) bool {
 		case int, int64:
 			return true
 		case float64:
-			return v == float64(int(v))
+			// Use int64 for conversion to avoid precision issues on 32-bit systems
+			return v == float64(int64(v))
 		default:
 			return false
 		}
