@@ -317,6 +317,7 @@ func (s *ProfileSchemaService) GetProfileSchemaAttributesByScope(orgId, scope st
 }
 
 func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}) error {
+	logger := log.GetLogger()
 
 	if len(updates) == 0 {
 		return errors2.NewClientError(errors2.ErrorMessage{
@@ -336,6 +337,9 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 			Description: fmt.Sprintf("Attribute with Id '%s' does not exist", attributeId),
 		}, http.StatusNotFound)
 	}
+
+	// Store the old schema for migration
+	oldSchema := attribute
 
 	// attribute id cannot be there and also org id. attribute name only can be updated not the scope.
 	var canonicalValues []model.CanonicalValue
@@ -385,7 +389,7 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 		applicationIdentifier = attribute.ApplicationIdentifier // Keep existing application identifier if not updated
 	}
 
-	multiValued := false // Default to false if not provided
+	multiValued := attribute.MultiValued // Default to existing value
 	if mv, ok := updates["multi_valued"]; ok && mv != nil {
 		if mvBool, ok := mv.(bool); ok {
 			multiValued = mvBool
@@ -396,23 +400,53 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 				Description: "multi_valued must be a boolean",
 			}, http.StatusBadRequest)
 		}
-	} else {
-		log.GetLogger().Debug(fmt.Sprintf("multi_valued not provided in patch; defaulting to false for attribute: %s", attributeId))
 	}
 
-	// todo: ensure NPE - see if u need to update application identifier also...its PUT as well. So yeah.
-	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
+	// Get or default updated values
+	updatedAttributeName := attribute.AttributeName
+	if an, ok := updates["attribute_name"]; ok && an != nil {
+		if anStr, ok := an.(string); ok {
+			updatedAttributeName = anStr
+		}
+	}
+
+	updatedValueType := attribute.ValueType
+	if vt, ok := updates["value_type"]; ok && vt != nil {
+		if vtStr, ok := vt.(string); ok {
+			updatedValueType = vtStr
+		}
+	}
+
+	updatedMergeStrategy := attribute.MergeStrategy
+	if ms, ok := updates["merge_strategy"]; ok && ms != nil {
+		if msStr, ok := ms.(string); ok {
+			updatedMergeStrategy = msStr
+		}
+	}
+
+	updatedMutability := attribute.Mutability
+	if m, ok := updates["mutability"]; ok && m != nil {
+		if mStr, ok := m.(string); ok {
+			updatedMutability = mStr
+		}
+	}
+
+	// Build the new schema for validation
+	newSchema := model.ProfileSchemaAttribute{
 		OrgId:                 orgId,
 		AttributeId:           attributeId,
-		AttributeName:         updates["attribute_name"].(string),
-		ValueType:             updates["value_type"].(string),
-		MergeStrategy:         updates["merge_strategy"].(string),
-		Mutability:            updates["mutability"].(string),
+		AttributeName:         updatedAttributeName,
+		ValueType:             updatedValueType,
+		MergeStrategy:         updatedMergeStrategy,
+		Mutability:            updatedMutability,
 		MultiValued:           multiValued,
 		CanonicalValues:       canonicalValues,
 		SubAttributes:         subAttributes,
 		ApplicationIdentifier: applicationIdentifier,
-	})
+	}
+
+	// Validate the new schema
+	err, isValid := s.validateSchemaAttribute(newSchema)
 	if !isValid {
 		if err != nil {
 			return err
@@ -424,6 +458,28 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 			Description: "Invalid updates provided for the profile schema attribute",
 		}, http.StatusBadRequest)
 	}
+
+	// Check if migration is needed
+	needsMigration := (oldSchema.ValueType != newSchema.ValueType) || (oldSchema.MultiValued != newSchema.MultiValued)
+
+	if needsMigration {
+		logger.Info(fmt.Sprintf("Schema migration triggered for attribute %s in org %s", attributeId, orgId))
+		
+		// Perform the migration asynchronously to avoid blocking the schema update
+		// Note: Capturing function parameters (orgId, attributeId, oldSchema, newSchema) is safe
+		// as they are not loop variables and won't be reused
+		go func() {
+			if err := MigrateProfileData(orgId, attributeId, oldSchema, newSchema); err != nil {
+				logger.Error(fmt.Sprintf("Schema migration failed for attribute %s", attributeId), log.Error(err))
+			} else {
+				logger.Info(fmt.Sprintf("Schema migration completed successfully for attribute %s", attributeId))
+			}
+		}()
+		
+		logger.Info(fmt.Sprintf("Schema migration started in background for attribute %s", attributeId))
+	}
+
+	// Update the schema
 	return psstr.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
 }
 
