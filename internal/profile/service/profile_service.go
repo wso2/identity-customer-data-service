@@ -536,7 +536,7 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 // UpdateProfile creates or updates a profile
 func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
 
-	profile, err := profileStore.GetProfile(profileId) //todo: need to get the reference to see what to updatedProfile (see if its the master)
+	profile, err := profileStore.GetProfile(profileId)
 	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("Error fetching profile for updatedProfile: %s", profileId)
@@ -629,11 +629,10 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 		return nil, err
 	}
 
-	profileFetched, errWait := ps.GetProfile(profile.ProfileId)
-	if errWait != nil || profileFetched == nil {
-		logger.Warn(fmt.Sprintf("Profile: %s not visible after insert/updatedProfile: %v", profile.ProfileId, errWait))
-		// todo: should we throw an error here?
-		return nil, errWait
+	profileFetched, err := ps.GetProfile(profile.ProfileId)
+	if err != nil || profileFetched == nil {
+		logger.Debug(fmt.Sprintf("Profile: %s not available after update: %v", profile.ProfileId, err))
+		return nil, err
 	}
 
 	config := UnificationModel.DefaultConfig()
@@ -1176,6 +1175,18 @@ func (ps *ProfilesService) PatchProfile(profileId, orgHandle string, patch map[s
 		}, http.StatusNotFound)
 	}
 
+	logger := log.GetLogger()
+	if strings.TrimSpace(existingProfile.UserId) != "" {
+		if _, ok := patch["identity_attributes"]; ok {
+			logger.Debug(fmt.Sprintf("Attempt to patch identity attributes for profile: %s with user_id: %s", profileId, existingProfile.UserId))
+			return nil, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: "Identity attributes cannot be updated. Use your Identity Provider to manage identity attributes.",
+			}, http.StatusBadRequest)
+		}
+	}
+
 	// Convert the full profile to map to allow patching
 	fullData, _ := json.Marshal(existingProfile)
 	var merged map[string]interface{}
@@ -1217,7 +1228,6 @@ func (ps *ProfilesService) PatchProfile(profileId, orgHandle string, patch map[s
 	mergedBytes, _ := json.Marshal(merged)
 	var updatedProfileReq profileModel.ProfileRequest
 	if err := json.Unmarshal(mergedBytes, &updatedProfileReq); err != nil {
-		logger := log.GetLogger()
 		errMsg := fmt.Sprintf("Error unmarshalling merged profile data for profile_id: %s", profileId)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{

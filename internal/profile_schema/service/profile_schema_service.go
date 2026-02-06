@@ -400,7 +400,6 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 		log.GetLogger().Debug(fmt.Sprintf("multi_valued not provided in patch; defaulting to false for attribute: %s", attributeId))
 	}
 
-	// todo: ensure NPE - see if u need to update application identifier also...its PUT as well. So yeah.
 	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
 		OrgId:                 orgId,
 		AttributeId:           attributeId,
