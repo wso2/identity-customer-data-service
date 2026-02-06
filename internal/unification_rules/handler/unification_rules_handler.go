@@ -21,7 +21,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -109,7 +108,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	logger := log.GetLogger()
 	traceID := cdscontext.GetTraceID(r.Context())
 	logger.Audit(log.AuditEvent{
-		InitiatorID:   getUserIDFromRequest(r),
+		InitiatorID:   authn.GetUserIDFromRequest(r),
 		InitiatorType: log.InitiatorTypeUser,
 		TargetID:      rule.RuleId,
 		TargetType:    log.TargetTypeUnificationRule,
@@ -287,7 +286,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	logger := log.GetLogger()
 	traceID := cdscontext.GetTraceID(r.Context())
 	logger.Audit(log.AuditEvent{
-		InitiatorID:   getUserIDFromRequest(r),
+		InitiatorID:   authn.GetUserIDFromRequest(r),
 		InitiatorType: log.InitiatorTypeUser,
 		TargetID:      ruleId,
 		TargetType:    log.TargetTypeUnificationRule,
@@ -346,7 +345,7 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	logger := log.GetLogger()
 	traceID := cdscontext.GetTraceID(r.Context())
 	logger.Audit(log.AuditEvent{
-		InitiatorID:   getUserIDFromRequest(r),
+		InitiatorID:   authn.GetUserIDFromRequest(r),
 		InitiatorType: log.InitiatorTypeUser,
 		TargetID:      ruleId,
 		TargetType:    log.TargetTypeUnificationRule,
@@ -362,24 +361,4 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 // isCDSEnabled checks if CDS is enabled for the given tenant
 func isCDSEnabled(orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
-}
-
-// getUserIDFromRequest extracts user ID from the JWT token in the request
-func getUserIDFromRequest(r *http.Request) string {
-	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "unknown"
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	claims, err := authn.ParseJWTClaims(token)
-	if err != nil {
-		return "unknown"
-	}
-
-	if sub, ok := claims["sub"].(string); ok && sub != "" {
-		return sub
-	}
-
-	return "unknown"
 }

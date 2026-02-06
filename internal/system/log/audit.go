@@ -78,6 +78,7 @@ const (
 	// Authentication operations
 	ActionAuthenticationSuccess = "authentication-success"
 	ActionAuthenticationFailure = "authentication-failure"
+	ActionAuthorizationFailure  = "authorization-failure"
 )
 
 // Initiator types

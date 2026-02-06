@@ -252,7 +252,7 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 	logger := log.GetLogger()
 	traceID := cdscontext.GetTraceID(r.Context())
 	logger.Audit(log.AuditEvent{
-		InitiatorID:   getUserIDFromRequest(r),
+		InitiatorID:   authn.GetUserIDFromRequest(r),
 		InitiatorType: log.InitiatorTypeUser,
 		TargetID:      profileId,
 		TargetType:    log.TargetTypeProfile,
@@ -585,7 +585,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger()
 	traceID := cdscontext.GetTraceID(r.Context())
 	logger.Audit(log.AuditEvent{
-		InitiatorID:   getUserIDFromRequest(r),
+		InitiatorID:   authn.GetUserIDFromRequest(r),
 		InitiatorType: log.InitiatorTypeUser,
 		TargetID:      profileResponse.ProfileId,
 		TargetType:    log.TargetTypeProfile,
@@ -718,7 +718,7 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	logger := log.GetLogger()
 	traceID := cdscontext.GetTraceID(request.Context())
 	logger.Audit(log.AuditEvent{
-		InitiatorID:   getUserIDFromRequest(request),
+		InitiatorID:   authn.GetUserIDFromRequest(request),
 		InitiatorType: log.InitiatorTypeUser,
 		TargetID:      profileId,
 		TargetType:    log.TargetTypeProfile,
@@ -1287,24 +1287,4 @@ func isCallerSystemApplication(orgHandle, appId string) bool {
 // isCDSEnabled checks if CDS is enabled for the given organization
 func isCDSEnabled(orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
-}
-
-// getUserIDFromRequest extracts user ID from the JWT token in the request
-func getUserIDFromRequest(r *http.Request) string {
-	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "unknown"
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	claims, err := authn.ParseJWTClaims(token)
-	if err != nil {
-		return "unknown"
-	}
-
-	if sub, ok := claims["sub"].(string); ok && sub != "" {
-		return sub
-	}
-
-	return "unknown"
 }

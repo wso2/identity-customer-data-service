@@ -182,7 +182,7 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 			InitiatorType: log.InitiatorTypeUser,
 			TargetID:      "system",
 			TargetType:    "authorization",
-			ActionID:      log.ActionAuthenticationFailure,
+			ActionID:      log.ActionAuthorizationFailure,
 			TraceID:       traceID,
 			Data:          map[string]string{"reason": "missing_scope"},
 		})
@@ -201,7 +201,7 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 			InitiatorType: log.InitiatorTypeUser,
 			TargetID:      "system",
 			TargetType:    "authorization",
-			ActionID:      log.ActionAuthenticationFailure,
+			ActionID:      log.ActionAuthorizationFailure,
 			TraceID:       traceID,
 			Data:          map[string]string{"reason": "insufficient_permissions", "operation": operation},
 		})

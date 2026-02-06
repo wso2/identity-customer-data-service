@@ -137,7 +137,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 	traceID := cdscontext.GetTraceID(r.Context())
 	for _, attr := range schemaAttributes {
 		logger.Audit(log.AuditEvent{
-			InitiatorID:   getUserIDFromRequest(r),
+			InitiatorID:   authn.GetUserIDFromRequest(r),
 			InitiatorType: log.InitiatorTypeUser,
 			TargetID:      attr.AttributeId,
 			TargetType:    log.TargetTypeSchemaAttribute,
@@ -347,7 +347,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 	logger := log.GetLogger()
 	traceID := cdscontext.GetTraceID(r.Context())
 	logger.Audit(log.AuditEvent{
-		InitiatorID:   getUserIDFromRequest(r),
+		InitiatorID:   authn.GetUserIDFromRequest(r),
 		InitiatorType: log.InitiatorTypeUser,
 		TargetID:      attributeId,
 		TargetType:    log.TargetTypeSchemaAttribute,
@@ -443,7 +443,7 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.Respons
 	logger := log.GetLogger()
 	traceID := cdscontext.GetTraceID(r.Context())
 	logger.Audit(log.AuditEvent{
-		InitiatorID:   getUserIDFromRequest(r),
+		InitiatorID:   authn.GetUserIDFromRequest(r),
 		InitiatorType: log.InitiatorTypeUser,
 		TargetID:      attributeId,
 		TargetType:    log.TargetTypeSchemaAttribute,
@@ -579,24 +579,4 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 // isCDSEnabled checks if CDS is enabled for the given organization
 func isCDSEnabled(orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
-}
-
-// getUserIDFromRequest extracts user ID from the JWT token in the request
-func getUserIDFromRequest(r *http.Request) string {
-	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "unknown"
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	claims, err := authn.ParseJWTClaims(token)
-	if err != nil {
-		return "unknown"
-	}
-
-	if sub, ok := claims["sub"].(string); ok && sub != "" {
-		return sub
-	}
-
-	return "unknown"
 }
