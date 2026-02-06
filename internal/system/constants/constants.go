@@ -18,6 +18,7 @@ const DefaultLimit = 50
 type contextKey string
 
 const TenantContextKey contextKey = "org_handle"
+const TraceIDContextKey contextKey = "trace_id"
 
 var AllowedFieldsForUnificationRulePatch = map[string]bool{
 	"is_active": true,

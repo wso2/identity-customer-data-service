@@ -24,6 +24,7 @@ type ErrorMessage struct {
 	Code        string `json:"error_code"`
 	Message     string `json:"error_message"`
 	Description string `json:"error_description"`
+	TraceID     string `json:"trace_id,omitempty"`
 }
 
 type ClientError struct {
@@ -61,5 +62,21 @@ func NewClientError(msg ErrorMessage, code int) *ClientError {
 func NewClientErrorWithoutCode(msg ErrorMessage) *ClientError {
 	return &ClientError{
 		ErrorMessage: msg,
+	}
+}
+
+func NewServerErrorWithTraceID(msg ErrorMessage, cause error, traceID string) *ServerError {
+	msg.TraceID = traceID
+	return &ServerError{
+		ErrorMessage: msg,
+		Err:          cause,
+	}
+}
+
+func NewClientErrorWithTraceID(msg ErrorMessage, code int, traceID string) *ClientError {
+	msg.TraceID = traceID
+	return &ClientError{
+		ErrorMessage: msg,
+		StatusCode:   code,
 	}
 }

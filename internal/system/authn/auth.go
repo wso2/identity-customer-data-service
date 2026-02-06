@@ -34,6 +34,26 @@ var (
 	expectedAudience = "iam-cds"
 )
 
+// GetUserIDFromRequest extracts user ID from the JWT token in the request
+func GetUserIDFromRequest(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return "unknown"
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	claims, err := ParseJWTClaims(token)
+	if err != nil {
+		return "unknown"
+	}
+
+	if sub, ok := claims["sub"].(string); ok && sub != "" {
+		return sub
+	}
+
+	return "unknown"
+}
+
 // ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
 func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]interface{}, error) {
 

@@ -26,6 +26,8 @@ import (
 	"sync"
 
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/authn"
+	cdscontext "github.com/wso2/identity-customer-data-service/internal/system/context"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 
@@ -129,6 +131,26 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 		utils.HandleError(w, err)
 		return
 	}
+
+	// Audit log for schema attribute creation
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+	for _, attr := range schemaAttributes {
+		logger.Audit(log.AuditEvent{
+			InitiatorID:   authn.GetUserIDFromRequest(r),
+			InitiatorType: log.InitiatorTypeUser,
+			TargetID:      attr.AttributeId,
+			TargetType:    log.TargetTypeSchemaAttribute,
+			ActionID:      log.ActionAddSchemaAttribute,
+			TraceID:       traceID,
+			Data: map[string]string{
+				"org_handle":     orgHandle,
+				"scope":          scope,
+				"attribute_name": attr.AttributeName,
+			},
+		})
+	}
+
 	schemaAttributesNew := schemaAttributes
 	for i := range schemaAttributesNew {
 		schemaAttributesNew[i].OrgId = ""
@@ -321,6 +343,22 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 		return
 	}
 
+	// Audit log for schema attribute update
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   authn.GetUserIDFromRequest(r),
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      attributeId,
+		TargetType:    log.TargetTypeSchemaAttribute,
+		ActionID:      log.ActionUpdateSchemaAttribute,
+		TraceID:       traceID,
+		Data: map[string]string{
+			"org_handle": orgHandle,
+			"scope":      scope,
+		},
+	})
+
 	attribute, err := schemaService.GetProfileSchemaAttributeById(orgHandle, attributeId)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -400,6 +438,23 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeById(w http.Respons
 		utils.HandleError(w, err)
 		return
 	}
+
+	// Audit log for schema attribute deletion
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   authn.GetUserIDFromRequest(r),
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      attributeId,
+		TargetType:    log.TargetTypeSchemaAttribute,
+		ActionID:      log.ActionDeleteSchemaAttribute,
+		TraceID:       traceID,
+		Data: map[string]string{
+			"org_handle": orgHandle,
+			"scope":      scope,
+		},
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
 }
