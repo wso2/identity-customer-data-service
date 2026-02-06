@@ -2,6 +2,7 @@ env: "${ENV}" # This will be replaced by the ENV variable
 
 log:
   log_level: "${LOG_LEVEL}"
+  trace_id_header: "X-Trace-Id"
   #    - "INFO", "WARN", "ERROR", "DEBUG" - and environment specific log level
 
 

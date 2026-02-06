@@ -27,6 +27,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/authz"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	cdscontext "github.com/wso2/identity-customer-data-service/internal/system/context"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
@@ -37,13 +38,25 @@ func AuthnWithAdminCredentials(r *http.Request) error {
 
 	authHeader := r.Header.Get("Authorization")
 	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
 		logger.Debug("Missing or invalid Authorization header")
-		return errors.NewClientError(errors.ErrorMessage{
+		// Audit failed authentication
+		logger.Audit(log.AuditEvent{
+			InitiatorID:   "unknown",
+			InitiatorType: log.InitiatorTypeAdmin,
+			TargetID:      "system",
+			TargetType:    "authentication",
+			ActionID:      log.ActionAuthenticationFailure,
+			TraceID:       traceID,
+			Data:          map[string]string{"reason": "missing_or_invalid_header"},
+		})
+		return errors.NewClientErrorWithTraceID(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
 			Description: "Missing or invalid Authorization header",
-		}, http.StatusUnauthorized)
+		}, http.StatusUnauthorized, traceID)
 	}
 
 	token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Basic "))
@@ -51,12 +64,32 @@ func AuthnWithAdminCredentials(r *http.Request) error {
 	isValidAdmin, err := validateAdminCredentials(token)
 	if err != nil || !isValidAdmin {
 		logger.Debug("Invalid admin credentials")
-		return errors.NewClientError(errors.ErrorMessage{
+		// Audit failed authentication
+		logger.Audit(log.AuditEvent{
+			InitiatorID:   "unknown",
+			InitiatorType: log.InitiatorTypeAdmin,
+			TargetID:      "system",
+			TargetType:    "authentication",
+			ActionID:      log.ActionAuthenticationFailure,
+			TraceID:       traceID,
+			Data:          map[string]string{"reason": "invalid_credentials"},
+		})
+		return errors.NewClientErrorWithTraceID(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
 			Description: "Missing or invalid Authorization header",
-		}, http.StatusUnauthorized)
+		}, http.StatusUnauthorized, traceID)
 	}
+
+	// Audit successful authentication
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   "admin",
+		InitiatorType: log.InitiatorTypeAdmin,
+		TargetID:      "system",
+		TargetType:    "authentication",
+		ActionID:      log.ActionAuthenticationSuccess,
+		TraceID:       traceID,
+	})
 
 	return nil
 }
@@ -87,12 +120,25 @@ func validateAdminCredentials(token string) (bool, error) {
 func AuthnAndAuthz(r *http.Request, operation string) error {
 
 	authHeader := r.Header.Get("Authorization")
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+
 	if !strings.HasPrefix(authHeader, "Bearer ") || authHeader == "" {
-		clientError := errors.NewClientError(errors.ErrorMessage{
+		// Audit failed authentication
+		logger.Audit(log.AuditEvent{
+			InitiatorID:   "unknown",
+			InitiatorType: log.InitiatorTypeUser,
+			TargetID:      "system",
+			TargetType:    "authentication",
+			ActionID:      log.ActionAuthenticationFailure,
+			TraceID:       traceID,
+			Data:          map[string]string{"reason": "missing_or_invalid_bearer_token"},
+		})
+		clientError := errors.NewClientErrorWithTraceID(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
 			Description: "Missing or invalid Authorization header",
-		}, http.StatusUnauthorized)
+		}, http.StatusUnauthorized, traceID)
 		return clientError
 	}
 
@@ -103,32 +149,80 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 	//  Validate token
 	claims, err := authn.ValidateAuthenticationAndReturnClaims(token, orgHandle)
 	if err != nil {
-		clientError := errors.NewClientError(errors.ErrorMessage{
+		// Audit failed authentication
+		logger.Audit(log.AuditEvent{
+			InitiatorID:   "unknown",
+			InitiatorType: log.InitiatorTypeUser,
+			TargetID:      "system",
+			TargetType:    "authentication",
+			ActionID:      log.ActionAuthenticationFailure,
+			TraceID:       traceID,
+			Data:          map[string]string{"reason": "token_validation_failed"},
+		})
+		clientError := errors.NewClientErrorWithTraceID(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
 			Description: "Missing or invalid Authorization header",
-		}, http.StatusUnauthorized)
+		}, http.StatusUnauthorized, traceID)
 		return clientError
+	}
+
+	// Extract user ID from claims for audit logging
+	userID := "unknown"
+	if sub, ok := claims["sub"].(string); ok && sub != "" {
+		userID = sub
 	}
 
 	//  Validate authorization
 	scope, ok := claims["scope"]
 	if !ok || scope == nil {
-		clientError := errors.NewClientError(errors.ErrorMessage{
+		// Audit authorization failure
+		logger.Audit(log.AuditEvent{
+			InitiatorID:   userID,
+			InitiatorType: log.InitiatorTypeUser,
+			TargetID:      "system",
+			TargetType:    "authorization",
+			ActionID:      log.ActionAuthenticationFailure,
+			TraceID:       traceID,
+			Data:          map[string]string{"reason": "missing_scope"},
+		})
+		clientError := errors.NewClientErrorWithTraceID(errors.ErrorMessage{
 			Code:        errors.FORBIDDEN.Code,
 			Message:     errors.FORBIDDEN.Message,
 			Description: errors.FORBIDDEN.Description,
-		}, http.StatusForbidden)
+		}, http.StatusForbidden, traceID)
 		return clientError
 	}
 
 	if !authz.ValidatePermission(scope.(string), operation) {
-		clientError := errors.NewClientError(errors.ErrorMessage{
+		// Audit authorization failure
+		logger.Audit(log.AuditEvent{
+			InitiatorID:   userID,
+			InitiatorType: log.InitiatorTypeUser,
+			TargetID:      "system",
+			TargetType:    "authorization",
+			ActionID:      log.ActionAuthenticationFailure,
+			TraceID:       traceID,
+			Data:          map[string]string{"reason": "insufficient_permissions", "operation": operation},
+		})
+		clientError := errors.NewClientErrorWithTraceID(errors.ErrorMessage{
 			Code:        errors.FORBIDDEN.Code,
 			Message:     errors.FORBIDDEN.Message,
 			Description: "Do not have permission to perform this operation",
-		}, http.StatusForbidden)
+		}, http.StatusForbidden, traceID)
 		return clientError
 	}
+
+	// Audit successful authentication
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   userID,
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      "system",
+		TargetType:    "authentication",
+		ActionID:      log.ActionAuthenticationSuccess,
+		TraceID:       traceID,
+		Data:          map[string]string{"operation": operation},
+	})
+
 	return nil
 }

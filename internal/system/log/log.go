@@ -46,10 +46,11 @@ func Init(logLevel string) error {
 	}
 
 	handlerOptions := &slog.HandlerOptions{Level: level}
-	logHandler := slog.NewTextHandler(os.Stdout, handlerOptions)
+	logHandler := slog.NewJSONHandler(os.Stdout, handlerOptions)
 
+	// Add service name to all logs
 	logger = &Logger{
-		internal: slog.New(logHandler),
+		internal: slog.New(logHandler).With(slog.String("service", "identity-customer-data-service")),
 	}
 	return nil
 }

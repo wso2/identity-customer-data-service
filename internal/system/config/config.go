@@ -24,7 +24,8 @@ type AddrConfig struct {
 }
 
 type LogConfig struct {
-	LogLevel string `yaml:"log_level"`
+	LogLevel      string `yaml:"log_level"`
+	TraceIDHeader string `yaml:"trace_id_header"`
 }
 
 type AuthConfig struct {

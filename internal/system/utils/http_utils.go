@@ -27,7 +27,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	cdscontext "github.com/wso2/identity-customer-data-service/internal/system/context"
 	customerrors "github.com/wso2/identity-customer-data-service/internal/system/errors" // Alias for the custom errors
 	error2 "github.com/wso2/identity-customer-data-service/internal/system/errors"       // Importing custom error types
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -43,10 +45,12 @@ func HandleError(w http.ResponseWriter, err error) {
 			Code        string `json:"code"`
 			Message     string `json:"message"`
 			Description string `json:"description"`
+			TraceID     string `json:"traceId,omitempty"`
 		}{
 			Code:        clientError.ErrorMessage.Code,
 			Message:     clientError.ErrorMessage.Message,
 			Description: clientError.ErrorMessage.Description,
+			TraceID:     clientError.ErrorMessage.TraceID,
 		})
 		return
 	}
@@ -56,8 +60,9 @@ func HandleError(w http.ResponseWriter, err error) {
 		logger := log.GetLogger()
 		logger.Error(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": "Internal server error",
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":   "Internal server error",
+			"traceId": serverError.ErrorMessage.TraceID,
 		})
 		return
 	}
@@ -117,13 +122,37 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 		orgHandle := parts[0]
 		remainingPath := "/" + parts[1]
 
-		// Add tenant to request context and preserve remaining path (including API version)
+		// Extract or generate trace ID
+		traceID := extractOrGenerateTraceID(r)
+
+		// Add tenant and traceID to request context
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, orgHandle)
+		ctx = cdscontext.WithTraceID(ctx, traceID)
 		r = r.WithContext(ctx)
 		r.URL.Path = remainingPath
 
+		// Add trace ID to response header
+		w.Header().Set("X-Trace-Id", traceID)
+
 		handlerFunc(w, r)
 	})
+}
+
+// extractOrGenerateTraceID extracts trace ID from request header or generates a new one
+func extractOrGenerateTraceID(r *http.Request) string {
+	cfg := config.GetCDSRuntime().Config
+	headerName := cfg.Log.TraceIDHeader
+	if headerName == "" {
+		headerName = "X-Trace-Id"
+	}
+
+	// Try to get trace ID from request header
+	if traceID := r.Header.Get(headerName); traceID != "" {
+		return traceID
+	}
+
+	// Generate new trace ID
+	return cdscontext.GenerateTraceID()
 }
 
 // RespondJSON sends a JSON response with the given status code and payload
