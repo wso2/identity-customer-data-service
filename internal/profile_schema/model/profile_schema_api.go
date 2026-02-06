@@ -22,3 +22,12 @@ type ProfileSchemaSync struct {
 	OrgId string `json:"orgHandle" bson:"orgHandle"`
 	Event string `json:"event" bson:"event"`
 }
+
+type ProfileSchemaUpdateAttribute struct {
+	// Currently we are not allowing to update value_type. Only identity attributes can update the value type through IDP.
+	MergeStrategy   string           `json:"merge_strategy" bson:"merge_strategy" binding:"required"`
+	Mutability      string           `json:"mutability" bson:"mutability"`
+	MultiValued     bool             `json:"multi_valued,omitempty" bson:"multi_valued,omitempty"`         // Means the data type is an array of chosen data type
+	CanonicalValues []CanonicalValue `json:"canonical_values,omitempty" bson:"canonical_values,omitempty"` // String of options for the attribute
+	SubAttributes   []SubAttribute   `json:"sub_attributes,omitempty" bson:"sub_attributes,omitempty"`     // If the datatype is object
+}
