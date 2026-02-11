@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -1094,13 +1095,14 @@ func GetAllProfilesWithFilter(
 				appScope := strings.SplitN(key, ".", 2)
 				appID := appScope[0]
 				appKey = appScope[1]
-				appAlias = "a_" + appID
+				appAlias = "a_" + sanitizeForAlias(appID)
 
 				if !joinedAppIDs[appID] {
 					baseSQL += fmt.Sprintf(`
-                        INNER JOIN application_data %s
-                          ON %s.profile_id = p.profile_id AND %s.app_id = '%s'
-                    `, appAlias, appAlias, appAlias, appID)
+                INNER JOIN application_data %s
+                  ON %s.profile_id = p.profile_id AND %s.app_id = $%d`, appAlias, appAlias, appAlias, argID)
+					args = append(args, appID)
+					argID++
 					joinedAppIDs[appID] = true
 				}
 			} else {
@@ -1119,18 +1121,20 @@ func GetAllProfilesWithFilter(
 				conditions = append(conditions,
 					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' = $%d", appAlias, appKey, argID))
 				args = append(args, value)
+				argID++
 			case "co":
 				conditions = append(conditions,
 					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID))
 				args = append(args, "%"+value+"%")
+				argID++
 			case "sw":
 				conditions = append(conditions,
 					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID))
 				args = append(args, value+"%")
+				argID++
 			default:
 				continue
 			}
-			argID++
 		}
 	}
 
@@ -1229,6 +1233,20 @@ func GetAllProfilesWithFilter(
 	}
 
 	return profiles, hasMore, nil
+}
+
+// sanitizeForAlias converts a string to a valid SQL alias by replacing special characters
+func sanitizeForAlias(input string) string {
+	// Replace any non-alphanumeric character with underscore
+	reg := regexp.MustCompile(`[^a-zA-Z0-9_]`)
+	sanitized := reg.ReplaceAllString(input, "_")
+
+	// Ensure it doesn't start with a number (SQL requirement)
+	if len(sanitized) > 0 && sanitized[0] >= '0' && sanitized[0] <= '9' {
+		sanitized = "_" + sanitized
+	}
+
+	return sanitized
 }
 
 func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]model.Profile, error) {
