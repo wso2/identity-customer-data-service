@@ -19,13 +19,14 @@
 package authn
 
 import (
+	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
@@ -37,37 +38,82 @@ var (
 // ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
 func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]interface{}, error) {
 
-	var claims map[string]interface{}
-	var err error
 	logger := log.GetLogger()
+	cfg := config.GetCDSRuntime().Config
+	identityClient := client.NewIdentityClient(cfg)
 
-	// Detect if token is JWT or opaque
-	if strings.Count(token, ".") == 2 {
-		claims, err = ParseJWTClaims(token)
+	if IsJWT(token) {
+		logger.Debug(fmt.Sprintf("Token is identified as JWT. Validating JWT for organization: '%s'", orgHandle))
+
+		// Parse JWT to get claims (contains org information)
+		claims, err := ParseJWTClaims(token)
 		if err != nil {
-			return claims, unauthorizedError()
-		}
-		cfg := config.GetCDSRuntime().Config
-		identityClient := client.NewIdentityClient(cfg)
-		introspectionClaims, err := identityClient.IntrospectToken(token, orgHandle)
-		if err != nil {
-			return claims, unauthorizedError()
-		}
-		active, ok := introspectionClaims["active"].(bool)
-		if !ok || !active {
-			logger.Debug("JWT token is not active according to introspection.")
+			logger.Debug(fmt.Sprintf("Failed to parse JWT claims for organization: '%s'", orgHandle),
+				log.Error(err))
 			return nil, unauthorizedError()
 		}
-	} else {
-		logger.Debug("Expecting a JWT token but received an opaque token.")
-		return claims, unauthorizedError()
+
+		// Validate org claims against request org handle
+		if !validateClaims(orgHandle, claims) {
+			logger.Debug("JWT claims validation failed")
+			return nil, unauthorizedError()
+		}
+
+		// Introspect to check if token is still active (not revoked)
+		introspectionClaims, err := identityClient.IntrospectToken(token, orgHandle)
+		if err != nil {
+			logger.Error(fmt.Sprintf("JWT token introspection failed for organization: '%s'", orgHandle),
+				log.Error(err))
+			return nil, unauthorizedError()
+		}
+
+		active, ok := introspectionClaims["active"].(bool)
+		if !ok || !active {
+			logger.Debug("JWT token is not active according to introspection")
+			return nil, unauthorizedError()
+		}
+
+		// Return JWT claims (contains org info needed downstream)
+		return claims, nil
 	}
 
-	if !validateClaims(orgHandle, claims) {
-		return claims, unauthorizedError()
+	// For opaque tokens, introspection is the only way to validate
+	logger.Debug(fmt.Sprintf("Token is identified as opaque. Validating opaque token for organization: '%s' "+
+		"using introspection", orgHandle))
+
+	introspectionClaims, err := identityClient.IntrospectToken(token, orgHandle)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Opaque token introspection failed for organization: '%s'", orgHandle),
+			log.Error(err))
+		return nil, unauthorizedError()
 	}
 
-	return claims, nil
+	active, ok := introspectionClaims[constants.ActiveClaim].(bool)
+	if !ok || !active {
+		logger.Debug("Opaque token is not active according to introspection")
+		return nil, unauthorizedError()
+	}
+
+	clientApp, ok := introspectionClaims[constants.ClientIdClaim].(string)
+	if !ok || clientApp == "" {
+		logger.Debug(fmt.Sprintf("Introspected token does not have a valid client_id claim for "+
+			"organization: '%s'", orgHandle))
+		return nil, unauthorizedError()
+	}
+	if clientApp != constants.CONSOLE_APP {
+		logger.Debug(fmt.Sprintf("Opaque token is allowed only for console app, "+
+			"but token is for client_id: '%s' for organization: '%s'", clientApp, orgHandle))
+		return nil, unauthorizedError()
+	}
+
+	// Return introspection claims (no org info, but that's expected for opaque tokens)
+	return introspectionClaims, nil
+}
+
+// IsJWT is a simple check to determine if the token is a JWT based on its structure
+func IsJWT(tokenString string) bool {
+	_, _, err := jwt.NewParser().ParseUnverified(tokenString, jwt.MapClaims{})
+	return err == nil
 }
 
 // ParseJWTClaims parses claims from a JWT without verifying the signature
@@ -93,7 +139,7 @@ func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 func validateClaims(orgHandle string, claims map[string]interface{}) bool {
 
 	logger := log.GetLogger()
-	orgHandleInClaimRaw, ok := claims["org_handle"]
+	orgHandleInClaimRaw, ok := claims[constants.OrgHandleClaim]
 	if !ok || orgHandleInClaimRaw != orgHandle {
 		logger.Debug("Token does not have the expected org_handle claim.")
 		return false
@@ -104,7 +150,7 @@ func validateClaims(orgHandle string, claims map[string]interface{}) bool {
 		return false
 	}
 
-	expRaw, ok := claims["exp"]
+	expRaw, ok := claims[constants.ExpiryClaim]
 	if !ok {
 		logger.Debug("Token does not have an expiration time.")
 		return false
@@ -121,7 +167,7 @@ func validateClaims(orgHandle string, claims map[string]interface{}) bool {
 		return false
 	}
 
-	audRaw, ok := claims["aud"]
+	audRaw, ok := claims[constants.AudienceClaim]
 	if !ok {
 		logger.Debug("Token does not have an audience claim.")
 		return false
@@ -144,7 +190,7 @@ func validateClaims(orgHandle string, claims map[string]interface{}) bool {
 			return true
 		}
 	}
-	logger.Debug("Token audience does not match expected audience.")
+	logger.Debug(fmt.Sprintf("Token audience does not match expected audience '%s'.", expectedAudience))
 	return false
 }
 

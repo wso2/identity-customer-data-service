@@ -406,7 +406,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 				"mutability":     constants.MutabilityReadWrite,
 			}
 
-			err = svc.PatchProfileSchemaAttributeById(SuperTenantOrg, attrId, updates)
+			err = svc.PatchProfileSchemaAttributeById(SuperTenantOrg, attrId, updates, "")
 			require.NoError(t, err, "Failed to patch profile schema attribute")
 
 			// Verify patch persisted

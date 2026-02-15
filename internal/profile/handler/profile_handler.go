@@ -27,6 +27,7 @@ import (
 
 	adminConfigPkg "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
@@ -305,7 +306,7 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Add ?userId= filter if present
+	// Add ?user_id= filter if present
 	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
 	if userID != "" {
 		filters = append(filters, fmt.Sprintf(`user_id eq %s`, userID))
@@ -410,15 +411,13 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 
 	for _, profile := range profiles {
 		profileRes := model.ProfileListResponse{
-			ProfileId: profile.ProfileId,
-			Meta:      profile.Meta,
-			UserId:    profile.UserId,
+			ProfileId:  profile.ProfileId,
+			Meta:       profile.Meta,
+			UserId:     profile.UserId,
+			MergedFrom: profile.MergedFrom,
 		}
 
 		if requestedAttrs == nil {
-			// If no specific attributes requested, return only metadata.
-			// MergedFrom references are always included since the response represents the merged profile
-			profileRes.MergedFrom = profile.MergedFrom
 			result = append(result, profileRes)
 			continue
 		}
@@ -454,34 +453,35 @@ func buildProfileListResponse(profiles []model.ProfileResponse, requestedAttrs m
 		}
 
 		// Application Data
-		appData := profile.ApplicationData
-		if len(appData) > 0 {
-			filteredAppData := make(map[string]map[string]interface{})
+		if fields, ok := requestedAttrs["application_data"]; ok {
+			appData := profile.ApplicationData
+			if len(appData) > 0 {
+				filteredAppData := make(map[string]map[string]interface{})
 
-			if len(requestedAttrs["application_data"]) == 0 {
-				filteredAppData = appData
-			} else {
-				fields := requestedAttrs["application_data"]
-				for appKey, appFields := range appData {
-					temp := make(map[string]interface{})
-					for _, f := range fields {
-						if f == "*" {
-							temp = appFields
-							break
+				if len(requestedAttrs["application_data"]) == 0 {
+					filteredAppData = appData
+				} else {
+					for appKey, appFields := range appData {
+						temp := make(map[string]interface{})
+						for _, f := range fields {
+							if f == "*" {
+								temp = appFields
+								break
+							}
+							if val, ok := appFields[f]; ok {
+								temp[f] = val
+							}
 						}
-						if val, ok := appFields[f]; ok {
-							temp[f] = val
+						if len(temp) > 0 {
+							filteredAppData[appKey] = temp
 						}
-					}
-					if len(temp) > 0 {
-						filteredAppData[appKey] = temp
 					}
 				}
-			}
-			// Note: Filter out the allowed application data only if it is not a system app."
+				// Note: Filter out the allowed application data only if it is not a system app."
 
-			if len(filteredAppData) > 0 {
-				profileRes.ApplicationData = filteredAppData
+				if len(filteredAppData) > 0 {
+					profileRes.ApplicationData = filteredAppData
+				}
 			}
 		}
 
@@ -1213,20 +1213,40 @@ func getCallerAppIDFromRequest(r *http.Request) string {
 	}
 
 	token := strings.TrimPrefix(authHeader, "Bearer ")
-	claims, err := authn.ParseJWTClaims(token)
+	logger := log.GetLogger()
+	if authn.IsJWT(token) {
+		claims, err := authn.ParseJWTClaims(token)
+		if err != nil {
+			logger.Debug("Failed to parse JWT claims for app ID extraction", log.Error(err))
+			return ""
+		}
+		return extractAppIDFromClaims(claims)
+	}
+
+	// For opaque tokens, introspect to get the app ID
+	cfg := config.GetCDSRuntime().Config
+	identityClient := client.NewIdentityClient(cfg)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+
+	introspectionClaims, err := identityClient.IntrospectToken(token, orgHandle)
 	if err != nil {
+		logger.Debug("Failed to introspect token for app ID extraction", log.Error(err))
 		return ""
 	}
 
-	// The azp (Authorized Party) claim identifies the application
-	if azp, ok := claims["azp"].(string); ok && azp != "" {
+	return extractAppIDFromClaims(introspectionClaims)
+}
+
+// extractAppIDFromClaims tries to extract the application ID from standard claims like "azp" or "client_id"
+func extractAppIDFromClaims(claims map[string]interface{}) string {
+	// Try azp  (standard OAuth 2.0 claim for app identification)
+	if azp, ok := claims[constants.AZPClaim].(string); ok && azp != "" {
 		return azp
 	}
-
-	if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
+	// Fall back to client_id
+	if clientID, ok := claims[constants.ClientIdClaim].(string); ok && clientID != "" {
 		return clientID
 	}
-
 	return ""
 }
 

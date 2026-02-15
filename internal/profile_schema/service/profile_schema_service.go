@@ -42,7 +42,7 @@ type ProfileSchemaServiceInterface interface {
 	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
 	GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error)
 	GetProfileSchemaAttributeByName(attributeName, orgId string) (*model.ProfileSchemaAttribute, error)
-	PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}) error
+	PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}, scope string) error
 	DeleteProfileSchemaAttributeById(orgId, attributeId string) error
 	SyncProfileSchema(orgId string) error
 }
@@ -193,8 +193,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	if attr.ValueType == constants.ComplexDataType {
 		if len(attr.SubAttributes) == 0 {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+				Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
 				Description: fmt.Sprintf("SubAttributes are required for value_type: %s", constants.ComplexDataType),
 			}, http.StatusBadRequest)
 			return clientError, false
@@ -316,7 +316,7 @@ func (s *ProfileSchemaService) GetProfileSchemaAttributesByScope(orgId, scope st
 	return schemaAttributes, nil
 }
 
-func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}) error {
+func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}, scope string) error {
 
 	if len(updates) == 0 {
 		return errors2.NewClientError(errors2.ErrorMessage{
@@ -374,15 +374,17 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 	}
 
 	var applicationIdentifier string
-	if appID, ok := updates["application_identifier"]; ok && appID != nil {
-		if appIDStr, ok := appID.(string); ok && appIDStr != "" {
-			applicationIdentifier = appIDStr
+	if scope == constants.ApplicationData {
+		if appID, ok := updates["application_identifier"]; ok && appID != nil {
+			if appIDStr, ok := appID.(string); ok && appIDStr != "" {
+				applicationIdentifier = appIDStr
+			} else {
+				// If application_identifier is not provided or is empty, keep the existing one
+				applicationIdentifier = attribute.ApplicationIdentifier
+			}
 		} else {
-			// If application_identifier is not provided or is empty, keep the existing one
-			applicationIdentifier = attribute.ApplicationIdentifier
+			applicationIdentifier = attribute.ApplicationIdentifier // Keep existing application identifier if not updated
 		}
-	} else {
-		applicationIdentifier = attribute.ApplicationIdentifier // Keep existing application identifier if not updated
 	}
 
 	multiValued := false // Default to false if not provided
@@ -400,7 +402,6 @@ func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeI
 		log.GetLogger().Debug(fmt.Sprintf("multi_valued not provided in patch; defaulting to false for attribute: %s", attributeId))
 	}
 
-	// todo: ensure NPE - see if u need to update application identifier also...its PUT as well. So yeah.
 	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
 		OrgId:                 orgId,
 		AttributeId:           attributeId,

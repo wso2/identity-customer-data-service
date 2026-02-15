@@ -103,6 +103,19 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 		utils.WriteErrorResponse(w, clientError)
 		return
 	}
+	if scope != constants.ApplicationData {
+		for _, attr := range schemaAttributes {
+			if attr.ApplicationIdentifier != "" {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
+					Message:     errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Message,
+					Description: "Application identifier is allowed for application data attributes only.",
+				}, http.StatusBadRequest)
+				utils.WriteErrorResponse(w, clientError)
+				return
+			}
+		}
+	}
 	if len(schemaAttributes) == 0 {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_SCHEMA_ADD_BAD_REQUEST.Code,
@@ -315,7 +328,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	err = schemaService.PatchProfileSchemaAttributeById(orgHandle, attributeId, updates)
+	err = schemaService.PatchProfileSchemaAttributeById(orgHandle, attributeId, updates, scope)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
