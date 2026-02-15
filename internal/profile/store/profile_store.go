@@ -1038,7 +1038,13 @@ func GetAllProfilesWithFilter(
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
 		if len(parts) != 3 {
-			continue
+			errorMsg := fmt.Sprintf("Invalid filter format: %s", f)
+			logger.Debug(errorMsg)
+			return nil, false, errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_PROFILE.Code,
+				Message:     errors2.FILTER_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
 		}
 		field, operator, value := parts[0], parts[1], parts[2]
 

@@ -14,6 +14,13 @@ const SpaceSeparator = " "
 const SystemAppHeader = "SystemApp"
 const DefaultQueueSize = 1000
 const DefaultLimit = 50
+const CONSOLE_APP = "CONSOLE"
+const AZPClaim = "azp"
+const ClientIdClaim = "client_id"
+const ActiveClaim = "active"
+const OrgHandleClaim = "org_handle"
+const AudienceClaim = "aud"
+const ExpiryClaim = "exp"
 
 type contextKey string
 

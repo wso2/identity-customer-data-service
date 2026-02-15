@@ -27,6 +27,7 @@ import (
 
 	adminConfigPkg "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
@@ -1212,20 +1213,40 @@ func getCallerAppIDFromRequest(r *http.Request) string {
 	}
 
 	token := strings.TrimPrefix(authHeader, "Bearer ")
-	claims, err := authn.ParseJWTClaims(token)
+	logger := log.GetLogger()
+	if authn.IsJWT(token) {
+		claims, err := authn.ParseJWTClaims(token)
+		if err != nil {
+			logger.Debug("Failed to parse JWT claims for app ID extraction", log.Error(err))
+			return ""
+		}
+		return extractAppIDFromClaims(claims)
+	}
+
+	// For opaque tokens, introspect to get the app ID
+	cfg := config.GetCDSRuntime().Config
+	identityClient := client.NewIdentityClient(cfg)
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+
+	introspectionClaims, err := identityClient.IntrospectToken(token, orgHandle)
 	if err != nil {
+		logger.Debug("Failed to introspect token for app ID extraction", log.Error(err))
 		return ""
 	}
 
-	// The azp (Authorized Party) claim identifies the application
-	if azp, ok := claims["azp"].(string); ok && azp != "" {
+	return extractAppIDFromClaims(introspectionClaims)
+}
+
+// extractAppIDFromClaims tries to extract the application ID from standard claims like "azp" or "client_id"
+func extractAppIDFromClaims(claims map[string]interface{}) string {
+	// Try azp  (standard OAuth 2.0 claim for app identification)
+	if azp, ok := claims[constants.AZPClaim].(string); ok && azp != "" {
 		return azp
 	}
-
-	if clientID, ok := claims["client_id"].(string); ok && clientID != "" {
+	// Fall back to client_id
+	if clientID, ok := claims[constants.ClientIdClaim].(string); ok && clientID != "" {
 		return clientID
 	}
-
 	return ""
 }
 
