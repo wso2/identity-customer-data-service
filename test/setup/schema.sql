@@ -117,3 +117,39 @@ CREATE TABLE cds_config (
     value VARCHAR(500),
     PRIMARY KEY (org_handle, config)
 );
+
+-- Indexes for performance optimization
+-- Indexes on profiles table
+CREATE INDEX idx_profiles_org_handle ON profiles(org_handle);
+CREATE INDEX idx_profiles_user_id ON profiles(user_id);
+CREATE INDEX idx_profiles_org_user ON profiles(org_handle, user_id);
+CREATE INDEX idx_profiles_created_at ON profiles(created_at DESC, profile_id DESC);
+
+-- Indexes on profile_reference table
+CREATE INDEX idx_profile_reference_org_handle ON profile_reference(org_handle);
+CREATE INDEX idx_profile_reference_status ON profile_reference(profile_status);
+CREATE INDEX idx_profile_reference_ref_profile ON profile_reference(reference_profile_id);
+CREATE INDEX idx_profile_reference_org_status ON profile_reference(org_handle, profile_status);
+
+-- Indexes on profile_schema table
+CREATE INDEX idx_profile_schema_org_handle ON profile_schema(org_handle);
+CREATE INDEX idx_profile_schema_org_scope ON profile_schema(org_handle, scope);
+CREATE INDEX idx_profile_schema_org_attr_name ON profile_schema(org_handle, attribute_name);
+CREATE INDEX idx_profile_schema_scope ON profile_schema(scope);
+
+-- Indexes on unification_rules table
+CREATE INDEX idx_unification_rules_org_handle ON unification_rules(org_handle);
+CREATE INDEX idx_unification_rules_property_id ON unification_rules(property_id);
+CREATE INDEX idx_unification_rules_is_active ON unification_rules(is_active);
+
+-- Indexes on application_data table (profile_id already has FK index)
+CREATE INDEX idx_application_data_app_id ON application_data(app_id);
+
+-- Indexes on consent_categories table
+CREATE INDEX idx_consent_categories_org_handle ON consent_categories(org_handle);
+CREATE INDEX idx_consent_categories_name ON consent_categories(category_name);
+
+-- Indexes on profile_consents table (profile_id and category_id already have FK indexes)
+
+-- Indexes on profile_cookies table (profile_id already has FK index)
+CREATE INDEX idx_profile_cookies_is_active ON profile_cookies(is_active);
