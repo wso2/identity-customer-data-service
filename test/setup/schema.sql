@@ -120,7 +120,6 @@ CREATE TABLE cds_config (
 
 -- Indexes for performance optimization
 -- Indexes on profiles table
-CREATE INDEX idx_profiles_org_handle ON profiles(org_handle);
 CREATE INDEX idx_profiles_user_id ON profiles(user_id);
 CREATE INDEX idx_profiles_org_user ON profiles(org_handle, user_id);
 CREATE INDEX idx_profiles_created_at ON profiles(created_at DESC, profile_id DESC);
@@ -132,7 +131,6 @@ CREATE INDEX idx_profile_reference_ref_profile ON profile_reference(reference_pr
 CREATE INDEX idx_profile_reference_org_status ON profile_reference(org_handle, profile_status);
 
 -- Indexes on profile_schema table
-CREATE INDEX idx_profile_schema_org_handle ON profile_schema(org_handle);
 CREATE INDEX idx_profile_schema_org_scope ON profile_schema(org_handle, scope);
 CREATE INDEX idx_profile_schema_org_attr_name ON profile_schema(org_handle, attribute_name);
 CREATE INDEX idx_profile_schema_scope ON profile_schema(scope);
