@@ -117,3 +117,80 @@ CREATE TABLE cds_config (
     value VARCHAR(500),
     PRIMARY KEY (org_handle, config)
 );
+
+-- ================================
+-- PROFILES (Hot path: tenant + cursor pagination + ordering)
+-- ================================
+CREATE INDEX IF NOT EXISTS idx_profiles_org_created_profile
+    ON profiles (org_handle, created_at, profile_id);
+
+-- user_id filtering within tenant
+CREATE INDEX IF NOT EXISTS idx_profiles_org_user
+    ON profiles (org_handle, user_id);
+
+-- Optional: speeds ILIKE/contains on user_id
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_profiles_user_id_trgm
+    ON profiles USING GIN (user_id gin_trgm_ops);
+
+
+-- ================================
+-- PROFILE_REFERENCE (Join + status filtering)
+-- ================================
+CREATE INDEX IF NOT EXISTS idx_profile_reference_status_profile
+    ON profile_reference (profile_status, profile_id);
+
+-- Optional but useful if org filtering is frequent on reference table
+CREATE INDEX IF NOT EXISTS idx_profile_reference_org_status_profile
+    ON profile_reference (org_handle, profile_status, profile_id);
+
+-- For lookups by reference_profile_id
+CREATE INDEX IF NOT EXISTS idx_profile_reference_reference_profile
+    ON profile_reference (reference_profile_id);
+
+
+-- ================================
+-- APPLICATION_DATA (Joins + filtering)
+-- ================================
+-- Postgres does NOT auto-index FK columns → required
+CREATE INDEX IF NOT EXISTS idx_application_data_profile_id
+    ON application_data (profile_id);
+
+-- Useful if querying by app_id alone
+CREATE INDEX IF NOT EXISTS idx_application_data_app_id
+    ON application_data (app_id);
+
+-- JSONB filtering inside app_specific_data
+CREATE INDEX IF NOT EXISTS idx_application_data_app_specific_gin
+    ON application_data USING GIN ((application_data -> 'app_specific_data'));
+
+
+-- ================================
+-- JSONB FILTERING (Profiles)
+-- ================================
+-- These help mainly after switching eq → @> (still safe to add now)
+CREATE INDEX IF NOT EXISTS idx_profiles_traits_gin
+    ON profiles USING GIN (traits);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_identity_attributes_gin
+    ON profiles USING GIN (identity_attributes);
+
+
+-- ================================
+-- PROFILE_SCHEMA (Rare filtering, minimal indexes)
+-- ================================
+CREATE INDEX IF NOT EXISTS idx_profile_schema_org_scope
+    ON profile_schema (org_handle, scope);
+
+CREATE INDEX IF NOT EXISTS idx_profile_schema_org_attr_name
+    ON profile_schema (org_handle, attribute_name);
+
+
+-- ================================
+-- UNIFICATION_RULES
+-- ================================
+CREATE INDEX IF NOT EXISTS idx_unification_rules_org_active_priority
+    ON unification_rules (org_handle, is_active, priority);
+
+CREATE INDEX IF NOT EXISTS idx_unification_rules_property_id
+    ON unification_rules (property_id);
