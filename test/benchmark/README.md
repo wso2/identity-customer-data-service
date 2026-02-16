@@ -81,41 +81,42 @@ Benchmark_CreateProfile-8    10    5234567 ns/op    12345 B/op    123 allocs/op
 
 ## Baseline Performance Metrics
 
-Below are the baseline performance metrics established on initial implementation. Use these as a reference point for comparison:
+Below are the baseline performance metrics established on initial implementation (AMD EPYC 7763 64-Core Processor, 4 cores, 10 iterations). Use these as a reference point for comparison:
 
 ### Profile Operations
 
 | Operation | Time (ns/op) | Memory (B/op) | Allocations |
 |-----------|-------------|---------------|-------------|
-| CreateProfile | ~TBD | ~TBD | ~TBD |
-| GetProfile | ~TBD | ~TBD | ~TBD |
-| UpdateProfile | ~TBD | ~TBD | ~TBD |
-| PatchProfile | ~TBD | ~TBD | ~TBD |
-| GetAllProfiles | ~TBD | ~TBD | ~TBD |
-| GetAllProfilesWithFilter | ~TBD | ~TBD | ~TBD |
-| DeleteProfile | ~TBD | ~TBD | ~TBD |
+| CreateProfile | ~5,609,000 | ~57,200 | ~922 |
+| GetProfile | ~1,601,000 | ~10,900 | ~202 |
+| UpdateProfile | ~4,891,000 | ~56,900 | ~903 |
+| GetAllProfiles | ~5,891,000 | ~81,200 | ~1,397 |
+| GetAllProfilesWithFilter | ~1,000,000 | ~5,600 | ~81 |
+| DeleteProfile | ~2,854,000 | ~11,900 | ~233 |
+
+**Note**: PatchProfile benchmark is currently disabled due to known issues with application_data marshaling.
 
 ### Profile Schema Operations
 
 | Operation | Time (ns/op) | Memory (B/op) | Allocations |
 |-----------|-------------|---------------|-------------|
-| GetProfileSchema | ~TBD | ~TBD | ~TBD |
-| AddSchemaAttribute | ~TBD | ~TBD | ~TBD |
-| GetSchemaAttributesByScope | ~TBD | ~TBD | ~TBD |
-| UpdateSchemaAttribute | ~TBD | ~TBD | ~TBD |
-| DeleteSchemaAttribute | ~TBD | ~TBD | ~TBD |
+| GetProfileSchema | ~468,000 | ~6,100 | ~78 |
+| AddSchemaAttribute | ~1,098,000 | ~4,400 | ~75 |
+| GetSchemaAttributesByScope | ~481,500 | ~6,000 | ~96 |
+| DeleteSchemaAttribute | ~1,083,000 | ~4,500 | ~80 |
+
+**Note**: PatchSchemaAttribute benchmark is currently disabled due to validation issues in the implementation.
 
 ### Unification Rules Operations
 
 | Operation | Time (ns/op) | Memory (B/op) | Allocations |
 |-----------|-------------|---------------|-------------|
-| AddUnificationRule | ~TBD | ~TBD | ~TBD |
-| GetUnificationRules | ~TBD | ~TBD | ~TBD |
-| GetUnificationRuleById | ~TBD | ~TBD | ~TBD |
-| UpdateUnificationRule | ~TBD | ~TBD | ~TBD |
-| DeleteUnificationRule | ~TBD | ~TBD | ~TBD |
+| GetUnificationRules | ~427,700 | ~2,600 | ~49 |
+| GetUnificationRuleById | ~478,400 | ~2,600 | ~48 |
+| PatchUnificationRule | ~1,058,000 | ~3,900 | ~73 |
+| DeleteUnificationRule | ~476,600 | ~900 | ~17 |
 
-**Note**: Run `make benchmark` and update this table with actual baseline values from your environment.
+**Note**: AddUnificationRule benchmark is currently disabled because the system only allows one rule per property per organization.
 
 ## Best Practices for Benchmarking
 
