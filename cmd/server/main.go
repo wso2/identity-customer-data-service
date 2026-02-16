@@ -168,11 +168,31 @@ func initMultiplexer() *http.ServeMux {
 // enableCORS allows cross-origin requests for UI/SDK clients.
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		w.Header().Set("Access-Control-Expose-Headers", "Content-Length")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		cdsAuthConfig := config.GetCDSRuntime().Config.Auth
+		origin := r.Header.Get("Origin")
+
+		// Check if the origin is in the allowed list
+		allowedOrigin := ""
+		for _, allowed := range cdsAuthConfig.CORSAllowedOrigins {
+			if origin == allowed {
+				allowedOrigin = origin
+				break
+			}
+		}
+
+		// Only set CORS headers if origin is allowed
+		if allowedOrigin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+			if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+			} else {
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			}
+			w.Header().Set("Access-Control-Expose-Headers", "Content-Length")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
