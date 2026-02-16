@@ -124,6 +124,10 @@ CREATE INDEX idx_profiles_user_id ON profiles(user_id);
 CREATE INDEX idx_profiles_org_user ON profiles(org_handle, user_id);
 CREATE INDEX idx_profiles_created_at ON profiles(created_at DESC, profile_id DESC);
 
+-- GIN indexes on JSONB columns for efficient filtering
+CREATE INDEX idx_profiles_traits_gin ON profiles USING GIN (traits);
+CREATE INDEX idx_profiles_identity_attributes_gin ON profiles USING GIN (identity_attributes);
+
 -- Indexes on profile_reference table
 CREATE INDEX idx_profile_reference_org_handle ON profile_reference(org_handle);
 CREATE INDEX idx_profile_reference_status ON profile_reference(profile_status);
@@ -142,6 +146,9 @@ CREATE INDEX idx_unification_rules_org_active ON unification_rules(org_handle, i
 
 -- Indexes on application_data table (profile_id already has FK index)
 CREATE INDEX idx_application_data_app_id ON application_data(app_id);
+
+-- GIN index on application_data JSONB column for efficient filtering
+CREATE INDEX idx_application_data_gin ON application_data USING GIN (application_data);
 
 -- Indexes on consent_categories table
 CREATE INDEX idx_consent_categories_org_handle ON consent_categories(org_handle);
