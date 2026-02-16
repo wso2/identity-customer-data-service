@@ -140,7 +140,7 @@ CREATE INDEX idx_profile_schema_scope ON profile_schema(scope);
 -- Indexes on unification_rules table
 CREATE INDEX idx_unification_rules_org_handle ON unification_rules(org_handle);
 CREATE INDEX idx_unification_rules_property_id ON unification_rules(property_id);
-CREATE INDEX idx_unification_rules_is_active ON unification_rules(is_active);
+CREATE INDEX idx_unification_rules_org_active ON unification_rules(org_handle, is_active);
 
 -- Indexes on application_data table (profile_id already has FK index)
 CREATE INDEX idx_application_data_app_id ON application_data(app_id);
@@ -152,4 +152,4 @@ CREATE INDEX idx_consent_categories_name ON consent_categories(category_name);
 -- Indexes on profile_consents table (profile_id and category_id already have FK indexes)
 
 -- Indexes on profile_cookies table (profile_id already has FK index)
-CREATE INDEX idx_profile_cookies_is_active ON profile_cookies(is_active);
+-- No additional indexes needed as queries primarily use profile_id or cookie_id
