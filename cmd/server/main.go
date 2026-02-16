@@ -184,7 +184,11 @@ func enableCORS(next http.Handler) http.Handler {
 		if allowedOrigin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-			w.Header().Set("Access-Control-Allow-Headers", "*")
+			if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+			} else {
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			}
 			w.Header().Set("Access-Control-Expose-Headers", "Content-Length")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
