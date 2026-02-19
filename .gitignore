@@ -37,3 +37,6 @@ bin/
 *.swo
 *~
 *.tgz
+
+# Go test coverage output
+coverage.out
