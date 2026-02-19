@@ -280,7 +280,7 @@ var (
 
 	UNIFICATION_RULE_ALREADY_EXISTS = ErrorMessage{
 		Code:    errorPrefix + "12003",
-		Message: "Unification rule with same attribute already exist.",
+		Message: "Unification rule with same attribute already exists.",
 	}
 	UNIFICATION_RULE_PRIORITY_EXISTS = ErrorMessage{
 		Code:    errorPrefix + "12004",

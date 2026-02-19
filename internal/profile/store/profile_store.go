@@ -1065,7 +1065,15 @@ func GetAllProfilesWithFilter(
 			jsonCol := "p." + scope
 			switch operator {
 			case "eq":
-				jsonObj := fmt.Sprintf(`{"%s": %s}`, key, strconv.Quote(value))
+				valBytes, err := json.Marshal(value)
+				if err != nil {
+					return nil, false, errors2.NewServerError(errors2.ErrorMessage{
+						Code:        errors2.FILTER_PROFILE.Code,
+						Message:     errors2.FILTER_PROFILE.Message,
+						Description: fmt.Sprintf("Invalid filter value for key: %s", key),
+					}, err)
+				}
+				jsonObj := fmt.Sprintf(`{"%s": %s}`, key, string(valBytes))
 				conditions = append(conditions, fmt.Sprintf("%s @> $%d::jsonb", jsonCol, argID))
 				args = append(args, jsonObj)
 			case "co":
@@ -1141,7 +1149,15 @@ func GetAllProfilesWithFilter(
 
 			switch operator {
 			case "eq":
-				jsonObj := fmt.Sprintf(`{"app_specific_data": {"%s": %s}}`, appKey, strconv.Quote(value))
+				valBytes, err := json.Marshal(value)
+				if err != nil {
+					return nil, false, errors2.NewServerError(errors2.ErrorMessage{
+						Code:        errors2.FILTER_PROFILE.Code,
+						Message:     errors2.FILTER_PROFILE.Message,
+						Description: fmt.Sprintf("Invalid filter value for key: %s", appKey),
+					}, err)
+				}
+				jsonObj := fmt.Sprintf(`{"app_specific_data": {"%s": %s}}`, appKey, string(valBytes))
 				conditions = append(conditions, fmt.Sprintf("%s.application_data @> $%d::jsonb", appAlias, argID))
 				args = append(args, jsonObj)
 				argID++

@@ -1140,11 +1140,11 @@ func isValidFilterKey(key string) bool {
 	logger := log.GetLogger()
 
 	if key == "" {
-		logger.Debug(fmt.Sprintf("Empty filter key:%s is not allowed", key))
+		logger.Debug("Empty filter key is not allowed while filtering profiles.")
 		return false
 	}
 	if !safeIdentifier.MatchString(key) {
-		logger.Debug(fmt.Sprintf("Filter key:%s does not match allowed pattern", key))
+		logger.Debug(fmt.Sprintf("Filter key:%s does not match allowed pattern for filtering profiles.", key))
 		return false
 	}
 	if strings.HasPrefix(key, ".") || strings.HasSuffix(key, ".") || strings.Contains(key, "..") {
