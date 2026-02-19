@@ -21,6 +21,7 @@ const ActiveClaim = "active"
 const OrgHandleClaim = "org_handle"
 const AudienceClaim = "aud"
 const ExpiryClaim = "exp"
+const FilterRegex = `^[a-zA-Z0-9._-]+$`
 
 type contextKey string
 
@@ -54,6 +55,7 @@ const (
 	UpdateScimAttributeEvent  = "POST_UPDATE_EXTERNAL_CLAIM"
 	DeleteScimAttributeEvent  = "POST_DELETE_EXTERNAL_CLAIM"
 	UpdateLocalAttributeEvent = "POST_UPDATE_LOCAL_CLAIM"
+	DeleteLocalClaimEvent     = "POST_DELETE_LOCAL_CLAIM"
 	AddUserEvent              = "POST_ADD_USER"
 	DeleteUserEvent           = "POST_DELETE_USER_WITH_ID"
 	UpdateUserClaimEvent      = "POST_SET_USER_CLAIM_VALUE_WITH_ID"
@@ -119,23 +121,9 @@ var AllowedMergeStrategies = map[string]bool{
 	"overwrite": true, // todo: Remove later.
 }
 
-var AllowedConditionOperators = map[string]bool{
-	"equals":              true,
-	"not_equals":          true,
-	"exists":              true,
-	"not_exists":          true,
-	"contains":            true,
-	"not_contains":        true,
-	"greater_than":        true,
-	"greater_than_equals": true,
-	"less_than":           true,
-	"less_than_equals":    true,
-}
-
-var AllowedEventTypes = map[string]bool{
-	"page":     true,
-	"track":    true,
-	"identify": true,
+var AllowedSchemaFields = map[string]bool{
+	"attribute_name":         true,
+	"application_identifier": true,
 }
 
 var AllowedConsentPurposes = map[string]bool{

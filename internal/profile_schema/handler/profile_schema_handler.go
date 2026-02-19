@@ -328,7 +328,7 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeById(w http.Response
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	err = schemaService.PatchProfileSchemaAttributeById(orgHandle, attributeId, updates, scope)
+	err = schemaService.UpdateProfileSchemaAttributeById(orgHandle, attributeId, updates, scope)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -506,7 +506,8 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 	logger.Info(fmt.Sprintf("Received schema sync request: %s for organization: %s ", schemaSync.Event, schemaSync.OrgId))
 
 	if schemaSync.Event == constants.AddScimAttributeEvent || schemaSync.Event == constants.UpdateScimAttributeEvent ||
-		schemaSync.Event == constants.DeleteScimAttributeEvent || schemaSync.Event == constants.UpdateLocalAttributeEvent {
+		schemaSync.Event == constants.DeleteScimAttributeEvent ||
+		schemaSync.Event == constants.UpdateLocalAttributeEvent || schemaSync.Event == constants.DeleteLocalClaimEvent {
 		// Enqueue the schema sync job for asynchronous processing
 		if !workers.EnqueueSchemaSyncJob(schemaSync) {
 			errMsg := fmt.Sprintf("Unable to process schema sync request for organization: %s. The system is currently at capacity. Please try again in a few moments.", schemaSync.OrgId)
