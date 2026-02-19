@@ -27,11 +27,6 @@ type contextKey string
 
 const TenantContextKey contextKey = "org_handle"
 
-var AllowedFieldsForUnificationRulePatch = map[string]bool{
-	"is_active": true,
-	"priority":  true,
-}
-
 const (
 	ProfileResource         = "profile"
 	UnificationRuleResource = "unification rule"
@@ -121,11 +116,6 @@ var AllowedMergeStrategies = map[string]bool{
 	"overwrite": true, // todo: Remove later.
 }
 
-var AllowedSchemaFields = map[string]bool{
-	"attribute_name":         true,
-	"application_identifier": true,
-}
-
 var AllowedConsentPurposes = map[string]bool{
 	"profiling":       true,
 	"personalization": true,
@@ -163,7 +153,6 @@ const (
 var AllowedFilterFieldsForSchema = map[string]bool{
 	"attribute_name":         true,
 	"application_identifier": true,
-	"value_type":             true,
 }
 
 const (
