@@ -42,7 +42,7 @@ type ProfileSchemaServiceInterface interface {
 	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
 	GetProfileSchemaAttributeById(orgId, attributeId string) (model.ProfileSchemaAttribute, error)
 	GetProfileSchemaAttributeByName(attributeName, orgId string) (*model.ProfileSchemaAttribute, error)
-	PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}, scope string) error
+	UpdateProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}, scope string) error
 	DeleteProfileSchemaAttributeById(orgId, attributeId string) error
 	SyncProfileSchema(orgId string) error
 }
@@ -316,7 +316,7 @@ func (s *ProfileSchemaService) GetProfileSchemaAttributesByScope(orgId, scope st
 	return schemaAttributes, nil
 }
 
-func (s *ProfileSchemaService) PatchProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}, scope string) error {
+func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attributeId string, updates map[string]interface{}, scope string) error {
 
 	if len(updates) == 0 {
 		return errors2.NewClientError(errors2.ErrorMessage{
@@ -640,7 +640,43 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgHandle string) error {
 
 func (s *ProfileSchemaService) GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []string) (interface{}, error) {
 
-	schemaAttributes, err := psstr.GetProfileSchemaAttributesByScopeAndFilter(orgId, scope, filters)
+	validatedFilters := make([]string, 0, len(filters))
+	for _, f := range filters {
+		parts := strings.SplitN(f, " ", 3)
+		if len(parts) != 3 {
+			return nil, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE_SCHEMA.Code,
+				Message:     errors2.GET_PROFILE_SCHEMA.Message,
+				Description: fmt.Sprintf("Invalid filter for schema attributes: `%s`. Filter must be in the format: field operator value", f),
+			}, http.StatusBadRequest)
+		}
+
+		field, operator, value := parts[0], parts[1], parts[2]
+
+		// Validate operator
+		switch operator {
+		case "eq", "co", "sw":
+		default:
+			return nil, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE_SCHEMA.Code,
+				Message:     errors2.GET_PROFILE_SCHEMA.Message,
+				Description: fmt.Sprintf("Unsupported operator:` %s`  while filtering schema attributes.", operator),
+			}, http.StatusBadRequest)
+		}
+
+		// Validate field against allowlist
+		if !constants.AllowedFilterFieldsForSchema[field] {
+			return nil, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE_SCHEMA.Code,
+				Message:     errors2.GET_PROFILE_SCHEMA.Message,
+				Description: fmt.Sprintf("Unsupported filter field: `%s` when filtering schema attributes.", field),
+			}, http.StatusBadRequest)
+		}
+
+		validatedFilters = append(validatedFilters, fmt.Sprintf("%s %s %s", field, operator, value))
+	}
+
+	schemaAttributes, err := psstr.GetProfileSchemaAttributesByScopeAndFilter(orgId, scope, validatedFilters)
 	if err != nil {
 		return nil, err
 	}

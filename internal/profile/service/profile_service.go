@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,8 @@ func GetProfilesService() ProfilesServiceInterface {
 
 	return &ProfilesService{}
 }
+
+var safeIdentifier = regexp.MustCompile(constants.FilterRegex)
 
 func ConvertAppData(input map[string]map[string]interface{}) []profileModel.ApplicationData {
 
@@ -1039,10 +1042,37 @@ func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
 		if len(parts) != 3 {
-			continue
+			return nil, false, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_PROFILE.Code,
+				Message:     errors2.FILTER_PROFILE.Message,
+				Description: "Invalid filter format when filtering profiles.",
+			}, http.StatusBadRequest)
 		}
 
 		field, operator, rawValue := parts[0], parts[1], parts[2]
+
+		// Validate operator
+		switch operator {
+		case "eq", "co", "sw":
+		default:
+			return nil, false, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_PROFILE.Code,
+				Message:     errors2.FILTER_PROFILE.Message,
+				Description: fmt.Sprintf("Unsupported operator: %s", operator),
+			}, http.StatusBadRequest)
+		}
+
+		// Validate field/key
+		if field != "user_id" && field != "profile_id" {
+			if !isValidFilterKey(field) {
+				return nil, false, errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.FILTER_PROFILE.Code,
+					Message:     errors2.FILTER_PROFILE.Message,
+					Description: "Invalid filter key: " + field,
+				}, http.StatusBadRequest)
+			}
+		}
+
 		valueType := propertyTypeMap[field]
 		typedVal := parseTypedValueForFilters(valueType, rawValue)
 
@@ -1102,6 +1132,26 @@ func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
 	}
 
 	return result, hasMore, nil
+}
+
+// isValidFilterKey ensures the filter key is valid and does not contain any malicious patterns.
+func isValidFilterKey(key string) bool {
+
+	logger := log.GetLogger()
+
+	if key == "" {
+		logger.Debug("Empty filter key is not allowed while filtering profiles.")
+		return false
+	}
+	if !safeIdentifier.MatchString(key) {
+		logger.Debug(fmt.Sprintf("Filter key:%s does not match allowed pattern for filtering profiles.", key))
+		return false
+	}
+	if strings.HasPrefix(key, ".") || strings.HasSuffix(key, ".") || strings.Contains(key, "..") {
+		logger.Debug(fmt.Sprintf("Filter key:%s cannot start or end with a dot or contain consecutive dots", key))
+		return false
+	}
+	return true
 }
 
 func parseTypedValueForFilters(valueType string, raw string) interface{} {

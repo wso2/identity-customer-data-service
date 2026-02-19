@@ -1034,7 +1034,7 @@ func GetAllProfilesWithFilter(
 	args = append(args, orgHandle)
 	argID++
 
-	// dynamic filter conditions (your existing logic, unchanged)
+	// dynamic filter conditions
 	for _, f := range filters {
 		parts := strings.SplitN(f, " ", 3)
 		if len(parts) != 3 {
@@ -1049,8 +1049,8 @@ func GetAllProfilesWithFilter(
 		field, operator, value := parts[0], parts[1], parts[2]
 
 		var scope, key string
-		if field == "user_id" {
-			scope = "user_id"
+		if field == "user_id" || field == "profile_id" {
+			scope = field
 			key = ""
 		} else {
 			scopeKey := strings.SplitN(field, ".", 2)
@@ -1065,8 +1065,17 @@ func GetAllProfilesWithFilter(
 			jsonCol := "p." + scope
 			switch operator {
 			case "eq":
-				conditions = append(conditions, fmt.Sprintf("%s ->> '%s' = $%d", jsonCol, key, argID))
-				args = append(args, value)
+				valBytes, err := json.Marshal(value)
+				if err != nil {
+					return nil, false, errors2.NewServerError(errors2.ErrorMessage{
+						Code:        errors2.FILTER_PROFILE.Code,
+						Message:     errors2.FILTER_PROFILE.Message,
+						Description: fmt.Sprintf("Invalid filter value for key: %s", key),
+					}, err)
+				}
+				jsonObj := fmt.Sprintf(`{"%s": %s}`, key, string(valBytes))
+				conditions = append(conditions, fmt.Sprintf("%s @> $%d::jsonb", jsonCol, argID))
+				args = append(args, jsonObj)
 			case "co":
 				conditions = append(conditions, fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID))
 				args = append(args, "%"+value+"%")
@@ -1088,6 +1097,22 @@ func GetAllProfilesWithFilter(
 				args = append(args, "%"+value+"%")
 			case "sw":
 				conditions = append(conditions, fmt.Sprintf("p.user_id ILIKE $%d", argID))
+				args = append(args, value+"%")
+			default:
+				continue
+			}
+			argID++
+
+		case "profile_id":
+			switch operator {
+			case "eq":
+				conditions = append(conditions, fmt.Sprintf("p.profile_id = $%d", argID))
+				args = append(args, value)
+			case "co":
+				conditions = append(conditions, fmt.Sprintf("p.profile_id ILIKE $%d", argID))
+				args = append(args, "%"+value+"%")
+			case "sw":
+				conditions = append(conditions, fmt.Sprintf("p.profile_id ILIKE $%d", argID))
 				args = append(args, value+"%")
 			default:
 				continue
@@ -1124,9 +1149,17 @@ func GetAllProfilesWithFilter(
 
 			switch operator {
 			case "eq":
-				conditions = append(conditions,
-					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' = $%d", appAlias, appKey, argID))
-				args = append(args, value)
+				valBytes, err := json.Marshal(value)
+				if err != nil {
+					return nil, false, errors2.NewServerError(errors2.ErrorMessage{
+						Code:        errors2.FILTER_PROFILE.Code,
+						Message:     errors2.FILTER_PROFILE.Message,
+						Description: fmt.Sprintf("Invalid filter value for key: %s", appKey),
+					}, err)
+				}
+				jsonObj := fmt.Sprintf(`{"app_specific_data": {"%s": %s}}`, appKey, string(valBytes))
+				conditions = append(conditions, fmt.Sprintf("%s.application_data @> $%d::jsonb", appAlias, argID))
+				args = append(args, jsonObj)
 				argID++
 			case "co":
 				conditions = append(conditions,

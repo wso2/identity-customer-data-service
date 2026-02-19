@@ -50,7 +50,7 @@ func NewProfileSchemaService(mux *http.ServeMux) *ProfileSchemaService {
 
 	// Attribute-level (preserve original verb mapping)
 	s.mux.HandleFunc("GET "+base+"/profile-schema/{scope}/{attrID}", s.handler.GetProfileSchemaAttributeById)
-	s.mux.HandleFunc("PATCH "+base+"/profile-schema/{scope}/{attrID}", s.handler.PatchProfileSchemaAttributeById)
+	s.mux.HandleFunc("PUT "+base+"/profile-schema/{scope}/{attrID}", s.handler.PatchProfileSchemaAttributeById)
 	s.mux.HandleFunc("DELETE "+base+"/profile-schema/{scope}/{attrID}", s.handler.DeleteProfileSchemaAttributeById)
 
 	return s
