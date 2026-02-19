@@ -21,7 +21,7 @@ $(TOOL_BIN):
 	mkdir -p $(TOOL_BIN)
 
 # Default target.
-all: clean lint build integration-test
+all: clean lint unit-test build integration-test
 
 # Clean up build artifacts.
 clean:
@@ -32,6 +32,10 @@ build: _build _package
 
 lint: golangci-lint
 	cd . && $(GOLANGCI_LINT) run ./...
+
+unit-test:
+	go test -v -coverprofile=coverage.out -covermode=atomic ./internal/...
+	go tool cover -func=coverage.out
 
 integration-test:
 ifdef test
@@ -59,15 +63,16 @@ _package:
 
 help:
 	@echo "Makefile targets:"
-	@echo "  all               - Clean, build, and test the project."
+	@echo "  all               - Clean, lint, unit-test, build, and integration-test the project."
 	@echo "  clean             - Remove build artifacts."
 	@echo "  build             - Build the Go project."
+	@echo "  unit-test         - Run unit tests with code coverage."
 	@echo "  integration-test  - Run integration tests (use TEST=TestName to filter specific test)."
 	@echo "  lint              - Run golangci-lint."
 	@echo "  help              - Show this help message."
 
 
-.PHONY: all clean build lint help
+.PHONY: all clean build lint unit-test help
 
 .PHONY: go_install_tool golangci-lint
 
