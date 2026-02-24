@@ -12,42 +12,55 @@ import (
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/queue"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-var UnificationQueue chan profileModel.Profile
+// activeProfileQueue is the queue implementation used for profile unification.
+// It is initialised by StartProfileWorker.
+var activeProfileQueue queue.ProfileUnificationQueue
 
-func StartProfileWorker() {
-
-	UnificationQueue = make(chan profileModel.Profile, constants.DefaultQueueSize)
-
-	go func() {
-		for profile := range UnificationQueue {
-
-			// Unify
-			profile, err := profileStore.GetProfile(profile.ProfileId)
-			if err == nil && profile != nil {
-				unifyProfiles(*profile)
-			}
+// StartProfileWorker initialises the profile unification queue (using the
+// provider configured in the runtime config) and starts the consumer
+// goroutine. An error is returned when the queue cannot be created or
+// started; the caller should treat this as a fatal startup failure.
+func StartProfileWorker() error {
+	cfg := config.GetCDSRuntime().Config.MessageQueue
+	q, err := queue.NewProfileUnificationQueue(cfg)
+	if err != nil {
+		return fmt.Errorf("workers: failed to create profile unification queue: %w", err)
+	}
+	activeProfileQueue = q
+	if err := q.Start(func(profile profileModel.Profile) {
+		p, err := profileStore.GetProfile(profile.ProfileId)
+		if err == nil && p != nil {
+			unifyProfiles(*p)
 		}
-	}()
+	}); err != nil {
+		return fmt.Errorf("workers: failed to start profile unification queue: %w", err)
+	}
+	return nil
 }
 
+// EnqueueProfileForProcessing adds a profile to the active queue for
+// asynchronous unification. It is a no-op when the worker has not been
+// started.
 func EnqueueProfileForProcessing(profile profileModel.Profile) {
-	if UnificationQueue != nil {
-		UnificationQueue <- profile
+	if activeProfileQueue != nil {
+		activeProfileQueue.Enqueue(profile)
 	}
 }
 
-// ProfileWorkerQueue Define a struct that implements the EventQueue interface
+// ProfileWorkerQueue is a thin adapter that allows service-layer code to
+// enqueue profiles without taking a direct dependency on the queue package.
 type ProfileWorkerQueue struct{}
 
-// Enqueue Implement the Enqueue method for ProfileWorkerQueue
+// Enqueue forwards the profile to the active queue via EnqueueProfileForProcessing.
 func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
 	EnqueueProfileForProcessing(profile)
 }

@@ -88,10 +88,16 @@ func main() {
 	initDatabaseFromConfig(cdsConfig)
 
 	// Initialize Profile worker
-	workers.StartProfileWorker()
+	if err := workers.StartProfileWorker(); err != nil {
+		fmt.Println("Failed to start profile worker.", err)
+		os.Exit(1)
+	}
 
 	// Initialize Schema Sync worker
-	workers.StartSchemaSyncWorker()
+	if err := workers.StartSchemaSyncWorker(); err != nil {
+		fmt.Println("Failed to start schema sync worker.", err)
+		os.Exit(1)
+	}
 
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())

@@ -23,39 +23,40 @@ import (
 
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/queue"
 )
 
-var SchemaSyncQueue chan model.ProfileSchemaSync
+// activeSchemaSyncQueue is the queue implementation used for schema
+// synchronisation. It is initialised by StartSchemaSyncWorker.
+var activeSchemaSyncQueue queue.SchemaSyncQueue
 
-// StartSchemaSyncWorker initializes and starts the schema sync worker
-func StartSchemaSyncWorker() {
-
-	// Initialize the queue with a buffer size (configurable in future via config)
-	SchemaSyncQueue = make(chan model.ProfileSchemaSync, constants.DefaultQueueSize)
-	go func() {
-		for schemaSync := range SchemaSyncQueue {
-			processSchemaSyncJob(schemaSync)
-		}
-	}()
+// StartSchemaSyncWorker initialises the schema sync queue (using the provider
+// configured in the runtime config) and starts the consumer goroutine. An
+// error is returned when the queue cannot be created or started; the caller
+// should treat this as a fatal startup failure.
+func StartSchemaSyncWorker() error {
+	cfg := config.GetCDSRuntime().Config.MessageQueue
+	q, err := queue.NewSchemaSyncQueue(cfg)
+	if err != nil {
+		return fmt.Errorf("workers: failed to create schema sync queue: %w", err)
+	}
+	activeSchemaSyncQueue = q
+	if err := q.Start(processSchemaSyncJob); err != nil {
+		return fmt.Errorf("workers: failed to start schema sync queue: %w", err)
+	}
+	return nil
 }
 
-// EnqueueSchemaSyncJob adds a schema sync job to the queue
+// EnqueueSchemaSyncJob adds a schema sync job to the active queue. It
+// returns false when the worker has not been started or the queue is full.
 func EnqueueSchemaSyncJob(schemaSync model.ProfileSchemaSync) bool {
-	if SchemaSyncQueue == nil {
+	if activeSchemaSyncQueue == nil {
 		log.GetLogger().Error("Schema sync queue is not initialized. Cannot enqueue job.")
 		return false
 	}
-
-	// Use non-blocking send to avoid hanging if queue is full
-	select {
-	case SchemaSyncQueue <- schemaSync:
-		return true
-	default:
-		log.GetLogger().Error(fmt.Sprintf("Schema sync queue is full. Cannot enqueue job for tenant: %s", schemaSync.OrgId))
-		return false
-	}
+	return activeSchemaSyncQueue.Enqueue(schemaSync)
 }
 
 // processSchemaSyncJob processes a schema sync job

@@ -60,13 +60,39 @@ type DataSourceConfig struct {
 	SSLMode  string `yaml:"sslmode"`
 }
 
+// ActiveMQConfig holds the connection settings for an ActiveMQ broker.
+type ActiveMQConfig struct {
+	// Addr is the broker address in "host:port" format (e.g. "localhost:61613").
+	Addr string `yaml:"addr"`
+	// Username is the STOMP login name.
+	Username string `yaml:"username"`
+	// Password is the STOMP passcode.
+	Password string `yaml:"password"`
+	// ProfileQueueName is the STOMP destination used for profile unification
+	// messages (e.g. "/queue/profile-unification").
+	ProfileQueueName string `yaml:"profile_queue_name"`
+	// SchemaSyncQueueName is the STOMP destination used for schema sync
+	// messages (e.g. "/queue/schema-sync").
+	SchemaSyncQueueName string `yaml:"schema_sync_queue_name"`
+}
+
+// MessageQueueConfig selects the queue provider and its settings. When Type
+// is empty or "memory" the built-in in-memory queue is used. Set Type to
+// "activemq" to use the ActiveMQ provider.
+type MessageQueueConfig struct {
+	// Type is the queue provider to use: "memory" (default) or "activemq".
+	Type     string         `yaml:"type"`
+	ActiveMQ ActiveMQConfig `yaml:"activemq"`
+}
+
 type Config struct {
-	Addr       AddrConfig       `yaml:"addr"`
-	Log        LogConfig        `yaml:"log"`
-	Auth       AuthConfig       `yaml:"auth"`
-	AuthServer AuthServerConfig `yaml:"auth_server"`
-	DataSource DataSourceConfig `yaml:"datasource"`
-	TLS        TLSConfig        `yaml:"tls"`
+	Addr         AddrConfig         `yaml:"addr"`
+	Log          LogConfig          `yaml:"log"`
+	Auth         AuthConfig         `yaml:"auth"`
+	AuthServer   AuthServerConfig   `yaml:"auth_server"`
+	DataSource   DataSourceConfig   `yaml:"datasource"`
+	TLS          TLSConfig          `yaml:"tls"`
+	MessageQueue MessageQueueConfig `yaml:"message_queue"`
 }
 
 type TLSConfig struct {
