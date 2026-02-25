@@ -554,7 +554,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If no valid cookie, create a new profile and cookie
-	profileResponse, err := profilesService.CreateProfile(profile, orgHandle)
+	profileResponse, err := profilesService.CreateProfile(profile, orgHandle, fmt.Sprintf("%s://%s", detectScheme(r), r.Host))
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -983,7 +983,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 					UserId:             profileSync.UserId,
 					IdentityAttributes: identityAttributes,
 				}
-				_, err := profilesService.CreateProfile(profileRequest, orgHandle)
+				_, err := profilesService.CreateProfile(profileRequest, orgHandle, fmt.Sprintf("%s://%s", detectScheme(request), request.Host))
 				if err != nil {
 					utils.HandleError(writer, err)
 					return
@@ -1033,7 +1033,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 					UserId:             profileSync.UserId,
 					IdentityAttributes: identityAttributes,
 				}
-				_, err := profilesService.CreateProfile(profileRequest, orgHandle)
+				_, err := profilesService.CreateProfile(profileRequest, orgHandle, fmt.Sprintf("%s://%s", detectScheme(request), request.Host))
 
 				if err != nil {
 					return
