@@ -17,6 +17,38 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
+func safeString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+
+func safeTime(v interface{}) time.Time {
+	if v == nil {
+		return time.Time{}
+	}
+	t, _ := v.(time.Time)
+	return t
+}
+
+func safeBool(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	b, _ := v.(bool)
+	return b
+}
+
+func safeBytes(v interface{}) []byte {
+	if v == nil {
+		return nil
+	}
+	b, _ := v.([]byte)
+	return b
+}
+
 // Unmarshal JSONB fields separately
 func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 	var (
@@ -26,13 +58,13 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 
 	profile.ProfileStatus = &model.ProfileStatus{}
 
-	profile.ProfileId = row["profile_id"].(string)
-	profile.UserId = row["user_id"].(string)
-	profile.OrgHandle = row["org_handle"].(string)
-	profile.CreatedAt = row["created_at"].(time.Time)
-	profile.UpdatedAt = row["updated_at"].(time.Time)
-	profile.Location = row["location"].(string)
-	profileStatus := row["profile_status"].(string)
+	profile.ProfileId = safeString(row["profile_id"])
+	profile.UserId = safeString(row["user_id"])
+	profile.OrgHandle = safeString(row["org_handle"])
+	profile.CreatedAt = safeTime(row["created_at"])
+	profile.UpdatedAt = safeTime(row["updated_at"])
+	profile.Location = safeString(row["location"])
+	profileStatus := safeString(row["profile_status"])
 	if profileStatus != "" && profileStatus != "null" {
 		if profileStatus == constants.WaitOnAdmin {
 			profile.ProfileStatus.IsWaitingOnAdmin = true
@@ -44,36 +76,40 @@ func scanProfileRow(row map[string]interface{}) (model.Profile, error) {
 			profile.ProfileStatus.IsReferenceProfile = true
 		}
 		if profileStatus == constants.MergedTo {
-			profile.ProfileStatus.ReferenceReason = row["reference_reason"].(string)
-			profile.ProfileStatus.ReferenceProfileId = row["reference_profile_id"].(string)
+			profile.ProfileStatus.ReferenceReason = safeString(row["reference_reason"])
+			profile.ProfileStatus.ReferenceProfileId = safeString(row["reference_profile_id"])
 		}
 	}
 
-	profile.ProfileStatus.ListProfile = row["list_profile"].(bool)
-	traitsJSON = row["traits"].([]byte)
-	identityAttrsJSON = row["identity_attributes"].([]byte)
+	profile.ProfileStatus.ListProfile = safeBool(row["list_profile"])
+	traitsJSON = safeBytes(row["traits"])
+	identityAttrsJSON = safeBytes(row["identity_attributes"])
 
 	logger := log.GetLogger()
-	// Unmarshal JSON fields
-	if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
-		errorMsg := "Failed to unmarshal traits"
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_PROFILE.Code,
-			Message:     errors2.GET_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return model.Profile{}, serverError
+	// Unmarshal JSON fields (skip if nil/empty)
+	if len(traitsJSON) > 0 {
+		if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
+			errorMsg := "Failed to unmarshal traits"
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE.Code,
+				Message:     errors2.GET_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return model.Profile{}, serverError
+		}
 	}
-	if err := json.Unmarshal(identityAttrsJSON, &profile.IdentityAttributes); err != nil {
-		errorMsg := "Failed to unmarshal identity attributes."
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_PROFILE.Code,
-			Message:     errors2.GET_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return model.Profile{}, serverError
+	if len(identityAttrsJSON) > 0 {
+		if err := json.Unmarshal(identityAttrsJSON, &profile.IdentityAttributes); err != nil {
+			errorMsg := "Failed to unmarshal identity attributes."
+			logger.Debug(errorMsg, log.Error(err))
+			serverError := errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE.Code,
+				Message:     errors2.GET_PROFILE.Message,
+				Description: errorMsg,
+			}, err)
+			return model.Profile{}, serverError
+		}
 	}
 	return profile, nil
 }

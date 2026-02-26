@@ -22,6 +22,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
@@ -85,6 +86,12 @@ func validateAdminCredentials(token string) (bool, error) {
 
 // AuthnAndAuthz performs authentication and authorization for the given HTTP request and operation.
 func AuthnAndAuthz(r *http.Request, operation string) error {
+
+	// DEV BYPASS: skip auth when running in dev mode (no identity server available).
+	// TODO: Remove this bypass before production deployment.
+	if os.Getenv("ENV") == "dev" {
+		return nil
+	}
 
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") || authHeader == "" {

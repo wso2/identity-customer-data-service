@@ -148,14 +148,16 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 		return nil, errWait
 	}
 
-	queue := &workers.ProfileWorkerQueue{}
+	// Skip async worker enqueue when the caller has explicitly opted out
+	if !profileRequest.SkipWorker {
+		queue := &workers.ProfileWorkerQueue{}
 
-	config := UnificationModel.DefaultConfig()
+		config := UnificationModel.DefaultConfig()
 
-	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
-		// Set organization handle for the profile before enqueuing
-		profile.OrgHandle = orgHandle
-		queue.Enqueue(profile)
+		if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
+			profile.OrgHandle = orgHandle
+			queue.Enqueue(profile)
+		}
 	}
 
 	logger.Info(fmt.Sprintf("Profile created successfully with profile id: %s", profile.ProfileId))

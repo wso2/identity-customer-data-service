@@ -21,6 +21,8 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+
 	model "github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
@@ -88,6 +90,18 @@ func GetAdminConfig(orgHandle string) (*model.AdminConfig, error) {
 			if err := json.Unmarshal([]byte(value), &apps); err == nil {
 				config.SystemApplications = apps
 			}
+		case constants.ConfigAutoMergeEnabled:
+			config.AutoMergeEnabled = value == "true"
+		case constants.ConfigAutoMergeThreshold:
+			if v, err := strconv.ParseFloat(value, 64); err == nil && v > 0 && v <= 1 {
+				config.AutoMergeThreshold = v
+			}
+		case constants.ConfigManualReviewThreshold:
+			if v, err := strconv.ParseFloat(value, 64); err == nil && v > 0 && v <= 1 {
+				config.ManualReviewThreshold = v
+			}
+		case constants.ConfigSmartResolutionEnabled:
+			config.SmartResolutionEnabled = value == "true"
 		}
 	}
 

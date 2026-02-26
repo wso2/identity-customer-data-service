@@ -18,8 +18,11 @@
 
 package model
 
-import "time"
-import "github.com/wso2/identity-customer-data-service/internal/system/pagination"
+import (
+	"time"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
+)
 
 type ProfileResponse struct {
 	ProfileId          string                            `json:"profile_id" bson:"profile_id"`
@@ -53,6 +56,7 @@ type ProfileRequest struct {
 	IdentityAttributes map[string]interface{}            `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
 	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
 	ApplicationData    map[string]map[string]interface{} `json:"application_data"`
+	SkipWorker         bool                              `json:"-"`
 }
 
 type ProfileSync struct {

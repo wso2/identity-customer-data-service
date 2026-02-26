@@ -1,0 +1,437 @@
+openapi: 3.0.0
+info:
+  title: Identity Resolution API
+  description: API documentation for identity resolution endpoints in customer data service.
+  version: 0.0.1
+servers:
+  - url: https://localhost:8900/t/{org_handle}/cds/api/v1
+    variables:
+      org_handle:
+        default: carbon.super
+
+paths:
+  /identity-resolution/search:
+    post:
+      tags: [Identity Resolution]
+      summary: Search for matching profiles
+      operationId: identityResolutionSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results with scored matches
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Invalid search request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_attributes:
+                  summary: No identity data provided
+                  value:
+                    code: "CDS-10001"
+                    message: "Invalid request."
+                    description: "At least one identity_attribute or trait is required for search."
+                malformed_body:
+                  summary: Unparseable request body
+                  value:
+                    code: "CDS-10001"
+                    message: "Invalid request."
+                    description: "Failed to parse search request: <parse error details>"
+
+  /identity-resolution/review-tasks:
+    get:
+      tags: [Identity Resolution]
+      summary: Get pending review tasks
+      operationId: getReviewTasks
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 200
+            default: 5
+      responses:
+        '200':
+          description: Paginated list of pending review tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewTaskListResponse'
+
+  /identity-resolution/review-tasks/{taskId}/resolve:
+    post:
+      tags: [Identity Resolution]
+      summary: Resolve a review task
+      operationId: resolveReviewTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewResolveRequest'
+      responses:
+        '200':
+          description: Task resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewTaskResolveResponse'
+        '400':
+          description: Invalid decision value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "CDS-10001"
+                message: "Invalid request."
+                description: "Invalid decision 'invalid'. Must be 'APPROVED' or 'REJECTED'."
+        '404':
+          description: Review task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "CDS-17002"
+                message: "Review task not found."
+                description: "No review task found with ID abc123"
+        '409':
+          description: Review task already resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "CDS-17003"
+                message: "Review task already resolved."
+                description: "Review task abc123 has already been APPROVED"
+
+  /identity-resolution/merge:
+    post:
+      tags: [Identity Resolution]
+      summary: Merge two profiles
+      operationId: mergeProfiles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeRequest'
+      responses:
+        '200':
+          description: Profiles merged successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MergeResponse'
+        '400':
+          description: Invalid merge request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_new_profile_id:
+                  summary: Missing new_profile_id
+                  value:
+                    code: "CDS-10001"
+                    message: "Invalid request."
+                    description: "new_profile_id is required. Use the new_profile_id from the search response."
+                missing_candidate_id:
+                  summary: Missing candidate_id
+                  value:
+                    code: "CDS-10001"
+                    message: "Invalid request."
+                    description: "candidate_id is required. Use a candidate_id from the search results."
+                same_ids:
+                  summary: Same profile IDs
+                  value:
+                    code: "CDS-17001"
+                    message: "Cannot merge profiles."
+                    description: "new_profile_id and candidate_id must be different."
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "CDS-11001"
+                message: "Profile not found."
+                description: "Candidate profile not found: p-abc-123"
+        '409':
+          description: Merge conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                already_merged:
+                  summary: Profiles already merged
+                  value:
+                    code: "CDS-17001"
+                    message: "Cannot merge profiles."
+                    description: "Both profiles resolve to the same master profile — they are already merged."
+                different_users:
+                  summary: Different user IDs
+                  value:
+                    code: "CDS-17001"
+                    message: "Cannot merge profiles."
+                    description: "Two permanent profiles with different user IDs cannot be merged."
+        '410':
+          description: Pending profile expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "CDS-17004"
+                message: "Profile data expired."
+                description: "The pending profile has expired. Please submit a new search request to get fresh data."
+
+components:
+  schemas:
+    SearchRequest:
+      type: object
+      description: At least one of identity_attributes or traits must be provided.
+      properties:
+        user_id:
+          type: string
+          example: "u-abc-123"
+        identity_attributes:
+          type: object
+          description: Key-value pairs of identity attributes to match
+          example:
+            emailaddress: "doe@gmail.com"
+            mobile: "0713449892"
+        traits:
+          type: object
+          description: Key-value pairs of traits to match
+          example:
+            settings: "default"
+        application_data:
+          type: object
+          description: "Nested map: application name into key-value data"
+          example:
+            myApp:
+              loyalty_id: "L12345"
+        max_results:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          example: 50
+        threshold:
+          type: number
+          format: double
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.75
+
+    SearchResponse:
+      type: object
+      properties:
+        new_profile_id:
+          type: string
+          description: "Only present when candidates are found. Use this ID in the merge request."
+          example: "p-temp-abc123"
+        expires_at:
+          type: string
+          description: "Only present when candidates are found. Cache expiry for the pending profile."
+          example: "2026-02-17T12:30:00Z"
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchResult'
+        total_candidates:
+          type: integer
+          example: 3
+        processing_time_ms:
+          type: integer
+          format: int64
+          example: 42
+
+    MatchResult:
+      type: object
+      properties:
+        candidate_id:
+          type: string
+          example: "613e447d-f4b3-47f0-97d3-245e569c103a"
+        user_id:
+          type: string
+          example: "u-abc-123"
+        final_score:
+          type: number
+          format: double
+          example: 0.8509
+        score_breakdown:
+          type: object
+          description: Per-attribute match scores
+          example:
+            identity_attributes.emailaddress: 0
+            identity_attributes.mobile: 1
+        attributes:
+          type: object
+          description: Candidate profile attributes
+          example:
+            identity_attributes.country: "Sri Lanka"
+            identity_attributes.dob: "1980-11-10"
+            identity_attributes.emailaddress: "johnon@gmail.com"
+            identity_attributes.fullname: "John O'neel"
+            identity_attributes.gender: "Male"
+            identity_attributes.lastname: "O'neel"
+            identity_attributes.mobile: "0713449892"
+            identity_attributes.username: "johnon"
+
+    ReviewTask:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "e78fa62f-4a24-4d3b-8652-db617de37347"
+        org_handle:
+          type: string
+          example: "carbon.super"
+        source_profile_id:
+          type: string
+          example: "17a3957f-38bf-45c8-8cf9-f590fafa5686"
+        target_profile_id:
+          type: string
+          example: "613e447d-f4b3-47f0-97d3-245e569c103a"
+        match_score:
+          type: number
+          format: double
+          example: 0.949
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, EXPIRED]
+          example: "PENDING"
+        match_reason:
+          type: string
+          description: Omitted when empty
+        score_breakdown:
+          type: object
+          description: Per-attribute match scores
+          example:
+            identity_attributes.country: 1
+            identity_attributes.dob: 1
+            identity_attributes.emailaddress: 1
+            identity_attributes.fullname: 1
+            identity_attributes.gender: 1
+            identity_attributes.lastname: 1
+            identity_attributes.mobile: 0
+            identity_attributes.username: 0
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-16T09:22:51Z"
+        resolved_at:
+          type: string
+          format: date-time
+          description: Omitted when task is still PENDING
+          example: "2026-02-17T03:15:00Z"
+        resolved_by:
+          type: string
+          description: Omitted when task is still PENDING
+        notes:
+          type: string
+          description: Omitted when empty
+
+    ReviewTaskListResponse:
+      type: object
+      properties:
+        pagination:
+          type: object
+          properties:
+            count:
+              type: integer
+              example: 12
+            page_size:
+              type: integer
+              example: 5
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewTask'
+
+    ReviewResolveRequest:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED]
+          example: "APPROVED"
+        notes:
+          type: string
+          example: "Verified - same person"
+
+    ReviewTaskResolveResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        message:
+          type: string
+          example: "Review task a1b2c3d4 approved"
+
+    MergeRequest:
+      type: object
+      required:
+        - new_profile_id
+        - candidate_id
+      properties:
+        new_profile_id:
+          type: string
+          description: "The new_profile_id returned by the search endpoint (may be a pending cache ID)."
+          example: "p-incoming-001"
+        candidate_id:
+          type: string
+          description: "The existing candidate profile to merge with."
+          example: "p-existing-002"
+
+    MergeResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        message:
+          type: string
+          example: "Profile p-incoming-001 merged into p-existing-002"
+        merged_profile_id:
+          type: string
+          example: "p-existing-002"
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "CDS-10001"
+        message:
+          type: string
+          example: "Invalid request."
+        description:
+          type: string
+          example: "At least one identity_attribute or trait is required for search."

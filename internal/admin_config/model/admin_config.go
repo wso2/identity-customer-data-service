@@ -19,10 +19,14 @@
 package model
 
 type AdminConfig struct {
-	OrgHandle             string   `json:"org_handle" bson:"org_handle"`
-	CDSEnabled            bool     `json:"cds_enabled" bson:"cds_enabled"`
-	InitialSchemaSyncDone bool     `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
-	SystemApplications    []string `json:"system_applications" bson:"system_applications"`
+	OrgHandle              string   `json:"org_handle" bson:"org_handle"`
+	CDSEnabled             bool     `json:"cds_enabled" bson:"cds_enabled"`
+	InitialSchemaSyncDone  bool     `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
+	SystemApplications     []string `json:"system_applications" bson:"system_applications"`
+	AutoMergeEnabled       bool     `json:"auto_merge_enabled" bson:"auto_merge_enabled"`
+	AutoMergeThreshold     float64  `json:"auto_merge_threshold" bson:"auto_merge_threshold"`
+	ManualReviewThreshold  float64  `json:"manual_review_threshold" bson:"manual_review_threshold"`
+	SmartResolutionEnabled bool     `json:"smart_resolution_enabled" bson:"smart_resolution_enabled"`
 }
 
 type AdminConfigAPI struct {

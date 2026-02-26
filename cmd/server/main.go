@@ -34,6 +34,8 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
+
+	irWorker "github.com/wso2/identity-customer-data-service/internal/identity_resolution/worker"
 )
 
 func initDatabaseFromConfig(config *config.Config) {
@@ -57,7 +59,7 @@ func main() {
 
 	cdsHome := resolveCDSHome()
 	utils.SetCDSHome(cdsHome)
-	const configFile = "/repository/conf/deployment.yaml"
+	const configFile = "/config/repository/conf/deployment.yaml"
 
 	envFiles, err := filepath.Glob("config/*.env")
 	if err != nil || len(envFiles) == 0 {
@@ -89,6 +91,7 @@ func main() {
 
 	// Initialize Profile worker
 	workers.StartProfileWorker()
+	workers.RegisterResolveFunc(irWorker.ResolveProfileAsync)
 
 	// Initialize Schema Sync worker
 	workers.StartSchemaSyncWorker()

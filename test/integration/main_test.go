@@ -31,6 +31,8 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
 	"github.com/wso2/identity-customer-data-service/test/setup"
+
+	irWorker "github.com/wso2/identity-customer-data-service/internal/identity_resolution/worker"
 )
 
 func TestMain(m *testing.M) {
@@ -55,6 +57,7 @@ func TestMain(m *testing.M) {
 	}
 
 	workers.StartProfileWorker() // Start the real enrichment queue worker
+	workers.RegisterResolveFunc(irWorker.ResolveProfileAsync)
 
 	// Initialize Schema Sync worker
 	workers.StartSchemaSyncWorker()

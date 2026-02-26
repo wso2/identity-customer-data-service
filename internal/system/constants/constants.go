@@ -175,4 +175,80 @@ const (
 	ConfigCDSEnabled            = "cds_enabled"
 	ConfigInitialSchemaSyncDone = "initial_schema_sync_done"
 	ConfigSystemApplications    = "system_applications"
+
+	// Identity resolution config keys
+	ConfigAutoMergeEnabled       = "auto_merge_enabled"
+	ConfigAutoMergeThreshold     = "auto_merge_threshold"
+	ConfigManualReviewThreshold  = "manual_review_threshold"
+	ConfigSmartResolutionEnabled = "smart_resolution_enabled"
+)
+
+const (
+	AttributeTypeName     = "NAME"
+	AttributeTypeEmail    = "EMAIL"
+	AttributeTypePhone    = "PHONE"
+	AttributeTypeDate     = "DATE"
+	AttributeTypeGender   = "GENDER"
+	AttributeTypeID       = "ID"
+	AttributeTypeLocation = "LOCATION"
+	AttributeTypeUnknown  = "UNKNOWN"
+)
+
+const (
+	ReviewStatusPending   = "PENDING"
+	ReviewStatusApproved  = "APPROVED"
+	ReviewStatusRejected  = "REJECTED"
+	ReviewStatusExpired   = "EXPIRED"
+	ReviewStatusCancelled = "CANCELLED"
+)
+
+const (
+	DecisionAutoMerge    = "AUTO_MERGE"
+	DecisionManualReview = "MANUAL_REVIEW"
+	DecisionUnique       = "UNIQUE"
+)
+
+const (
+	ProfileTypePermanent = "PERMANENT"
+	ProfileTypeTemp      = "TEMP"
+)
+
+const (
+	UnificationModeStrict = "STRICT"
+	UnificationModeSmart  = "SMART"
+)
+
+const (
+	MergeTypeNewMaster   = "NEW_MASTER"
+	MergeTypeAutoMerge   = "AUTO_MERGE"
+	MergeTypeReviewMerge = "REVIEW_MERGE"
+	MergeTypeManualMerge = "MANUAL_MERGE"
+)
+
+const (
+	MergeReasonAutoMerge   = "auto_merge"
+	MergeReasonReviewMerge = "review_merge"
+	MergeReasonManualMerge = "manual_merge"
+)
+
+const MergedBySystem = "system"
+
+const (
+	MaxCandidatesPerRule = 100
+	MaxSampleSize        = 50
+	MinContentMatchRatio = 0.60
+	CoverageBoostFactor  = 0.30
+	FuzzyStringThreshold = 0.80
+)
+
+const (
+	DefaultAutoMergeThreshold    = 0.95
+	DefaultManualReviewThreshold = 0.75
+)
+
+const (
+	LSHSignatureSize = 8
+	LSHBands         = 4
+	LSHRows          = 2
+	LSHMinLength     = 4
 )
