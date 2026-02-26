@@ -15,7 +15,7 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import PageHeader from '../../components/PageHeader';
 import EmptyState from '../../components/EmptyState';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { getProfiles, createProfile, deleteProfile } from '../../api';
+import { getProfiles, createProfile, deleteProfile, getUnificationRules } from '../../api';
 
 const PAGE_SIZE = 15;
 
@@ -32,9 +32,33 @@ export default function ProfilesListPage() {
 
   // Dialogs
   const [createOpen, setCreateOpen] = useState(false);
-  const [createData, setCreateData] = useState({ user_id: '', emailaddress: '', fullname: '', mobile: '', country: '' });
+  const [createData, setCreateData] = useState({ user_id: '' });
+  const [ruleFields, setRuleFields] = useState([]);  // active rules
+  const [rulesLoading, setRulesLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [toast, setToast] = useState({ open: false, msg: '', severity: 'success' });
+
+  const openCreateDialog = async () => {
+    setCreateOpen(true);
+    setRulesLoading(true);
+    try {
+      const res = await getUnificationRules();
+      const allRules = Array.isArray(res) ? res : [];
+      const active = allRules.filter((r) => r.is_active);
+      setRuleFields(active);
+      const init = { user_id: '' };
+      active.forEach((r) => {
+        const key = r.property_name.includes('.') ? r.property_name.split('.').pop() : r.property_name;
+        init[key] = '';
+      });
+      setCreateData(init);
+    } catch {
+      setRuleFields([]);
+      setCreateData({ user_id: '' });
+    } finally {
+      setRulesLoading(false);
+    }
+  };
 
   const load = useCallback(async (cursor = '') => {
     setLoading(true);
@@ -71,13 +95,12 @@ export default function ProfilesListPage() {
     try {
       const body = { identity_attributes: {} };
       if (createData.user_id) body.user_id = createData.user_id;
-      if (createData.emailaddress) body.identity_attributes.emailaddress = createData.emailaddress;
-      if (createData.fullname) body.identity_attributes.fullname = createData.fullname;
-      if (createData.mobile) body.identity_attributes.mobile = createData.mobile;
-      if (createData.country) body.identity_attributes.country = createData.country;
+      Object.entries(createData).forEach(([key, val]) => {
+        if (key !== 'user_id' && val) body.identity_attributes[key] = val;
+      });
       await createProfile(body);
       setCreateOpen(false);
-      setCreateData({ user_id: '', emailaddress: '', fullname: '', mobile: '', country: '' });
+      setCreateData({ user_id: '' });
       setToast({ open: true, msg: 'Profile created', severity: 'success' });
       load(cursorStack[cursorStack.length - 1] || '');
     } catch (e) {
@@ -115,6 +138,11 @@ export default function ProfilesListPage() {
       <PageHeader
         title="Profiles"
         subtitle="Manage customer profiles which has identity, behavioural and application data"
+        action={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
+            Add Profile
+          </Button>
+        }
       />
 
       {/* Search bar */}
@@ -228,28 +256,39 @@ export default function ProfilesListPage() {
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Create Profile</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="User ID" fullWidth size="small" value={createData.user_id}
-              onChange={(e) => setCreateData({ ...createData, user_id: e.target.value })}
-              helperText="Optional. Associates this profile with a user."
-            />
-            <TextField label="Email Address" fullWidth size="small" value={createData.emailaddress}
-              onChange={(e) => setCreateData({ ...createData, emailaddress: e.target.value })}
-            />
-            <TextField label="Full Name" fullWidth size="small" value={createData.fullname}
-              onChange={(e) => setCreateData({ ...createData, fullname: e.target.value })}
-            />
-            <TextField label="Mobile" fullWidth size="small" value={createData.mobile}
-              onChange={(e) => setCreateData({ ...createData, mobile: e.target.value })}
-            />
-            <TextField label="Country" fullWidth size="small" value={createData.country}
-              onChange={(e) => setCreateData({ ...createData, country: e.target.value })}
-            />
-          </Stack>
+          {rulesLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
+          ) : (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <TextField label="User ID" fullWidth size="small" value={createData.user_id || ''}
+                onChange={(e) => setCreateData({ ...createData, user_id: e.target.value })}
+                helperText="Optional. Associates this profile with a user."
+              />
+              {ruleFields.map((r) => {
+                const key = r.property_name.includes('.') ? r.property_name.split('.').pop() : r.property_name;
+                return (
+                  <TextField
+                    key={r.rule_id}
+                    label={key}
+                    placeholder={r.property_name}
+                    fullWidth
+                    size="small"
+                    value={createData[key] || ''}
+                    onChange={(e) => setCreateData({ ...createData, [key]: e.target.value })}
+                  />
+                );
+              })}
+              {ruleFields.length === 0 && (
+                <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
+                  No active unification rules found. Add rules to see attribute fields here.
+                </Alert>
+              )}
+            </Stack>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button color="inherit" onClick={() => setCreateOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleCreate}>Create</Button>
+          <Button variant="contained" onClick={handleCreate} disabled={rulesLoading}>Create</Button>
         </DialogActions>
       </Dialog>
 
