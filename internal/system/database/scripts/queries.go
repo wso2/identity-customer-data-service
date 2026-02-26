@@ -24,7 +24,7 @@ var DeleteProfileSchemaForOrg = map[string]string{
 }
 
 var GetProfileSchemaByOrg = map[string]string{
-	"postgres": `SELECT attribute_id, attribute_name, value_type, merge_strategy , application_identifier, mutability, 
+	"postgres": `SELECT attribute_id, attribute_name, display_name, value_type, merge_strategy , application_identifier, mutability, 
        multi_valued, sub_attributes::text, canonical_values::text FROM profile_schema WHERE org_handle = $1`,
 }
 
@@ -35,21 +35,21 @@ var DeleteIdentityClaimsOfProfileSchema = map[string]string{
 var InsertIdentityClaimsForProfileSchema = map[string]string{
 	"postgres": `INSERT INTO profile_schema 
 	(org_handle, attribute_id, attribute_name, value_type, merge_strategy, mutability, application_identifier, 
-	 multi_valued, canonical_values, sub_attributes, scim_dialect, scope) VALUES `,
+	 multi_valued, canonical_values, sub_attributes, scim_dialect, scope, display_name) VALUES `,
 }
 
 var GetProfileSchemaAttributeByName = map[string]string{
-	"postgres": `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability , application_identifier, 
+	"postgres": `SELECT attribute_id, attribute_name, display_name, value_type, merge_strategy, mutability , application_identifier, 
        multi_valued, sub_attributes::text, canonical_values::text FROM profile_schema WHERE org_handle = $1 
        AND attribute_name = $2 LIMIT 1`,
 }
 
 var InsertProfileSchemaAttributesForScope = map[string]string{
 	"postgres": `INSERT INTO profile_schema (org_handle, attribute_id, attribute_name, value_type, merge_strategy, 
-                            application_identifier, mutability, multi_valued, sub_attributes, canonical_values, scope) VALUES `,
+                            application_identifier, mutability, multi_valued, sub_attributes, canonical_values, scope, display_name) VALUES `,
 }
 var GetProfileSchemaAttributeByScope = map[string]string{
-	"postgres": `SELECT attribute_id, org_handle, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued,   sub_attributes::text,
+	"postgres": `SELECT attribute_id, org_handle, attribute_name, display_name, value_type, merge_strategy, mutability, application_identifier, multi_valued,   sub_attributes::text,
   canonical_values::text FROM profile_schema WHERE org_handle = $1 AND scope = $2`,
 }
 
@@ -63,8 +63,9 @@ var UpdateProfileSchemaAttributesForSchema = map[string]string{
 			application_identifier = $5,
 			multi_valued = $6,
 			canonical_values = $7,
-			sub_attributes = $8
-		WHERE org_handle = $9 AND attribute_id = $10 AND scope = $11
+			sub_attributes = $8,
+			display_name = $9
+		WHERE org_handle = $10 AND attribute_id = $11 AND scope = $12
 	`,
 }
 
@@ -73,13 +74,13 @@ var DeleteProfileSchemaAttributeForScope = map[string]string{
 }
 
 var GetProfileSchemaAttributeById = map[string]string{
-	"postgres": `SELECT attribute_id, attribute_name, value_type, merge_strategy, mutability , application_identifier, multi_valued,   sub_attributes::text,
+	"postgres": `SELECT attribute_id, attribute_name, display_name, value_type, merge_strategy, mutability , application_identifier, multi_valued,   sub_attributes::text,
   canonical_values::text
 	          FROM profile_schema WHERE org_handle = $1 AND attribute_id = $2`,
 }
 
 var FilterProfileSchemaAttributes = map[string]string{
-	"postgres": `SELECT attribute_id, org_handle, attribute_name, value_type, merge_strategy, mutability, application_identifier, multi_valued, sub_attributes::text,
+	"postgres": `SELECT attribute_id, org_handle, attribute_name, display_name, value_type, merge_strategy, mutability, application_identifier, multi_valued, sub_attributes::text,
   canonical_values::text FROM profile_schema WHERE org_handle = $1`,
 }
 

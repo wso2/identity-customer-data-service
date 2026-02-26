@@ -55,10 +55,10 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 
 	baseQuery := scripts.InsertProfileSchemaAttributesForScope[provider.NewDBProvider().GetDBType()]
 	valueStrings := make([]string, 0, len(attrs))
-	valueArgs := make([]interface{}, 0, len(attrs)*11)
+	valueArgs := make([]interface{}, 0, len(attrs)*12)
 
 	for i, attr := range attrs {
-		idx := i * 11
+		idx := i * 12
 		subAttrsJSON, err := json.Marshal(attr.SubAttributes)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Failed to marshal sub attributes for attribute %s", attr.AttributeId)
@@ -79,11 +79,11 @@ func AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, sc
 			}, err)
 		}
 
-		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d,  $%d, $%d,  $%d, $%d, $%d) ",
-			idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11))
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d,  $%d, $%d,  $%d, $%d, $%d, $%d) ",
+			idx+1, idx+2, idx+3, idx+4, idx+5, idx+6, idx+7, idx+8, idx+9, idx+10, idx+11, idx+12))
 		valueArgs = append(valueArgs, orgId, attr.AttributeId, attr.AttributeName, attr.ValueType,
 			attr.MergeStrategy, attr.ApplicationIdentifier, attr.Mutability, attr.MultiValued, subAttrsJSON,
-			canonicalJSON, scope)
+			canonicalJSON, scope, attr.DisplayName)
 
 	}
 
@@ -260,6 +260,7 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 	attr := &model.ProfileSchemaAttribute{
 		OrgId:                 orgId,
 		AttributeName:         row["attribute_name"].(string),
+		DisplayName:           resolveDisplayName(row),
 		AttributeId:           row["attribute_id"].(string),
 		ValueType:             row["value_type"].(string),
 		MergeStrategy:         row["merge_strategy"].(string),
@@ -507,6 +508,7 @@ func PatchProfileSchemaAttributesForScope(orgId string, scope string, updates []
 			attr.MultiValued,
 			canonicalJSON,
 			subAttrsJSON,
+			attr.DisplayName,
 			orgId,
 			attr.AttributeId,
 			scope,
@@ -600,6 +602,7 @@ func mapRowToProfileAttribute(row map[string]interface{}) model.ProfileSchemaAtt
 	return model.ProfileSchemaAttribute{
 		AttributeId:           fmt.Sprint(row["attribute_id"]),
 		AttributeName:         row["attribute_name"].(string),
+		DisplayName:           resolveDisplayName(row),
 		ValueType:             row["value_type"].(string),
 		MergeStrategy:         row["merge_strategy"].(string),
 		Mutability:            row["mutability"].(string),
@@ -608,6 +611,18 @@ func mapRowToProfileAttribute(row map[string]interface{}) model.ProfileSchemaAtt
 		SubAttributes:         subAttrs,
 		CanonicalValues:       canonicalValues,
 	}
+}
+
+// resolveDisplayName returns the display_name from the DB row if present and non-empty,
+// otherwise falls back to attribute_name.
+func resolveDisplayName(row map[string]interface{}) string {
+	if dn, ok := row["display_name"].(string); ok && dn != "" {
+		return dn
+	}
+	if name, ok := row["attribute_name"].(string); ok {
+		return name
+	}
+	return ""
 }
 
 func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute) error {
@@ -652,9 +667,9 @@ func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute
 		attrKey := extractClaimKeyFromURI(attr.AttributeName)
 		attr.AttributeName = attrKey
 
-		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d, $%d)",
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d, $%d, $%d)",
 			argIndex, argIndex+1, argIndex+2, argIndex+3, argIndex+4, argIndex+5, argIndex+6,
-			argIndex+7, argIndex+8, argIndex+9, argIndex+10, argIndex+11))
+			argIndex+7, argIndex+8, argIndex+9, argIndex+10, argIndex+11, argIndex+12))
 		valueArgs = append(valueArgs,
 			orgID,
 			attr.AttributeId,
@@ -668,8 +683,9 @@ func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute
 			string(subAttrJSON),
 			attr.SCIMDialect,
 			constants.IdentityAttributes,
+			attr.DisplayName,
 		)
-		argIndex += 12
+		argIndex += 13
 	}
 
 	insertQuery += strings.Join(valueStrings, ",")
