@@ -260,7 +260,7 @@ func GetProfileSchemaAttributeByName(orgId, attributeName string) (*model.Profil
 	attr := &model.ProfileSchemaAttribute{
 		OrgId:                 orgId,
 		AttributeName:         row["attribute_name"].(string),
-		DisplayName:           resolveDisplayName(row),
+		DisplayName:           row["display_name"].(string),
 		AttributeId:           row["attribute_id"].(string),
 		ValueType:             row["value_type"].(string),
 		MergeStrategy:         row["merge_strategy"].(string),
@@ -602,7 +602,7 @@ func mapRowToProfileAttribute(row map[string]interface{}) model.ProfileSchemaAtt
 	return model.ProfileSchemaAttribute{
 		AttributeId:           fmt.Sprint(row["attribute_id"]),
 		AttributeName:         row["attribute_name"].(string),
-		DisplayName:           resolveDisplayName(row),
+		DisplayName:           row["display_name"].(string),
 		ValueType:             row["value_type"].(string),
 		MergeStrategy:         row["merge_strategy"].(string),
 		Mutability:            row["mutability"].(string),
@@ -611,18 +611,6 @@ func mapRowToProfileAttribute(row map[string]interface{}) model.ProfileSchemaAtt
 		SubAttributes:         subAttrs,
 		CanonicalValues:       canonicalValues,
 	}
-}
-
-// resolveDisplayName returns the display_name from the DB row if present and non-empty,
-// otherwise falls back to attribute_name.
-func resolveDisplayName(row map[string]interface{}) string {
-	if dn, ok := row["display_name"].(string); ok && dn != "" {
-		return dn
-	}
-	if name, ok := row["attribute_name"].(string); ok {
-		return name
-	}
-	return ""
 }
 
 func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute) error {
