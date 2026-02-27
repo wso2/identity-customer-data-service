@@ -40,6 +40,13 @@ else
 	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration
 endif
 
+benchmark:
+ifdef bench
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark -bench=$(bench) -benchmem -benchtime=10x
+else
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark -bench=. -benchmem -benchtime=10x
+endif
+
 
 # Build the Go project.
 _build:
@@ -62,12 +69,13 @@ help:
 	@echo "  all               - Clean, build, and test the project."
 	@echo "  clean             - Remove build artifacts."
 	@echo "  build             - Build the Go project."
-	@echo "  integration-test  - Run integration tests (use TEST=TestName to filter specific test)."
+	@echo "  integration-test  - Run integration tests (use test=TestName to filter specific test)."
+	@echo "  benchmark         - Run benchmark tests (use bench=BenchmarkName to filter specific benchmark)."
 	@echo "  lint              - Run golangci-lint."
 	@echo "  help              - Show this help message."
 
 
-.PHONY: all clean build lint help
+.PHONY: all clean build lint benchmark help
 
 .PHONY: go_install_tool golangci-lint
 

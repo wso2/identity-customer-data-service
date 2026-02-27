@@ -37,3 +37,6 @@ bin/
 *.swo
 *~
 *.tgz
+
+# Test binaries
+*.test
