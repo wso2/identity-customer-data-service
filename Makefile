@@ -40,6 +40,12 @@ else
 	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/integration
 endif
 
+mq-integration-test:
+ifdef test
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/activemq_integration/... -run $(test)
+else
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/activemq_integration/...
+endif
 
 # Build the Go project.
 _build:
@@ -59,15 +65,15 @@ _package:
 
 help:
 	@echo "Makefile targets:"
-	@echo "  all               - Clean, build, and test the project."
-	@echo "  clean             - Remove build artifacts."
-	@echo "  build             - Build the Go project."
-	@echo "  integration-test  - Run integration tests (use TEST=TestName to filter specific test)."
-	@echo "  lint              - Run golangci-lint."
-	@echo "  help              - Show this help message."
+	@echo "  all                        - Clean, build, and test the project."
+	@echo "  clean                      - Remove build artifacts."
+	@echo "  build                      - Build the Go project."
+	@echo "  integration-test           - Run integration tests (use test=TestName to filter)."
+	@echo "  mq-integration-test        - Run message queue integration tests (use test=TestName to filter)."
+	@echo "  lint                       - Run golangci-lint."
+	@echo "  help                       - Show this help message."
 
-
-.PHONY: all clean build lint help
+.PHONY: all clean build lint help integration-test mq-integration-test
 
 .PHONY: go_install_tool golangci-lint
 

@@ -20,6 +20,14 @@ The queue layer is built around two interfaces defined in
 | `ProfileUnificationQueue` | Enqueue and process profile-unification events |
 | `SchemaSyncQueue` | Enqueue and process schema-synchronisation events |
 
+Both interfaces require three methods:
+
+| Method | Description |
+|---|---|
+| `Enqueue(…) error` | Publish a message to the broker. Returns `nil` on success or a descriptive error (queue full, serialization failure, broker unreachable, etc.). |
+| `Start(handler) error` | Subscribe to the queue and forward messages to `handler` in a background goroutine. Returns an error only if the initial subscription fails. |
+| `Close() error` | Graceful shutdown — flush in-flight items and release connections, channels, and goroutines. Must be safe to call more than once. |
+
 Providers register themselves at startup via the factory's provider registry
 (see `internal/system/queue/factory.go`), following the same pattern as Go's
 `database/sql` driver model. No modification to the factory or any other
@@ -53,16 +61,15 @@ import (
     profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
     schemaModel  "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
     "github.com/wso2/identity-customer-data-service/internal/system/config"
-    "github.com/wso2/identity-customer-data-service/internal/system/log"
     "github.com/wso2/identity-customer-data-service/internal/system/queue"
 )
 
 // ProfileQueue implements queue.ProfileUnificationQueue.
 type ProfileQueue struct { /* broker connection fields */ }
 
-func (q *ProfileQueue) Enqueue(profile profileModel.Profile) bool {
+func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
     // publish profile to your broker
-    return true
+    return nil
 }
 
 func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
@@ -71,17 +78,27 @@ func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
     return nil
 }
 
+func (q *ProfileQueue) Close() error {
+    // disconnect from your broker
+    return nil
+}
+
 // SchemaSyncQueue implements queue.SchemaSyncQueue.
 type SchemaSyncQueue struct { /* broker connection fields */ }
 
-func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) bool {
+func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
     // publish sync job to your broker
-    return true
+    return nil
 }
 
 func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) error {
     // subscribe and forward messages to handler in a goroutine
     go func() { /* consume loop */ }()
+    return nil
+}
+
+func (q *SchemaSyncQueue) Close() error {
+    // disconnect from your broker
     return nil
 }
 ```
@@ -149,7 +166,6 @@ message_queue:
 
 Mirror the test in `test/activemq_integration/` to spin up your broker via
 testcontainers and run an end-to-end profile unification scenario:
-
 ```
 test/
 └── myprovider_integration/
@@ -157,6 +173,19 @@ test/
     └── profile_unification_myprovider_test.go
 ```
 
+Then add your test package path to the `mq-integration-test` target in the
+`Makefile` so it runs alongside other MQ provider tests:
+```makefile
+mq-integration-test:
+ifdef test
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/activemq_integration/... ./test/myprovider_integration/... -run $(test)
+else
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/activemq_integration/... ./test/myprovider_integration/...
+endif
+```
+
+This is automatically picked up by the `mq-test` job in the PR builder CI
+pipeline (`.github/workflows/pr-builder.yml`).
 ---
 
 ## Summary
@@ -164,7 +193,7 @@ test/
 | Step | What to do |
 |---|---|
 | 1 | Create `internal/system/queue/myprovider/` |
-| 2 | Implement `ProfileUnificationQueue` and `SchemaSyncQueue` |
+| 2 | Implement `ProfileUnificationQueue` and `SchemaSyncQueue` (including `Close()`) |
 | 3 | Register via `init()` using `queue.Register*QueueProvider` |
 | 4 | Blank-import in `cmd/server/main.go` |
 | 5 | Set `message_queue.type` in `deployment.yaml` |
