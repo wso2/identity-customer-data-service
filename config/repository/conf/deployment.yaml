@@ -81,11 +81,11 @@ sync:
 # use the built-in in-memory queue, which is the default and is suitable
 # for local and single-instance deployments.
 message_queue:
-  type: "memory" # Options: "memory" (default), "activemq"
-  activemq:
-    addr: "localhost:61613"               # ActiveMQ STOMP endpoint (host:port)
-    username: "${ACTIVEMQ_USERNAME}"
-    password: "${ACTIVEMQ_PASSWORD}"
+  type: "memory" # Options: "memory" (default), "activemq", or any registered custom provider
+  broker:
+    addr: "localhost:61613"               # Broker endpoint (host:port)
+    username: "${BROKER_USERNAME}"
+    password: "${BROKER_PASSWORD}"
     profile_queue_name: "/queue/cds-profile-unification"
     schema_sync_queue_name: "/queue/cds-schema-sync"
 

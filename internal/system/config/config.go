@@ -60,29 +60,35 @@ type DataSourceConfig struct {
 	SSLMode  string `yaml:"sslmode"`
 }
 
-// ActiveMQConfig holds the connection settings for an ActiveMQ broker.
-type ActiveMQConfig struct {
+// ExternalBrokerConfig holds the connection settings that are common to
+// broker-backed queue providers (e.g. any STOMP-compatible broker such as
+// ActiveMQ or Artemis). Providers that need additional broker-specific
+// settings should be configured via environment variables or a dedicated
+// sub-section added to this struct.
+type ExternalBrokerConfig struct {
 	// Addr is the broker address in "host:port" format (e.g. "localhost:61613").
 	Addr string `yaml:"addr"`
-	// Username is the STOMP login name.
+	// Username is the broker login name.
 	Username string `yaml:"username"`
-	// Password is the STOMP passcode.
+	// Password is the broker passcode.
 	Password string `yaml:"password"`
-	// ProfileQueueName is the STOMP destination used for profile unification
-	// messages (e.g. "/queue/profile-unification").
+	// ProfileQueueName is the destination used for profile unification
+	// messages (e.g. "/queue/cds-profile-unification").
 	ProfileQueueName string `yaml:"profile_queue_name"`
-	// SchemaSyncQueueName is the STOMP destination used for schema sync
-	// messages (e.g. "/queue/schema-sync").
+	// SchemaSyncQueueName is the destination used for schema sync
+	// messages (e.g. "/queue/cds-schema-sync").
 	SchemaSyncQueueName string `yaml:"schema_sync_queue_name"`
 }
 
 // MessageQueueConfig selects the queue provider and its settings. When Type
-// is empty or "memory" the built-in in-memory queue is used. Set Type to
-// "activemq" to use the ActiveMQ provider.
+// is empty or "memory" the built-in in-memory queue is used. Set Type to the
+// name of any registered provider (e.g. "activemq") to use an external broker.
+// See docs/extending-queue-providers.md for how to add a custom provider.
 type MessageQueueConfig struct {
-	// Type is the queue provider to use: "memory" (default) or "activemq".
-	Type     string         `yaml:"type"`
-	ActiveMQ ActiveMQConfig `yaml:"activemq"`
+	// Type is the queue provider to use: "memory" (default) or the name of
+	// any registered external provider (e.g. "activemq").
+	Type   string              `yaml:"type"`
+	Broker ExternalBrokerConfig `yaml:"broker"`
 }
 
 type Config struct {

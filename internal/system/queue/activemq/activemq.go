@@ -20,6 +20,13 @@
 // queue.ProfileUnificationQueue and queue.SchemaSyncQueue interfaces using
 // the STOMP protocol. This provider is intended for production deployments
 // that require durable messaging across restarts and horizontal scaling.
+//
+// To activate this provider, blank-import this package in main.go (or any
+// other entry-point) so that its init() function registers it:
+//
+//	import _ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq"
+//
+// Then set message_queue.type = "activemq" in deployment.yaml.
 package activemq
 
 import (
@@ -29,10 +36,27 @@ import (
 	"github.com/go-stomp/stomp/v3"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/queue"
 )
 
 const contentTypeJSON = "application/json"
+
+// init registers the ActiveMQ provider with the queue factory so it is
+// available as soon as this package is imported.
+func init() {
+	queue.RegisterProfileQueueProvider(queue.TypeActiveMQ,
+		func(cfg config.ExternalBrokerConfig) (queue.ProfileUnificationQueue, error) {
+			return NewProfileQueue(cfg.Addr, cfg.Username, cfg.Password, cfg.ProfileQueueName)
+		},
+	)
+	queue.RegisterSchemaSyncQueueProvider(queue.TypeActiveMQ,
+		func(cfg config.ExternalBrokerConfig) (queue.SchemaSyncQueue, error) {
+			return NewSchemaSyncQueue(cfg.Addr, cfg.Username, cfg.Password, cfg.SchemaSyncQueueName)
+		},
+	)
+}
 
 // ProfileQueue is the ActiveMQ-backed implementation of
 // queue.ProfileUnificationQueue. It communicates with ActiveMQ over the

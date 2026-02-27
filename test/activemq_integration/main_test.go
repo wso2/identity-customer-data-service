@@ -33,6 +33,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 	integrationUtils "github.com/wso2/identity-customer-data-service/test/integration/utils"
 	"github.com/wso2/identity-customer-data-service/test/setup"
@@ -63,7 +64,7 @@ func TestMain(m *testing.M) {
 		DataSource: config.DataSourceConfig{Type: "postgres"},
 		MessageQueue: config.MessageQueueConfig{
 			Type: "activemq",
-			ActiveMQ: config.ActiveMQConfig{
+			Broker: config.ExternalBrokerConfig{
 				Addr:                amq.Addr,
 				Username:            amq.Username,
 				Password:            amq.Password,

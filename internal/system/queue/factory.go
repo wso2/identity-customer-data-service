@@ -20,55 +20,89 @@ package queue
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
-	"github.com/wso2/identity-customer-data-service/internal/system/queue/activemq"
 	"github.com/wso2/identity-customer-data-service/internal/system/queue/inmemory"
 )
 
-// NewProfileUnificationQueue creates the ProfileUnificationQueue implementation
-// specified by cfg.Type. When the type is empty or "memory" the default
-// in-memory provider is returned. When the type is "activemq" an ActiveMQ
-// provider is returned using the settings in cfg.ActiveMQ.
-func NewProfileUnificationQueue(cfg config.MessageQueueConfig) (ProfileUnificationQueue, error) {
-	switch cfg.Type {
-	case TypeActiveMQ:
-		q, err := activemq.NewProfileQueue(
-			cfg.ActiveMQ.Addr,
-			cfg.ActiveMQ.Username,
-			cfg.ActiveMQ.Password,
-			cfg.ActiveMQ.ProfileQueueName,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("queue: failed to create ActiveMQ profile queue: %w", err)
-		}
-		return q, nil
-	default:
-		// TypeMemory or any unrecognised value – fall back to in-memory.
-		return inmemory.NewProfileQueue(constants.DefaultQueueSize), nil
-	}
+// ProfileQueueProvider is the constructor signature for a
+// ProfileUnificationQueue provider. It receives the generic broker config
+// from the deployment configuration.
+type ProfileQueueProvider func(cfg config.ExternalBrokerConfig) (ProfileUnificationQueue, error)
+
+// SchemaSyncQueueProvider is the constructor signature for a SchemaSyncQueue
+// provider. It receives the generic broker config from the deployment
+// configuration.
+type SchemaSyncQueueProvider func(cfg config.ExternalBrokerConfig) (SchemaSyncQueue, error)
+
+var (
+	mu                      sync.RWMutex
+	profileQueueProviders   = map[string]ProfileQueueProvider{}
+	schemaSyncQueueProviders = map[string]SchemaSyncQueueProvider{}
+)
+
+// RegisterProfileQueueProvider registers a ProfileQueueProvider under the
+// given name. Call this inside an init() function in your provider package so
+// the provider is available as soon as the package is imported.
+//
+// Example:
+//
+//	func init() {
+//	    queue.RegisterProfileQueueProvider("myprovider", func(cfg config.ExternalBrokerConfig) (queue.ProfileUnificationQueue, error) {
+//	        return newMyProviderQueue(cfg)
+//	    })
+//	}
+func RegisterProfileQueueProvider(name string, p ProfileQueueProvider) {
+	mu.Lock()
+	defer mu.Unlock()
+	profileQueueProviders[name] = p
 }
 
-// NewSchemaSyncQueue creates the SchemaSyncQueue implementation specified by
+// RegisterSchemaSyncQueueProvider registers a SchemaSyncQueueProvider under
+// the given name. Call this inside an init() function in your provider
+// package so the provider is available as soon as the package is imported.
+func RegisterSchemaSyncQueueProvider(name string, p SchemaSyncQueueProvider) {
+	mu.Lock()
+	defer mu.Unlock()
+	schemaSyncQueueProviders[name] = p
+}
+
+// NewProfileUnificationQueue returns the ProfileUnificationQueue for the
+// provider named in cfg.Type. When the type is empty or "memory" the default
+// in-memory provider is returned. For any other type the provider must have
+// been registered (e.g. via an init() function) before this call; an error is
+// returned if no matching provider is found.
+func NewProfileUnificationQueue(cfg config.MessageQueueConfig) (ProfileUnificationQueue, error) {
+	if cfg.Type == TypeMemory || cfg.Type == "" {
+		return inmemory.NewProfileQueue(constants.DefaultQueueSize), nil
+	}
+	mu.RLock()
+	p, ok := profileQueueProviders[cfg.Type]
+	mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("queue: unknown profile queue provider %q; "+
+			"register it by importing its package (see docs/extending-queue-providers.md)", cfg.Type)
+	}
+	return p(cfg.Broker)
+}
+
+// NewSchemaSyncQueue returns the SchemaSyncQueue for the provider named in
 // cfg.Type. When the type is empty or "memory" the default in-memory provider
-// is returned. When the type is "activemq" an ActiveMQ provider is returned
-// using the settings in cfg.ActiveMQ.
+// is returned. For any other type the provider must have been registered
+// (e.g. via an init() function) before this call; an error is returned if no
+// matching provider is found.
 func NewSchemaSyncQueue(cfg config.MessageQueueConfig) (SchemaSyncQueue, error) {
-	switch cfg.Type {
-	case TypeActiveMQ:
-		q, err := activemq.NewSchemaSyncQueue(
-			cfg.ActiveMQ.Addr,
-			cfg.ActiveMQ.Username,
-			cfg.ActiveMQ.Password,
-			cfg.ActiveMQ.SchemaSyncQueueName,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("queue: failed to create ActiveMQ schema sync queue: %w", err)
-		}
-		return q, nil
-	default:
-		// TypeMemory or any unrecognised value – fall back to in-memory.
+	if cfg.Type == TypeMemory || cfg.Type == "" {
 		return inmemory.NewSchemaSyncQueue(constants.DefaultQueueSize), nil
 	}
+	mu.RLock()
+	p, ok := schemaSyncQueueProviders[cfg.Type]
+	mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("queue: unknown schema sync queue provider %q; "+
+			"register it by importing its package (see docs/extending-queue-providers.md)", cfg.Type)
+	}
+	return p(cfg.Broker)
 }
