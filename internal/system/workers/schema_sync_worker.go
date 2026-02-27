@@ -73,5 +73,15 @@ func processSchemaSyncJob(schemaSync model.ProfileSchemaSync) {
 		return
 	}
 
+	// Audit log for schema sync
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   log.InitiatorTypeSystem,
+		InitiatorType: log.InitiatorTypeSystem,
+		TargetID:      schemaSync.OrgId,
+		TargetType:    log.TargetTypeSchema,
+		ActionID:      log.ActionSchemaSync,
+		Data:          map[string]string{"event": schemaSync.Event},
+	})
+
 	logger.Info(fmt.Sprintf("Profile schema sync completed successfully for tenant: %s", schemaSync.OrgId))
 }

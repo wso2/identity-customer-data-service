@@ -96,6 +96,19 @@ func unifyProfiles(newProfile profileModel.Profile) {
 				schemaRules, _ := schemaStore.GetProfileSchemaAttributesForOrg(newProfile.OrgHandle)
 				newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, schemaRules)
 
+				// Audit log for profile unification
+				logger.Audit(log.AuditEvent{
+					InitiatorID:   log.InitiatorTypeSystem,
+					InitiatorType: log.InitiatorTypeSystem,
+					TargetID:      newMasterProfile.ProfileId,
+					TargetType:    log.TargetTypeProfile,
+					ActionID:      log.ActionProfileUnification,
+					Data: map[string]string{
+						"unified_profiles": fmt.Sprintf("%s,%s", existingMasterProfile.ProfileId, newProfile.ProfileId),
+						"rule_name":        rule.RuleName,
+					},
+				})
+
 				if len(existingMasterProfile.ProfileStatus.References) == 0 {
 
 					hasUserIDExisting := existingMasterProfile.UserId != ""

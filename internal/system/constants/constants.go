@@ -26,6 +26,7 @@ const FilterRegex = `^[a-zA-Z0-9._-]+$`
 type contextKey string
 
 const TenantContextKey contextKey = "org_handle"
+const TraceIDContextKey contextKey = "trace_id"
 
 const (
 	ProfileResource         = "profile"

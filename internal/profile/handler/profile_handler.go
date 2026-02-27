@@ -29,6 +29,7 @@ import (
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	cdscontext "github.com/wso2/identity-customer-data-service/internal/system/context"
 	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 
@@ -247,6 +248,20 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 		utils.HandleError(w, err)
 		return
 	}
+
+	// Audit log for profile deletion
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   authn.GetUserIDFromRequest(r),
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      profileId,
+		TargetType:    log.TargetTypeProfile,
+		ActionID:      log.ActionDeleteProfile,
+		TraceID:       traceID,
+		Data:          map[string]string{"org_handle": orgHandle},
+	})
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -560,6 +575,19 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Audit log for profile creation
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   authn.GetUserIDFromRequest(r),
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      profileResponse.ProfileId,
+		TargetType:    log.TargetTypeProfile,
+		ActionID:      log.ActionAddProfile,
+		TraceID:       traceID,
+		Data:          map[string]string{"org_handle": orgHandle},
+	})
+
 	cookie, err := profilesService.CreateProfileCookie(profileResponse.ProfileId)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -679,6 +707,19 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 		utils.HandleError(writer, err)
 		return
 	}
+
+	// Audit log for profile update
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(request.Context())
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   authn.GetUserIDFromRequest(request),
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      profileId,
+		TargetType:    log.TargetTypeProfile,
+		ActionID:      log.ActionUpdateProfile,
+		TraceID:       traceID,
+		Data:          map[string]string{"org_handle": orgHandle},
+	})
 
 	profileResponse, err := profilesService.GetProfile(profileId)
 	if err != nil {

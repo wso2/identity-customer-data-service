@@ -25,8 +25,11 @@ import (
 	"time"
 
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	cdscontext "github.com/wso2/identity-customer-data-service/internal/system/context"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
@@ -100,6 +103,24 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		utils.HandleError(w, err)
 		return
 	}
+
+	// Audit log for unification rule creation
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   authn.GetUserIDFromRequest(r),
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      rule.RuleId,
+		TargetType:    log.TargetTypeUnificationRule,
+		ActionID:      log.ActionAddUnificationRule,
+		TraceID:       traceID,
+		Data: map[string]string{
+			"org_handle":    orgHandle,
+			"rule_name":     rule.RuleName,
+			"property_name": rule.PropertyName,
+		},
+	})
+
 	addedRule, err := ruleService.GetUnificationRule(rule.RuleId)
 	addedRuleResponse := model.UnificationRuleAPIResponse{
 		RuleId:       addedRule.RuleId,
@@ -261,6 +282,19 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		return
 	}
 
+	// Audit log for unification rule update
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   authn.GetUserIDFromRequest(r),
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      ruleId,
+		TargetType:    log.TargetTypeUnificationRule,
+		ActionID:      log.ActionUpdateUnificationRule,
+		TraceID:       traceID,
+		Data:          map[string]string{"org_handle": orgHandle},
+	})
+
 	rule, err := ruleService.GetUnificationRule(ruleId)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -306,6 +340,20 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 		utils.HandleError(w, err)
 		return
 	}
+
+	// Audit log for unification rule deletion
+	logger := log.GetLogger()
+	traceID := cdscontext.GetTraceID(r.Context())
+	logger.Audit(log.AuditEvent{
+		InitiatorID:   authn.GetUserIDFromRequest(r),
+		InitiatorType: log.InitiatorTypeUser,
+		TargetID:      ruleId,
+		TargetType:    log.TargetTypeUnificationRule,
+		ActionID:      log.ActionDeleteUnificationRule,
+		TraceID:       traceID,
+		Data:          map[string]string{"org_handle": orgHandle},
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
 }
