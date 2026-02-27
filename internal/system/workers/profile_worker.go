@@ -52,7 +52,11 @@ func StartProfileWorker() error {
 // started.
 func EnqueueProfileForProcessing(profile profileModel.Profile) {
 	if activeProfileQueue != nil {
-		activeProfileQueue.Enqueue(profile)
+		if err := activeProfileQueue.Enqueue(profile); err != nil {
+			log.GetLogger().Error(fmt.Sprintf(
+				"workers: failed to enqueue profile %s for unification: %v",
+				profile.ProfileId, err))
+		}
 	}
 }
 
@@ -63,6 +67,15 @@ type ProfileWorkerQueue struct{}
 // Enqueue forwards the profile to the active queue via EnqueueProfileForProcessing.
 func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
 	EnqueueProfileForProcessing(profile)
+}
+
+// StopProfileWorker gracefully shuts down the profile unification queue.
+// It should be called during application shutdown.
+func StopProfileWorker() error {
+	if activeProfileQueue != nil {
+		return activeProfileQueue.Close()
+	}
+	return nil
 }
 
 // unifyProfiles unifies profiles based on unification rules

@@ -16,11 +16,6 @@
  * under the License.
  */
 
-// Package queue provides a pluggable message queue abstraction for profile
-// unification and schema synchronization. The default provider is an
-// in-memory channel-based queue suitable for lightweight and local
-// deployments. An ActiveMQ provider is also available for production
-// workloads that require durability across restarts and scaling events.
 package queue
 
 import (
@@ -37,28 +32,39 @@ const (
 // ProfileUnificationQueue defines the contract for enqueuing profiles for
 // asynchronous unification processing.
 type ProfileUnificationQueue interface {
-	// Enqueue adds a profile to the queue for unification. It returns true
-	// when the item is accepted and false when the queue is full or
-	// unavailable.
-	Enqueue(profile profileModel.Profile) bool
+	// Enqueue adds a profile to the queue for unification. It returns nil
+	// on success or a descriptive error when the item cannot be accepted
+	// (e.g. queue full, serialization failure, broker unreachable).
+	Enqueue(profile profileModel.Profile) error
 
 	// Start begins consuming queue items and invokes handler for each one.
 	// Implementations must start the consumer loop in a separate goroutine
 	// so that Start returns immediately. An error is returned when the queue
 	// cannot be started (e.g. broker subscription failure).
 	Start(handler func(profileModel.Profile)) error
+
+	// Close performs a graceful shutdown of the queue, flushing any
+	// in-flight items and releasing underlying resources (connections,
+	// channels, goroutines). It is safe to call Close more than once.
+	Close() error
 }
 
 // SchemaSyncQueue defines the contract for enqueuing schema synchronisation
 // jobs for asynchronous processing.
 type SchemaSyncQueue interface {
-	// Enqueue adds a schema sync job to the queue. It returns true when the
-	// item is accepted and false when the queue is full or unavailable.
-	Enqueue(sync schemaModel.ProfileSchemaSync) bool
+	// Enqueue adds a schema sync job to the queue. It returns nil on
+	// success or a descriptive error when the item cannot be accepted
+	// (e.g. queue full, serialization failure, broker unreachable).
+	Enqueue(sync schemaModel.ProfileSchemaSync) error
 
 	// Start begins consuming queue items and invokes handler for each one.
 	// Implementations must start the consumer loop in a separate goroutine
 	// so that Start returns immediately. An error is returned when the queue
 	// cannot be started (e.g. broker subscription failure).
 	Start(handler func(schemaModel.ProfileSchemaSync)) error
+
+	// Close performs a graceful shutdown of the queue, flushing any
+	// in-flight items and releasing underlying resources (connections,
+	// channels, goroutines). It is safe to call Close more than once.
+	Close() error
 }

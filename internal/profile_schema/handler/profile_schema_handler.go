@@ -509,7 +509,8 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 		schemaSync.Event == constants.DeleteScimAttributeEvent ||
 		schemaSync.Event == constants.UpdateLocalAttributeEvent || schemaSync.Event == constants.DeleteLocalClaimEvent {
 		// Enqueue the schema sync job for asynchronous processing
-		if !workers.EnqueueSchemaSyncJob(schemaSync) {
+		err := workers.EnqueueSchemaSyncJob(schemaSync)
+		if err != nil {
 			errMsg := fmt.Sprintf("Unable to process schema sync request for organization: %s. The system is currently at capacity. Please try again in a few moments.", schemaSync.OrgId)
 			logger.Error(errMsg)
 			serverError := errors2.NewServerError(errors2.ErrorMessage{

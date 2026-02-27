@@ -24,6 +24,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/queue"
 )
@@ -49,14 +50,39 @@ func StartSchemaSyncWorker() error {
 	return nil
 }
 
-// EnqueueSchemaSyncJob adds a schema sync job to the active queue. It
-// returns false when the worker has not been started or the queue is full.
-func EnqueueSchemaSyncJob(schemaSync model.ProfileSchemaSync) bool {
+// EnqueueSchemaSyncJob adds a schema sync job to the active queue. It is a
+// no-op when the worker has not been started. Enqueue errors are logged but
+// not propagated, because schema sync is a best-effort background task.
+func EnqueueSchemaSyncJob(schemaSync model.ProfileSchemaSync) error {
 	if activeSchemaSyncQueue == nil {
-		log.GetLogger().Error("Schema sync queue is not initialized. Cannot enqueue job.")
-		return false
+		errorMsg := fmt.Sprintf("workers: cannot enqueue schema sync for organization %s, worker not started",
+			schemaSync.OrgId)
+		log.GetLogger().Debug(errorMsg)
+		return errors.NewServerError(errors.ErrorMessage{
+			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
+			Description: errorMsg,
+		}, nil)
 	}
-	return activeSchemaSyncQueue.Enqueue(schemaSync)
+	if err := activeSchemaSyncQueue.Enqueue(schemaSync); err != nil {
+		errorMsg := fmt.Sprintf("workers: failed to enqueue schema sync for organization %s:", schemaSync.OrgId)
+		log.GetLogger().Debug(errorMsg)
+		return errors.NewServerError(errors.ErrorMessage{
+			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
+			Description: errorMsg,
+		}, nil)
+	}
+	return nil
+}
+
+// StopSchemaSyncWorker gracefully shuts down the schema sync queue.
+// It should be called during application shutdown.
+func StopSchemaSyncWorker() error {
+	if activeSchemaSyncQueue != nil {
+		return activeSchemaSyncQueue.Close()
+	}
+	return nil
 }
 
 // processSchemaSyncJob processes a schema sync job

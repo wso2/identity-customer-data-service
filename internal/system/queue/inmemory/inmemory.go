@@ -24,16 +24,21 @@ package inmemory
 
 import (
 	"fmt"
+	"sync"
 
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
+
+// -----------------------------------------------------------------------
+// ProfileQueue
+// -----------------------------------------------------------------------
 
 // ProfileQueue is the in-memory implementation of queue.ProfileUnificationQueue.
 // It uses a buffered Go channel as the underlying queue.
 type ProfileQueue struct {
-	ch chan profileModel.Profile
+	ch        chan profileModel.Profile
+	closeOnce sync.Once
 }
 
 // NewProfileQueue creates a new ProfileQueue with the given buffer size.
@@ -42,15 +47,13 @@ func NewProfileQueue(size int) *ProfileQueue {
 }
 
 // Enqueue adds a profile to the in-memory channel. It is non-blocking: if
-// the channel is full the item is dropped and false is returned.
-func (q *ProfileQueue) Enqueue(profile profileModel.Profile) bool {
+// the channel is full the item is dropped and an error is returned.
+func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
 	select {
 	case q.ch <- profile:
-		return true
+		return nil
 	default:
-		log.GetLogger().Error(fmt.Sprintf(
-			"In-memory profile unification queue is full. Dropping profile: %s", profile.ProfileId))
-		return false
+		return fmt.Errorf("inmemory: profile queue full, dropping profile %s", profile.ProfileId)
 	}
 }
 
@@ -66,10 +69,22 @@ func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
 	return nil
 }
 
+// Close closes the underlying channel, which causes the consumer goroutine
+// started by Start to exit. It is safe to call Close more than once.
+func (q *ProfileQueue) Close() error {
+	q.closeOnce.Do(func() { close(q.ch) })
+	return nil
+}
+
+// -----------------------------------------------------------------------
+// SchemaSyncQueue
+// -----------------------------------------------------------------------
+
 // SchemaSyncQueue is the in-memory implementation of queue.SchemaSyncQueue.
 // It uses a buffered Go channel as the underlying queue.
 type SchemaSyncQueue struct {
-	ch chan schemaModel.ProfileSchemaSync
+	ch        chan schemaModel.ProfileSchemaSync
+	closeOnce sync.Once
 }
 
 // NewSchemaSyncQueue creates a new SchemaSyncQueue with the given buffer size.
@@ -78,15 +93,13 @@ func NewSchemaSyncQueue(size int) *SchemaSyncQueue {
 }
 
 // Enqueue adds a schema sync job to the in-memory channel. It is non-blocking:
-// if the channel is full the item is dropped and false is returned.
-func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) bool {
+// if the channel is full the item is dropped and an error is returned.
+func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
 	select {
 	case q.ch <- sync:
-		return true
+		return nil
 	default:
-		log.GetLogger().Error(fmt.Sprintf(
-			"In-memory schema sync queue is full. Dropping job for tenant: %s", sync.OrgId))
-		return false
+		return fmt.Errorf("inmemory: schema sync queue full, dropping job for tenant %s", sync.OrgId)
 	}
 }
 
@@ -99,5 +112,12 @@ func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) err
 			handler(sync)
 		}
 	}()
+	return nil
+}
+
+// Close closes the underlying channel, which causes the consumer goroutine
+// started by Start to exit. It is safe to call Close more than once.
+func (q *SchemaSyncQueue) Close() error {
+	q.closeOnce.Do(func() { close(q.ch) })
 	return nil
 }
