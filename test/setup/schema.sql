@@ -48,6 +48,7 @@ CREATE TABLE profile_schema
     scope                  VARCHAR(255),
     org_handle             VARCHAR(255) NOT NULL,
     attribute_name         VARCHAR(255) NOT NULL,
+    display_name           VARCHAR(255) NOT NULL,
     value_type             VARCHAR(255) NOT NULL,
     merge_strategy         VARCHAR(255) NOT NULL,
     application_identifier VARCHAR(255) NOT NULL,

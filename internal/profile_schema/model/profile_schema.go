@@ -24,6 +24,7 @@ type ProfileSchemaAttribute struct {
 	OrgId                 string           `json:"org_id,omitempty" bson:"org_id,omitempty"`
 	AttributeId           string           `json:"attribute_id" bson:"attribute_id"`
 	AttributeName         string           `json:"attribute_name" bson:"attribute_name" binding:"required"`
+	DisplayName           string           `json:"display_name,omitempty" bson:"display_name,omitempty"`
 	ValueType             string           `json:"value_type" bson:"value_type" binding:"required"`
 	MergeStrategy         string           `json:"merge_strategy" bson:"merge_strategy" binding:"required"`
 	Mutability            string           `json:"mutability" bson:"mutability"`

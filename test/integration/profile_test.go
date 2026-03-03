@@ -84,13 +84,13 @@ func Test_Profile(t *testing.T) {
 			},
 		}
 
-		err := profileSchemaSvc.AddProfileSchemaAttributesForScope(identityAttributes, constants.IdentityAttributes, SuperTenantOrg)
+		_, err := profileSchemaSvc.AddProfileSchemaAttributesForScope(identityAttributes, constants.IdentityAttributes, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add identity schema attributes")
 
-		err = profileSchemaSvc.AddProfileSchemaAttributesForScope(traits, constants.Traits, SuperTenantOrg)
+		_, err = profileSchemaSvc.AddProfileSchemaAttributesForScope(traits, constants.Traits, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add traits schema attributes")
 
-		err = profileSchemaSvc.AddProfileSchemaAttributesForScope(appData, constants.ApplicationData, SuperTenantOrg)
+		_, err = profileSchemaSvc.AddProfileSchemaAttributesForScope(appData, constants.ApplicationData, SuperTenantOrg)
 		require.NoError(t, err, "Failed to add app data schema attributes")
 	})
 
