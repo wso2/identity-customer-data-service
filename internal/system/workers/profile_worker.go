@@ -65,6 +65,7 @@ func StartProfileWorker() error {
 			unifyProfiles(*p)
 		}
 	}); err != nil {
+		_ = q.Close()
 		return fmt.Errorf("workers: failed to start profile unification queue: %w", err)
 	}
 	profileQueueMu.Lock()

@@ -62,11 +62,11 @@ type managedConn struct {
 	username string
 	password string
 
-	mu   sync.RWMutex
-	conn *stomp.Conn
-
-	done     chan struct{}
-	doneOnce sync.Once
+	mu          sync.RWMutex
+	conn        *stomp.Conn
+	reconnectMu sync.Mutex
+	done        chan struct{}
+	doneOnce    sync.Once
 }
 
 func newManagedConn(addr, username, password string) (*managedConn, error) {
@@ -124,6 +124,9 @@ func (mc *managedConn) isShuttingDown() bool {
 // for unlimited retries (used by long-lived consumers). Returns an error if
 // all attempts are exhausted or if shutdown is signalled.
 func (mc *managedConn) reconnectWithBackoff(context string, maxAttempts int) error {
+	mc.reconnectMu.Lock()
+	defer mc.reconnectMu.Unlock()
+
 	logger := log.GetLogger()
 	backoff := initialBackoff
 	attempt := 0

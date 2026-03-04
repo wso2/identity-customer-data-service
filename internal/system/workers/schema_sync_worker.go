@@ -49,6 +49,7 @@ func StartSchemaSyncWorker() error {
 		return fmt.Errorf("workers: failed to create schema sync queue: %w", err)
 	}
 	if err := q.Start(processSchemaSyncJob); err != nil {
+		_ = q.Close()
 		return fmt.Errorf("workers: failed to start schema sync queue: %w", err)
 	}
 	schemaSyncQueueMu.Lock()
