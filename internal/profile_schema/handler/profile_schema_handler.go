@@ -135,18 +135,19 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 		}
 		schemaAttributes[i].OrgId = orgHandle
 	}
+
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	err = schemaService.AddProfileSchemaAttributesForScope(schemaAttributes, scope, orgHandle)
+	addedAttributes, err := schemaService.AddProfileSchemaAttributesForScope(schemaAttributes, scope, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
-	schemaAttributesNew := schemaAttributes
+	schemaAttributesNew := addedAttributes
 	for i := range schemaAttributesNew {
 		schemaAttributesNew[i].OrgId = ""
 	}
-	utils.RespondJSON(w, http.StatusCreated, schemaAttributes, constants.SchemaAttribute)
+	utils.RespondJSON(w, http.StatusCreated, schemaAttributesNew, constants.SchemaAttribute)
 }
 
 // GetProfileSchema handles fetching the entire profile schema.

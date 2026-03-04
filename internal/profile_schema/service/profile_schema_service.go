@@ -36,7 +36,7 @@ import (
 type ProfileSchemaServiceInterface interface {
 	GetProfileSchema(orgId string) (map[string]interface{}, error)
 	DeleteProfileSchema(orgId string) error
-	AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope, orgId string) error
+	AddProfileSchemaAttributesForScope(attrs []model.ProfileSchemaAttribute, scope, orgId string) ([]model.ProfileSchemaAttribute, error)
 	GetProfileSchemaAttributesByScope(orgId, scope string) (interface{}, error)
 	GetProfileSchemaAttributesByScopeAndFilter(id, scope string, filters []string) (interface{}, error)
 	DeleteProfileSchemaAttributesByScope(orgId, scope string) error
@@ -57,60 +57,86 @@ func GetProfileSchemaService() ProfileSchemaServiceInterface {
 }
 
 // AddProfileSchemaAttributesForScope adds profile schema attributes to the specific scope.
-func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttributes []model.ProfileSchemaAttribute, scope, orgId string) error {
+func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttributes []model.ProfileSchemaAttribute, scope, orgId string) ([]model.ProfileSchemaAttribute, error) {
 
 	validAttrs := make([]model.ProfileSchemaAttribute, 0, len(schemaAttributes))
 	for _, attr := range schemaAttributes {
 		if err, isValid := s.validateSchemaAttribute(attr); isValid {
-			validAttrs = append(validAttrs, attr)
-		} else {
-			return err
-		}
+			// Ensure the scope is valid
+			parts := strings.SplitN(attr.AttributeName, ".", 2)
+			scopeOfAttr := parts[0]
+			if scope != scopeOfAttr {
+				errorMsg := fmt.Sprintf("Attribute '%s' does not match the scope '%s'", attr.AttributeName, scope)
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Description: errorMsg,
+				}, http.StatusBadRequest)
+				return nil, clientError
+			}
 
-		// Ensure the scope is valid
-		parts := strings.SplitN(attr.AttributeName, ".", 2)
-		scopeOfAttr := parts[0]
-		if scope != scopeOfAttr {
-			errorMsg := fmt.Sprintf("Attribute '%s' does not match the scope '%s'", attr.AttributeName, scope)
-			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-				Description: errorMsg,
-			}, http.StatusBadRequest)
-			return clientError
-		}
-
-		existing, err := psstr.GetProfileSchemaAttributeByName(attr.OrgId, attr.AttributeName)
-		if err != nil {
-			return err
-		}
-		if existing != nil {
-			// For application_data attributes, check both attribute name AND application identifier
-			if scope == constants.ApplicationData {
-				if existing.ApplicationIdentifier == attr.ApplicationIdentifier {
-					errorMsg := fmt.Sprintf("Attribute '%s' already exists for application '%s' in org '%s'",
-						attr.AttributeName, attr.ApplicationIdentifier, attr.OrgId)
+			existing, err := psstr.GetProfileSchemaAttributeByName(attr.OrgId, attr.AttributeName)
+			if err != nil {
+				return nil, err
+			}
+			if existing != nil {
+				// For application_data attributes, check both attribute name AND application identifier
+				if scope == constants.ApplicationData {
+					if existing.ApplicationIdentifier == attr.ApplicationIdentifier {
+						errorMsg := fmt.Sprintf("Attribute '%s' already exists for application '%s' in org '%s'",
+							attr.AttributeName, attr.ApplicationIdentifier, attr.OrgId)
+						clientError := errors2.NewClientError(errors2.ErrorMessage{
+							Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
+							Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
+							Description: errorMsg,
+						}, http.StatusConflict)
+						return nil, clientError
+					}
+				} else {
+					// For non-application attributes, duplicate names are not allowed
+					errorMsg := fmt.Sprintf("Attribute '%s' already exists for org '%s'", attr.AttributeName, attr.OrgId)
 					clientError := errors2.NewClientError(errors2.ErrorMessage{
 						Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
 						Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
 						Description: errorMsg,
 					}, http.StatusConflict)
-					return clientError
+					return nil, clientError
 				}
-			} else {
-				// For non-application attributes, duplicate names are not allowed
-				errorMsg := fmt.Sprintf("Attribute '%s' already exists for org '%s'", attr.AttributeName, attr.OrgId)
-				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Code,
-					Message:     errors2.SCHEMA_ATTRIBUTE_ALREADY_EXISTS.Message,
-					Description: errorMsg,
-				}, http.StatusConflict)
-				return clientError
 			}
+
+			if attr.DisplayName == "" {
+				log.GetLogger().Debug(fmt.Sprintf("Display name not provided for attribute: %s. "+
+					"Resolving display name from attribute name.", attr.AttributeName))
+				attr.DisplayName = resolveDisplayName(attr.AttributeName)
+			}
+
+			validAttrs = append(validAttrs, attr)
+		} else {
+			return nil, err
 		}
 	}
 
-	return psstr.AddProfileSchemaAttributesForScope(validAttrs, scope, orgId)
+	return validAttrs, psstr.AddProfileSchemaAttributesForScope(validAttrs, scope, orgId)
+}
+
+func resolveDisplayName(attributeName string) string {
+	parts := strings.Split(attributeName, ".")
+	if len(parts) == 0 {
+		return ""
+	}
+
+	// Take leaf attribute for display name
+	leaf := parts[len(parts)-1]
+
+	// Title case each word
+	words := strings.Fields(leaf)
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
+		}
+	}
+
+	return strings.Join(words, " ")
 }
 
 func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaAttribute) (error, bool) {

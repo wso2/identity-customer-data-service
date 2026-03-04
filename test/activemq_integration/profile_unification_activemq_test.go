@@ -74,8 +74,10 @@ func Test_ActiveMQ_ProfileUnification_EmailBased(t *testing.T) {
 			MultiValued:   true,
 		},
 	}
-	require.NoError(t, schemaSvc.AddProfileSchemaAttributesForScope(identityAttrs, constants.IdentityAttributes, orgHandle))
-	require.NoError(t, schemaSvc.AddProfileSchemaAttributesForScope(traitAttrs, constants.Traits, orgHandle))
+	_, err := schemaSvc.AddProfileSchemaAttributesForScope(identityAttrs, constants.IdentityAttributes, orgHandle)
+	require.NoError(t, err)
+	_, err = schemaSvc.AddProfileSchemaAttributesForScope(traitAttrs, constants.Traits, orgHandle)
+	require.NoError(t, err)
 
 	// ── Unification rule: match on email ─────────────────────────────────────
 	unificationSvc := unificationService.GetUnificationRuleService()
