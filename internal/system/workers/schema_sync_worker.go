@@ -20,18 +20,23 @@ package workers
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
-	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/queue"
 )
 
 // activeSchemaSyncQueue is the queue implementation used for schema
-// synchronisation. It is initialised by StartSchemaSyncWorker.
-var activeSchemaSyncQueue queue.SchemaSyncQueue
+// synchronisation. It is initialised by StartSchemaSyncWorker. All access is
+// guarded by schemaSyncQueueMu to prevent data races between concurrent
+// Enqueue calls and shutdown.
+var (
+	schemaSyncQueueMu     sync.RWMutex
+	activeSchemaSyncQueue queue.SchemaSyncQueue
+)
 
 // StartSchemaSyncWorker initialises the schema sync queue (using the provider
 // configured in the runtime config) and starts the consumer goroutine. An
@@ -43,44 +48,40 @@ func StartSchemaSyncWorker() error {
 	if err != nil {
 		return fmt.Errorf("workers: failed to create schema sync queue: %w", err)
 	}
-	activeSchemaSyncQueue = q
 	if err := q.Start(processSchemaSyncJob); err != nil {
 		return fmt.Errorf("workers: failed to start schema sync queue: %w", err)
 	}
+	schemaSyncQueueMu.Lock()
+	activeSchemaSyncQueue = q
+	schemaSyncQueueMu.Unlock()
 	return nil
 }
 
 // EnqueueSchemaSyncJob adds a schema sync job to the active queue. It is a
-// no-op when the worker has not been started. Enqueue errors are logged but
-// not propagated, because schema sync is a best-effort background task.
+// no-op when the worker has not been started or has been stopped. Enqueue
+// errors are logged but not propagated, because schema sync is a best-effort
+// background task.
 func EnqueueSchemaSyncJob(schemaSync model.ProfileSchemaSync) error {
-	if activeSchemaSyncQueue == nil {
-		errorMsg := fmt.Sprintf("workers: cannot enqueue schema sync for organization %s, worker not started",
-			schemaSync.OrgId)
-		log.GetLogger().Debug(errorMsg)
-		return errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
-			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
-			Description: errorMsg,
-		}, nil)
+	schemaSyncQueueMu.RLock()
+	q := activeSchemaSyncQueue
+	schemaSyncQueueMu.RUnlock()
+	if q == nil {
+		return fmt.Errorf("schema sync queue is not initialized")
 	}
-	if err := activeSchemaSyncQueue.Enqueue(schemaSync); err != nil {
-		errorMsg := fmt.Sprintf("workers: failed to enqueue schema sync for organization %s:", schemaSync.OrgId)
-		log.GetLogger().Debug(errorMsg)
-		return errors.NewServerError(errors.ErrorMessage{
-			Code:        errors.UPDATE_PROFILE_SCHEMA.Code,
-			Message:     errors.UPDATE_PROFILE_SCHEMA.Message,
-			Description: errorMsg,
-		}, nil)
-	}
-	return nil
+	return q.Enqueue(schemaSync)
 }
 
-// StopSchemaSyncWorker gracefully shuts down the schema sync queue.
-// It should be called during application shutdown.
+// StopSchemaSyncWorker gracefully shuts down the schema sync queue. It nils
+// out the global reference under a write lock before calling Close, ensuring
+// no concurrent Enqueue can send on a closed queue. It should be called
+// during application shutdown.
 func StopSchemaSyncWorker() error {
-	if activeSchemaSyncQueue != nil {
-		return activeSchemaSyncQueue.Close()
+	schemaSyncQueueMu.Lock()
+	q := activeSchemaSyncQueue
+	activeSchemaSyncQueue = nil
+	schemaSyncQueueMu.Unlock()
+	if q != nil {
+		return q.Close()
 	}
 	return nil
 }

@@ -35,10 +35,13 @@ import (
 // -----------------------------------------------------------------------
 
 // ProfileQueue is the in-memory implementation of queue.ProfileUnificationQueue.
-// It uses a buffered Go channel as the underlying queue.
+// It uses a buffered Go channel as the underlying queue. The mu/closed fields
+// synchronize Enqueue and Close to prevent sending on a closed channel.
 type ProfileQueue struct {
 	ch        chan profileModel.Profile
 	closeOnce sync.Once
+	mu        sync.RWMutex
+	closed    bool
 }
 
 // NewProfileQueue creates a new ProfileQueue with the given buffer size.
@@ -47,8 +50,13 @@ func NewProfileQueue(size int) *ProfileQueue {
 }
 
 // Enqueue adds a profile to the in-memory channel. It is non-blocking: if
-// the channel is full the item is dropped and an error is returned.
+// the channel is full or closed the item is dropped and an error is returned.
 func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	if q.closed {
+		return fmt.Errorf("inmemory: profile queue closed, dropping profile %s", profile.ProfileId)
+	}
 	select {
 	case q.ch <- profile:
 		return nil
@@ -69,9 +77,13 @@ func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
 	return nil
 }
 
-// Close closes the underlying channel, which causes the consumer goroutine
-// started by Start to exit. It is safe to call Close more than once.
+// Close marks the queue as closed and closes the underlying channel, which
+// causes the consumer goroutine started by Start to exit. It is safe to call
+// Close more than once.
 func (q *ProfileQueue) Close() error {
+	q.mu.Lock()
+	q.closed = true
+	q.mu.Unlock()
 	q.closeOnce.Do(func() { close(q.ch) })
 	return nil
 }
@@ -81,10 +93,13 @@ func (q *ProfileQueue) Close() error {
 // -----------------------------------------------------------------------
 
 // SchemaSyncQueue is the in-memory implementation of queue.SchemaSyncQueue.
-// It uses a buffered Go channel as the underlying queue.
+// It uses a buffered Go channel as the underlying queue. The mu/closed fields
+// synchronize Enqueue and Close to prevent sending on a closed channel.
 type SchemaSyncQueue struct {
 	ch        chan schemaModel.ProfileSchemaSync
 	closeOnce sync.Once
+	mu        sync.RWMutex
+	closed    bool
 }
 
 // NewSchemaSyncQueue creates a new SchemaSyncQueue with the given buffer size.
@@ -93,8 +108,13 @@ func NewSchemaSyncQueue(size int) *SchemaSyncQueue {
 }
 
 // Enqueue adds a schema sync job to the in-memory channel. It is non-blocking:
-// if the channel is full the item is dropped and an error is returned.
+// if the channel is full or closed the item is dropped and an error is returned.
 func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	if q.closed {
+		return fmt.Errorf("inmemory: schema sync queue closed, dropping job for tenant %s", sync.OrgId)
+	}
 	select {
 	case q.ch <- sync:
 		return nil
@@ -115,9 +135,13 @@ func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) err
 	return nil
 }
 
-// Close closes the underlying channel, which causes the consumer goroutine
-// started by Start to exit. It is safe to call Close more than once.
+// Close marks the queue as closed and closes the underlying channel, which
+// causes the consumer goroutine started by Start to exit. It is safe to call
+// Close more than once.
 func (q *SchemaSyncQueue) Close() error {
+	q.mu.Lock()
+	q.closed = true
+	q.mu.Unlock()
 	q.closeOnce.Do(func() { close(q.ch) })
 	return nil
 }

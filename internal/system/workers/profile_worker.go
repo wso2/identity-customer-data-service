@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package workers
 
 import (
@@ -5,6 +23,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,8 +41,13 @@ import (
 )
 
 // activeProfileQueue is the queue implementation used for profile unification.
-// It is initialised by StartProfileWorker.
-var activeProfileQueue queue.ProfileUnificationQueue
+// It is initialised by StartProfileWorker. All access is guarded by
+// profileQueueMu to prevent data races between concurrent Enqueue calls and
+// shutdown.
+var (
+	profileQueueMu     sync.RWMutex
+	activeProfileQueue queue.ProfileUnificationQueue
+)
 
 // StartProfileWorker initialises the profile unification queue (using the
 // provider configured in the runtime config) and starts the consumer
@@ -35,7 +59,6 @@ func StartProfileWorker() error {
 	if err != nil {
 		return fmt.Errorf("workers: failed to create profile unification queue: %w", err)
 	}
-	activeProfileQueue = q
 	if err := q.Start(func(profile profileModel.Profile) {
 		p, err := profileStore.GetProfile(profile.ProfileId)
 		if err == nil && p != nil {
@@ -44,15 +67,21 @@ func StartProfileWorker() error {
 	}); err != nil {
 		return fmt.Errorf("workers: failed to start profile unification queue: %w", err)
 	}
+	profileQueueMu.Lock()
+	activeProfileQueue = q
+	profileQueueMu.Unlock()
 	return nil
 }
 
 // EnqueueProfileForProcessing adds a profile to the active queue for
 // asynchronous unification. It is a no-op when the worker has not been
-// started.
+// started or has been stopped.
 func EnqueueProfileForProcessing(profile profileModel.Profile) {
-	if activeProfileQueue != nil {
-		if err := activeProfileQueue.Enqueue(profile); err != nil {
+	profileQueueMu.RLock()
+	q := activeProfileQueue
+	profileQueueMu.RUnlock()
+	if q != nil {
+		if err := q.Enqueue(profile); err != nil {
 			log.GetLogger().Error(fmt.Sprintf(
 				"workers: failed to enqueue profile %s for unification: %v",
 				profile.ProfileId, err))
@@ -70,10 +99,16 @@ func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
 }
 
 // StopProfileWorker gracefully shuts down the profile unification queue.
-// It should be called during application shutdown.
+// It nils out the global reference under a write lock before calling Close,
+// ensuring no concurrent Enqueue can send on a closed queue. It should be
+// called during application shutdown.
 func StopProfileWorker() error {
-	if activeProfileQueue != nil {
-		return activeProfileQueue.Close()
+	profileQueueMu.Lock()
+	q := activeProfileQueue
+	activeProfileQueue = nil
+	profileQueueMu.Unlock()
+	if q != nil {
+		return q.Close()
 	}
 	return nil
 }
