@@ -20,6 +20,6 @@ package utils
 
 import "fmt"
 
-func BuildProfileLocation(orgId, profileId string) string {
-	return fmt.Sprintf("%s/cds/api/v1/profiles/%s", orgId, profileId)
+func BuildProfileLocation(serverURL, orgId, profileId string) string {
+	return fmt.Sprintf("%s/t/%s/cds/api/v1/profiles/%s", serverURL, orgId, profileId)
 }
