@@ -545,6 +545,16 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if profile.UserId != "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ADD_PROFILE.Code,
+			Message:     errors2.ADD_PROFILE.Message,
+			Description: "UserId is not allowed in profile creation.",
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
 	// Check if a valid cookie exists
 	profileCookie, err := r.Cookie(constants.ProfileCookie)
 	if err == nil && profileCookie.Value != "" {
@@ -894,8 +904,6 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	orgHandle := profileSync.OrgHandle
 
 	if orgHandle == "" {
-		//orgHandle = utils.ExtractOrgHandleFromPath(request)
-		//todo: should we expect orgHandle in the path or as body param
 		errMsg := fmt.Sprintf("Organization handle cannot be empty in profile sync event: %s", profileSync.Event)
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,

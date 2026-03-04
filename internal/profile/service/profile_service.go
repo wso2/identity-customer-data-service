@@ -539,7 +539,7 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 // UpdateProfile creates or updates a profile
 func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
 
-	profile, err := profileStore.GetProfile(profileId) //todo: need to get the reference to see what to updatedProfile (see if its the master)
+	profile, err := profileStore.GetProfile(profileId)
 	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("Error fetching profile for updatedProfile: %s", profileId)
@@ -1224,6 +1224,18 @@ func (ps *ProfilesService) PatchProfile(profileId, orgHandle string, patch map[s
 			Message:     errors2.PROFILE_NOT_FOUND.Message,
 			Description: fmt.Sprintf("Profile %s not found", profileId),
 		}, http.StatusNotFound)
+	}
+
+	logger := log.GetLogger()
+	if strings.TrimSpace(existingProfile.UserId) != "" {
+		if _, ok := patch["identity_attributes"]; ok {
+			logger.Debug(fmt.Sprintf("Attempt to patch identity attributes for profile: %s with user_id: %s", profileId, existingProfile.UserId))
+			return nil, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: "Identity attributes cannot be updated. Use your Identity Provider to manage identity attributes.",
+			}, http.StatusBadRequest)
+		}
 	}
 
 	// Convert the full profile to map to allow patching
