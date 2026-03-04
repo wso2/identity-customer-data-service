@@ -60,13 +60,45 @@ type DataSourceConfig struct {
 	SSLMode  string `yaml:"sslmode"`
 }
 
+// ExternalBrokerConfig holds the connection settings that are common to
+// broker-backed queue providers (e.g. any STOMP-compatible broker such as
+// ActiveMQ or Artemis). Providers that need additional broker-specific
+// settings should be configured via environment variables or a dedicated
+// sub-section added to this struct.
+type ExternalBrokerConfig struct {
+	// Addr is the broker address in "host:port" format (e.g. "localhost:61613").
+	Addr string `yaml:"addr"`
+	// Username is the broker login name.
+	Username string `yaml:"username"`
+	// Password is the broker passcode.
+	Password string `yaml:"password"`
+	// ProfileQueueName is the destination used for profile unification
+	// messages (e.g. "/queue/cds-profile-unification").
+	ProfileQueueName string `yaml:"profile_queue_name"`
+	// SchemaSyncQueueName is the destination used for schema sync
+	// messages (e.g. "/queue/cds-schema-sync").
+	SchemaSyncQueueName string `yaml:"schema_sync_queue_name"`
+}
+
+// MessageQueueConfig selects the queue provider and its settings. When Type
+// is empty or "memory" the built-in in-memory queue is used. Set Type to the
+// name of any registered provider (e.g. "activemq") to use an external broker.
+// See docs/extending-queue-providers.md for how to add a custom provider.
+type MessageQueueConfig struct {
+	// Type is the queue provider to use: "memory" (default) or the name of
+	// any registered external provider (e.g. "activemq").
+	Type   string              `yaml:"type"`
+	Broker ExternalBrokerConfig `yaml:"broker"`
+}
+
 type Config struct {
-	Addr       AddrConfig       `yaml:"addr"`
-	Log        LogConfig        `yaml:"log"`
-	Auth       AuthConfig       `yaml:"auth"`
-	AuthServer AuthServerConfig `yaml:"auth_server"`
-	DataSource DataSourceConfig `yaml:"datasource"`
-	TLS        TLSConfig        `yaml:"tls"`
+	Addr         AddrConfig         `yaml:"addr"`
+	Log          LogConfig          `yaml:"log"`
+	Auth         AuthConfig         `yaml:"auth"`
+	AuthServer   AuthServerConfig   `yaml:"auth_server"`
+	DataSource   DataSourceConfig   `yaml:"datasource"`
+	TLS          TLSConfig          `yaml:"tls"`
+	MessageQueue MessageQueueConfig `yaml:"message_queue"`
 }
 
 type TLSConfig struct {

@@ -15,6 +15,7 @@ auth:
     - "http://localhost:3000"
     - "http://localhost:3001"
     - "https://localhost:9001"
+    - "https://localhost:9443"
 
 addr:
   host: 127.0.0.1
@@ -74,6 +75,20 @@ sync:
   schema:
     enabled: true
     interval: 3600 # in seconds
+
+# Message queue configuration.
+# Set type to "activemq" to use an external ActiveMQ broker for durable
+# message delivery. Leave type as "memory" (or omit the block entirely) to
+# use the built-in in-memory queue, which is the default and is suitable
+# for local and single-instance deployments.
+message_queue:
+  type: "memory" # Options: "memory" (default), "activemq", or any registered custom provider
+  broker:
+    addr: ""               # Broker endpoint (host:port)
+    username: "admin"
+    password: "${BROKER_PASSWORD}"
+    profile_queue_name: "/queue/cds-profile-unification"
+    schema_sync_queue_name: "/queue/cds-schema-sync"
 
 datasource:
   type: "postgres"
