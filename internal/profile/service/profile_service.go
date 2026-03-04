@@ -44,7 +44,7 @@ import (
 type ProfilesServiceInterface interface {
 	DeleteProfile(profileId string) error
 	GetAllProfilesCursor(orgHandle string, limit int, cursor *profileModel.ProfileCursor) ([]profileModel.ProfileResponse, bool, error)
-	CreateProfile(profile profileModel.ProfileRequest, orgHandle string) (*profileModel.ProfileResponse, error)
+	CreateProfile(profile profileModel.ProfileRequest, orgHandle, serverURL string) (*profileModel.ProfileResponse, error)
 	UpdateProfile(profileId, orgHandle string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
@@ -89,7 +89,7 @@ func ConvertAppData(input map[string]map[string]interface{}) []profileModel.Appl
 }
 
 // CreateProfile creates a new profile.
-func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequest, orgHandle string) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequest, orgHandle, serverURL string) (*profileModel.ProfileResponse, error) {
 
 	rawSchema, err := schemaService.GetProfileSchemaService().GetProfileSchema(orgHandle)
 	logger := log.GetLogger()
@@ -138,7 +138,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 		},
 		CreatedAt: createdTime,
 		UpdatedAt: createdTime,
-		Location:  utils.BuildProfileLocation(orgHandle, profileId),
+		Location:  utils.BuildProfileLocation(serverURL, orgHandle, profileId),
 	}
 
 	if err := profileStore.InsertProfile(profile); err != nil {

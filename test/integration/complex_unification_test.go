@@ -140,13 +140,13 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		p3 := mustUnmarshalProfile(`{"identity_attributes":{"phone_number":["0771111111"],"email":["cascade2@wso2.com"]},"traits":{"interests":["art"]}}`)
 		p4 := mustUnmarshalProfile(`{"identity_attributes":{"email":["cascade2@wso2.com"]},"traits":{"interests":["cooking"]}}`)
 
-		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		prof3, _ := profileSvc.CreateProfile(p3, SuperTenantOrg)
+		prof3, _ := profileSvc.CreateProfile(p3, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		prof4, _ := profileSvc.CreateProfile(p4, SuperTenantOrg)
+		prof4, _ := profileSvc.CreateProfile(p4, SuperTenantOrg, "")
 
 		time.Sleep(3 * time.Second)
 
@@ -182,8 +182,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		t1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["deep1@wso2.com"]},"traits":{"interests":["reading"]}}`)
 		t2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["deep1@wso2.com"],"phone_number":["0772222222"]},"traits":{"interests":["writing"]}}`)
 
-		prof1, _ := profileSvc.CreateProfile(t1, SuperTenantOrg)
-		prof2, _ := profileSvc.CreateProfile(t2, SuperTenantOrg)
+		prof1, _ := profileSvc.CreateProfile(t1, SuperTenantOrg, "")
+		prof2, _ := profileSvc.CreateProfile(t2, SuperTenantOrg, "")
 		time.Sleep(2 * time.Second)
 
 		// Verify initial merge happened
@@ -193,7 +193,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 
 		// Now add T3 with matching phone
 		t3 := mustUnmarshalProfile(`{"identity_attributes":{"phone_number":["0772222222"]},"traits":{"interests":["gaming"]}}`)
-		prof3, _ := profileSvc.CreateProfile(t3, SuperTenantOrg)
+		prof3, _ := profileSvc.CreateProfile(t3, SuperTenantOrg, "")
 		time.Sleep(2 * time.Second)
 
 		merged3, _ := profileSvc.GetProfile(prof3.ProfileId)
@@ -225,8 +225,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 			"application_data":{"` + AppId + `":{"device_id":["device-002"]}}
 		}`)
 
-		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
-		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg, "")
+		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg, "")
 		time.Sleep(2 * time.Second)
 
 		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
@@ -254,8 +254,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		p1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["update1@wso2.com"]},"traits":{"interests":["hiking"]}}`)
 		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["update2@wso2.com"]},"traits":{"interests":["camping"]}}`)
 
-		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
-		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg, "")
+		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg, "")
 		time.Sleep(2 * time.Second)
 
 		// Verify they are NOT merged initially
@@ -299,8 +299,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		p1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["multi1@wso2.com"],"phone_number":["0773333333"]},"traits":{"interests":["photography"]}}`)
 		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["multi1@wso2.com"],"phone_number":["0773333333"]},"traits":{"interests":["videography"]}}`)
 
-		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
-		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg, "")
+		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg, "")
 		time.Sleep(2 * time.Second)
 
 		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
@@ -323,13 +323,13 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		pC := mustUnmarshalProfile(`{"identity_attributes":{"phone_number":["0774444444"]},"traits":{"preferences":["compact_view"]}}`)
 		pD := mustUnmarshalProfile(`{"identity_attributes":{"phone_number":["0774444444"]},"traits":{"preferences":["high_contrast"]}}`)
 
-		profA, _ := profileSvc.CreateProfile(pA, SuperTenantOrg)
+		profA, _ := profileSvc.CreateProfile(pA, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		profB, _ := profileSvc.CreateProfile(pB, SuperTenantOrg)
+		profB, _ := profileSvc.CreateProfile(pB, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		profC, _ := profileSvc.CreateProfile(pC, SuperTenantOrg)
+		profC, _ := profileSvc.CreateProfile(pC, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		profD, _ := profileSvc.CreateProfile(pD, SuperTenantOrg)
+		profD, _ := profileSvc.CreateProfile(pD, SuperTenantOrg, "")
 		time.Sleep(3 * time.Second)
 
 		mergedA, _ := profileSvc.GetProfile(profA.ProfileId)
@@ -368,13 +368,13 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		t2 := mustUnmarshalProfile(`{"identity_attributes":{"phone_number":["0775555555"]},"traits":{"interests":["strategy"]}}`)
 		t3 := mustUnmarshalProfile(`{"identity_attributes":{"phone_number":["0775555555"]},"traits":{"interests":["planning"]}}`)
 
-		profPerm, _ := profileSvc.CreateProfile(perm, SuperTenantOrg)
+		profPerm, _ := profileSvc.CreateProfile(perm, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		profT1, _ := profileSvc.CreateProfile(t1, SuperTenantOrg)
+		profT1, _ := profileSvc.CreateProfile(t1, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		profT2, _ := profileSvc.CreateProfile(t2, SuperTenantOrg)
+		profT2, _ := profileSvc.CreateProfile(t2, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		profT3, _ := profileSvc.CreateProfile(t3, SuperTenantOrg)
+		profT3, _ := profileSvc.CreateProfile(t3, SuperTenantOrg, "")
 		time.Sleep(3 * time.Second)
 
 		mergedPerm, _ := profileSvc.GetProfile(profPerm.ProfileId)
@@ -409,8 +409,8 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		p1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["types@wso2.com"]},"traits":{"interests":["reading"],"score":50}}`)
 		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["types@wso2.com"]},"traits":{"interests":["writing"],"score":75}}`)
 
-		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
-		_, _ = profileSvc.CreateProfile(p2, SuperTenantOrg)
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg, "")
+		_, _ = profileSvc.CreateProfile(p2, SuperTenantOrg, "")
 		time.Sleep(2 * time.Second)
 
 		merged1, _ := profileSvc.GetProfile(prof1.ProfileId)
@@ -433,7 +433,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 
 		// First create profile while rule is active
 		p1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["reactivate@wso2.com"]},"traits":{"interests":["initial"]}}`)
-		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg, "")
 		time.Sleep(1 * time.Second)
 
 		// Deactivate email rule
@@ -442,7 +442,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 
 		// Create second profile while rule is inactive
 		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["reactivate@wso2.com"]},"traits":{"interests":["during_inactive"]}}`)
-		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg, "")
 		time.Sleep(2 * time.Second)
 
 		// Verify no unification happened
@@ -457,7 +457,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 
 		// Create third profile after reactivation
 		p3 := mustUnmarshalProfile(`{"identity_attributes":{"email":["reactivate@wso2.com"]},"traits":{"interests":["after_reactivate"]}}`)
-		prof3, _ := profileSvc.CreateProfile(p3, SuperTenantOrg)
+		prof3, _ := profileSvc.CreateProfile(p3, SuperTenantOrg, "")
 		time.Sleep(2 * time.Second)
 
 		// Third profile should trigger unification
@@ -479,11 +479,11 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy1@wso2.com"]},"traits":{"interests":["writing"]}}`)
 		p3 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy1@wso2.com"],"phone_number":["0771111111"]},"traits":{"interests":["coding"]}}`)
 
-		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg)
+		prof1, _ := profileSvc.CreateProfile(p1, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg)
+		prof2, _ := profileSvc.CreateProfile(p2, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		prof3, _ := profileSvc.CreateProfile(p3, SuperTenantOrg)
+		prof3, _ := profileSvc.CreateProfile(p3, SuperTenantOrg, "")
 		time.Sleep(3 * time.Second)
 
 		// Verify first hierarchy is created
@@ -508,9 +508,9 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		p4 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy2@wso2.com"],"phone_number":["0772222222"]},"traits":{"interests":["gaming"]}}`)
 		p5 := mustUnmarshalProfile(`{"identity_attributes":{"email":["hierarchy2@wso2.com"]},"traits":{"interests":["music"]}}`)
 
-		prof4, _ := profileSvc.CreateProfile(p4, SuperTenantOrg)
+		prof4, _ := profileSvc.CreateProfile(p4, SuperTenantOrg, "")
 		time.Sleep(500 * time.Millisecond)
-		prof5, _ := profileSvc.CreateProfile(p5, SuperTenantOrg)
+		prof5, _ := profileSvc.CreateProfile(p5, SuperTenantOrg, "")
 		time.Sleep(3 * time.Second)
 
 		// Verify second hierarchy is created
@@ -536,7 +536,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		// Step 3: Create a profile that connects both hierarchies
 		// P6 shares phone with P3 (from Master1) and shares phone with P4 (from Master2)
 		p6 := mustUnmarshalProfile(`{"identity_attributes":{"phone_number":["0771111111","0772222222"]},"traits":{"interests":["sports"]}}`)
-		prof6, _ := profileSvc.CreateProfile(p6, SuperTenantOrg)
+		prof6, _ := profileSvc.CreateProfile(p6, SuperTenantOrg, "")
 		time.Sleep(5 * time.Second)
 
 		// Step 4: Verify all profiles are now in unified hierarchy

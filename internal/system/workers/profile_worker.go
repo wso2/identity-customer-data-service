@@ -12,6 +12,7 @@ import (
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
@@ -179,7 +180,8 @@ func unifyProfiles(newProfile profileModel.Profile) {
 						}
 						newMasterProfile.ProfileId = uuid.New().String()
 						newMasterProfile.UserId = userId
-						newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.OrgHandle, newMasterProfile.ProfileId)
+						cdsServerURL := buildServerURL()
+						newMasterProfile.Location = utils.BuildProfileLocation(cdsServerURL, newMasterProfile.OrgHandle, newMasterProfile.ProfileId)
 						childProfile1 := profileModel.Reference{
 							ProfileId: newProfile.ProfileId,
 							Reason:    rule.RuleName,
@@ -842,4 +844,17 @@ func mergeAppData(existingAppData, incomingAppData []profileModel.ApplicationDat
 
 	logger.Info(fmt.Sprintf("Application data merge completed for %d applications", len(mergedList)))
 	return mergedList
+}
+
+func buildServerURL() string {
+	cfg := config.GetCDSRuntime().Config
+	host := cfg.Addr.Host
+	if cfg.Addr.Port != 0 {
+		host = fmt.Sprintf("%s:%d", host, cfg.Addr.Port)
+	}
+	scheme := "https"
+	if strings.HasPrefix(cfg.Addr.Host, "localhost") || strings.HasPrefix(cfg.Addr.Host, "127.0.0.1") {
+		scheme = "http"
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
 }

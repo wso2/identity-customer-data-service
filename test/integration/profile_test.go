@@ -105,7 +105,7 @@ func Test_Profile(t *testing.T) {
 	_ = json.Unmarshal(jsonData, &profileRequest)
 
 	t.Run("Create_Profile_Success", func(t *testing.T) {
-		profile, err := profileSvc.CreateProfile(profileRequest, SuperTenantOrg)
+		profile, err := profileSvc.CreateProfile(profileRequest, SuperTenantOrg, "")
 		require.NoError(t, err)
 		require.NotNil(t, profile)
 		require.Equal(t, email, profile.IdentityAttributes["email"].([]interface{})[0])
@@ -123,7 +123,7 @@ func Test_Profile(t *testing.T) {
 	})
 
 	t.Run("Update_Profile_Success", func(t *testing.T) {
-		_, err := profileSvc.CreateProfile(profileRequest, SuperTenantOrg)
+		_, err := profileSvc.CreateProfile(profileRequest, SuperTenantOrg, "")
 		require.NoError(t, err)
 
 		var updatedRequest profileModel.ProfileRequest
