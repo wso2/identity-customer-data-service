@@ -184,3 +184,7 @@ const (
 const (
 	SystemUserIdMatchReason = "system:user_id_match"
 )
+
+const (
+	DefaultCookieCleanupTime = 24 * 60 * 60 // 24 hours in seconds
+)

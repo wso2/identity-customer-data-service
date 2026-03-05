@@ -421,6 +421,39 @@ func findAppAttributeInSchema(appSchema map[string][]model.ProfileSchemaAttribut
 	return model.ProfileSchemaAttribute{}, false
 }
 
+// valuesEqualForMutability compares two values for equality, normalizing numeric types
+// so that values like int64(1) and float64(1.0) are considered equal.
+// For non-numeric types, it falls back to reflect.DeepEqual.
+func valuesEqualForMutability(oldVal, newVal interface{}) bool {
+	oldNum, oldOk := toFloat64(oldVal)
+	newNum, newOk := toFloat64(newVal)
+	if oldOk && newOk {
+		return oldNum == newNum
+	}
+	return reflect.DeepEqual(oldVal, newVal)
+}
+
+// toFloat64 attempts to convert a numeric value to float64.
+// Returns the float64 value and true if the input is numeric, or 0 and false otherwise.
+// This allows for flexible comparison of numeric values across different types (int, int64, float32, etc.)
+// when validating mutability constraints.
+func toFloat64(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float32:
+		return float64(n), true
+	case float64:
+		return n, true
+	default:
+		return 0, false
+	}
+}
+
 func validateMutability(mutability string, isUpdate bool, oldVal, newVal interface{}) error {
 	switch mutability {
 	case constants.MutabilityReadOnly:
@@ -430,7 +463,7 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 			Description: "field is read-only or computed",
 		}, http.StatusBadRequest)
 	case constants.MutabilityImmutable:
-		if isUpdate && !reflect.DeepEqual(oldVal, newVal) {
+		if isUpdate && !valuesEqualForMutability(oldVal, newVal) {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
 				Message:     errors2.UPDATE_PROFILE.Message,
@@ -438,7 +471,7 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 			}, http.StatusBadRequest)
 		}
 	case constants.MutabilityWriteOnce:
-		if isUpdate && hasExistingValue(oldVal) && !reflect.DeepEqual(oldVal, newVal) {
+		if isUpdate && hasExistingValue(oldVal) && !valuesEqualForMutability(oldVal, newVal) {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
 				Message:     errors2.UPDATE_PROFILE.Message,

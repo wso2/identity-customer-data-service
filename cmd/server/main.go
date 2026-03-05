@@ -189,6 +189,8 @@ func main() {
 		logger.Error("Failed to stop schema sync worker.", log.Error(err))
 	}
 
+	workers.StopCookieCleanupWorker()
+
 	logger.Info("Shutdown complete")
 }
 

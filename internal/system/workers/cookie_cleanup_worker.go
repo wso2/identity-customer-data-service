@@ -24,18 +24,28 @@ import (
 
 	"github.com/wso2/identity-customer-data-service/internal/profile/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
+
+var cookieCleanupDone chan struct{}
 
 func StartCookieCleanupWorker(cfg config.CookieCleanupConfig) {
 
 	logger := log.GetLogger()
+
+	if cfg.Interval <= 0 {
+		cfg.Interval = constants.DefaultCookieCleanupTime
+		logger.Info("Cookie cleanup interval not set or invalid. Defaulting to 24 hours.")
+	}
 
 	interval := time.Duration(cfg.Interval) * time.Second
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
 		batchSize = 500
 	}
+
+	cookieCleanupDone = make(chan struct{})
 
 	logger.Info(fmt.Sprintf("Cookie cleanup worker started. Interval: %s, Batch size: %d",
 		interval, batchSize))
@@ -44,10 +54,22 @@ func StartCookieCleanupWorker(cfg config.CookieCleanupConfig) {
 
 	go func() {
 		defer ticker.Stop()
-		for range ticker.C {
-			runCookieCleanup(batchSize)
+		for {
+			select {
+			case <-ticker.C:
+				runCookieCleanup(batchSize)
+			case <-cookieCleanupDone:
+				logger.Info("Cookie cleanup worker stopped")
+				return
+			}
 		}
 	}()
+}
+
+func StopCookieCleanupWorker() {
+	if cookieCleanupDone != nil {
+		close(cookieCleanupDone)
+	}
 }
 
 func runCookieCleanup(batchSize int) {
