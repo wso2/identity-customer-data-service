@@ -119,10 +119,17 @@ func mergeMatchedProfiles(existingMasterProfile profileModel.Profile, newProfile
 	logger := log.GetLogger()
 
 	// Fetch references for the existing master profile
-	existingMasterProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(existingMasterProfile.ProfileId)
+	refs, err := profileStore.FetchReferencedProfiles(existingMasterProfile.ProfileId)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to fetch references for profile %s during unification with profile %s", existingMasterProfile.ProfileId))
+	}
+	existingMasterProfile.ProfileStatus.References = refs
 
 	// Merge profile data using schema rules
-	schemaRules, _ := schemaStore.GetProfileSchemaAttributesForOrg(newProfile.OrgHandle)
+	schemaRules, err := schemaStore.GetProfileSchemaAttributesForOrg(newProfile.OrgHandle)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to fetch profile schema attributes for org %s during unification of profile %s", newProfile.OrgHandle, newProfile.ProfileId))
+	}
 	newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, schemaRules)
 
 	hasUserIDExisting := existingMasterProfile.UserId != ""
@@ -294,6 +301,7 @@ func mergeSameKindProfiles(
 		}
 
 		if err := profileStore.InsertProfile(newMasterProfile); err != nil {
+			_ = profileStore.DeleteProfile(newMasterProfile.ProfileId) // cleanup
 			logger.Error(fmt.Sprintf("Failed to insert new master profile while unifying %s and %s",
 				newProfile.ProfileId, existingMasterProfile.ProfileId), log.Error(err))
 			return

@@ -1362,7 +1362,7 @@ func (ps *ProfilesService) UpdateCookieStatusByProfileId(profileId string, isAct
 	err := profileStore.UpdateProfileCookieByProfileId(profileId, isActive)
 	logger := log.GetLogger()
 	if err != nil {
-		errMsg := fmt.Sprintf("Error creating profile cookie by profile_id: %s", profileId)
+		errMsg := fmt.Sprintf("Error updating profile cookie by profile_id: %s", profileId)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_COOKIE.Code,

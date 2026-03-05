@@ -1167,6 +1167,10 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if profileSync.Event == constants.SessionTermination {
 		logger.Info("Event received session termination for user: " + profileSync.UserId)
 		if profileSync.UserId != "" {
+			if strings.TrimSpace(profileSync.ProfileCookie) == "" {
+				logger.Debug("No profile cookie provided for session termination. Skipping cookie deactivation.")
+				return
+			}
 			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
 			if err != nil {
 				utils.HandleError(writer, err)
@@ -1188,6 +1192,20 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 			}
 
+			owned := profileCookie.ProfileId == existingProfile.ProfileId
+			if !owned {
+				for _, ref := range existingProfile.MergedFrom {
+					if ref.ProfileId == profileCookie.ProfileId {
+						owned = true
+						break
+					}
+				}
+			}
+			if !owned {
+				logger.Warn("Profile cookie does not belong to the resolved user profile. " +
+					"Skipping cookie deactivation.")
+				return
+			}
 			// Use the cookie's own profile ID, not the master profile ID.
 			// The cookie may belong to a merged-from (child) profile.
 			err = profilesService.UpdateCookieStatusByCookieId(profileCookie.CookieId, false)
