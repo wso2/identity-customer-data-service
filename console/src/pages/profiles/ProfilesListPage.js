@@ -172,9 +172,6 @@ export default function ProfilesListPage() {
           <Typography variant="caption" sx={{ flex: '0 0 120px', color: '#999', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.5px' }}>
             User
           </Typography>
-          <Typography variant="caption" sx={{ flex: '0 0 140px', color: '#999', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.5px', textAlign: 'right' }}>
-            Unified Profiles
-          </Typography>
         </Box>
 
         {loading ? (
@@ -210,12 +207,12 @@ export default function ProfilesListPage() {
                       }
                       sx={{ flex: '1 1 50%' }}
                     />
-                    <Box sx={{ flex: '0 0 120px' }}>
+                    <Box sx={{ flex: '0 0 160px', display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 2 }}>
                       <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
                         {p.user_id || ''}
                       </Typography>
-                    </Box>
-                    <Box sx={{ flex: '0 0 140px', display: 'flex', justifyContent: 'flex-end', pr: 4 }}>
+                    {/* </Box>
+                    <Box sx={{ flex: '0 0 140px', display: 'flex', justifyContent: 'flex-end', pr: 4 }}> */}
                       <Chip
                         label={unified ? 'Unified' : 'Anonymous'}
                         size="small"

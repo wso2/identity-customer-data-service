@@ -43,6 +43,8 @@ type ProfileListResponse struct {
 	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
 	ApplicationData    map[string]map[string]interface{} `json:"application_data,omitempty" bson:"application_data,omitempty"`
 	MergedFrom         []Reference                       `json:"merged_from,omitempty" bson:"merged_from,omitempty"`
+	MatchScore         *float64                          `json:"match_score,omitempty" bson:"match_score,omitempty"`
+	ScoreBreakdown     map[string]float64                `json:"score_breakdown,omitempty" bson:"score_breakdown,omitempty"`
 }
 
 type Meta struct {
@@ -71,4 +73,11 @@ type ProfileSync struct {
 type ProfileListAPIResponse struct {
 	Pagination pagination.Pagination `json:"pagination"`
 	Items      []ProfileListResponse `json:"profiles"`
+}
+
+// FuzzyMatchResult holds a profile along with its fuzzy match score.
+type FuzzyMatchResult struct {
+	Profile        ProfileResponse    `json:"profile"`
+	MatchScore     float64            `json:"match_score"`
+	ScoreBreakdown map[string]float64 `json:"score_breakdown"`
 }

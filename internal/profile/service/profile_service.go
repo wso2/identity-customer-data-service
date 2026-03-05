@@ -22,15 +22,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine"
+	irModel "github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
+	irStore "github.com/wso2/identity-customer-data-service/internal/identity_resolution/store"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
+	schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
+	urStore "github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
 
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
@@ -48,6 +54,7 @@ type ProfilesServiceInterface interface {
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilterCursor(orgHandle string, filters []string, limit int, cursor *profileModel.ProfileCursor) ([]profileModel.ProfileResponse, bool, error)
+	GetProfilesWithFuzzyResolution(orgHandle string, filters []string, threshold float64, limit int) ([]profileModel.FuzzyMatchResult, error)
 	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
 	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
 	PatchProfile(profileId, orgHandle string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
@@ -1104,6 +1111,260 @@ func (ps *ProfilesService) GetAllProfilesWithFilterCursor(
 	}
 
 	return result, hasMore, nil
+}
+
+// GetProfilesWithFuzzyResolution uses the identity resolution engine to find
+// profiles that fuzzy-match the attributes extracted from query filters.
+// It returns profiles scored above the given threshold, sorted by score descending.
+func (ps *ProfilesService) GetProfilesWithFuzzyResolution(
+	orgHandle string,
+	filters []string,
+	threshold float64,
+	limit int,
+) ([]profileModel.FuzzyMatchResult, error) {
+	logger := log.GetLogger()
+	startTime := time.Now()
+
+	logger.Info("Service: starting fuzzy resolution search",
+		log.String("orgHandle", orgHandle),
+		log.Int("filterCount", len(filters)))
+
+	// Step 1: Parse filters to extract attribute key-value pairs for fuzzy matching.
+	// Filters format: "scope.key operator value" e.g. "identity_attributes.email eq john@example.com"
+	identityAttrs := make(map[string]interface{})
+	traits := make(map[string]interface{})
+	var userID string
+
+	for _, f := range filters {
+		parts := strings.SplitN(f, " ", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		field := parts[0]
+		// operator := parts[1] // For fuzzy matching we use the value regardless of operator.
+		value := parts[2]
+
+		if field == "user_id" {
+			userID = value
+			continue
+		}
+
+		dotIdx := strings.Index(field, ".")
+		if dotIdx < 0 {
+			continue
+		}
+		scope := field[:dotIdx]
+		key := field[dotIdx+1:]
+
+		switch scope {
+		case "identity_attributes":
+			identityAttrs[key] = value
+		case "traits":
+			traits[key] = value
+		}
+	}
+
+	if len(identityAttrs) == 0 && len(traits) == 0 && userID == "" {
+		logger.Warn("Service: no searchable attributes found in filters for fuzzy resolution")
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	// Step 2: Load enriched unification rules.
+	rules, err := loadEnrichedRulesForFuzzy(orgHandle)
+	if err != nil {
+		return nil, err
+	}
+	if len(rules) == 0 {
+		logger.Warn("Service: no active unification rules, fuzzy resolution returning empty",
+			log.String("orgHandle", orgHandle))
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	// Step 3: Build flat attributes map for the IR engine.
+	flatAttrs := make(map[string]interface{})
+	irModel.FlattenMap("identity_attributes", identityAttrs, flatAttrs)
+	irModel.FlattenMap("traits", traits, flatAttrs)
+	if userID != "" {
+		flatAttrs["user_id"] = userID
+	}
+
+	// Step 4: Generate blocking keys and find candidate IDs.
+	blockingKeys := engine.GenerateProfileBlockingKeys(rules, flatAttrs)
+	candidateIDs := engine.FindCandidatesByIndex(blockingKeys, orgHandle, "", irStore.FindCandidateIDsByKeys)
+
+	if len(candidateIDs) == 0 {
+		logger.Info("Service: fuzzy resolution found no candidates after blocking")
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	// Step 5: Load candidate profiles.
+	candidateProfiles, err := irStore.GetProfilesByIDs(candidateIDs)
+	if err != nil {
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_SEARCH_FAILED.Code,
+			Message:     errors2.IR_SEARCH_FAILED.Message,
+			Description: "Failed to load candidate profiles for fuzzy resolution.",
+		}, err)
+	}
+
+	profileMap := make(map[string]*irModel.ProfileData, len(candidateProfiles))
+	for i := range candidateProfiles {
+		profileMap[candidateProfiles[i].ProfileID] = &candidateProfiles[i]
+	}
+
+	// Step 6: Resolve child candidates to their master profiles.
+	{
+		resolvedIDs := make([]string, 0, len(candidateIDs))
+		seen := make(map[string]bool)
+		for _, cid := range candidateIDs {
+			candidate, exists := profileMap[cid]
+			if !exists {
+				continue
+			}
+			resolvedID := cid
+			if candidate.IsChild() {
+				masterID := candidate.ReferenceProfileID
+				resolvedID = masterID
+				if _, ok := profileMap[masterID]; !ok {
+					masterProfiles, loadErr := irStore.GetProfilesByIDs([]string{masterID})
+					if loadErr != nil || len(masterProfiles) == 0 {
+						logger.Warn(fmt.Sprintf("Service: fuzzy could not load master '%s' for child '%s', skipping",
+							masterID, cid))
+						continue
+					}
+					profileMap[masterID] = &masterProfiles[0]
+				}
+			}
+			if !seen[resolvedID] {
+				seen[resolvedID] = true
+				resolvedIDs = append(resolvedIDs, resolvedID)
+			}
+		}
+		candidateIDs = resolvedIDs
+	}
+
+	// Step 7: Score candidates.
+	inputProfileType := irModel.DetermineProfileType(flatAttrs)
+	thresholds := irModel.LoadThresholds(orgHandle)
+
+	// If no explicit threshold, use the system manual_review threshold.
+	if threshold <= 0 {
+		threshold = thresholds.ManualReview
+	}
+	if threshold > 1.0 {
+		threshold = 1.0
+	}
+
+	type scoredMatch struct {
+		candidateID    string
+		finalScore     float64
+		scoreBreakdown map[string]float64
+	}
+
+	var scoredMatches []scoredMatch
+	for _, candidateID := range candidateIDs {
+		candidate, exists := profileMap[candidateID]
+		if !exists {
+			continue
+		}
+
+		candidateType := candidate.GetProfileType()
+		mode := irModel.DetermineMode(inputProfileType, candidateType, thresholds.SmartResolutionEnabled)
+		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, mode, thresholds.AutoMerge)
+
+		if finalScore >= threshold {
+			scoredMatches = append(scoredMatches, scoredMatch{
+				candidateID:    candidateID,
+				finalScore:     finalScore,
+				scoreBreakdown: breakdown,
+			})
+		}
+	}
+
+	// Sort by score descending.
+	sort.Slice(scoredMatches, func(i, j int) bool {
+		return scoredMatches[i].finalScore > scoredMatches[j].finalScore
+	})
+
+	// Apply limit.
+	if limit > 0 && len(scoredMatches) > limit {
+		scoredMatches = scoredMatches[:limit]
+	}
+
+	// Step 8: Build full ProfileResponse for each scored match.
+	results := make([]profileModel.FuzzyMatchResult, 0, len(scoredMatches))
+	for _, sm := range scoredMatches {
+		profile, err := profileStore.GetProfile(sm.candidateID)
+		if err != nil {
+			logger.Warn(fmt.Sprintf("Service: fuzzy could not load profile '%s', skipping", sm.candidateID))
+			continue
+		}
+
+		baseMeta := profileModel.Meta{
+			CreatedAt: profile.CreatedAt,
+			UpdatedAt: profile.UpdatedAt,
+			Location:  profile.Location,
+		}
+
+		alias, _ := profileStore.FetchReferencedProfiles(profile.ProfileId)
+
+		profileResp := profileModel.ProfileResponse{
+			ProfileId:          profile.ProfileId,
+			UserId:             profile.UserId,
+			ApplicationData:    ConvertAppDataToMap(profile.ApplicationData),
+			Traits:             profile.Traits,
+			IdentityAttributes: profile.IdentityAttributes,
+			Meta:               baseMeta,
+		}
+
+		if profile.ProfileStatus.IsReferenceProfile {
+			profileResp.MergedFrom = alias
+		}
+
+		results = append(results, profileModel.FuzzyMatchResult{
+			Profile:        profileResp,
+			MatchScore:     sm.finalScore,
+			ScoreBreakdown: sm.scoreBreakdown,
+		})
+	}
+
+	logger.Info(fmt.Sprintf("Service: fuzzy resolution complete — %d candidates, %d matches above threshold %.2f in %dms",
+		len(candidateIDs), len(results), threshold, time.Since(startTime).Milliseconds()))
+
+	return results, nil
+}
+
+// loadEnrichedRulesForFuzzy loads and enriches unification rules for fuzzy matching.
+func loadEnrichedRulesForFuzzy(orgHandle string) ([]*irModel.EnrichedRule, error) {
+	logger := log.GetLogger()
+	logger.Debug("Service: loading unification rules for fuzzy resolution", log.String("orgHandle", orgHandle))
+
+	rawRules, err := urStore.GetUnificationRules(orgHandle)
+	if err != nil {
+		logger.Error("Service: failed to load unification rules", log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_SEARCH_FAILED.Code,
+			Message:     errors2.IR_SEARCH_FAILED.Message,
+			Description: fmt.Sprintf("Failed to load unification rules for org: %s", orgHandle),
+		}, err)
+	}
+
+	enriched := irModel.EnrichRulesWithSampling(rawRules, orgHandle, irStore.SampleAttributeValues, buildSchemaLookupForFuzzy)
+	logger.Info(fmt.Sprintf("Service: enriched %d active rules from %d total for fuzzy resolution", len(enriched), len(rawRules)))
+
+	return enriched, nil
+}
+
+func buildSchemaLookupForFuzzy(orgHandle string) (map[string]string, error) {
+	attrs, err := schemaStore.GetProfileSchemaAttributesForOrg(orgHandle)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(attrs))
+	for _, a := range attrs {
+		result[a.AttributeId] = a.ValueType
+	}
+	return result, nil
 }
 
 func parseTypedValueForFilters(valueType string, raw string) interface{} {

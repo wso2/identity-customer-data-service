@@ -62,7 +62,8 @@ export default function UnificationRulesPage() {
   const handleSave = async () => {
     try {
       if (editingId) {
-        await patchUnificationRule(editingId, formData);
+        const { property_name, ...patchData } = formData;
+        await patchUnificationRule(editingId, patchData);
         setToast({ open: true, msg: 'Rule updated', severity: 'success' });
       } else {
         await addUnificationRule(formData);
@@ -79,7 +80,6 @@ export default function UnificationRulesPage() {
     try {
       await patchUnificationRule(rule.rule_id, {
         rule_name: rule.rule_name,
-        property_name: rule.property_name,
         priority: rule.priority,
         is_active: !rule.is_active,
       });

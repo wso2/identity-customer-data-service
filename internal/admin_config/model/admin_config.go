@@ -30,11 +30,19 @@ type AdminConfig struct {
 }
 
 type AdminConfigAPI struct {
-	CDSEnabled         bool     `json:"cds_enabled" bson:"cds_enabled"`
-	SystemApplications []string `json:"system_applications,omitempty" bson:"system_applications,omitempty"`
+	CDSEnabled             bool     `json:"cds_enabled" bson:"cds_enabled"`
+	SystemApplications     []string `json:"system_applications,omitempty" bson:"system_applications,omitempty"`
+	AutoMergeEnabled       bool     `json:"auto_merge_enabled" bson:"auto_merge_enabled"`
+	AutoMergeThreshold     float64  `json:"auto_merge_threshold" bson:"auto_merge_threshold"`
+	ManualReviewThreshold  float64  `json:"manual_review_threshold" bson:"manual_review_threshold"`
+	SmartResolutionEnabled bool     `json:"smart_resolution_enabled" bson:"smart_resolution_enabled"`
 }
 
 type AdminConfigUpdateAPI struct {
-	CDSEnabled         *bool    `json:"cds_enabled" bson:"cds_enabled"`
-	SystemApplications []string `json:"system_applications,omitempty"`
+	CDSEnabled             *bool    `json:"cds_enabled" bson:"cds_enabled"`
+	SystemApplications     []string `json:"system_applications,omitempty"`
+	AutoMergeEnabled       *bool    `json:"auto_merge_enabled,omitempty"`
+	AutoMergeThreshold     *float64 `json:"auto_merge_threshold,omitempty"`
+	ManualReviewThreshold  *float64 `json:"manual_review_threshold,omitempty"`
+	SmartResolutionEnabled *bool    `json:"smart_resolution_enabled,omitempty"`
 }

@@ -193,6 +193,62 @@ func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 		}, err)
 	}
 
+	autoMergeEnabledValue := "false"
+	if config.AutoMergeEnabled {
+		autoMergeEnabledValue = "true"
+	}
+	_, err = tx.Exec(query, orgHandle, constants.ConfigAutoMergeEnabled, autoMergeEnabledValue)
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to update auto_merge_enabled for organization: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	_, err = tx.Exec(query, orgHandle, constants.ConfigAutoMergeThreshold, strconv.FormatFloat(config.AutoMergeThreshold, 'f', -1, 64))
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to update auto_merge_threshold for organization: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	_, err = tx.Exec(query, orgHandle, constants.ConfigManualReviewThreshold, strconv.FormatFloat(config.ManualReviewThreshold, 'f', -1, 64))
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to update manual_review_threshold for organization: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	smartResolutionEnabledValue := "false"
+	if config.SmartResolutionEnabled {
+		smartResolutionEnabledValue = "true"
+	}
+	_, err = tx.Exec(query, orgHandle, constants.ConfigSmartResolutionEnabled, smartResolutionEnabledValue)
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to update smart_resolution_enabled for organization: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
 	return tx.Commit()
 }
 

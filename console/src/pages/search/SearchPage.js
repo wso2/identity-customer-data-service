@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Paper, Box, Typography, Button, TextField, Stack, Slider,
   Card, CardContent, Chip, CircularProgress, Alert, Snackbar,
-  Table, TableBody, TableCell, TableRow, Divider, InputAdornment,
+  Table, TableBody, TableCell, TableRow, Divider, Switch,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -15,6 +15,7 @@ import { getUnificationRules, searchProfiles } from '../../api';
 export default function SearchPage() {
   const [rules, setRules] = useState([]);
   const [formValues, setFormValues] = useState({});
+  const [enableFuzzyResolution, setEnableFuzzyResolution] = useState(false);
   const [threshold, setThreshold] = useState(0.3);
   const [maxResults, setMaxResults] = useState(10);
   const [results, setResults] = useState(null);
@@ -59,7 +60,7 @@ export default function SearchPage() {
     setLoading(true);
     setResults(null);
     try {
-      const res = await searchProfiles({ identity_attributes, threshold, max_results: maxResults });
+      const res = await searchProfiles({ identity_attributes, enableFuzzyResolution, threshold, max_results: maxResults });
       setResults(res);
     } catch {
       setToast({ open: true, msg: 'Search failed', severity: 'error' });
@@ -75,7 +76,7 @@ export default function SearchPage() {
     setResults(null);
   };
 
-  const matches = results?.matches || [];
+  const matches = results?.profiles || [];
 
   return (
     <>
@@ -109,6 +110,18 @@ export default function SearchPage() {
             <Divider sx={{ my: 2 }} />
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+              <Box sx={{ width: 160 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Enable Fuzzy Resolution
+                </Typography>
+                <Switch
+                  size="small"
+                  checked={enableFuzzyResolution}
+                  onChange={(e) => setEnableFuzzyResolution(e.target.checked)}
+                  valueLabelDisplay="auto"
+                  color="primary"
+                />
+              </Box>
               <Box sx={{ width: 240 }}>
                 <Typography variant="caption" color="text.secondary">
                   Threshold: {threshold.toFixed(2)}
@@ -119,6 +132,7 @@ export default function SearchPage() {
                   onChange={(_, v) => setThreshold(v)}
                   min={0} max={1} step={0.05}
                   valueLabelDisplay="auto"
+                  disabled={!enableFuzzyResolution}
                 />
               </Box>
               <TextField
@@ -140,7 +154,6 @@ export default function SearchPage() {
         )}
       </Paper>
 
-      {/* ─── Results ──────────────────────── */}
       {results && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -148,7 +161,6 @@ export default function SearchPage() {
               Results
               <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
                 {matches.length} match{matches.length !== 1 ? 'es' : ''}
-                {results.processing_time_ms != null && ` · ${results.processing_time_ms}ms`}
               </Typography>
             </Typography>
           </Box>
@@ -159,14 +171,17 @@ export default function SearchPage() {
             </Paper>
           ) : (
             <Stack spacing={2}>
-              {matches.map((m, idx) => (
-                <Card key={m.candidate_id || idx}>
+              {matches.map((m, idx) => {
+                // Combine identity_attributes and traits for display
+                const displayAttrs = { ...m.identity_attributes, ...m.traits };
+                return (
+                <Card key={m.profile_id || idx}>
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                       <Box sx={{ flexGrow: 1 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <Typography variant="subtitle2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                            {m.candidate_id?.slice(0, 12)}…
+                            {m.profile_id?.slice(0, 12)}…
                           </Typography>
                           {m.user_id && <Chip label={m.user_id} size="small" variant="outlined" />}
                         </Box>
@@ -174,7 +189,7 @@ export default function SearchPage() {
                         {/* Matched attributes */}
                         <Table size="small" sx={{ mb: 1 }}>
                           <TableBody>
-                            {m.attributes && Object.entries(m.attributes).map(([k, v]) => (
+                            {Object.entries(displayAttrs).map(([k, v]) => (
                               <TableRow key={k}>
                                 <TableCell sx={{ py: 0.25, fontWeight: 500, color: 'text.secondary', width: 200, border: 0 }}>
                                   {k.includes('.') ? k.split('.').pop() : k}
@@ -190,8 +205,8 @@ export default function SearchPage() {
 
                       {/* Score */}
                       <Box sx={{ minWidth: 180, textAlign: 'right' }}>
-                        <Typography variant="caption" color="text.secondary">Final Score</Typography>
-                        <ScoreBar value={m.final_score} />
+                        <Typography variant="caption" color="text.secondary">Match Score</Typography>
+                        <ScoreBar value={m.match_score} />
                       </Box>
                     </Box>
 
@@ -213,7 +228,8 @@ export default function SearchPage() {
                     )}
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </Stack>
           )}
         </>

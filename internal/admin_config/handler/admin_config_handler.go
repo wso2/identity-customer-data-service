@@ -57,8 +57,12 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	resp := model.AdminConfigAPI{
-		CDSEnabled:         config.CDSEnabled,
-		SystemApplications: config.SystemApplications,
+		CDSEnabled:             config.CDSEnabled,
+		SystemApplications:     config.SystemApplications,
+		AutoMergeEnabled:       config.AutoMergeEnabled,
+		AutoMergeThreshold:     config.AutoMergeThreshold,
+		ManualReviewThreshold:  config.ManualReviewThreshold,
+		SmartResolutionEnabled: config.SmartResolutionEnabled,
 	}
 	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }
@@ -94,10 +98,14 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	configToUpdate := model.AdminConfig{
-		OrgHandle:             orgHandle,
-		InitialSchemaSyncDone: existingConfig.InitialSchemaSyncDone,
-		CDSEnabled:            existingConfig.CDSEnabled,
-		SystemApplications:    existingConfig.SystemApplications,
+		OrgHandle:              orgHandle,
+		InitialSchemaSyncDone:  existingConfig.InitialSchemaSyncDone,
+		CDSEnabled:             existingConfig.CDSEnabled,
+		SystemApplications:     existingConfig.SystemApplications,
+		AutoMergeEnabled:       existingConfig.AutoMergeEnabled,
+		AutoMergeThreshold:     existingConfig.AutoMergeThreshold,
+		ManualReviewThreshold:  existingConfig.ManualReviewThreshold,
+		SmartResolutionEnabled: existingConfig.SmartResolutionEnabled,
 	}
 
 	// Update only if provided in request
@@ -107,6 +115,18 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	if config.SystemApplications != nil {
 		configToUpdate.SystemApplications = config.SystemApplications
 	}
+	if config.AutoMergeEnabled != nil {
+		configToUpdate.AutoMergeEnabled = *config.AutoMergeEnabled
+	}
+	if config.AutoMergeThreshold != nil {
+		configToUpdate.AutoMergeThreshold = *config.AutoMergeThreshold
+	}
+	if config.ManualReviewThreshold != nil {
+		configToUpdate.ManualReviewThreshold = *config.ManualReviewThreshold
+	}
+	if config.SmartResolutionEnabled != nil {
+		configToUpdate.SmartResolutionEnabled = *config.SmartResolutionEnabled
+	}
 
 	err = adminConfigService.UpdateAdminConfig(configToUpdate, orgHandle)
 	if err != nil {
@@ -115,8 +135,12 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	}
 
 	resp := model.AdminConfigAPI{
-		CDSEnabled:         configToUpdate.CDSEnabled,
-		SystemApplications: configToUpdate.SystemApplications,
+		CDSEnabled:             configToUpdate.CDSEnabled,
+		SystemApplications:     configToUpdate.SystemApplications,
+		AutoMergeEnabled:       configToUpdate.AutoMergeEnabled,
+		AutoMergeThreshold:     configToUpdate.AutoMergeThreshold,
+		ManualReviewThreshold:  configToUpdate.ManualReviewThreshold,
+		SmartResolutionEnabled: configToUpdate.SmartResolutionEnabled,
 	}
 	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }

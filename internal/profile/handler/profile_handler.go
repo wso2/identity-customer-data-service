@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -316,6 +317,134 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
+	// Check if fuzzy resolution is requested.
+	enableFuzzy := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("enableFuzzyResolution"))) == "true"
+
+	if enableFuzzy {
+		// Parse optional threshold query param.
+		var threshold float64
+		thresholdStr := strings.TrimSpace(r.URL.Query().Get("threshold"))
+		if thresholdStr != "" {
+			parsedThreshold, parseErr := strconv.ParseFloat(thresholdStr, 64)
+			if parseErr != nil {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.GET_PROFILE.Code,
+					Message:     errors2.GET_PROFILE.Message,
+					Description: fmt.Sprintf("Invalid threshold value: %s", thresholdStr),
+				}, http.StatusBadRequest)
+				utils.HandleError(w, clientError)
+				return
+			}
+			threshold = parsedThreshold
+		}
+
+		if len(filters) == 0 {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.GET_PROFILE.Code,
+				Message:     errors2.GET_PROFILE.Message,
+				Description: "At least one filter is required when enableFuzzyResolution is true.",
+			}, http.StatusBadRequest)
+			utils.HandleError(w, clientError)
+			return
+		}
+
+		logger.Info("Fetching profiles with fuzzy resolution")
+		fuzzyResults, fuzzyErr := profilesService.GetProfilesWithFuzzyResolution(orgHandle, filters, threshold, limit)
+		if fuzzyErr != nil {
+			utils.HandleError(w, fuzzyErr)
+			return
+		}
+
+		// Convert fuzzy results to ProfileListResponse items with match scores.
+		items := make([]model.ProfileListResponse, 0, len(fuzzyResults))
+		for _, fr := range fuzzyResults {
+			profileRes := model.ProfileListResponse{
+				ProfileId:      fr.Profile.ProfileId,
+				Meta:           fr.Profile.Meta,
+				UserId:         fr.Profile.UserId,
+				MatchScore:     &fr.MatchScore,
+				ScoreBreakdown: fr.ScoreBreakdown,
+			}
+
+			if requestedAttrs == nil {
+				profileRes.MergedFrom = fr.Profile.MergedFrom
+				items = append(items, profileRes)
+				continue
+			}
+
+			if fields, ok := requestedAttrs["identity_attributes"]; ok {
+				filtered := make(map[string]interface{})
+				for _, f := range fields {
+					if f == "*" {
+						filtered = fr.Profile.IdentityAttributes
+						break
+					}
+					if val, exists := fr.Profile.IdentityAttributes[f]; exists {
+						filtered[f] = val
+					}
+				}
+				profileRes.IdentityAttributes = filtered
+			}
+
+			if fields, ok := requestedAttrs["traits"]; ok {
+				filtered := make(map[string]interface{})
+				for _, f := range fields {
+					if f == "*" {
+						filtered = fr.Profile.Traits
+						break
+					}
+					if val, exists := fr.Profile.Traits[f]; exists {
+						filtered[f] = val
+					}
+				}
+				profileRes.Traits = filtered
+			}
+
+			appData := fr.Profile.ApplicationData
+			if len(appData) > 0 {
+				filteredAppData := make(map[string]map[string]interface{})
+				if len(requestedAttrs["application_data"]) == 0 {
+					filteredAppData = appData
+				} else {
+					fields := requestedAttrs["application_data"]
+					for appKey, appFields := range appData {
+						temp := make(map[string]interface{})
+						for _, f := range fields {
+							if f == "*" {
+								temp = appFields
+								break
+							}
+							if val, ok := appFields[f]; ok {
+								temp[f] = val
+							}
+						}
+						if len(temp) > 0 {
+							filteredAppData[appKey] = temp
+						}
+					}
+				}
+				if len(filteredAppData) > 0 {
+					profileRes.ApplicationData = filteredAppData
+				}
+			}
+
+			profileRes.MergedFrom = fr.Profile.MergedFrom
+			items = append(items, profileRes)
+		}
+
+		resp := model.ProfileListAPIResponse{
+			Pagination: pagination.Pagination{
+				Count:    len(items),
+				PageSize: limit,
+			},
+			Items: items,
+		}
+
+		utils.RespondJSON(w, http.StatusOK, resp, constants.ProfileResource)
+		return
+	}
+
+	// Standard (non-fuzzy) flow.
 	var (
 		profiles []model.ProfileResponse
 		hasMore  bool

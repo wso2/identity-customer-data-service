@@ -53,6 +53,7 @@ func FindCandidatesByIndex(
 			logger.Error(fmt.Sprintf("Blocker: query failed for attribute '%s'", attrName), log.Error(err))
 			continue
 		}
+		// todo: ids equals to null means too many candidates?
 		if ids == nil {
 			logger.Info(fmt.Sprintf("Blocker: skipping attribute '%s' — too many candidates (>%d)",
 				attrName, constants.MaxCandidatesPerRule))

@@ -39,64 +39,6 @@ func NewIdentityResolutionHandler() *IdentityResolutionHandler {
 	return &IdentityResolutionHandler{}
 }
 
-func (h *IdentityResolutionHandler) Search(w http.ResponseWriter, r *http.Request) {
-	logger := log.GetLogger()
-	logger.Info("Handler: identity resolution search request received")
-
-	// Auth check
-	err := security.AuthnAndAuthz(r, "identity_resolution:search")
-	if err != nil {
-		logger.Warn("Handler: authentication/authorization failed", log.Error(err))
-		utils.HandleError(w, err)
-		return
-	}
-
-	orgHandle := utils.ExtractOrgHandleFromPath(r)
-	if orgHandle == "" {
-		logger.Warn("Handler: missing org handle in request")
-		utils.HandleError(w, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.BAD_REQUEST.Code,
-			Message:     errors2.BAD_REQUEST.Message,
-			Description: "Organization handle is required.",
-		}, http.StatusBadRequest))
-		return
-	}
-
-	var request irModel.SearchRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		logger.Warn("Handler: invalid request body", log.Error(err))
-		utils.HandleError(w, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.BAD_REQUEST.Code,
-			Message:     errors2.BAD_REQUEST.Message,
-			Description: fmt.Sprintf("Failed to parse search request: %v", err),
-		}, http.StatusBadRequest))
-		return
-	}
-
-	if len(request.IdentityAttributes) == 0 && len(request.Traits) == 0 {
-		logger.Warn("Handler: no identity_attributes or traits in search request")
-		utils.HandleError(w, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.BAD_REQUEST.Code,
-			Message:     errors2.BAD_REQUEST.Message,
-			Description: "At least one identity_attribute or trait is required for search.",
-		}, http.StatusBadRequest))
-		return
-	}
-
-	svc := provider.NewIdentityResolutionProvider().GetIdentityResolutionService()
-	response, err := svc.Search(orgHandle, &request)
-	if err != nil {
-		logger.Error("Handler: search failed", log.Error(err))
-		utils.HandleError(w, err)
-		return
-	}
-
-	logger.Info(fmt.Sprintf("Handler: search completed — %d matches found", len(response.Matches)))
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(response)
-}
-
 func (h *IdentityResolutionHandler) GetReviewTasks(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger()
 	logger.Info("Handler: get review tasks request received")
@@ -189,8 +131,8 @@ func (h *IdentityResolutionHandler) ResolveReviewTask(w http.ResponseWriter, r *
 
 	if resolveReq.Decision != constants.ReviewStatusApproved && resolveReq.Decision != constants.ReviewStatusRejected {
 		utils.HandleError(w, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.BAD_REQUEST.Code,
-			Message:     errors2.BAD_REQUEST.Message,
+			Code:    errors2.BAD_REQUEST.Code,
+			Message: errors2.BAD_REQUEST.Message,
 			Description: fmt.Sprintf("Invalid decision '%s'. Must be '%s' or '%s'.",
 				resolveReq.Decision, constants.ReviewStatusApproved, constants.ReviewStatusRejected),
 		}, http.StatusBadRequest))

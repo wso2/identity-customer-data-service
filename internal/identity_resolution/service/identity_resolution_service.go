@@ -21,10 +21,7 @@ package service
 import (
 	"fmt"
 	"net/http"
-	"sort"
-	"time"
 
-	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	irStore "github.com/wso2/identity-customer-data-service/internal/identity_resolution/store"
 	irWorker "github.com/wso2/identity-customer-data-service/internal/identity_resolution/worker"
@@ -40,8 +37,6 @@ import (
 )
 
 type IdentityResolutionServiceInterface interface {
-	Search(orgHandle string, request *model.SearchRequest) (*model.SearchResponse, error)
-
 	MergeProfiles(orgHandle string, request *model.MergeRequest) (*model.MergeResponse, error)
 
 	GetPendingReviewTasks(orgHandle string, pageSize int) (*model.ReviewTaskListResponse, error)
@@ -55,147 +50,6 @@ type IdentityResolutionService struct{}
 
 func GetIdentityResolutionService() IdentityResolutionServiceInterface {
 	return &IdentityResolutionService{}
-}
-
-func (s *IdentityResolutionService) Search(orgHandle string, request *model.SearchRequest) (*model.SearchResponse, error) {
-	logger := log.GetLogger()
-	startTime := time.Now()
-
-	logger.Info("Service: starting identity search",
-		log.String("orgHandle", orgHandle),
-		log.Int("maxResults", request.GetMaxResults()))
-
-	rules, err := loadEnrichedRules(orgHandle)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(rules) == 0 {
-		logger.Warn("Service: no active unification rules found",
-			log.String("orgHandle", orgHandle))
-		return &model.SearchResponse{
-			Matches:         []model.MatchResult{},
-			TotalCandidates: 0,
-			ProcessingTime:  time.Since(startTime).Milliseconds(),
-		}, nil
-	}
-
-	logger.Info(fmt.Sprintf("Service: loaded %d enriched rules", len(rules)))
-
-	flatAttrs := request.FlatAttributes()
-
-	blockingKeys := engine.GenerateProfileBlockingKeys(rules, flatAttrs)
-
-	// Use empty string as pendingID since profile is not cached yet.
-	candidateIDs := engine.FindCandidatesByIndex(blockingKeys, orgHandle, "", irStore.FindCandidateIDsByKeys)
-
-	if len(candidateIDs) == 0 {
-		logger.Info("Service: no candidates found after blocking")
-		return &model.SearchResponse{
-			Matches:         []model.MatchResult{},
-			TotalCandidates: 0,
-			ProcessingTime:  time.Since(startTime).Milliseconds(),
-		}, nil
-	}
-
-	candidateProfiles, err := irStore.GetProfilesByIDs(candidateIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	profileMap := make(map[string]*model.ProfileData, len(candidateProfiles))
-	for i := range candidateProfiles {
-		profileMap[candidateProfiles[i].ProfileID] = &candidateProfiles[i]
-	}
-
-	// Resolve child candidates to their master profiles so search results
-	// reference the surviving (master) profile, not a merged child.
-	{
-		resolvedIDs := make([]string, 0, len(candidateIDs))
-		seen := make(map[string]bool)
-		for _, cid := range candidateIDs {
-			candidate, exists := profileMap[cid]
-			if !exists {
-				continue
-			}
-			resolvedID := cid
-			if candidate.IsChild() {
-				masterID := candidate.ReferenceProfileID
-				resolvedID = masterID
-				if _, ok := profileMap[masterID]; !ok {
-					masterProfiles, loadErr := irStore.GetProfilesByIDs([]string{masterID})
-					if loadErr != nil || len(masterProfiles) == 0 {
-						logger.Warn(fmt.Sprintf("Service: could not load master '%s' for child '%s', skipping",
-							masterID, cid))
-						continue
-					}
-					profileMap[masterID] = &masterProfiles[0]
-				}
-				logger.Info(fmt.Sprintf("Service: resolved child candidate '%s' → master '%s'", cid, masterID))
-			}
-			if !seen[resolvedID] {
-				seen[resolvedID] = true
-				resolvedIDs = append(resolvedIDs, resolvedID)
-			}
-		}
-		candidateIDs = resolvedIDs
-	}
-
-	inputProfileType := model.DetermineProfileType(flatAttrs)
-	thresholds := model.LoadThresholds(orgHandle)
-
-	var matches []model.MatchResult
-	for _, candidateID := range candidateIDs {
-		candidate, exists := profileMap[candidateID]
-		if !exists {
-			continue
-		}
-
-		candidateType := candidate.GetProfileType()
-		mode := model.DetermineMode(inputProfileType, candidateType, thresholds.SmartResolutionEnabled)
-
-		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, mode, thresholds.AutoMerge)
-
-		matches = append(matches, model.MatchResult{
-			CandidateID:    candidateID,
-			UserID:         candidate.UserID,
-			FinalScore:     finalScore,
-			ScoreBreakdown: breakdown,
-			Attributes:     candidate.Attributes,
-		})
-	}
-
-	threshold := request.GetThreshold(thresholds)
-	var filteredMatches []model.MatchResult
-	for _, m := range matches {
-		if m.FinalScore >= threshold {
-			filteredMatches = append(filteredMatches, m)
-		}
-	}
-	matches = filteredMatches
-
-	logger.Info(fmt.Sprintf("Service: %d matches above threshold %.2f (from %d candidates)",
-		len(matches), threshold, len(candidateIDs)))
-
-	sort.Slice(matches, func(i, j int) bool {
-		return matches[i].FinalScore > matches[j].FinalScore
-	})
-
-	maxResults := request.GetMaxResults()
-	if len(matches) > maxResults {
-		matches = matches[:maxResults]
-	}
-
-	response := &model.SearchResponse{
-		Matches:         matches,
-		TotalCandidates: len(candidateIDs),
-		ProcessingTime:  time.Since(startTime).Milliseconds(),
-	}
-
-	logger.Info(fmt.Sprintf("Service: search complete — %d candidates, %d matches returned in %dms",
-		len(candidateIDs), len(matches), response.ProcessingTime))
-
-	return response, nil
 }
 
 func (s *IdentityResolutionService) GetPendingReviewTasks(orgHandle string, pageSize int) (*model.ReviewTaskListResponse, error) {

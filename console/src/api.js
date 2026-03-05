@@ -53,8 +53,24 @@ export const patchUnificationRule = (id, data) =>
 export const deleteUnificationRule = (id) => request('DELETE', `/unification-rules/${id}`);
 
 // ─── Identity Resolution ───────────────────────────────
-export const searchProfiles = (body) =>
-  request('POST', '/identity-resolution/search', body);
+export const searchProfiles = ({ identity_attributes = {}, traits = {}, enableFuzzyResolution = false, threshold, max_results }) => {
+  const filters = [];
+  Object.entries(identity_attributes).forEach(([key, value]) => {
+    if (value) filters.push(`identity_attributes.${key} eq ${value}`);
+  });
+  Object.entries(traits).forEach(([key, value]) => {
+    if (value) filters.push(`traits.${key} eq ${value}`);
+  });
+
+  const params = new URLSearchParams();
+  filters.forEach((f) => params.append('filter', f));
+  params.set('enableFuzzyResolution', String(enableFuzzyResolution));
+  if (threshold) params.set('threshold', String(threshold));
+  if (max_results) params.set('page_size', String(max_results));
+  params.set('attributes', 'identity_attributes.*,traits.*');
+
+  return request('GET', `/profiles?${params.toString()}`);
+};
 export const mergeProfiles = (body) =>
   request('POST', '/identity-resolution/merge', body);
 export const getReviewTasks = (pageSize = 100) =>
