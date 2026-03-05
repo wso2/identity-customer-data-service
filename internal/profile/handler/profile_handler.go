@@ -133,7 +133,7 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 	// Try cookie-based resolution first
 	cookie, err := r.Cookie(constants.ProfileCookie)
 	if err == nil && cookie.Value != "" {
-		cookieObj, err := profilesService.GetProfileCookie(cookie.Value)
+		cookieObj, err := profilesService.GetProfileCookieById(cookie.Value)
 		if err == nil && cookieObj != nil && cookieObj.IsActive {
 			profileId = cookieObj.ProfileId
 		}
@@ -589,7 +589,7 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	cookieObj, err := profilesService.GetProfileCookie(cookieVal)
+	cookieObj, err := profilesService.GetProfileCookieById(cookieVal)
 	if err != nil || cookieObj == nil {
 		return false
 	}
@@ -779,7 +779,7 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 	// Try cookie-based profileId resolution (preferred)
 	cookie, err := r.Cookie(constants.ProfileCookie)
 	if err == nil && cookie.Value != "" {
-		cookieObj, err := profilesService.GetProfileCookie(cookie.Value)
+		cookieObj, err := profilesService.GetProfileCookieById(cookie.Value)
 		if err == nil && cookieObj != nil && cookieObj.IsActive {
 			profileId = cookieObj.ProfileId
 		}
@@ -923,7 +923,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if profileSync.Event == constants.AddUserEvent {
 		if profileSync.ProfileCookie != "" && profileSync.UserId != "" {
 			logger.Debug("Syncing profile for user id: " + profileSync.UserId + " with profile cookie: " + profileSync.ProfileCookie)
-			cookieObj, err := profilesService.GetProfileCookie(profileSync.ProfileCookie)
+			cookieObj, err := profilesService.GetProfileCookieById(profileSync.ProfileCookie)
 			if err == nil && cookieObj != nil && cookieObj.IsActive {
 				profileId = cookieObj.ProfileId
 				logger.Debug("Found active profile cookie with profile id: " + profileId)
@@ -1067,6 +1067,135 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			}
 		}
 		return
+	}
+
+	if profileSync.Event == constants.AuthenticationSuccess {
+		logger.Info("Authentication success event received for user: " + profileSync.UserId)
+
+		if profileSync.UserId == "" {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: "UserId is required for authentication success event.",
+			}, http.StatusBadRequest)
+			utils.HandleError(writer, clientError)
+			return
+		}
+
+		// cookie + userId (anonymous → authenticated)
+		if profileSync.ProfileCookie != "" {
+			logger.Debug("Syncing profile for user id: " + profileSync.UserId +
+				" with profile cookie: " + profileSync.ProfileCookie)
+
+			// Step 1: Resolve anonymous profile from cookie
+			var anonymousProfile *model.ProfileResponse
+			cookieObj, err := profilesService.GetProfileCookieById(profileSync.ProfileCookie)
+			if err == nil && cookieObj != nil && cookieObj.IsActive {
+				anonymousProfile, err = profilesService.GetProfile(cookieObj.ProfileId)
+				if err != nil {
+					logger.Debug("Failed to fetch anonymous profile from cookie",
+						log.Error(err))
+					anonymousProfile = nil
+				}
+			}
+
+			// Step 2: Look up existing profile by userId
+			existingUserProfile, err := profilesService.FindProfileByUserId(profileSync.UserId)
+			if err != nil {
+				if !utils.HasClientErrorCode(err, errors2.PROFILE_NOT_FOUND.Code) {
+					utils.HandleError(writer, err)
+					return
+				}
+				existingUserProfile = nil
+			}
+
+			// Step 3: Handle sub-cases
+			if anonymousProfile != nil && existingUserProfile != nil {
+				if anonymousProfile.ProfileId != existingUserProfile.ProfileId {
+					// Both profiles exist and are different — attach userId on the anonymous profile.
+					// UpdateProfile will enqueue for unification. The worker will detect two profiles
+					// with the same userId and merge the anonymous profile into the permanent one.
+					logger.Info(fmt.Sprintf(
+						"Stitching temporary profile %s with the permanent profile %s",
+						anonymousProfile.ProfileId, existingUserProfile.ProfileId))
+
+					profileRequest := model.ProfileRequest{
+						UserId:             profileSync.UserId,
+						IdentityAttributes: anonymousProfile.IdentityAttributes,
+						Traits:             anonymousProfile.Traits,
+						ApplicationData:    anonymousProfile.ApplicationData,
+					}
+					_, err = profilesService.UpdateProfile(anonymousProfile.ProfileId, orgHandle, profileRequest)
+					if err != nil {
+						utils.HandleError(writer, err)
+						return
+					}
+				} else {
+					// Cookie already points to the user's profile. Nothing to do.
+					logger.Debug("Anonymous and user profile are the same: " +
+						existingUserProfile.ProfileId + ". No action needed.")
+				}
+
+			} else if anonymousProfile != nil && existingUserProfile == nil {
+				// Only anonymous profile exists. Attach userId and make it into a permanent profile.
+				logger.Info("Attaching user id: " + profileSync.UserId +
+					" to anonymous profile with profile id: " + anonymousProfile.ProfileId)
+
+				profileRequest := model.ProfileRequest{
+					UserId:             profileSync.UserId,
+					IdentityAttributes: anonymousProfile.IdentityAttributes,
+					Traits:             anonymousProfile.Traits,
+					ApplicationData:    anonymousProfile.ApplicationData,
+				}
+
+				_, err = profilesService.UpdateProfile(anonymousProfile.ProfileId, orgHandle, profileRequest)
+				if err != nil {
+					utils.HandleError(writer, err)
+					return
+				}
+
+			} else {
+				// Cookie was stale or invalid. No anonymous session data to recover.
+				logger.Debug("Cookie was stale or invalid for user id: " + profileSync.UserId +
+					". No anonymous profile to link.")
+			}
+		} else {
+			// Decide whether to create a profile here for existing user accounts that misses profile.
+			logger.Debug("No profile cookie provided for user id: " + profileSync.UserId)
+		}
+	}
+	if profileSync.Event == constants.SessionTermination {
+		logger.Info("Event received session termination for user: " + profileSync.UserId)
+		if profileSync.UserId != "" {
+			existingProfile, err = profilesService.FindProfileByUserId(profileSync.UserId)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
+
+			if existingProfile == nil {
+				logger.Debug("No profile found for user: " + profileSync.UserId)
+				return
+			}
+
+			profileCookie, err := profilesService.GetProfileCookieById(profileSync.ProfileCookie)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
+			if profileCookie == nil {
+				logger.Debug("No cookie found for profile during session termination: " + existingProfile.ProfileId)
+				return
+			}
+
+			// Use the cookie's own profile ID, not the master profile ID.
+			// The cookie may belong to a merged-from (child) profile.
+			err = profilesService.UpdateCookieStatusByCookieId(profileCookie.CookieId, false)
+			if err != nil {
+				utils.HandleError(writer, err)
+				return
+			}
+		}
 	}
 
 	writer.WriteHeader(http.StatusOK)

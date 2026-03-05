@@ -346,6 +346,10 @@ var UpdateCookieStatusByProfileId = map[string]string{
 	"postgres": `UPDATE profile_cookies SET is_active = $1 WHERE profile_id = $2`,
 }
 
+var UpdateCookieStatusByCookieId = map[string]string{
+	"postgres": `UPDATE profile_cookies SET is_active = $1 WHERE cookie_id = $2`,
+}
+
 var DeleteCookieById = map[string]string{
 	"postgres": `DELETE FROM profile_cookies WHERE cookie_id = $1`,
 }

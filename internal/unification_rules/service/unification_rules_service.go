@@ -53,12 +53,12 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 
 	logger := log.GetLogger()
 	// Need to specifically prevent
-	if rule.PropertyName == "user_id" {
+	if rule.PropertyName == "user_id" || rule.PropertyName == "identity_attributes.user_id" {
 		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.UNIFICATION_RULE_ALREADY_EXISTS.Code,
-			Message:     errors2.UNIFICATION_RULE_ALREADY_EXISTS.Message,
-			Description: fmt.Sprintf("Unification rule with property %s already exists", rule.PropertyName),
-		}, http.StatusConflict)
+			Code:        errors2.ADD_UNIFICATION_RULE.Code,
+			Message:     errors2.ADD_UNIFICATION_RULE.Message,
+			Description: "user_id based unification rule can not be created.",
+		}, http.StatusBadRequest)
 	}
 
 	if strings.HasPrefix(rule.PropertyName, constants.ApplicationData+".") {

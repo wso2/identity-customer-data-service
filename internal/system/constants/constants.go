@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package constants
 
 const ApiBasePath = "/cds/api"
@@ -55,6 +73,8 @@ const (
 	DeleteUserEvent           = "POST_DELETE_USER_WITH_ID"
 	UpdateUserClaimEvent      = "POST_SET_USER_CLAIM_VALUE_WITH_ID"
 	UpdateUserClaimsEvent     = "POST_SET_USER_CLAIM_VALUES_WITH_ID"
+	AuthenticationSuccess     = "AUTHENTICATION_SUCCESS"
+	SessionTermination        = "SESSION_TERMINATE"
 )
 
 var AllowedValueTypes = map[string]bool{
@@ -159,4 +179,8 @@ const (
 	ConfigCDSEnabled            = "cds_enabled"
 	ConfigInitialSchemaSyncDone = "initial_schema_sync_done"
 	ConfigSystemApplications    = "system_applications"
+)
+
+const (
+	SystemUserIdMatchReason = "system:user_id_match"
 )

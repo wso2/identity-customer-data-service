@@ -53,9 +53,10 @@ type ProfilesServiceInterface interface {
 	UpdateProfileConsents(profileId string, consents []profileModel.ConsentRecord) error
 	PatchProfile(profileId, orgHandle string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
 	GetProfileCookieByProfileId(profileId string) (*profileModel.ProfileCookie, error)
-	GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error)
+	GetProfileCookieById(cookie string) (*profileModel.ProfileCookie, error)
 	CreateProfileCookie(profileId string) (*profileModel.ProfileCookie, error)
-	UpdateCookieStatus(profileId string, isActive bool) error
+	UpdateCookieStatusByCookieId(cookieId string, isActive bool) error
+	UpdateCookieStatusByProfileId(profileId string, isActive bool) error
 	DeleteCookieByProfileId(profileId string) error
 }
 
@@ -628,7 +629,7 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 	}
 
 	if err := profileStore.UpdateProfile(profileToUpDate); err != nil {
-		logger.Error(fmt.Sprintf("Error inserting/updating profile: %s", profile.ProfileId), log.Error(err))
+		logger.Error(fmt.Sprintf("Error updating profile: %s", profile.ProfileId), log.Error(err))
 		return nil, err
 	}
 
@@ -1307,7 +1308,7 @@ func (ps *ProfilesService) GetProfileCookieByProfileId(profileId string) (*profi
 	return cookie, nil
 }
 
-func (ps *ProfilesService) GetProfileCookie(cookie string) (*profileModel.ProfileCookie, error) {
+func (ps *ProfilesService) GetProfileCookieById(cookie string) (*profileModel.ProfileCookie, error) {
 
 	cookieObj, err := profileStore.GetProfileCookie(cookie)
 	logger := log.GetLogger()
@@ -1355,13 +1356,31 @@ func (ps *ProfilesService) CreateProfileCookie(profileId string) (*profileModel.
 	return &cookie, nil
 }
 
-// UpdateCookieStatus updates the status of a profile cookie
-func (ps *ProfilesService) UpdateCookieStatus(profileId string, isActive bool) error {
+// UpdateCookieStatusByProfileId updates the status of a profile cookie by profile_id
+func (ps *ProfilesService) UpdateCookieStatusByProfileId(profileId string, isActive bool) error {
 
-	err := profileStore.UpdateProfileCookie(profileId, isActive)
+	err := profileStore.UpdateProfileCookieByProfileId(profileId, isActive)
 	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("Error creating profile cookie by profile_id: %s", profileId)
+		logger.Debug(errMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_COOKIE.Code,
+			Message:     errors2.UPDATE_COOKIE.Message,
+			Description: errMsg,
+		}, err)
+		return serverError
+	}
+	return nil
+}
+
+// UpdateCookieStatusByCookieId updates the status of a profile cookie by cookie id
+func (ps *ProfilesService) UpdateCookieStatusByCookieId(cookieId string, isActive bool) error {
+
+	err := profileStore.UpdateProfileCookieByCookieId(cookieId, isActive)
+	logger := log.GetLogger()
+	if err != nil {
+		errMsg := fmt.Sprintf("Error updating profile cookie: %s", cookieId)
 		logger.Debug(errMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_COOKIE.Code,
