@@ -1874,6 +1874,44 @@ func DeleteProfileCookieByProfile(profileId string) error {
 	return nil
 }
 
+// DeleteInactiveCookieProfiles deletes inactive cookie-profile records in batches.
+func DeleteInactiveCookieProfiles(batchSize int) (int, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := "Failed to get db client while cleaning up inactive cookie profiles"
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE_COOKIE.Code,
+			Message:     errors2.DELETE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return 0, serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.DeleteInactiveCookies[provider.NewDBProvider().GetDBType()]
+
+	results, err := dbClient.ExecuteQuery(query, batchSize)
+	if err != nil {
+		errorMsg := "Failed to delete inactive cookie profiles"
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE_COOKIE.Code,
+			Message:     errors2.DELETE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return 0, serverError
+	}
+
+	deleted := len(results)
+	if deleted > 0 {
+		logger.Info(fmt.Sprintf("Cleaned up %d inactive cookie profiles", deleted))
+	}
+	return deleted, nil
+}
+
 // UpdateProfileConsents updates or creates consent records for a profile
 func UpdateProfileConsents(profileId string, consents []model.ConsentRecord) error {
 	dbClient, err := provider.NewDBProvider().GetDBClient()

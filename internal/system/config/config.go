@@ -67,6 +67,7 @@ type Config struct {
 	AuthServer AuthServerConfig `yaml:"auth_server"`
 	DataSource DataSourceConfig `yaml:"datasource"`
 	TLS        TLSConfig        `yaml:"tls"`
+	Cleanup    CleanupConfig    `yaml:"cleanup"`
 }
 
 type TLSConfig struct {
@@ -76,4 +77,14 @@ type TLSConfig struct {
 	CDSPrivateKey           string `yaml:"server_key"`
 	IdentityServerPublicKey string `yaml:"client_cert"`
 	TrustStore              string `yaml:"trust_store"`
+}
+
+type CleanupConfig struct {
+	Cookie CookieCleanupConfig `yaml:"cookie"`
+}
+
+type CookieCleanupConfig struct {
+	Enabled   bool `yaml:"enabled"`
+	Interval  int  `yaml:"interval"` // in seconds
+	BatchSize int  `yaml:"batch_size"`
 }

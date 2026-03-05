@@ -93,6 +93,11 @@ func main() {
 	// Initialize Schema Sync worker
 	workers.StartSchemaSyncWorker()
 
+	// Initialize Cookie Cleanup worker
+	if cdsConfig.Cleanup.Cookie.Enabled {
+		workers.StartCookieCleanupWorker(cdsConfig.Cleanup.Cookie)
+	}
+
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
 

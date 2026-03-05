@@ -33,6 +33,11 @@ cloud:
           corsAllowedOrigins: []
         addr:
           host: "localhost"
+        cleanup:
+          cookie:
+            enabled: true
+            interval: 86400    # in seconds (24 hours)
+            batch_size: 500
         sync:
           schema:
             enabled: true
