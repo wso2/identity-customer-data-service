@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package workers
 
 import (
@@ -5,6 +23,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,44 +31,88 @@ import (
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/queue"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-var UnificationQueue chan profileModel.Profile
+// activeProfileQueue is the queue implementation used for profile unification.
+// It is initialised by StartProfileWorker. All access is guarded by
+// profileQueueMu to prevent data races between concurrent Enqueue calls and
+// shutdown.
+var (
+	profileQueueMu     sync.RWMutex
+	activeProfileQueue queue.ProfileUnificationQueue
+)
 
-func StartProfileWorker() {
-
-	UnificationQueue = make(chan profileModel.Profile, constants.DefaultQueueSize)
-
-	go func() {
-		for profile := range UnificationQueue {
-
-			// Unify
-			profile, err := profileStore.GetProfile(profile.ProfileId)
-			if err == nil && profile != nil {
-				unifyProfiles(*profile)
-			}
+// StartProfileWorker initialises the profile unification queue (using the
+// provider configured in the runtime config) and starts the consumer
+// goroutine. An error is returned when the queue cannot be created or
+// started; the caller should treat this as a fatal startup failure.
+func StartProfileWorker() error {
+	cfg := config.GetCDSRuntime().Config.MessageQueue
+	q, err := queue.NewProfileUnificationQueue(cfg)
+	if err != nil {
+		return fmt.Errorf("workers: failed to create profile unification queue: %w", err)
+	}
+	if err := q.Start(func(profile profileModel.Profile) {
+		p, err := profileStore.GetProfile(profile.ProfileId)
+		if err == nil && p != nil {
+			unifyProfiles(*p)
 		}
-	}()
+	}); err != nil {
+		_ = q.Close()
+		return fmt.Errorf("workers: failed to start profile unification queue: %w", err)
+	}
+	profileQueueMu.Lock()
+	activeProfileQueue = q
+	profileQueueMu.Unlock()
+	return nil
 }
 
+// EnqueueProfileForProcessing adds a profile to the active queue for
+// asynchronous unification. It is a no-op when the worker has not been
+// started or has been stopped.
 func EnqueueProfileForProcessing(profile profileModel.Profile) {
-	if UnificationQueue != nil {
-		UnificationQueue <- profile
+	profileQueueMu.RLock()
+	q := activeProfileQueue
+	profileQueueMu.RUnlock()
+	if q != nil {
+		if err := q.Enqueue(profile); err != nil {
+			log.GetLogger().Error(fmt.Sprintf(
+				"workers: failed to enqueue profile %s for unification: %v",
+				profile.ProfileId, err))
+		}
 	}
 }
 
-// ProfileWorkerQueue Define a struct that implements the EventQueue interface
+// ProfileWorkerQueue is a thin adapter that allows service-layer code to
+// enqueue profiles without taking a direct dependency on the queue package.
 type ProfileWorkerQueue struct{}
 
-// Enqueue Implement the Enqueue method for ProfileWorkerQueue
+// Enqueue forwards the profile to the active queue via EnqueueProfileForProcessing.
 func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
 	EnqueueProfileForProcessing(profile)
+}
+
+// StopProfileWorker gracefully shuts down the profile unification queue.
+// It nils out the global reference under a write lock before calling Close,
+// ensuring no concurrent Enqueue can send on a closed queue. It should be
+// called during application shutdown.
+func StopProfileWorker() error {
+	profileQueueMu.Lock()
+	q := activeProfileQueue
+	activeProfileQueue = nil
+	profileQueueMu.Unlock()
+	if q != nil {
+		return q.Close()
+	}
+	return nil
 }
 
 // unifyProfiles unifies profiles based on unification rules

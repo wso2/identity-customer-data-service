@@ -54,10 +54,16 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	workers.StartProfileWorker() // Start the real enrichment queue worker
+	if err := workers.StartProfileWorker(); err != nil { // Start the real enrichment queue worker
+		fmt.Println("Failed to start profile worker:", err)
+		os.Exit(1)
+	}
 
 	// Initialize Schema Sync worker
-	workers.StartSchemaSyncWorker()
+	if err := workers.StartSchemaSyncWorker(); err != nil {
+		fmt.Println("Failed to start schema sync worker:", err)
+		os.Exit(1)
+	}
 
 	provider.SetTestDB(pg.DB)
 	err = utils.CreateTablesFromFile(pg.DB, utils.GetSchemaPath())

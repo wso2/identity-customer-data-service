@@ -19,12 +19,15 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -32,6 +35,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
+	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 )
@@ -88,10 +92,16 @@ func main() {
 	initDatabaseFromConfig(cdsConfig)
 
 	// Initialize Profile worker
-	workers.StartProfileWorker()
+	if err := workers.StartProfileWorker(); err != nil {
+		fmt.Println("Failed to start profile worker.", err)
+		os.Exit(1)
+	}
 
 	// Initialize Schema Sync worker
-	workers.StartSchemaSyncWorker()
+	if err := workers.StartSchemaSyncWorker(); err != nil {
+		fmt.Println("Failed to start schema sync worker.", err)
+		os.Exit(1)
+	}
 
 	// Initialize Cookie Cleanup worker
 	if cdsConfig.Cleanup.Cookie.Enabled {
@@ -148,11 +158,38 @@ func main() {
 		},
 	}
 
-	logger.Info(fmt.Sprintf("HTTPS server listening on %s", serverAddr))
-	if err := server.ListenAndServeTLS(serverCertPath, serverKeyPath); err != nil {
-		logger.Error("Failed to start HTTPS server.", log.Error(err))
-		os.Exit(1)
+	// Listen for OS shutdown signals
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start the server in a goroutine so we can listen for signals
+	go func() {
+		logger.Info(fmt.Sprintf("HTTPS server listening on %s", serverAddr))
+		if err := server.ListenAndServeTLS(serverCertPath, serverKeyPath); err != nil && err != http.ErrServerClosed {
+			logger.Error("Failed to start HTTPS server.", log.Error(err))
+			os.Exit(1)
+		}
+	}()
+
+	// Block until a signal is received
+	<-quit
+	logger.Info("Shutdown signal received, draining connections...")
+
+	// Give in-flight requests up to 15 seconds to complete
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Error("HTTP server shutdown error.", log.Error(err))
 	}
+	if err := workers.StopProfileWorker(); err != nil {
+		logger.Error("Failed to stop profile worker.", log.Error(err))
+	}
+	if err := workers.StopSchemaSyncWorker(); err != nil {
+		logger.Error("Failed to stop schema sync worker.", log.Error(err))
+	}
+
+	logger.Info("Shutdown complete")
 }
 
 // initMultiplexer initializes the HTTP multiplexer and registers the services.
