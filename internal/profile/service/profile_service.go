@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -181,34 +182,13 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 			}, http.StatusBadRequest)
 			return clientError
 		}
+		var existingVal interface{}
 		if isUpdate && existingProfile.IdentityAttributes != nil {
-			if !(attr.AttributeName == "identity_attributes.modified" || attr.AttributeName == "identity_attributes.created" || attr.AttributeName == "identity_attributes.userid") {
-				if err := validateMutability(attr.Mutability, isUpdate, existingProfile.IdentityAttributes[key], val); err != nil {
-					return err
-				}
-			}
-		} else {
-			if !(attr.AttributeName == "identity_attributes.modified" || attr.AttributeName == "identity_attributes.created" || attr.AttributeName == "identity_attributes.userid") {
-				if err := validateMutability(attr.Mutability, isUpdate, nil, val); err != nil {
-					return err
-				}
-			}
+			existingVal = existingProfile.IdentityAttributes[key]
 		}
-		if !isValidType(val, attr.ValueType, attr.MultiValued, nil) {
-			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.UPDATE_PROFILE.Code,
-				Message:     errors2.UPDATE_PROFILE.Message,
-				Description: fmt.Sprintf("identity attribute '%s': type mismatch", key),
-			}, http.StatusBadRequest)
-			return clientError
-		}
-		if !isValidCanonicalValue(val, attr.CanonicalValues) {
-			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.UPDATE_PROFILE.Code,
-				Message:     errors2.UPDATE_PROFILE.Message,
-				Description: fmt.Sprintf("identity attribute '%s': value not in canonical values", key),
-			}, http.StatusBadRequest)
-			return clientError
+		if err := validateAttributeValueAgainstSchema(attr, val, existingVal, isUpdate, schema.IdentityAttributes,
+			"identity attribute", key, isSystemIdentityAttribute(attr.AttributeName)); err != nil {
+			return err
 		}
 	}
 
@@ -224,30 +204,13 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 			}, http.StatusBadRequest)
 			return clientError
 		}
+		var existingVal interface{}
 		if isUpdate && existingProfile.Traits != nil {
-			if err := validateMutability(attr.Mutability, isUpdate, existingProfile.Traits[key], val); err != nil {
-				return err
-			}
-		} else {
-			if err := validateMutability(attr.Mutability, isUpdate, nil, val); err != nil {
-				return err
-			}
+			existingVal = existingProfile.Traits[key]
 		}
-		if !isValidType(val, attr.ValueType, attr.MultiValued, nil) {
-			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.UPDATE_PROFILE.Code,
-				Message:     errors2.UPDATE_PROFILE.Message,
-				Description: fmt.Sprintf("trait '%s': type mismatch", key),
-			}, http.StatusBadRequest)
-			return clientError
-		}
-		if !isValidCanonicalValue(val, attr.CanonicalValues) {
-			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.UPDATE_PROFILE.Code,
-				Message:     errors2.UPDATE_PROFILE.Message,
-				Description: fmt.Sprintf("trait '%s': value not in canonical values", key),
-			}, http.StatusBadRequest)
-			return clientError
+		if err := validateAttributeValueAgainstSchema(attr, val, existingVal, isUpdate, schema.Traits,
+			"trait", key, false); err != nil {
+			return err
 		}
 	}
 
@@ -270,30 +233,132 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 				existingVal, _ = getAppDataValue(existingProfile.ApplicationData, appID, key)
 			}
 
-			if err := validateMutability(attr.Mutability, isUpdate, existingVal, val); err != nil {
+			if err := validateAttributeValueAgainstSchema(attr, val, existingVal, isUpdate, schema.ApplicationData[appID],
+				"application_data", appID+"."+key, false); err != nil {
 				return err
-			}
-
-			if !isValidType(val, attr.ValueType, attr.MultiValued, nil) {
-				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.UPDATE_PROFILE.Code,
-					Message:     errors2.UPDATE_PROFILE.Message,
-					Description: fmt.Sprintf("application_data '%s.%s': type mismatch", appID, key),
-				}, http.StatusBadRequest)
-				return clientError
-			}
-			if !isValidCanonicalValue(val, attr.CanonicalValues) {
-				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.UPDATE_PROFILE.Code,
-					Message:     errors2.UPDATE_PROFILE.Message,
-					Description: fmt.Sprintf("application data '%s': value not in canonical values", key),
-				}, http.StatusBadRequest)
-				return clientError
 			}
 		}
 	}
 
 	return nil
+}
+
+func validateAttributeValueAgainstSchema(attr model.ProfileSchemaAttribute, val, existingVal interface{}, isUpdate bool,
+	scopeAttrs []model.ProfileSchemaAttribute, attributeLabel, attributePath string, skipMutability bool) error {
+	if !skipMutability {
+		if err := validateMutability(attr.Mutability, isUpdate, existingVal, val); err != nil {
+			return err
+		}
+	}
+
+	if !isValidType(val, attr.ValueType, attr.MultiValued, nil) {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: fmt.Sprintf("%s '%s': type mismatch", attributeLabel, attributePath),
+		}, http.StatusBadRequest)
+	}
+
+	if !isValidCanonicalValue(val, attr.CanonicalValues) {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: fmt.Sprintf("%s '%s': value not in canonical values", attributeLabel, attributePath),
+		}, http.StatusBadRequest)
+	}
+
+	if attr.ValueType == constants.ComplexDataType {
+		if err := validateComplexSubAttributes(attr, val, existingVal, isUpdate, scopeAttrs, attributeLabel, attributePath); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateComplexSubAttributes(parentAttr model.ProfileSchemaAttribute, val, existingVal interface{}, isUpdate bool,
+	scopeAttrs []model.ProfileSchemaAttribute, attributeLabel, attributePath string) error {
+	switch v := val.(type) {
+	case map[string]interface{}:
+		var existingMap map[string]interface{}
+		if current, ok := existingVal.(map[string]interface{}); ok {
+			existingMap = current
+		}
+		return validateComplexObject(parentAttr, v, existingMap, isUpdate, scopeAttrs, attributeLabel, attributePath)
+	case []interface{}:
+		var existingSlice []interface{}
+		if current, ok := existingVal.([]interface{}); ok {
+			existingSlice = current
+		}
+		for i, item := range v {
+			itemMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			var existingMap map[string]interface{}
+			if i < len(existingSlice) {
+				if oldMap, ok := existingSlice[i].(map[string]interface{}); ok {
+					existingMap = oldMap
+				}
+			}
+
+			indexedPath := fmt.Sprintf("%s[%d]", attributePath, i)
+			if err := validateComplexObject(parentAttr, itemMap, existingMap, isUpdate, scopeAttrs, attributeLabel, indexedPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateComplexObject(parentAttr model.ProfileSchemaAttribute, objVal map[string]interface{}, existingObj map[string]interface{},
+	isUpdate bool, scopeAttrs []model.ProfileSchemaAttribute, attributeLabel, attributePath string) error {
+	subAttrSchema := make(map[string]model.ProfileSchemaAttribute, len(parentAttr.SubAttributes))
+	prefix := parentAttr.AttributeName + "."
+	for _, subAttr := range parentAttr.SubAttributes {
+		attr, found := findAttributeInSchema(scopeAttrs, subAttr.AttributeName)
+		if !found {
+			return errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: fmt.Sprintf("sub-attribute '%s' referenced by '%s' not found in schema", subAttr.AttributeName, parentAttr.AttributeName),
+			}, fmt.Errorf("sub-attribute '%s' not found", subAttr.AttributeName))
+		}
+
+		childKey := strings.TrimPrefix(subAttr.AttributeName, prefix)
+		subAttrSchema[childKey] = attr
+	}
+
+	for childKey, childVal := range objVal {
+		childAttr, ok := subAttrSchema[childKey]
+		if !ok {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: fmt.Sprintf("%s '%s.%s' not defined in schema", attributeLabel, attributePath, childKey),
+			}, http.StatusBadRequest)
+		}
+
+		var existingChildVal interface{}
+		if existingObj != nil {
+			existingChildVal = existingObj[childKey]
+		}
+
+		childPath := attributePath + "." + childKey
+		if err := validateAttributeValueAgainstSchema(childAttr, childVal, existingChildVal, isUpdate, scopeAttrs,
+			attributeLabel, childPath, false); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func isSystemIdentityAttribute(attributeName string) bool {
+	return attributeName == "identity_attributes.modified" ||
+		attributeName == "identity_attributes.created" ||
+		attributeName == "identity_attributes.userid"
 }
 
 // isValidCanonicalValue checks if the value is valid against the canonical values defined in the schema.
@@ -365,7 +430,7 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 			Description: "field is read-only or computed",
 		}, http.StatusBadRequest)
 	case constants.MutabilityImmutable:
-		if isUpdate && oldVal != newVal {
+		if isUpdate && !reflect.DeepEqual(oldVal, newVal) {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
 				Message:     errors2.UPDATE_PROFILE.Message,
@@ -373,7 +438,7 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 			}, http.StatusBadRequest)
 		}
 	case constants.MutabilityWriteOnce:
-		if isUpdate && oldVal != nil && oldVal != "" && oldVal != newVal {
+		if isUpdate && hasExistingValue(oldVal) && !reflect.DeepEqual(oldVal, newVal) {
 			return errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.UPDATE_PROFILE.Code,
 				Message:     errors2.UPDATE_PROFILE.Message,
@@ -391,6 +456,16 @@ func validateMutability(mutability string, isUpdate bool, oldVal, newVal interfa
 		}, http.StatusBadRequest)
 	}
 	return nil
+}
+
+func hasExistingValue(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	if s, ok := v.(string); ok {
+		return s != ""
+	}
+	return true
 }
 
 func isValidType(value interface{}, expected string, multiValued bool, subAttrs []model.ProfileSchemaAttribute) bool {
@@ -540,7 +615,7 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 // UpdateProfile creates or updates a profile
 func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
 
-	profile, err := profileStore.GetProfile(profileId) //todo: need to get the reference to see what to updatedProfile (see if its the master)
+	profile, err := profileStore.GetProfile(profileId)
 	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("Error fetching profile for updatedProfile: %s", profileId)
@@ -629,14 +704,12 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 	}
 
 	if err := profileStore.UpdateProfile(profileToUpDate); err != nil {
-		logger.Error(fmt.Sprintf("Error updating profile: %s", profile.ProfileId), log.Error(err))
+		logger.Error(fmt.Sprintf("Error updating profile: %s", profileToUpDate.ProfileId), log.Error(err))
 		return nil, err
 	}
 
 	profileFetched, errWait := ps.GetProfile(profile.ProfileId)
 	if errWait != nil || profileFetched == nil {
-		logger.Warn(fmt.Sprintf("Profile: %s not visible after insert/updatedProfile: %v", profile.ProfileId, errWait))
-		// todo: should we throw an error here?
 		return nil, errWait
 	}
 

@@ -1090,7 +1090,13 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			// Step 1: Resolve anonymous profile from cookie
 			var anonymousProfile *model.ProfileResponse
 			cookieObj, err := profilesService.GetProfileCookieById(profileSync.ProfileCookie)
-			if err == nil && cookieObj != nil && cookieObj.IsActive {
+			if err != nil {
+				if !utils.HasClientErrorCode(err, errors2.PROFILE_COOKIE_NOT_FOUND.Code) {
+					utils.HandleError(writer, err)
+					return
+				}
+			}
+			if cookieObj != nil && cookieObj.IsActive {
 				anonymousProfile, err = profilesService.GetProfile(cookieObj.ProfileId)
 				if err != nil {
 					logger.Debug("Failed to fetch anonymous profile from cookie",
@@ -1184,11 +1190,11 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 			profileCookie, err := profilesService.GetProfileCookieById(profileSync.ProfileCookie)
 			if err != nil {
+				if utils.HasClientErrorCode(err, errors2.PROFILE_COOKIE_NOT_FOUND.Code) {
+					logger.Debug("No cookie found during session termination. Skipping cookie deactivation.")
+					return
+				}
 				utils.HandleError(writer, err)
-				return
-			}
-			if profileCookie == nil {
-				logger.Debug("No cookie found for profile during session termination: " + existingProfile.ProfileId)
 				return
 			}
 
