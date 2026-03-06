@@ -423,20 +423,47 @@ func findAppAttributeInSchema(appSchema map[string][]model.ProfileSchemaAttribut
 
 // valuesEqualForMutability compares two values for equality, normalizing numeric types
 // so that values like int64(1) and float64(1.0) are considered equal.
+// When both values are integers, they are compared directly as int64 to preserve
+// precision for large values (> 2^53) that would lose precision in float64.
 // For non-numeric types, it falls back to reflect.DeepEqual.
 func valuesEqualForMutability(oldVal, newVal interface{}) bool {
-	oldNum, oldOk := toFloat64(oldVal)
-	newNum, newOk := toFloat64(newVal)
-	if oldOk && newOk {
-		return oldNum == newNum
+	oldInt, oldIsInt := toInt64(oldVal)
+	newInt, newIsInt := toInt64(newVal)
+
+	// Both are integer types: compare directly to preserve precision for large values.
+	if oldIsInt && newIsInt {
+		return oldInt == newInt
 	}
+
+	// Mixed int/float or both float: convert to float64.
+	// This is safe because at least one side is already float64 (from JSON),
+	// so precision is already bounded by float64 representation.
+	oldFloat, oldIsNum := toFloat64(oldVal)
+	newFloat, newIsNum := toFloat64(newVal)
+	if oldIsNum && newIsNum {
+		return oldFloat == newFloat
+	}
+
 	return reflect.DeepEqual(oldVal, newVal)
+}
+
+// toInt64 attempts to convert an integer value to int64.
+// Returns 0 and false for floating-point types to ensure they go through float64 comparison.
+func toInt64(v interface{}) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true
+	case int32:
+		return int64(n), true
+	case int64:
+		return n, true
+	default:
+		return 0, false
+	}
 }
 
 // toFloat64 attempts to convert a numeric value to float64.
 // Returns the float64 value and true if the input is numeric, or 0 and false otherwise.
-// This allows for flexible comparison of numeric values across different types (int, int64, float32, etc.)
-// when validating mutability constraints.
 func toFloat64(v interface{}) (float64, bool) {
 	switch n := v.(type) {
 	case int:
