@@ -346,12 +346,21 @@ var UpdateCookieStatusByProfileId = map[string]string{
 	"postgres": `UPDATE profile_cookies SET is_active = $1 WHERE profile_id = $2`,
 }
 
+var UpdateCookieStatusByCookieId = map[string]string{
+	"postgres": `UPDATE profile_cookies SET is_active = $1 WHERE cookie_id = $2`,
+}
+
 var DeleteCookieById = map[string]string{
 	"postgres": `DELETE FROM profile_cookies WHERE cookie_id = $1`,
 }
 
 var DeleteCookieByProfileId = map[string]string{
 	"postgres": `DELETE FROM profile_cookies WHERE profile_id = $1`,
+}
+
+var DeleteInactiveCookies = map[string]string{
+	"postgres": `DELETE FROM cookie_profiles WHERE cookie_id IN (SELECT cookie_id FROM cookie_profiles 
+                                                                 WHERE is_active = false LIMIT $1)`,
 }
 
 var GetOrgConfigurations = map[string]string{

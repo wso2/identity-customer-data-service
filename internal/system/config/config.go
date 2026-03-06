@@ -87,7 +87,7 @@ type ExternalBrokerConfig struct {
 type MessageQueueConfig struct {
 	// Type is the queue provider to use: "memory" (default) or the name of
 	// any registered external provider (e.g. "activemq").
-	Type   string              `yaml:"type"`
+	Type   string               `yaml:"type"`
 	Broker ExternalBrokerConfig `yaml:"broker"`
 }
 
@@ -98,6 +98,7 @@ type Config struct {
 	AuthServer   AuthServerConfig   `yaml:"auth_server"`
 	DataSource   DataSourceConfig   `yaml:"datasource"`
 	TLS          TLSConfig          `yaml:"tls"`
+	Cleanup      CleanupConfig      `yaml:"cleanup"`
 	MessageQueue MessageQueueConfig `yaml:"message_queue"`
 }
 
@@ -108,4 +109,14 @@ type TLSConfig struct {
 	CDSPrivateKey           string `yaml:"server_key"`
 	IdentityServerPublicKey string `yaml:"client_cert"`
 	TrustStore              string `yaml:"trust_store"`
+}
+
+type CleanupConfig struct {
+	Cookie CookieCleanupConfig `yaml:"cookie"`
+}
+
+type CookieCleanupConfig struct {
+	Enabled   bool `yaml:"enabled"`
+	Interval  int  `yaml:"interval"` // in seconds
+	BatchSize int  `yaml:"batch_size"`
 }

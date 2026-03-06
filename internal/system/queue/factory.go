@@ -38,8 +38,8 @@ type ProfileQueueProvider func(cfg config.ExternalBrokerConfig) (ProfileUnificat
 type SchemaSyncQueueProvider func(cfg config.ExternalBrokerConfig) (SchemaSyncQueue, error)
 
 var (
-	mu                      sync.RWMutex
-	profileQueueProviders   = map[string]ProfileQueueProvider{}
+	mu                       sync.RWMutex
+	profileQueueProviders    = map[string]ProfileQueueProvider{}
 	schemaSyncQueueProviders = map[string]SchemaSyncQueueProvider{}
 )
 

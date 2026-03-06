@@ -1773,8 +1773,8 @@ func GetProfileCookie(cookie string) (*model.ProfileCookie, error) {
 	return profileCookie, nil
 }
 
-// UpdateProfileCookie updates the status of a profile cookie
-func UpdateProfileCookie(profileId string, isActive bool) error {
+// UpdateProfileCookieByProfileId updates the status of a profile cookie
+func UpdateProfileCookieByProfileId(profileId string, isActive bool) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -1795,6 +1795,40 @@ func UpdateProfileCookie(profileId string, isActive bool) error {
 	_, err = dbClient.ExecuteQuery(query, isActive, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed updating the profile cookie with profile Id: %s", profileId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE_COOKIE.Code,
+			Message:     errors2.UPDATE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+
+	return nil
+}
+
+// UpdateProfileCookieByCookieId updates the status of a profile cookie
+func UpdateProfileCookieByCookieId(cookieId string, isActive bool) error {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get db client while updating profile cookie: %s", cookieId)
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE_COOKIE.Code,
+			Message:     errors2.UPDATE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.UpdateCookieStatusByCookieId[provider.NewDBProvider().GetDBType()]
+
+	_, err = dbClient.ExecuteQuery(query, isActive, cookieId)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed updating the profile cookie: %s", cookieId)
 		logger.Debug(errorMsg, log.Error(err))
 		serverError := errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE_COOKIE.Code,
@@ -1838,6 +1872,44 @@ func DeleteProfileCookieByProfile(profileId string) error {
 	}
 
 	return nil
+}
+
+// DeleteInactiveCookieProfiles deletes inactive cookie-profile records in batches.
+func DeleteInactiveCookieProfiles(batchSize int) (int, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := "Failed to get db client while cleaning up inactive cookie profiles"
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE_COOKIE.Code,
+			Message:     errors2.DELETE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return 0, serverError
+	}
+	defer dbClient.Close()
+
+	query := scripts.DeleteInactiveCookies[provider.NewDBProvider().GetDBType()]
+
+	results, err := dbClient.ExecuteQuery(query, batchSize)
+	if err != nil {
+		errorMsg := "Failed to delete inactive cookie profiles"
+		logger.Debug(errorMsg, log.Error(err))
+		serverError := errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.DELETE_PROFILE_COOKIE.Code,
+			Message:     errors2.DELETE_PROFILE_COOKIE.Message,
+			Description: errorMsg,
+		}, err)
+		return 0, serverError
+	}
+
+	deleted := len(results)
+	if deleted > 0 {
+		logger.Info(fmt.Sprintf("Cleaned up %d inactive cookie profiles", deleted))
+	}
+	return deleted, nil
 }
 
 // UpdateProfileConsents updates or creates consent records for a profile

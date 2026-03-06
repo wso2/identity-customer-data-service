@@ -103,6 +103,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize Cookie Cleanup worker
+	if cdsConfig.Cleanup.Cookie.Enabled {
+		workers.StartCookieCleanupWorker(cdsConfig.Cleanup.Cookie)
+	}
+
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
 
@@ -183,6 +188,8 @@ func main() {
 	if err := workers.StopSchemaSyncWorker(); err != nil {
 		logger.Error("Failed to stop schema sync worker.", log.Error(err))
 	}
+
+	workers.StopCookieCleanupWorker()
 
 	logger.Info("Shutdown complete")
 }

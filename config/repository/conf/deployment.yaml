@@ -76,6 +76,12 @@ sync:
     enabled: true
     interval: 3600 # in seconds
 
+cleanup:
+  cookie:
+    enabled: true
+    interval: 86400    # in seconds (24 hours)
+    batch_size: 500
+
 # Message queue configuration.
 # Set type to "activemq" to use an external ActiveMQ broker for durable
 # message delivery. Leave type as "memory" (or omit the block entirely) to
