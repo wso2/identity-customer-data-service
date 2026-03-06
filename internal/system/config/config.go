@@ -78,6 +78,10 @@ type ExternalBrokerConfig struct {
 	// SchemaSyncQueueName is the destination used for schema sync
 	// messages (e.g. "/queue/cds-schema-sync").
 	SchemaSyncQueueName string `yaml:"schema_sync_queue_name"`
+	// ProfileDataMigrationQueueName is the destination used for profile
+	// data migration jobs triggered by schema attribute deletions or type
+	// changes (e.g. "/queue/cds-profile-data-migration").
+	ProfileDataMigrationQueueName string `yaml:"profile_data_migration_queue_name"`
 }
 
 // MessageQueueConfig selects the queue provider and its settings. When Type

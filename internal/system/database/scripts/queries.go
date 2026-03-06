@@ -88,6 +88,137 @@ var DeleteProfileSchemaAttributeById = map[string]string{
 	"postgres": `DELETE FROM profile_schema WHERE org_handle = $1 AND attribute_id = $2`,
 }
 
+// RemoveFromIdentityAttributes removes the attribute at the given JSON path
+// from the identity_attributes JSONB column for all profiles in the org.
+// The path placeholder $2 must be a Postgres text[] literal, e.g. '{email}'.
+var RemoveFromIdentityAttributes = map[string]string{
+	"postgres": `UPDATE profiles SET identity_attributes = identity_attributes #- $2::text[]
+	             WHERE org_handle = $1`,
+}
+
+// NullifyInIdentityAttributes sets the value at the given JSON path to null
+// for all profiles in the org that currently have a non-null value there.
+var NullifyInIdentityAttributes = map[string]string{
+	"postgres": `UPDATE profiles SET identity_attributes = jsonb_set(identity_attributes, $2::text[], 'null')
+	             WHERE org_handle = $1 AND identity_attributes #> $2::text[] IS NOT NULL`,
+}
+
+// RemoveFromTraits removes the attribute at the given JSON path from the
+// traits JSONB column for all profiles in the org.
+var RemoveFromTraits = map[string]string{
+	"postgres": `UPDATE profiles SET traits = traits #- $2::text[]
+	             WHERE org_handle = $1`,
+}
+
+// NullifyInTraits sets the value at the given JSON path to null in the
+// traits JSONB column for all profiles in the org.
+var NullifyInTraits = map[string]string{
+	"postgres": `UPDATE profiles SET traits = jsonb_set(traits, $2::text[], 'null')
+	             WHERE org_handle = $1 AND traits #> $2::text[] IS NOT NULL`,
+}
+
+// RemoveFromApplicationData removes the attribute at the given JSON path from
+// the application_data JSONB column for the given app within the org.
+var RemoveFromApplicationData = map[string]string{
+	"postgres": `UPDATE application_data SET application_data = application_data #- $3::text[]
+	             WHERE app_id = $2
+	               AND profile_id IN (SELECT profile_id FROM profiles WHERE org_handle = $1)`,
+}
+
+// NullifyInApplicationData sets the value at the given JSON path to null in
+// the application_data JSONB column for the given app within the org.
+var NullifyInApplicationData = map[string]string{
+	"postgres": `UPDATE application_data SET application_data = jsonb_set(application_data, $3::text[], 'null')
+	             WHERE app_id = $2
+	               AND profile_id IN (SELECT profile_id FROM profiles WHERE org_handle = $1)
+	               AND application_data #> $3::text[] IS NOT NULL`,
+}
+
+// WrapScalarInArrayInIdentityAttributes wraps a scalar value at the given JSON
+// path in a single-element array in the identity_attributes JSONB column.
+// Rows where the value is already an array or is null are left unchanged.
+var WrapScalarInArrayInIdentityAttributes = map[string]string{
+	"postgres": `UPDATE profiles
+	             SET identity_attributes = jsonb_set(identity_attributes, $2::text[], jsonb_build_array(identity_attributes #> $2::text[]))
+	             WHERE org_handle = $1
+	               AND identity_attributes #> $2::text[] IS NOT NULL
+	               AND jsonb_typeof(identity_attributes #> $2::text[]) <> 'array'`,
+}
+
+// WrapScalarInArrayInTraits wraps a scalar value at the given JSON path in a
+// single-element array in the traits JSONB column.
+var WrapScalarInArrayInTraits = map[string]string{
+	"postgres": `UPDATE profiles
+	             SET traits = jsonb_set(traits, $2::text[], jsonb_build_array(traits #> $2::text[]))
+	             WHERE org_handle = $1
+	               AND traits #> $2::text[] IS NOT NULL
+	               AND jsonb_typeof(traits #> $2::text[]) <> 'array'`,
+}
+
+// WrapScalarInArrayInApplicationData wraps a scalar value at the given JSON
+// path in a single-element array in the application_data JSONB column.
+var WrapScalarInArrayInApplicationData = map[string]string{
+	"postgres": `UPDATE application_data
+	             SET application_data = jsonb_set(application_data, $3::text[], jsonb_build_array(application_data #> $3::text[]))
+	             WHERE app_id = $2
+	               AND profile_id IN (SELECT profile_id FROM profiles WHERE org_handle = $1)
+	               AND application_data #> $3::text[] IS NOT NULL
+	               AND jsonb_typeof(application_data #> $3::text[]) <> 'array'`,
+}
+
+// TakeFirstElementInIdentityAttributes replaces an array at the given JSON path
+// with its first element in the identity_attributes JSONB column.  Rows where
+// the value is not an array or the array is empty are nullified instead.
+var TakeFirstElementInIdentityAttributes = map[string]string{
+	"postgres": `UPDATE profiles
+	             SET identity_attributes = jsonb_set(
+	               identity_attributes, $2::text[],
+	               CASE
+	                 WHEN jsonb_typeof(identity_attributes #> $2::text[]) = 'array'
+	                  AND jsonb_array_length(identity_attributes #> $2::text[]) > 0
+	                 THEN (identity_attributes #> $2::text[]) -> 0
+	                 ELSE 'null'::jsonb
+	               END
+	             )
+	             WHERE org_handle = $1
+	               AND identity_attributes #> $2::text[] IS NOT NULL`,
+}
+
+// TakeFirstElementInTraits replaces an array at the given JSON path with its
+// first element in the traits JSONB column.
+var TakeFirstElementInTraits = map[string]string{
+	"postgres": `UPDATE profiles
+	             SET traits = jsonb_set(
+	               traits, $2::text[],
+	               CASE
+	                 WHEN jsonb_typeof(traits #> $2::text[]) = 'array'
+	                  AND jsonb_array_length(traits #> $2::text[]) > 0
+	                 THEN (traits #> $2::text[]) -> 0
+	                 ELSE 'null'::jsonb
+	               END
+	             )
+	             WHERE org_handle = $1
+	               AND traits #> $2::text[] IS NOT NULL`,
+}
+
+// TakeFirstElementInApplicationData replaces an array at the given JSON path
+// with its first element in the application_data JSONB column.
+var TakeFirstElementInApplicationData = map[string]string{
+	"postgres": `UPDATE application_data
+	             SET application_data = jsonb_set(
+	               application_data, $3::text[],
+	               CASE
+	                 WHEN jsonb_typeof(application_data #> $3::text[]) = 'array'
+	                  AND jsonb_array_length(application_data #> $3::text[]) > 0
+	                 THEN (application_data #> $3::text[]) -> 0
+	                 ELSE 'null'::jsonb
+	               END
+	             )
+	             WHERE app_id = $2
+	               AND profile_id IN (SELECT profile_id FROM profiles WHERE org_handle = $1)
+	               AND application_data #> $3::text[] IS NOT NULL`,
+}
+
 var GetUnificationRules = map[string]string{
 	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at 
 FROM unification_rules WHERE org_handle = $1`,

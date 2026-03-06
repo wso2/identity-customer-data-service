@@ -38,6 +38,7 @@ import (
 	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
+	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 )
 
 func initDatabaseFromConfig(config *config.Config) {
@@ -102,6 +103,13 @@ func main() {
 		fmt.Println("Failed to start schema sync worker.", err)
 		os.Exit(1)
 	}
+
+	// Initialize Profile Data Migration worker and wire it into the schema service.
+	if err := workers.StartProfileDataMigrationWorker(); err != nil {
+		fmt.Println("Failed to start profile data migration worker.", err)
+		os.Exit(1)
+	}
+	schemaService.SetProfileDataMigrationJobEnqueuer(workers.EnqueueProfileDataMigrationJob)
 
 	serverAddr := fmt.Sprintf("%s:%d", cdsConfig.Addr.Host, cdsConfig.Addr.Port)
 	mux := enableCORS(initMultiplexer())
@@ -182,6 +190,9 @@ func main() {
 	}
 	if err := workers.StopSchemaSyncWorker(); err != nil {
 		logger.Error("Failed to stop schema sync worker.", log.Error(err))
+	}
+	if err := workers.StopProfileDataMigrationWorker(); err != nil {
+		logger.Error("Failed to stop profile data migration worker.", log.Error(err))
 	}
 
 	logger.Info("Shutdown complete")

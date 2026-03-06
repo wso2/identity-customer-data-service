@@ -50,6 +50,11 @@ func init() {
 			return NewSchemaSyncQueue(cfg.Addr, cfg.Username, cfg.Password, cfg.SchemaSyncQueueName)
 		},
 	)
+	queue.RegisterProfileDataMigrationQueueProvider(queue.TypeActiveMQ,
+		func(cfg config.ExternalBrokerConfig) (queue.ProfileDataMigrationQueue, error) {
+			return NewProfileDataMigrationQueue(cfg.Addr, cfg.Username, cfg.Password, cfg.ProfileDataMigrationQueueName)
+		},
+	)
 }
 
 // managedConn holds a STOMP connection and re-dials transparently when the
@@ -364,6 +369,106 @@ func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) err
 // Close signals the consumer goroutine to stop and gracefully disconnects
 // from ActiveMQ. Safe to call more than once.
 func (q *SchemaSyncQueue) Close() error {
+	q.mc.shutdown()
+	return q.mc.getConn().Disconnect()
+}
+
+// -----------------------------------------------------------------------
+// ProfileDataMigrationQueue
+// -----------------------------------------------------------------------
+
+// ProfileDataMigrationQueue is the ActiveMQ-backed ProfileDataMigrationQueue.
+// It uses a dedicated destination so that long-running bulk profile updates
+// cannot block schema sync events.
+type ProfileDataMigrationQueue struct {
+	mc          *managedConn
+	destination string
+}
+
+func NewProfileDataMigrationQueue(addr, username, password, destination string) (*ProfileDataMigrationQueue, error) {
+	mc, err := newManagedConn(addr, username, password)
+	if err != nil {
+		return nil, fmt.Errorf("activemq: failed to connect for profile data migration queue: %w", err)
+	}
+	return &ProfileDataMigrationQueue{mc: mc, destination: destination}, nil
+}
+
+// Enqueue marshals the migration job to JSON and sends it to ActiveMQ.
+// See ProfileQueue.Enqueue for retry-policy rationale.
+func (q *ProfileDataMigrationQueue) Enqueue(job schemaModel.SchemaChangeJob) error {
+	data, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("activemq: failed to marshal migration job for org %s: %w", job.OrgId, err)
+	}
+
+	if err := q.mc.getConn().Send(q.destination, contentTypeJSON, data); err != nil {
+		log.GetLogger().Error(fmt.Sprintf(
+			"activemq: send failed for migration job org %s, will reconnect and retry: %v",
+			job.OrgId, err))
+
+		if reconnErr := q.mc.reconnectWithBackoff("profile data migration enqueue", 1); reconnErr != nil {
+			return fmt.Errorf("activemq: send failed for migration job org %s: %w", job.OrgId, reconnErr)
+		}
+		if retryErr := q.mc.getConn().Send(q.destination, contentTypeJSON, data); retryErr != nil {
+			return fmt.Errorf("activemq: retry send failed for migration job org %s: %w", job.OrgId, retryErr)
+		}
+	}
+	return nil
+}
+
+// Start subscribes to the destination and launches a consumer goroutine.
+// See ProfileQueue.Start for retry-policy rationale.
+func (q *ProfileDataMigrationQueue) Start(handler func(schemaModel.SchemaChangeJob)) error {
+	sub, err := q.mc.getConn().Subscribe(q.destination, stomp.AckAuto)
+	if err != nil {
+		return fmt.Errorf("activemq: failed to subscribe to profile data migration queue %s: %w", q.destination, err)
+	}
+
+	go func() {
+		for {
+			msg, ok := <-sub.C
+			if !ok {
+				if q.mc.isShuttingDown() {
+					log.GetLogger().Info("activemq: profile data migration consumer stopped (shutdown)")
+					return
+				}
+				log.GetLogger().Error("activemq: profile data migration subscription channel closed, reconnecting…")
+				if err := q.mc.reconnectWithBackoff("profile data migration consumer", 0); err != nil {
+					log.GetLogger().Info(fmt.Sprintf(
+						"activemq: profile data migration consumer exiting: %v", err))
+					return
+				}
+				newSub, err := q.mc.getConn().Subscribe(q.destination, stomp.AckAuto)
+				if err != nil {
+					log.GetLogger().Error(fmt.Sprintf(
+						"activemq: failed to re-subscribe to profile data migration queue: %v", err))
+					continue
+				}
+				sub = newSub
+				continue
+			}
+
+			if msg.Err != nil {
+				log.GetLogger().Error(fmt.Sprintf(
+					"activemq: error receiving migration job message: %v", msg.Err))
+				continue
+			}
+
+			var job schemaModel.SchemaChangeJob
+			if err := json.Unmarshal(msg.Body, &job); err != nil {
+				log.GetLogger().Error(fmt.Sprintf(
+					"activemq: failed to unmarshal migration job message: %v", err))
+				continue
+			}
+			handler(job)
+		}
+	}()
+	return nil
+}
+
+// Close signals the consumer goroutine to stop and gracefully disconnects
+// from ActiveMQ. Safe to call more than once.
+func (q *ProfileDataMigrationQueue) Close() error {
 	q.mc.shutdown()
 	return q.mc.getConn().Disconnect()
 }

@@ -298,6 +298,20 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 
 var validateApplicationIdentifierFn = defaultValidateApplicationIdentifier
 
+// enqueueProfileDataMigrationJobFn is the function used to enqueue a
+// SchemaChangeJob for asynchronous profile data cleanup.  It defaults to a
+// no-op so that the service remains functional when no migration worker is
+// running (e.g. in unit tests).  Production startup calls
+// SetProfileDataMigrationJobEnqueuer to wire in the real worker.
+var enqueueProfileDataMigrationJobFn = func(job model.SchemaChangeJob) error { return nil }
+
+// SetProfileDataMigrationJobEnqueuer replaces the default no-op enqueuer with
+// the provided function.  Call this once during application startup after the
+// profile data migration worker has been initialised.
+func SetProfileDataMigrationJobEnqueuer(fn func(model.SchemaChangeJob) error) {
+	enqueueProfileDataMigrationJobFn = fn
+}
+
 func defaultValidateApplicationIdentifier(appID, orgHandle string) (error, bool) {
 	cfg := config.GetCDSRuntime().Config
 	identityClient := client.NewIdentityClient(cfg)
@@ -428,11 +442,13 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 		log.GetLogger().Debug(fmt.Sprintf("multi_valued not provided in patch; defaulting to false for attribute: %s", attributeId))
 	}
 
+	newValueType := updates["value_type"].(string)
+
 	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
 		OrgId:                 orgId,
 		AttributeId:           attributeId,
 		AttributeName:         updates["attribute_name"].(string),
-		ValueType:             updates["value_type"].(string),
+		ValueType:             newValueType,
 		MergeStrategy:         updates["merge_strategy"].(string),
 		Mutability:            updates["mutability"].(string),
 		MultiValued:           multiValued,
@@ -444,14 +460,52 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 		if err != nil {
 			return err
 		}
-		// If validation fails, return a bad request error
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
 			Description: "Invalid updates provided for the profile schema attribute",
 		}, http.StatusBadRequest)
 	}
-	return psstr.PatchProfileSchemaAttributeById(orgId, attributeId, updates)
+
+	if err := psstr.PatchProfileSchemaAttributeById(orgId, attributeId, updates); err != nil {
+		return err
+	}
+
+	// Enqueue profile data cleanup when value_type or multi_valued changes for
+	// traits and application_data.  Identity attributes are managed via schema
+	// sync and are not updated through this path.
+	attrScope := scopeOf(attribute.AttributeName)
+	if attrScope == constants.Traits || attrScope == constants.ApplicationData {
+		var job *model.SchemaChangeJob
+		switch {
+		case attribute.ValueType != newValueType:
+			// When the old type is complex the parent key in JSONB is an
+			// object whose nested keys are still addressed by the individual
+			// sub-attribute schema entries.  Nullifying the parent would
+			// destroy all sub-attribute profile data, so we leave it alone;
+			// the sub-attributes continue to be readable via their own paths.
+			if attribute.ValueType != constants.ComplexDataType {
+				j := SchemaChangeJobForTypeChange(orgId, attribute, newValueType)
+				job = &j
+			}
+		case !attribute.MultiValued && multiValued:
+			j := SchemaChangeJobForScalarToArray(orgId, attribute)
+			job = &j
+		case attribute.MultiValued && !multiValued:
+			j := SchemaChangeJobForArrayToScalar(orgId, attribute)
+			job = &j
+		}
+		if job != nil {
+			logger := log.GetLogger()
+			if err := enqueueProfileDataMigrationJobFn(*job); err != nil {
+				logger.Warn(fmt.Sprintf(
+					"Failed to enqueue profile data migration job after schema change for attribute %s in org %s: %v",
+					attributeId, orgId, err,
+				))
+			}
+		}
+	}
+	return nil
 }
 
 // DeleteProfileSchemaAttributeById deletes a profile schema attribute by its Id.
@@ -473,7 +527,24 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(orgId, attribute
 		logger.Debug(fmt.Sprintf("Attribute with Id '%s' does not exist", attributeId))
 		return nil
 	}
-	return psstr.DeleteProfileSchemaAttributeById(orgId, attributeId)
+
+	if err := psstr.DeleteProfileSchemaAttributeById(orgId, attributeId); err != nil {
+		return err
+	}
+
+	// Enqueue profile data cleanup for traits and application_data only.
+	// Identity attributes are managed exclusively via schema sync.
+	scope := scopeOf(attribute.AttributeName)
+	if scope == constants.Traits || scope == constants.ApplicationData {
+		job := SchemaChangeJobForDelete(orgId, attribute)
+		if err := enqueueProfileDataMigrationJobFn(job); err != nil {
+			logger.Warn(fmt.Sprintf(
+				"Failed to enqueue profile data migration job after deleting attribute %s in org %s: %v",
+				attributeId, orgId, err,
+			))
+		}
+	}
+	return nil
 }
 
 func (s *ProfileSchemaService) DeleteProfileSchemaAttributesByScope(orgId, scope string) error {
@@ -635,9 +706,9 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgHandle string) error {
 
 	cfg := config.GetCDSRuntime().Config
 	identityClient := client.NewIdentityClient(cfg)
+	logger := log.GetLogger()
 
 	claims, err := identityClient.GetProfileSchema(orgHandle)
-	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to fetch profile schema from identity server for organization %s:", orgHandle)
 		logger.Debug(errMsg, log.Error(err))
@@ -648,18 +719,45 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgHandle string) error {
 		}, err)
 	}
 
-	if len(claims) > 0 {
-		err := psstr.UpsertIdentityAttributes(orgHandle, claims)
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to persist profile schema for organization %s:", orgHandle)
-			logger.Debug(errMsg, log.Error(err))
-			return errors2.NewServerError(errors2.ErrorMessage{
-				Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
-				Message:     errors2.SYNC_PROFILE_SCHEMA.Message,
-				Description: errMsg,
-			}, err)
+	if len(claims) == 0 {
+		return nil
+	}
+
+	// Fetch the current identity attributes BEFORE overwriting so we can diff.
+	current, err := psstr.GetProfileSchemaAttributesByScope(orgHandle, constants.IdentityAttributes)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to fetch current identity attributes for organization %s:", orgHandle)
+		logger.Debug(errMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
+			Message:     errors2.SYNC_PROFILE_SCHEMA.Message,
+			Description: errMsg,
+		}, err)
+	}
+
+	changeJobs := ComputeIdentityAttrDiff(orgHandle, current, claims)
+
+	if err := psstr.UpsertIdentityAttributes(orgHandle, claims); err != nil {
+		errMsg := fmt.Sprintf("failed to persist profile schema for organization %s:", orgHandle)
+		logger.Debug(errMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.SYNC_PROFILE_SCHEMA.Code,
+			Message:     errors2.SYNC_PROFILE_SCHEMA.Message,
+			Description: errMsg,
+		}, err)
+	}
+	logger.Info("Profile schema successfully updated for org: " + orgHandle)
+
+	// Enqueue profile data cleanup jobs for each detected change.
+	// Errors are logged but not returned — the schema update has already
+	// committed and cleanup is best-effort.
+	for _, job := range changeJobs {
+		if err := enqueueProfileDataMigrationJobFn(job); err != nil {
+			logger.Warn(fmt.Sprintf(
+				"Failed to enqueue profile data migration job for org %s key %v: %v",
+				orgHandle, job.KeyPath, err,
+			))
 		}
-		logger.Info("Profile schema successfully updated for org: " + orgHandle)
 	}
 	return nil
 }
