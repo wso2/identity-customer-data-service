@@ -94,6 +94,10 @@ func processProfileDataMigrationJob(job schemaModel.SchemaChangeJob) {
 		err = profileStore.RemoveProfileAttribute(job.OrgId, job.Scope, job.KeyPath, job.AppId)
 	case schemaModel.ChangeTypeTypeChanged:
 		err = profileStore.NullifyProfileAttribute(job.OrgId, job.Scope, job.KeyPath, job.AppId)
+	case schemaModel.ChangeTypeScalarToArray:
+		err = profileStore.CoerceProfileAttributeScalarToArray(job.OrgId, job.Scope, job.KeyPath, job.AppId)
+	case schemaModel.ChangeTypeArrayToScalar:
+		err = profileStore.CoerceProfileAttributeArrayToScalar(job.OrgId, job.Scope, job.KeyPath, job.AppId)
 	default:
 		logger.Warn(fmt.Sprintf("Unknown schema change type %q, skipping job", job.ChangeType))
 		return

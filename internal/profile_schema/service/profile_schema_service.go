@@ -471,17 +471,38 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 		return err
 	}
 
-	// Enqueue profile data cleanup when value_type changes for traits and
-	// application_data.  Identity attributes are managed via schema sync.
+	// Enqueue profile data cleanup when value_type or multi_valued changes for
+	// traits and application_data.  Identity attributes are managed via schema
+	// sync and are not updated through this path.
 	attrScope := scopeOf(attribute.AttributeName)
-	if (attrScope == constants.Traits || attrScope == constants.ApplicationData) && attribute.ValueType != newValueType {
-		job := SchemaChangeJobForTypeChange(orgId, attribute, newValueType)
-		logger := log.GetLogger()
-		if err := enqueueProfileDataMigrationJobFn(job); err != nil {
-			logger.Warn(fmt.Sprintf(
-				"Failed to enqueue profile data migration job after type change for attribute %s in org %s: %v",
-				attributeId, orgId, err,
-			))
+	if attrScope == constants.Traits || attrScope == constants.ApplicationData {
+		var job *model.SchemaChangeJob
+		switch {
+		case attribute.ValueType != newValueType:
+			// When the old type is complex the parent key in JSONB is an
+			// object whose nested keys are still addressed by the individual
+			// sub-attribute schema entries.  Nullifying the parent would
+			// destroy all sub-attribute profile data, so we leave it alone;
+			// the sub-attributes continue to be readable via their own paths.
+			if attribute.ValueType != constants.ComplexDataType {
+				j := SchemaChangeJobForTypeChange(orgId, attribute, newValueType)
+				job = &j
+			}
+		case !attribute.MultiValued && multiValued:
+			j := SchemaChangeJobForScalarToArray(orgId, attribute)
+			job = &j
+		case attribute.MultiValued && !multiValued:
+			j := SchemaChangeJobForArrayToScalar(orgId, attribute)
+			job = &j
+		}
+		if job != nil {
+			logger := log.GetLogger()
+			if err := enqueueProfileDataMigrationJobFn(*job); err != nil {
+				logger.Warn(fmt.Sprintf(
+					"Failed to enqueue profile data migration job after schema change for attribute %s in org %s: %v",
+					attributeId, orgId, err,
+				))
+			}
 		}
 	}
 	return nil

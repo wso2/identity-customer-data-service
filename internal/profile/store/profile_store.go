@@ -2048,3 +2048,116 @@ func NullifyProfileAttribute(orgId, scope string, keyPath []string, appId string
 	logger.Info(fmt.Sprintf("Nullified attribute %v in %s for org: %s", keyPath, scope, orgId))
 	return nil
 }
+
+// CoerceProfileAttributeScalarToArray wraps the scalar value at keyPath in a
+// single-element JSON array for every profile in the org where the stored value
+// is not already an array and is not null.  This is invoked when an attribute's
+// multi_valued changes from false to true — existing scalar values are
+// losslessly migrated so no data is discarded.
+func CoerceProfileAttributeScalarToArray(orgId, scope string, keyPath []string, appId string) error {
+	logger := log.GetLogger()
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get DB client for scalar→array coerce in org: %s", orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer dbClient.Close()
+
+	pgPath := pgTextArrayLiteral(keyPath)
+	var query string
+	var args []interface{}
+
+	switch scope {
+	case constants.IdentityAttributes:
+		base := scripts.WrapScalarInArrayInIdentityAttributes[provider.NewDBProvider().GetDBType()]
+		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
+		args = []interface{}{orgId}
+	case constants.Traits:
+		base := scripts.WrapScalarInArrayInTraits[provider.NewDBProvider().GetDBType()]
+		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
+		args = []interface{}{orgId}
+	case constants.ApplicationData:
+		base := scripts.WrapScalarInArrayInApplicationData[provider.NewDBProvider().GetDBType()]
+		query = strings.ReplaceAll(base, "$3::text[]", pgPath+"::text[]")
+		args = []interface{}{orgId, appId}
+	default:
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: fmt.Sprintf("Unknown scope %q for scalar→array coerce", scope),
+		}, fmt.Errorf("unknown scope: %s", scope))
+	}
+
+	if _, err := dbClient.ExecuteQuery(query, args...); err != nil {
+		errorMsg := fmt.Sprintf("Failed to coerce attribute %v to array in %s profiles in org: %s", keyPath, scope, orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	logger.Info(fmt.Sprintf("Coerced attribute %v to array in %s for org: %s", keyPath, scope, orgId))
+	return nil
+}
+
+// CoerceProfileAttributeArrayToScalar replaces the array at keyPath with its
+// first element for every profile in the org where a value is stored.  If the
+// stored value is not an array or is an empty array the field is nullified.
+// This is invoked when an attribute's multi_valued changes from true to false.
+func CoerceProfileAttributeArrayToScalar(orgId, scope string, keyPath []string, appId string) error {
+	logger := log.GetLogger()
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to get DB client for array→scalar coerce in org: %s", orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer dbClient.Close()
+
+	pgPath := pgTextArrayLiteral(keyPath)
+	var query string
+	var args []interface{}
+
+	switch scope {
+	case constants.IdentityAttributes:
+		base := scripts.TakeFirstElementInIdentityAttributes[provider.NewDBProvider().GetDBType()]
+		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
+		args = []interface{}{orgId}
+	case constants.Traits:
+		base := scripts.TakeFirstElementInTraits[provider.NewDBProvider().GetDBType()]
+		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
+		args = []interface{}{orgId}
+	case constants.ApplicationData:
+		base := scripts.TakeFirstElementInApplicationData[provider.NewDBProvider().GetDBType()]
+		query = strings.ReplaceAll(base, "$3::text[]", pgPath+"::text[]")
+		args = []interface{}{orgId, appId}
+	default:
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: fmt.Sprintf("Unknown scope %q for array→scalar coerce", scope),
+		}, fmt.Errorf("unknown scope: %s", scope))
+	}
+
+	if _, err := dbClient.ExecuteQuery(query, args...); err != nil {
+		errorMsg := fmt.Sprintf("Failed to coerce attribute %v to scalar in %s profiles in org: %s", keyPath, scope, orgId)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	logger.Info(fmt.Sprintf("Coerced attribute %v to scalar in %s for org: %s", keyPath, scope, orgId))
+	return nil
+}

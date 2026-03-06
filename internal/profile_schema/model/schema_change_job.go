@@ -27,6 +27,16 @@ const (
 	// Existing stored values are nullified because they may no longer be
 	// valid under the new type.
 	ChangeTypeTypeChanged = "type_changed"
+
+	// ChangeTypeScalarToArray indicates multi_valued changed false → true.
+	// Each stored scalar value is wrapped in a single-element array so
+	// that no data is lost.
+	ChangeTypeScalarToArray = "scalar_to_array"
+
+	// ChangeTypeArrayToScalar indicates multi_valued changed true → false.
+	// The first element of each stored array is kept; remaining elements
+	// are discarded.
+	ChangeTypeArrayToScalar = "array_to_scalar"
 )
 
 // SchemaChangeJob carries the information needed to propagate a single

@@ -127,6 +127,38 @@ func TestComputeIdentityAttrDiff_EmptyCurrent(t *testing.T) {
 	}
 }
 
+func TestComputeIdentityAttrDiff_MultiValuedChanged(t *testing.T) {
+	current := []model.ProfileSchemaAttribute{
+		{AttributeName: "interests", ValueType: constants.StringDataType, MultiValued: false},
+	}
+	// Same value_type but multi_valued flipped true — stored scalar is now incompatible.
+	incoming := []model.ProfileSchemaAttribute{
+		{AttributeName: "http://wso2.org/claims/interests", ValueType: constants.StringDataType, MultiValued: true},
+	}
+
+	jobs := ComputeIdentityAttrDiff(testOrg, current, incoming)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job for multi_valued change, got %d: %+v", len(jobs), jobs)
+	}
+	if jobs[0].ChangeType != model.ChangeTypeScalarToArray {
+		t.Errorf("expected ChangeTypeScalarToArray, got %q", jobs[0].ChangeType)
+	}
+}
+
+func TestComputeIdentityAttrDiff_MultiValuedUnchanged(t *testing.T) {
+	current := []model.ProfileSchemaAttribute{
+		{AttributeName: "tags", ValueType: constants.StringDataType, MultiValued: true},
+	}
+	incoming := []model.ProfileSchemaAttribute{
+		{AttributeName: "http://wso2.org/claims/tags", ValueType: constants.StringDataType, MultiValued: true},
+	}
+
+	jobs := ComputeIdentityAttrDiff(testOrg, current, incoming)
+	if len(jobs) != 0 {
+		t.Fatalf("expected no jobs when multi_valued is unchanged, got %d: %+v", len(jobs), jobs)
+	}
+}
+
 func TestComputeIdentityAttrDiff_EmptyIncoming(t *testing.T) {
 	current := []model.ProfileSchemaAttribute{
 		attr("email", constants.StringDataType),
@@ -151,7 +183,7 @@ func TestKeyPathFromAttributeName(t *testing.T) {
 		expected []string
 	}{
 		{"traits.interests", []string{"interests"}},
-		{"traits.address.city", []string{"address", "city"}},
+		{"traits.address.city", []string{"address.city"}},
 		{"identity_attributes.email", []string{"email"}},
 		{"application_data.device_id", []string{"device_id"}},
 		{"traits", nil},

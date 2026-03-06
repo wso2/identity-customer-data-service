@@ -92,7 +92,7 @@ func ComputeIdentityAttrDiff(orgId string, current, incoming []model.ProfileSche
 				ChangeType: model.ChangeTypeDeleted,
 			})
 		} else if cur.ValueType != inc.ValueType {
-			// Attribute still exists but its type changed; nullify stored values.
+			// Scalar type changed — stored values are incompatible; nullify.
 			jobs = append(jobs, model.SchemaChangeJob{
 				OrgId:        orgId,
 				Scope:        constants.IdentityAttributes,
@@ -100,6 +100,22 @@ func ComputeIdentityAttrDiff(orgId string, current, incoming []model.ProfileSche
 				ChangeType:   model.ChangeTypeTypeChanged,
 				OldValueType: cur.ValueType,
 				NewValueType: inc.ValueType,
+			})
+		} else if !cur.MultiValued && inc.MultiValued {
+			// false → true: wrap each stored scalar in a single-element array.
+			jobs = append(jobs, model.SchemaChangeJob{
+				OrgId:      orgId,
+				Scope:      constants.IdentityAttributes,
+				KeyPath:    []string{name},
+				ChangeType: model.ChangeTypeScalarToArray,
+			})
+		} else if cur.MultiValued && !inc.MultiValued {
+			// true → false: keep the first element, discard the rest.
+			jobs = append(jobs, model.SchemaChangeJob{
+				OrgId:      orgId,
+				Scope:      constants.IdentityAttributes,
+				KeyPath:    []string{name},
+				ChangeType: model.ChangeTypeArrayToScalar,
 			})
 		}
 	}
@@ -132,6 +148,32 @@ func SchemaChangeJobForTypeChange(orgId string, attr model.ProfileSchemaAttribut
 		OldValueType: attr.ValueType,
 		NewValueType: newValueType,
 		AppId:        attr.ApplicationIdentifier,
+	}
+}
+
+// SchemaChangeJobForScalarToArray builds the job to enqueue when an attribute's
+// multi_valued changes from false to true.  The stored scalar is wrapped in a
+// single-element array so no data is lost.
+func SchemaChangeJobForScalarToArray(orgId string, attr model.ProfileSchemaAttribute) model.SchemaChangeJob {
+	return model.SchemaChangeJob{
+		OrgId:      orgId,
+		Scope:      scopeOf(attr.AttributeName),
+		KeyPath:    keyPathFromAttributeName(attr.AttributeName),
+		ChangeType: model.ChangeTypeScalarToArray,
+		AppId:      attr.ApplicationIdentifier,
+	}
+}
+
+// SchemaChangeJobForArrayToScalar builds the job to enqueue when an attribute's
+// multi_valued changes from true to false.  The first element of the stored
+// array is kept; remaining elements are discarded.
+func SchemaChangeJobForArrayToScalar(orgId string, attr model.ProfileSchemaAttribute) model.SchemaChangeJob {
+	return model.SchemaChangeJob{
+		OrgId:      orgId,
+		Scope:      scopeOf(attr.AttributeName),
+		KeyPath:    keyPathFromAttributeName(attr.AttributeName),
+		ChangeType: model.ChangeTypeArrayToScalar,
+		AppId:      attr.ApplicationIdentifier,
 	}
 }
 
