@@ -68,3 +68,24 @@ type SchemaSyncQueue interface {
 	// channels, goroutines). It is safe to call Close more than once.
 	Close() error
 }
+
+// ProfileDataMigrationQueue defines the contract for enqueuing profile data
+// migration jobs.  These jobs are produced whenever a schema attribute is
+// deleted or its value_type changes, and consumed asynchronously to keep
+// stored profile data consistent with the current schema.
+//
+// This queue is intentionally separate from SchemaSyncQueue to prevent
+// long-running bulk profile updates from blocking schema sync events.
+type ProfileDataMigrationQueue interface {
+	// Enqueue adds a migration job to the queue. It returns nil on
+	// success or a descriptive error when the item cannot be accepted.
+	Enqueue(job schemaModel.SchemaChangeJob) error
+
+	// Start begins consuming queue items and invokes handler for each one.
+	// Implementations must start the consumer loop in a separate goroutine
+	// so that Start returns immediately.
+	Start(handler func(schemaModel.SchemaChangeJob)) error
+
+	// Close performs a graceful shutdown of the queue.
+	Close() error
+}

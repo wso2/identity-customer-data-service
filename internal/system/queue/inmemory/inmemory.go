@@ -145,3 +145,59 @@ func (q *SchemaSyncQueue) Close() error {
 	q.closeOnce.Do(func() { close(q.ch) })
 	return nil
 }
+
+// -----------------------------------------------------------------------
+// ProfileDataMigrationQueue
+// -----------------------------------------------------------------------
+
+// ProfileDataMigrationQueue is the in-memory implementation of
+// queue.ProfileDataMigrationQueue.
+type ProfileDataMigrationQueue struct {
+	ch        chan schemaModel.SchemaChangeJob
+	closeOnce sync.Once
+	mu        sync.RWMutex
+	closed    bool
+}
+
+// NewProfileDataMigrationQueue creates a new ProfileDataMigrationQueue with
+// the given buffer size.
+func NewProfileDataMigrationQueue(size int) *ProfileDataMigrationQueue {
+	return &ProfileDataMigrationQueue{ch: make(chan schemaModel.SchemaChangeJob, size)}
+}
+
+// Enqueue adds a migration job to the in-memory channel. It is non-blocking:
+// if the channel is full or closed the item is dropped and an error is returned.
+func (q *ProfileDataMigrationQueue) Enqueue(job schemaModel.SchemaChangeJob) error {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	if q.closed {
+		return fmt.Errorf("inmemory: profile data migration queue closed, dropping job for org %s", job.OrgId)
+	}
+	select {
+	case q.ch <- job:
+		return nil
+	default:
+		return fmt.Errorf("inmemory: profile data migration queue full, dropping job for org %s", job.OrgId)
+	}
+}
+
+// Start launches a goroutine that reads migration jobs from the channel and
+// forwards each one to handler. The goroutine runs until the channel is closed.
+func (q *ProfileDataMigrationQueue) Start(handler func(schemaModel.SchemaChangeJob)) error {
+	go func() {
+		for job := range q.ch {
+			handler(job)
+		}
+	}()
+	return nil
+}
+
+// Close marks the queue as closed and closes the underlying channel. Safe to
+// call more than once.
+func (q *ProfileDataMigrationQueue) Close() error {
+	q.mu.Lock()
+	q.closed = true
+	q.mu.Unlock()
+	q.closeOnce.Do(func() { close(q.ch) })
+	return nil
+}

@@ -37,10 +37,15 @@ type ProfileQueueProvider func(cfg config.ExternalBrokerConfig) (ProfileUnificat
 // configuration.
 type SchemaSyncQueueProvider func(cfg config.ExternalBrokerConfig) (SchemaSyncQueue, error)
 
+// ProfileDataMigrationQueueProvider is the constructor signature for a
+// ProfileDataMigrationQueue provider.
+type ProfileDataMigrationQueueProvider func(cfg config.ExternalBrokerConfig) (ProfileDataMigrationQueue, error)
+
 var (
-	mu                      sync.RWMutex
-	profileQueueProviders   = map[string]ProfileQueueProvider{}
-	schemaSyncQueueProviders = map[string]SchemaSyncQueueProvider{}
+	mu                                 sync.RWMutex
+	profileQueueProviders              = map[string]ProfileQueueProvider{}
+	schemaSyncQueueProviders           = map[string]SchemaSyncQueueProvider{}
+	profileDataMigrationQueueProviders = map[string]ProfileDataMigrationQueueProvider{}
 )
 
 // RegisterProfileQueueProvider registers a ProfileQueueProvider under the
@@ -102,6 +107,31 @@ func NewSchemaSyncQueue(cfg config.MessageQueueConfig) (SchemaSyncQueue, error) 
 	mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("queue: unknown schema sync queue provider %q; "+
+			"register it by importing its package (see docs/extending-queue-providers.md)", cfg.Type)
+	}
+	return p(cfg.Broker)
+}
+
+// RegisterProfileDataMigrationQueueProvider registers a
+// ProfileDataMigrationQueueProvider under the given name.
+func RegisterProfileDataMigrationQueueProvider(name string, p ProfileDataMigrationQueueProvider) {
+	mu.Lock()
+	defer mu.Unlock()
+	profileDataMigrationQueueProviders[name] = p
+}
+
+// NewProfileDataMigrationQueue returns the ProfileDataMigrationQueue for the
+// provider named in cfg.Type. When the type is empty or "memory" the default
+// in-memory provider is returned.
+func NewProfileDataMigrationQueue(cfg config.MessageQueueConfig) (ProfileDataMigrationQueue, error) {
+	if cfg.Type == TypeMemory || cfg.Type == "" {
+		return inmemory.NewProfileDataMigrationQueue(constants.DefaultQueueSize), nil
+	}
+	mu.RLock()
+	p, ok := profileDataMigrationQueueProviders[cfg.Type]
+	mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("queue: unknown profile data migration queue provider %q; "+
 			"register it by importing its package (see docs/extending-queue-providers.md)", cfg.Type)
 	}
 	return p(cfg.Broker)
