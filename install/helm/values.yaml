@@ -61,6 +61,13 @@ cloud:
           isSystemAppGrantEnabled: true
           certName: "wso2carbontls.cer"
 
+      message_queue:
+        type: "activemq"
+        broker:
+          addr: "localhost"
+          profile_queue_name: "/queue/cds-profile-unification"
+          schema_sync_queue_name: "/queue/cds-schema-sync"
+
       tls:
         mtls_enabled: false
         cert_dir : "/app/repository/certs"
@@ -78,6 +85,8 @@ cloud:
         databasePassword: "" # Add the database admin password
         introspectionClientId: ""
         introspectionClientSecret: "" # Add the introspection client secret
+        activemqBrokerUsername: "" # Add the ActiveMQ broker username
+        activemqBrokerPassword: "" # Add the ActiveMQ broker password
       replicas: 2
       progressDeadlineSeconds: 300
       minReadySeconds: 30
