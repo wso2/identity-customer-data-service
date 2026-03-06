@@ -184,7 +184,7 @@ func mergeMatchedProfiles(existingMasterProfile profileModel.Profile, newProfile
 	// Fetch references for the existing master profile
 	refs, err := profileStore.FetchReferencedProfiles(existingMasterProfile.ProfileId)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to fetch references for profile %s during unification with profile %s", existingMasterProfile.ProfileId))
+		logger.Error(fmt.Sprintf("Failed to fetch references for profile: %s during unification with profile: %s", existingMasterProfile.ProfileId, newProfile.ProfileId))
 	}
 	existingMasterProfile.ProfileStatus.References = refs
 
