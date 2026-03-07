@@ -37,6 +37,18 @@ const (
 	// The first element of each stored array is kept; remaining elements
 	// are discarded.
 	ChangeTypeArrayToScalar = "array_to_scalar"
+
+	// ChangeTypeComplexSubAttrRemoved indicates a sub-attribute was removed
+	// from a complex attribute while the parent stays complex.  The sub-key's
+	// value is moved from the nested object to a flat dotted key so no data
+	// is lost.  KeyPath must have at least two elements: [parentKey, subKey].
+	ChangeTypeComplexSubAttrRemoved = "complex_sub_attr_removed"
+
+	// ChangeTypeComplexSubAttrAdded indicates a sub-attribute was added to a
+	// complex attribute.  Any existing flat dotted key (written by a prior
+	// ChangeTypeComplexSubAttrRemoved job) is moved back into the nested
+	// object.  KeyPath must have at least two elements: [parentKey, subKey].
+	ChangeTypeComplexSubAttrAdded = "complex_sub_attr_added"
 )
 
 // SchemaChangeJob carries the information needed to propagate a single

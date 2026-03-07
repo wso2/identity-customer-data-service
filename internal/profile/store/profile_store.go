@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
@@ -1925,239 +1926,404 @@ func UpdateProfileConsents(profileId string, consents []model.ConsentRecord) err
 	return nil
 }
 
-// pgTextArrayLiteral converts a Go string slice to a Postgres text-array
-// literal that can be embedded directly in a query string, e.g. {email} or
-// {address,city}.  Values are single-quote escaped to prevent injection;
-// because these values originate from validated schema attribute names they
-// will never contain single quotes in practice.
-func pgTextArrayLiteral(parts []string) string {
-	escaped := make([]string, len(parts))
-	for i, p := range parts {
-		escaped[i] = strings.ReplaceAll(p, `'`, `''`)
+// MigrateRemovedComplexSubAttribute moves a removed sub-attribute's value from the nested complex
+// object to a flat dotted key in the same JSONB column, for all profiles in the org.
+// Call this when a sub-attribute is removed from a complex schema attribute while the parent
+// remains complex (e.g., removing "city" from "traits.address" sub-attributes).
+//
+// scope must be "traits" or "identity_attributes".
+// parentKey is the attribute key within the JSONB column (e.g., "address" for "traits.address").
+// removedSubKey is the sub-attribute key being removed (e.g., "city").
+// The value is preserved under the flat key "parentKey.removedSubKey" (e.g., "address.city").
+func MigrateRemovedComplexSubAttribute(orgHandle, scope, parentKey, removedSubKey string) error {
+	if scope != constants.Traits && scope != constants.IdentityAttributes {
+		return fmt.Errorf("unsupported scope for migration: %s", scope)
 	}
-	return "'{" + strings.Join(escaped, ",") + "}'"
-}
 
-// RemoveProfileAttribute removes the attribute at keyPath from the JSONB
-// column that corresponds to scope for every profile in the org.
-// For application_data scope, appId selects the target application row.
-func RemoveProfileAttribute(orgId, scope string, keyPath []string, appId string) error {
-	logger := log.GetLogger()
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get DB client for removing profile attribute in org: %s", orgId)
+		errorMsg := fmt.Sprintf("Failed to get db client for schema migration on org: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
+			Code:        errors2.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors2.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
 	defer dbClient.Close()
 
-	pgPath := pgTextArrayLiteral(keyPath)
-	var query string
-	var args []interface{}
+	flatKey := parentKey + "." + removedSubKey
 
-	switch scope {
-	case constants.IdentityAttributes:
-		base := scripts.RemoveFromIdentityAttributes[provider.NewDBProvider().GetDBType()]
-		query = strings.Replace(base, "$2::text[]", pgPath+"::text[]", 1)
-		args = []interface{}{orgId}
-	case constants.Traits:
-		base := scripts.RemoveFromTraits[provider.NewDBProvider().GetDBType()]
-		query = strings.Replace(base, "$2::text[]", pgPath+"::text[]", 1)
-		args = []interface{}{orgId}
-	case constants.ApplicationData:
-		base := scripts.RemoveFromApplicationData[provider.NewDBProvider().GetDBType()]
-		query = strings.Replace(base, "$3::text[]", pgPath+"::text[]", 1)
-		args = []interface{}{orgId, appId}
-	default:
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: fmt.Sprintf("Unknown scope %q for profile attribute removal", scope),
-		}, fmt.Errorf("unknown scope: %s", scope))
-	}
+	// scope is validated to be "traits" or "identity_attributes" above, so this fmt.Sprintf is safe.
+	query := fmt.Sprintf(`
+		UPDATE profiles
+		SET %s = (
+			(%s - $2::text)
+			|| jsonb_build_object($2::text, (%s->$2::text) - $3::text)
+			|| CASE WHEN (%s->$2::text) ? $3::text
+			   THEN jsonb_build_object($4::text, %s->$2::text->$3::text)
+			   ELSE '{}'::jsonb
+			   END
+		)
+		WHERE org_handle = $1
+		  AND %s ? $2::text
+	`, scope, scope, scope, scope, scope, scope)
 
-	if _, err := dbClient.ExecuteQuery(query, args...); err != nil {
-		errorMsg := fmt.Sprintf("Failed to remove attribute %v from %s profiles in org: %s", keyPath, scope, orgId)
+	_, err = dbClient.ExecuteQuery(query, orgHandle, parentKey, removedSubKey, flatKey)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to migrate removed sub-attribute '%s' from '%s.%s' in org: %s",
+			removedSubKey, scope, parentKey, orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
+			Code:        errors2.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors2.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
-	logger.Info(fmt.Sprintf("Removed attribute %v from %s for org: %s", keyPath, scope, orgId))
+
+	logger.Info(fmt.Sprintf("Migrated removed sub-attribute '%s.%s' to flat key '%s' in org: %s",
+		parentKey, removedSubKey, flatKey, orgHandle))
 	return nil
 }
 
-// NullifyProfileAttribute sets the value at keyPath to JSON null in the JSONB
-// column corresponding to scope for every profile in the org that currently
-// has a non-null value at that path.
-// For application_data scope, appId selects the target application row.
-func NullifyProfileAttribute(orgId, scope string, keyPath []string, appId string) error {
-	logger := log.GetLogger()
+// MigrateAddedComplexSubAttribute moves an existing flat dotted key back into the nested complex
+// object, for all profiles in the org that have that flat key.
+// Call this when a sub-attribute is added to a complex schema attribute (e.g., re-adding "city"
+// to "traits.address" sub-attributes), so that any previously orphaned flat key data is restored.
+//
+// scope must be "traits" or "identity_attributes".
+// parentKey is the attribute key within the JSONB column (e.g., "address" for "traits.address").
+// newSubKey is the sub-attribute key being added (e.g., "city").
+// Profiles that have the flat key "parentKey.newSubKey" (e.g., "address.city") will have that
+// value moved into the nested object and the flat key removed.
+func MigrateAddedComplexSubAttribute(orgHandle, scope, parentKey, newSubKey string) error {
+	if scope != constants.Traits && scope != constants.IdentityAttributes {
+		return fmt.Errorf("unsupported scope for migration: %s", scope)
+	}
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get DB client for nullifying profile attribute in org: %s", orgId)
+		errorMsg := fmt.Sprintf("Failed to get db client for schema migration on org: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
+			Code:        errors2.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors2.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
 	defer dbClient.Close()
 
-	pgPath := pgTextArrayLiteral(keyPath)
-	var query string
-	var args []interface{}
+	flatKey := parentKey + "." + newSubKey
 
-	switch scope {
-	case constants.IdentityAttributes:
-		base := scripts.NullifyInIdentityAttributes[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId}
-	case constants.Traits:
-		base := scripts.NullifyInTraits[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId}
-	case constants.ApplicationData:
-		base := scripts.NullifyInApplicationData[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$3::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId, appId}
-	default:
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: fmt.Sprintf("Unknown scope %q for profile attribute nullification", scope),
-		}, fmt.Errorf("unknown scope: %s", scope))
-	}
+	// Remove the flat key and parent key, then add back parent with the flat key's value merged in.
+	// scope is validated to be "traits" or "identity_attributes" above, so this fmt.Sprintf is safe.
+	query := fmt.Sprintf(`
+		UPDATE profiles
+		SET %s = (
+			(%s - $4::text - $2::text)
+			|| jsonb_build_object($2::text,
+				coalesce(%s->$2::text, '{}'::jsonb) || jsonb_build_object($3::text, %s->$4::text)
+			)
+		)
+		WHERE org_handle = $1
+		  AND %s ? $4::text
+	`, scope, scope, scope, scope, scope)
 
-	if _, err := dbClient.ExecuteQuery(query, args...); err != nil {
-		errorMsg := fmt.Sprintf("Failed to nullify attribute %v in %s profiles in org: %s", keyPath, scope, orgId)
+	_, err = dbClient.ExecuteQuery(query, orgHandle, parentKey, newSubKey, flatKey)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to migrate flat key '%s' into '%s.%s' in org: %s",
+			flatKey, scope, parentKey, orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
+			Code:        errors2.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors2.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
-	logger.Info(fmt.Sprintf("Nullified attribute %v in %s for org: %s", keyPath, scope, orgId))
+
+	logger.Info(fmt.Sprintf("Migrated flat key '%s' into nested '%s.%s' in org: %s",
+		flatKey, parentKey, newSubKey, orgHandle))
 	return nil
 }
 
-// CoerceProfileAttributeScalarToArray wraps the scalar value at keyPath in a
-// single-element JSON array for every profile in the org where the stored value
-// is not already an array and is not null.  This is invoked when an attribute's
-// multi_valued changes from false to true — existing scalar values are
-// losslessly migrated so no data is discarded.
-func CoerceProfileAttributeScalarToArray(orgId, scope string, keyPath []string, appId string) error {
-	logger := log.GetLogger()
+// MigrateComplexToFlatAttributes moves all known sub-attribute values out of a nested complex
+// object to flat dotted keys, then removes the parent key. Call this when a schema attribute's
+// value_type changes from "complex" to a non-complex type.
+//
+// scope must be "traits" or "identity_attributes".
+// parentKey is the attribute key within the JSONB column (e.g., "address" for "traits.address").
+// subKeys are the sub-attribute keys that were defined (e.g., ["city", "zip"]).
+func MigrateComplexToFlatAttributes(orgHandle, scope, parentKey string, subKeys []string) error {
+	if scope != constants.Traits && scope != constants.IdentityAttributes {
+		return fmt.Errorf("unsupported scope for migration: %s", scope)
+	}
+
+	for _, subKey := range subKeys {
+		flatKey := parentKey + "." + subKey
+
+		dbClient, err := provider.NewDBProvider().GetDBClient()
+		logger := log.GetLogger()
+		if err != nil {
+			errorMsg := fmt.Sprintf("Failed to get db client for schema migration on org: %s", orgHandle)
+			logger.Debug(errorMsg, log.Error(err))
+			return errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE_SCHEMA.Code,
+				Message:     errors2.UPDATE_PROFILE_SCHEMA.Message,
+				Description: errorMsg,
+			}, err)
+		}
+
+		// scope is validated above, so this fmt.Sprintf is safe.
+		query := fmt.Sprintf(`
+			UPDATE profiles
+			SET %s = (
+				(%s - $2)
+				|| CASE WHEN (%s->$2) ? $3
+				   THEN jsonb_build_object($4, %s->$2->$3)
+				   ELSE '{}'::jsonb
+				   END
+			)
+			WHERE org_handle = $1
+			  AND %s ? $2
+		`, scope, scope, scope, scope, scope)
+
+		_, err = dbClient.ExecuteQuery(query, orgHandle, parentKey, subKey, flatKey)
+		dbClient.Close()
+		if err != nil {
+			errorMsg := fmt.Sprintf("Failed to migrate sub-attribute '%s' from '%s.%s' during type change in org: %s",
+				subKey, scope, parentKey, orgHandle)
+			log.GetLogger().Debug(errorMsg, log.Error(err))
+			return errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE_SCHEMA.Code,
+				Message:     errors2.UPDATE_PROFILE_SCHEMA.Message,
+				Description: errorMsg,
+			}, err)
+		}
+
+		log.GetLogger().Info(fmt.Sprintf("Migrated '%s.%s' to flat key '%s' during type change in org: %s",
+			parentKey, subKey, flatKey, orgHandle))
+	}
+
+	return nil
+}
+
+// profileAttributeOp is a helper that runs a single UPDATE affecting a JSONB
+// key path in either the profiles table (traits/identity_attributes) or the
+// application_data table.  The caller provides the SET expression fragment
+// and the WHERE condition fragment (both referencing the JSONB column as "col").
+// $1 = orgHandle, $2 = pq.Array(keyPath), $3 = appId (empty for non-app scopes).
+func execProfileAttributeUpdate(orgHandle, scope string, keyPath []string, appId string,
+	setExpr, whereExpr string) error {
+
+	if len(keyPath) == 0 {
+		return nil
+	}
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get DB client for scalar→array coerce in org: %s", orgId)
+		errorMsg := fmt.Sprintf("Failed to get db client for profile attribute update on org: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
+			Code:        errors2.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors2.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
 	defer dbClient.Close()
 
-	pgPath := pgTextArrayLiteral(keyPath)
 	var query string
 	var args []interface{}
 
-	switch scope {
-	case constants.IdentityAttributes:
-		base := scripts.WrapScalarInArrayInIdentityAttributes[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId}
-	case constants.Traits:
-		base := scripts.WrapScalarInArrayInTraits[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId}
-	case constants.ApplicationData:
-		base := scripts.WrapScalarInArrayInApplicationData[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$3::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId, appId}
-	default:
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: fmt.Sprintf("Unknown scope %q for scalar→array coerce", scope),
-		}, fmt.Errorf("unknown scope: %s", scope))
+	if scope == constants.ApplicationData {
+		// Prepend "app_specific_data" to address the nested key within the blob.
+		fullPath := append([]string{"app_specific_data"}, keyPath...)
+		// scope column is "application_data" — replace placeholder "col" in expressions.
+		col := "application_data"
+		set := strings.ReplaceAll(setExpr, "col", col)
+		whr := strings.ReplaceAll(whereExpr, "col", col)
+		query = fmt.Sprintf(`
+			UPDATE application_data
+			SET %s
+			WHERE app_id = $3
+			  AND profile_id IN (SELECT profile_id FROM profiles WHERE org_handle = $1)
+			  AND %s
+		`, set, whr)
+		args = []interface{}{orgHandle, pq.Array(fullPath), appId}
+	} else {
+		// scope is "traits" or "identity_attributes" — validated by caller.
+		set := strings.ReplaceAll(setExpr, "col", scope)
+		whr := strings.ReplaceAll(whereExpr, "col", scope)
+		query = fmt.Sprintf(`
+			UPDATE profiles
+			SET %s
+			WHERE org_handle = $1
+			  AND %s
+		`, set, whr)
+		args = []interface{}{orgHandle, pq.Array(keyPath)}
 	}
 
-	if _, err := dbClient.ExecuteQuery(query, args...); err != nil {
-		errorMsg := fmt.Sprintf("Failed to coerce attribute %v to array in %s profiles in org: %s", keyPath, scope, orgId)
+	_, err = dbClient.ExecuteQuery(query, args...)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to update profile attribute at path %v in scope '%s' for org: %s",
+			keyPath, scope, orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
+			Code:        errors2.UPDATE_PROFILE_SCHEMA.Code,
+			Message:     errors2.UPDATE_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
 	}
-	logger.Info(fmt.Sprintf("Coerced attribute %v to array in %s for org: %s", keyPath, scope, orgId))
 	return nil
+}
+
+// RemoveProfileAttribute deletes the JSONB key at keyPath from every profile
+// in the org (for traits/identity_attributes) or from every app row matching
+// appId (for application_data).
+func RemoveProfileAttribute(orgHandle, scope string, keyPath []string, appId string) error {
+	return execProfileAttributeUpdate(orgHandle, scope, keyPath, appId,
+		"col = col #- $2::text[]",
+		"col #> $2::text[] IS NOT NULL",
+	)
+}
+
+// NullifyProfileAttribute sets the JSONB key at keyPath to JSON null without
+// removing the key.  Used when a type change makes existing values invalid.
+func NullifyProfileAttribute(orgHandle, scope string, keyPath []string, appId string) error {
+	return execProfileAttributeUpdate(orgHandle, scope, keyPath, appId,
+		"col = jsonb_set(col, $2::text[], 'null'::jsonb)",
+		"col #> $2::text[] IS NOT NULL",
+	)
+}
+
+// CoerceProfileAttributeType attempts a best-effort type coercion for all
+// profiles in the org when an attribute's value_type changes.  Rows whose
+// stored value can be safely converted are updated in place; rows that cannot
+// be coerced (e.g. a non-numeric string when the target type is integer) are
+// nullified individually via the CASE expression.  When no coercion path
+// exists at all (e.g. boolean → date_time) every value is nullified and a
+// warning is logged.
+func CoerceProfileAttributeType(orgHandle, scope string, keyPath []string, appId, oldType, newType string) error {
+	setExpr, canCoerce := typeCoercionExpr(oldType, newType)
+	if !canCoerce {
+		log.GetLogger().Warn(fmt.Sprintf(
+			"No coercion path from %q to %q for attribute path %v in org %s, nullifying all values",
+			oldType, newType, keyPath, orgHandle,
+		))
+		return NullifyProfileAttribute(orgHandle, scope, keyPath, appId)
+	}
+	return execProfileAttributeUpdate(orgHandle, scope, keyPath, appId,
+		setExpr,
+		"col #> $2::text[] IS NOT NULL",
+	)
+}
+
+// typeCoercionExpr returns (setExpr, true) when a safe SQL coercion from
+// oldType to newType is known, using the "col" and "$2" placeholders expected
+// by execProfileAttributeUpdate.  Values that cannot be coerced at the row
+// level are set to NULL::jsonb via a CASE expression so a single bad row does
+// not abort the entire UPDATE.  Returns ("", false) when no coercion path
+// makes sense for the type pair; the caller should nullify and warn instead.
+func typeCoercionExpr(oldType, newType string) (string, bool) {
+	// Helpers — SQL fragments using the "col"/"$2" placeholder convention.
+	val := "col #> $2::text[]"           // current JSONB value
+	txt := "col #>> $2::text[]"          // current text representation
+	set := func(expr string) string { return "col = jsonb_set(col, $2::text[], " + expr + ")" }
+
+	switch newType {
+
+	case constants.StringDataType:
+		// Every JSON type has a text representation — always safe.
+		return set("to_jsonb(" + txt + ")"), true
+
+	case constants.IntegerDataType:
+		switch oldType {
+		case constants.DecimalDataType:
+			return set("to_jsonb(floor((" + txt + ")::numeric)::bigint)"), true
+		case constants.EpochDataType:
+			// Epoch is already stored as a JSON integer — no data change needed.
+			return "col = col", true
+		case constants.BooleanDataType:
+			return set("CASE WHEN " + val + " = 'true'::jsonb THEN to_jsonb(1) ELSE to_jsonb(0) END"), true
+		case constants.StringDataType:
+			return set("CASE WHEN " + txt + " ~ '^-?[0-9]+$' THEN to_jsonb((" + txt + ")::bigint) ELSE NULL::jsonb END"), true
+		}
+
+	case constants.DecimalDataType:
+		switch oldType {
+		case constants.IntegerDataType, constants.EpochDataType:
+			return set("to_jsonb((" + txt + ")::numeric)"), true
+		case constants.BooleanDataType:
+			return set("CASE WHEN " + val + " = 'true'::jsonb THEN to_jsonb(1.0::numeric) ELSE to_jsonb(0.0::numeric) END"), true
+		case constants.StringDataType:
+			return set("CASE WHEN " + txt + " ~ '^-?[0-9]*(\\.[0-9]+)?([eE][+-]?[0-9]+)?$' THEN to_jsonb((" + txt + ")::numeric) ELSE NULL::jsonb END"), true
+		}
+
+	case constants.BooleanDataType:
+		switch oldType {
+		case constants.IntegerDataType, constants.DecimalDataType:
+			return set("to_jsonb((" + txt + ")::numeric != 0)"), true
+		case constants.StringDataType:
+			return set("CASE WHEN lower(" + txt + ") IN ('true','t','yes','on','1') THEN 'true'::jsonb" +
+				" WHEN lower(" + txt + ") IN ('false','f','no','off','0') THEN 'false'::jsonb" +
+				" ELSE NULL::jsonb END"), true
+		}
+
+	case constants.DateTimeDataType:
+		switch oldType {
+		case constants.DateDataType:
+			return set("to_jsonb((" + txt + ")::date::timestamptz)"), true
+		case constants.EpochDataType:
+			return set("to_jsonb(to_timestamp((" + txt + ")::bigint))"), true
+		case constants.StringDataType:
+			return set("CASE WHEN " + txt + " ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN to_jsonb((" + txt + ")::timestamptz) ELSE NULL::jsonb END"), true
+		}
+
+	case constants.DateDataType:
+		switch oldType {
+		case constants.DateTimeDataType:
+			return set("to_jsonb((" + txt + ")::timestamptz::date)"), true
+		case constants.EpochDataType:
+			return set("to_jsonb(to_timestamp((" + txt + ")::bigint)::date)"), true
+		case constants.StringDataType:
+			return set("CASE WHEN " + txt + " ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN to_jsonb((" + txt + ")::date) ELSE NULL::jsonb END"), true
+		}
+
+	case constants.EpochDataType:
+		switch oldType {
+		case constants.IntegerDataType:
+			// Integer is already a valid epoch value — no data change needed.
+			return "col = col", true
+		case constants.DecimalDataType:
+			return set("to_jsonb(floor((" + txt + ")::numeric)::bigint)"), true
+		case constants.DateTimeDataType:
+			return set("to_jsonb(extract(epoch from (" + txt + ")::timestamptz)::bigint)"), true
+		case constants.DateDataType:
+			return set("to_jsonb(extract(epoch from (" + txt + ")::date::timestamptz)::bigint)"), true
+		case constants.StringDataType:
+			return set("CASE WHEN " + txt + " ~ '^-?[0-9]+$' THEN to_jsonb((" + txt + ")::bigint) ELSE NULL::jsonb END"), true
+		}
+	}
+
+	return "", false
+}
+
+// CoerceProfileAttributeScalarToArray wraps the value at keyPath in a
+// single-element JSON array.  No-ops if the value is already an array.
+func CoerceProfileAttributeScalarToArray(orgHandle, scope string, keyPath []string, appId string) error {
+	return execProfileAttributeUpdate(orgHandle, scope, keyPath, appId,
+		"col = jsonb_set(col, $2::text[], jsonb_build_array(col #> $2::text[]))",
+		"col #> $2::text[] IS NOT NULL AND jsonb_typeof(col #> $2::text[]) != 'array'",
+	)
 }
 
 // CoerceProfileAttributeArrayToScalar replaces the array at keyPath with its
-// first element for every profile in the org where a value is stored.  If the
-// stored value is not an array or is an empty array the field is nullified.
-// This is invoked when an attribute's multi_valued changes from true to false.
-func CoerceProfileAttributeArrayToScalar(orgId, scope string, keyPath []string, appId string) error {
-	logger := log.GetLogger()
-	dbClient, err := provider.NewDBProvider().GetDBClient()
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get DB client for array→scalar coerce in org: %s", orgId)
-		logger.Debug(errorMsg, log.Error(err))
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-	}
-	defer dbClient.Close()
-
-	pgPath := pgTextArrayLiteral(keyPath)
-	var query string
-	var args []interface{}
-
-	switch scope {
-	case constants.IdentityAttributes:
-		base := scripts.TakeFirstElementInIdentityAttributes[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId}
-	case constants.Traits:
-		base := scripts.TakeFirstElementInTraits[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$2::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId}
-	case constants.ApplicationData:
-		base := scripts.TakeFirstElementInApplicationData[provider.NewDBProvider().GetDBType()]
-		query = strings.ReplaceAll(base, "$3::text[]", pgPath+"::text[]")
-		args = []interface{}{orgId, appId}
-	default:
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: fmt.Sprintf("Unknown scope %q for array→scalar coerce", scope),
-		}, fmt.Errorf("unknown scope: %s", scope))
-	}
-
-	if _, err := dbClient.ExecuteQuery(query, args...); err != nil {
-		errorMsg := fmt.Sprintf("Failed to coerce attribute %v to scalar in %s profiles in org: %s", keyPath, scope, orgId)
-		logger.Debug(errorMsg, log.Error(err))
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UPDATE_PROFILE.Code,
-			Message:     errors2.UPDATE_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-	}
-	logger.Info(fmt.Sprintf("Coerced attribute %v to scalar in %s for org: %s", keyPath, scope, orgId))
-	return nil
+// first element, discarding the rest.  No-ops if the value is not an array.
+func CoerceProfileAttributeArrayToScalar(orgHandle, scope string, keyPath []string, appId string) error {
+	return execProfileAttributeUpdate(orgHandle, scope, keyPath, appId,
+		"col = jsonb_set(col, $2::text[], (col #> $2::text[])->0)",
+		"col #> $2::text[] IS NOT NULL AND jsonb_typeof(col #> $2::text[]) = 'array'",
+	)
 }

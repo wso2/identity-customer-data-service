@@ -93,11 +93,23 @@ func processProfileDataMigrationJob(job schemaModel.SchemaChangeJob) {
 	case schemaModel.ChangeTypeDeleted:
 		err = profileStore.RemoveProfileAttribute(job.OrgId, job.Scope, job.KeyPath, job.AppId)
 	case schemaModel.ChangeTypeTypeChanged:
-		err = profileStore.NullifyProfileAttribute(job.OrgId, job.Scope, job.KeyPath, job.AppId)
+		err = profileStore.CoerceProfileAttributeType(job.OrgId, job.Scope, job.KeyPath, job.AppId, job.OldValueType, job.NewValueType)
 	case schemaModel.ChangeTypeScalarToArray:
 		err = profileStore.CoerceProfileAttributeScalarToArray(job.OrgId, job.Scope, job.KeyPath, job.AppId)
 	case schemaModel.ChangeTypeArrayToScalar:
 		err = profileStore.CoerceProfileAttributeArrayToScalar(job.OrgId, job.Scope, job.KeyPath, job.AppId)
+	case schemaModel.ChangeTypeComplexSubAttrRemoved:
+		if len(job.KeyPath) < 2 {
+			logger.Warn(fmt.Sprintf("ChangeTypeComplexSubAttrRemoved job has invalid KeyPath %v, skipping", job.KeyPath))
+			return
+		}
+		err = profileStore.MigrateRemovedComplexSubAttribute(job.OrgId, job.Scope, job.KeyPath[0], job.KeyPath[1])
+	case schemaModel.ChangeTypeComplexSubAttrAdded:
+		if len(job.KeyPath) < 2 {
+			logger.Warn(fmt.Sprintf("ChangeTypeComplexSubAttrAdded job has invalid KeyPath %v, skipping", job.KeyPath))
+			return
+		}
+		err = profileStore.MigrateAddedComplexSubAttribute(job.OrgId, job.Scope, job.KeyPath[0], job.KeyPath[1])
 	default:
 		logger.Warn(fmt.Sprintf("Unknown schema change type %q, skipping job", job.ChangeType))
 		return

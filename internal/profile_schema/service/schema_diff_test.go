@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package service
 
 import (
@@ -183,7 +201,7 @@ func TestKeyPathFromAttributeName(t *testing.T) {
 		expected []string
 	}{
 		{"traits.interests", []string{"interests"}},
-		{"traits.address.city", []string{"address.city"}},
+		{"traits.address.city", []string{"address", "city"}},
 		{"identity_attributes.email", []string{"email"}},
 		{"application_data.device_id", []string{"device_id"}},
 		{"traits", nil},
@@ -236,6 +254,111 @@ func TestSchemaChangeJobForDelete_AppData(t *testing.T) {
 	}
 	if job.AppId != "app-123" {
 		t.Errorf("expected AppId app-123, got %q", job.AppId)
+	}
+}
+
+// --- SchemaChangeJobForComplexSubAttrRemoved ---
+
+func TestSchemaChangeJobForComplexSubAttrRemoved(t *testing.T) {
+	parent := model.ProfileSchemaAttribute{
+		AttributeName:         "traits.address",
+		ValueType:             "complex",
+		ApplicationIdentifier: "",
+	}
+	removedSub := model.SubAttribute{
+		AttributeId:   "sub-1",
+		AttributeName: "traits.address.city",
+	}
+	job := SchemaChangeJobForComplexSubAttrRemoved(testOrg, parent, removedSub)
+
+	if job.ChangeType != model.ChangeTypeComplexSubAttrRemoved {
+		t.Errorf("expected ChangeTypeComplexSubAttrRemoved, got %q", job.ChangeType)
+	}
+	if job.OrgId != testOrg {
+		t.Errorf("expected org %q, got %q", testOrg, job.OrgId)
+	}
+	if job.Scope != "traits" {
+		t.Errorf("expected scope %q, got %q", "traits", job.Scope)
+	}
+	if len(job.KeyPath) != 2 || job.KeyPath[0] != "address" || job.KeyPath[1] != "city" {
+		t.Errorf("expected KeyPath [address city], got %v", job.KeyPath)
+	}
+	if job.AppId != "" {
+		t.Errorf("expected empty AppId, got %q", job.AppId)
+	}
+}
+
+func TestSchemaChangeJobForComplexSubAttrRemoved_AppData(t *testing.T) {
+	parent := model.ProfileSchemaAttribute{
+		AttributeName:         "application_data.contact",
+		ApplicationIdentifier: "app-42",
+	}
+	removedSub := model.SubAttribute{
+		AttributeId:   "sub-2",
+		AttributeName: "application_data.contact.email",
+	}
+	job := SchemaChangeJobForComplexSubAttrRemoved(testOrg, parent, removedSub)
+
+	if job.ChangeType != model.ChangeTypeComplexSubAttrRemoved {
+		t.Errorf("expected ChangeTypeComplexSubAttrRemoved, got %q", job.ChangeType)
+	}
+	if job.Scope != "application_data" {
+		t.Errorf("expected scope application_data, got %q", job.Scope)
+	}
+	if len(job.KeyPath) != 2 || job.KeyPath[0] != "contact" || job.KeyPath[1] != "email" {
+		t.Errorf("expected KeyPath [contact email], got %v", job.KeyPath)
+	}
+	if job.AppId != "app-42" {
+		t.Errorf("expected AppId app-42, got %q", job.AppId)
+	}
+}
+
+// --- SchemaChangeJobForComplexSubAttrAdded ---
+
+func TestSchemaChangeJobForComplexSubAttrAdded(t *testing.T) {
+	parent := model.ProfileSchemaAttribute{
+		AttributeName:         "traits.address",
+		ApplicationIdentifier: "",
+	}
+	addedSub := model.SubAttribute{
+		AttributeId:   "sub-3",
+		AttributeName: "traits.address.zip",
+	}
+	job := SchemaChangeJobForComplexSubAttrAdded(testOrg, parent, addedSub)
+
+	if job.ChangeType != model.ChangeTypeComplexSubAttrAdded {
+		t.Errorf("expected ChangeTypeComplexSubAttrAdded, got %q", job.ChangeType)
+	}
+	if job.OrgId != testOrg {
+		t.Errorf("expected org %q, got %q", testOrg, job.OrgId)
+	}
+	if job.Scope != "traits" {
+		t.Errorf("expected scope traits, got %q", job.Scope)
+	}
+	if len(job.KeyPath) != 2 || job.KeyPath[0] != "address" || job.KeyPath[1] != "zip" {
+		t.Errorf("expected KeyPath [address zip], got %v", job.KeyPath)
+	}
+}
+
+func TestSchemaChangeJobForComplexSubAttrAdded_AppData(t *testing.T) {
+	parent := model.ProfileSchemaAttribute{
+		AttributeName:         "application_data.prefs",
+		ApplicationIdentifier: "app-99",
+	}
+	addedSub := model.SubAttribute{
+		AttributeId:   "sub-4",
+		AttributeName: "application_data.prefs.theme",
+	}
+	job := SchemaChangeJobForComplexSubAttrAdded(testOrg, parent, addedSub)
+
+	if job.Scope != "application_data" {
+		t.Errorf("expected scope application_data, got %q", job.Scope)
+	}
+	if job.AppId != "app-99" {
+		t.Errorf("expected AppId app-99, got %q", job.AppId)
+	}
+	if len(job.KeyPath) != 2 || job.KeyPath[0] != "prefs" || job.KeyPath[1] != "theme" {
+		t.Errorf("expected KeyPath [prefs theme], got %v", job.KeyPath)
 	}
 }
 

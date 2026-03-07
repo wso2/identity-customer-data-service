@@ -177,6 +177,33 @@ func SchemaChangeJobForArrayToScalar(orgId string, attr model.ProfileSchemaAttri
 	}
 }
 
+// SchemaChangeJobForComplexSubAttrRemoved builds the job to enqueue when a
+// sub-attribute is removed from a complex schema attribute while the parent
+// remains complex.  KeyPath will be [parentKey, subKey], e.g. ["address", "city"].
+func SchemaChangeJobForComplexSubAttrRemoved(orgId string, parentAttr model.ProfileSchemaAttribute, removedSubAttr model.SubAttribute) model.SchemaChangeJob {
+	return model.SchemaChangeJob{
+		OrgId:      orgId,
+		Scope:      scopeOf(parentAttr.AttributeName),
+		KeyPath:    keyPathFromAttributeName(removedSubAttr.AttributeName),
+		ChangeType: model.ChangeTypeComplexSubAttrRemoved,
+		AppId:      parentAttr.ApplicationIdentifier,
+	}
+}
+
+// SchemaChangeJobForComplexSubAttrAdded builds the job to enqueue when a
+// sub-attribute is added to a complex schema attribute.  Any orphaned flat
+// key written by a prior removal job will be merged back into the nested
+// object.  KeyPath will be [parentKey, subKey], e.g. ["address", "city"].
+func SchemaChangeJobForComplexSubAttrAdded(orgId string, parentAttr model.ProfileSchemaAttribute, addedSubAttr model.SubAttribute) model.SchemaChangeJob {
+	return model.SchemaChangeJob{
+		OrgId:      orgId,
+		Scope:      scopeOf(parentAttr.AttributeName),
+		KeyPath:    keyPathFromAttributeName(addedSubAttr.AttributeName),
+		ChangeType: model.ChangeTypeComplexSubAttrAdded,
+		AppId:      parentAttr.ApplicationIdentifier,
+	}
+}
+
 // scopeOf returns the scope segment (the first dot-separated part) of an
 // attribute name, e.g. "traits.interests" → "traits".
 func scopeOf(attributeName string) string {

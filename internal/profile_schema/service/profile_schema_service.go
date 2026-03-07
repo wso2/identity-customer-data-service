@@ -116,7 +116,32 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 		}
 	}
 
-	return validAttrs, psstr.AddProfileSchemaAttributesForScope(validAttrs, scope, orgId)
+	if err := psstr.AddProfileSchemaAttributesForScope(validAttrs, scope, orgId); err != nil {
+		return nil, err
+	}
+
+	// For newly created complex attributes in traits/application_data, migrate any
+	// pre-existing flat dotted keys (e.g. "address.city": "NY") into the nested
+	// object structure (e.g. {"address": {"city": "NY"}}).
+	if scope == constants.Traits || scope == constants.ApplicationData {
+		logger := log.GetLogger()
+		for _, attr := range validAttrs {
+			if attr.ValueType != constants.ComplexDataType {
+				continue
+			}
+			for _, sa := range attr.SubAttributes {
+				job := SchemaChangeJobForComplexSubAttrAdded(orgId, attr, sa)
+				if err := enqueueProfileDataMigrationJobFn(job); err != nil {
+					logger.Warn(fmt.Sprintf(
+						"Failed to enqueue profile data migration job after creating complex attribute %s in org %s: %v",
+						attr.AttributeName, orgId, err,
+					))
+				}
+			}
+		}
+	}
+
+	return validAttrs, nil
 }
 
 func resolveDisplayName(attributeName string) string {
@@ -471,33 +496,54 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 		return err
 	}
 
-	// Enqueue profile data cleanup when value_type or multi_valued changes for
-	// traits and application_data.  Identity attributes are managed via schema
-	// sync and are not updated through this path.
+	// Enqueue profile data cleanup when value_type, multi_valued, or sub_attributes change for
+	// traits and application_data.  Identity attributes are managed via schema sync and are not
+	// updated through this path.
 	attrScope := scopeOf(attribute.AttributeName)
 	if attrScope == constants.Traits || attrScope == constants.ApplicationData {
-		var job *model.SchemaChangeJob
+		logger := log.GetLogger()
+		var jobs []model.SchemaChangeJob
+
 		switch {
 		case attribute.ValueType != newValueType:
-			// When the old type is complex the parent key in JSONB is an
-			// object whose nested keys are still addressed by the individual
-			// sub-attribute schema entries.  Nullifying the parent would
-			// destroy all sub-attribute profile data, so we leave it alone;
-			// the sub-attributes continue to be readable via their own paths.
-			if attribute.ValueType != constants.ComplexDataType {
-				j := SchemaChangeJobForTypeChange(orgId, attribute, newValueType)
-				job = &j
+			// When the old type is complex the nested object is addressed field-by-field via
+			// sub-attribute schema entries.  Each sub-attribute is individually migrated to a
+			// flat dotted key so no data is lost.
+			if attribute.ValueType == constants.ComplexDataType {
+				for _, sa := range attribute.SubAttributes {
+					jobs = append(jobs, SchemaChangeJobForComplexSubAttrRemoved(orgId, attribute, sa))
+				}
+			} else {
+				jobs = append(jobs, SchemaChangeJobForTypeChange(orgId, attribute, newValueType))
 			}
 		case !attribute.MultiValued && multiValued:
-			j := SchemaChangeJobForScalarToArray(orgId, attribute)
-			job = &j
+			jobs = append(jobs, SchemaChangeJobForScalarToArray(orgId, attribute))
 		case attribute.MultiValued && !multiValued:
-			j := SchemaChangeJobForArrayToScalar(orgId, attribute)
-			job = &j
+			jobs = append(jobs, SchemaChangeJobForArrayToScalar(orgId, attribute))
+		case attribute.ValueType == constants.ComplexDataType && newValueType == constants.ComplexDataType:
+			// Still complex — enqueue jobs for added and removed sub-attributes.
+			oldSubAttrNames := make(map[string]bool, len(attribute.SubAttributes))
+			for _, sa := range attribute.SubAttributes {
+				oldSubAttrNames[sa.AttributeName] = true
+			}
+			newSubAttrNames := make(map[string]bool, len(subAttributes))
+			for _, sa := range subAttributes {
+				newSubAttrNames[sa.AttributeName] = true
+			}
+			for _, oldSa := range attribute.SubAttributes {
+				if !newSubAttrNames[oldSa.AttributeName] {
+					jobs = append(jobs, SchemaChangeJobForComplexSubAttrRemoved(orgId, attribute, oldSa))
+				}
+			}
+			for _, newSa := range subAttributes {
+				if !oldSubAttrNames[newSa.AttributeName] {
+					jobs = append(jobs, SchemaChangeJobForComplexSubAttrAdded(orgId, attribute, newSa))
+				}
+			}
 		}
-		if job != nil {
-			logger := log.GetLogger()
-			if err := enqueueProfileDataMigrationJobFn(*job); err != nil {
+
+		for _, job := range jobs {
+			if err := enqueueProfileDataMigrationJobFn(job); err != nil {
 				logger.Warn(fmt.Sprintf(
 					"Failed to enqueue profile data migration job after schema change for attribute %s in org %s: %v",
 					attributeId, orgId, err,
@@ -505,6 +551,7 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -536,12 +583,26 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(orgId, attribute
 	// Identity attributes are managed exclusively via schema sync.
 	scope := scopeOf(attribute.AttributeName)
 	if scope == constants.Traits || scope == constants.ApplicationData {
-		job := SchemaChangeJobForDelete(orgId, attribute)
-		if err := enqueueProfileDataMigrationJobFn(job); err != nil {
-			logger.Warn(fmt.Sprintf(
-				"Failed to enqueue profile data migration job after deleting attribute %s in org %s: %v",
-				attributeId, orgId, err,
-			))
+		var jobs []model.SchemaChangeJob
+
+		// For complex attributes, preserve each sub-attribute's value as a flat
+		// dotted key before removing the parent object. This mirrors the behaviour
+		// of removing a sub-attribute while the parent remains complex.
+		if attribute.ValueType == constants.ComplexDataType {
+			for _, sa := range attribute.SubAttributes {
+				jobs = append(jobs, SchemaChangeJobForComplexSubAttrRemoved(orgId, attribute, sa))
+			}
+		}
+		// Always enqueue the parent delete so the (now-empty) object is removed.
+		jobs = append(jobs, SchemaChangeJobForDelete(orgId, attribute))
+
+		for _, job := range jobs {
+			if err := enqueueProfileDataMigrationJobFn(job); err != nil {
+				logger.Warn(fmt.Sprintf(
+					"Failed to enqueue profile data migration job after deleting attribute %s in org %s: %v",
+					attributeId, orgId, err,
+				))
+			}
 		}
 	}
 	return nil
