@@ -21,14 +21,17 @@ package utils
 import (
 	"fmt"
 	"strings"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
 func BuildProfileLocation(orgId, profileId string) string {
 	return fmt.Sprintf("%s/cds/api/v1/profiles/%s", orgId, profileId)
 }
 
-// ResolveDisplayName takes an attribute name (potentially in dot notation) and converts it to a human-readable display name.
-func ResolveDisplayName(attributeName string) string {
+// ResolveDisplayNameFromAttribute takes an attribute name (potentially in dot notation) and converts it to a human-readable display name.
+// The result is guaranteed to comply with the display name character rules and is truncated to MaxAttributeDisplayNameLength characters.
+func ResolveDisplayNameFromAttribute(attributeName string) string {
 	parts := strings.Split(attributeName, ".")
 	if len(parts) == 0 {
 		return ""
@@ -36,6 +39,8 @@ func ResolveDisplayName(attributeName string) string {
 
 	// Take leaf attribute for display name
 	leaf := parts[len(parts)-1]
+	leaf = strings.NewReplacer("_", " ", "-", " ").Replace(leaf)
+	leaf = constants.DisplayNameCamelCaseSplitter.ReplaceAllString(leaf, "${1} ${2}")
 
 	// Title case each word
 	words := strings.Fields(leaf)
@@ -45,5 +50,15 @@ func ResolveDisplayName(attributeName string) string {
 		}
 	}
 
-	return strings.Join(words, " ")
+	result := strings.Join(words, " ")
+
+	// Strip any characters not allowed in display names.
+	result = constants.DisplayNameRegex.ReplaceAllString(result, "")
+
+	// Truncate to MaxAttributeDisplayNameLength characters.
+	if len(result) > constants.MaxAttributeDisplayNameLength {
+		result = result[:constants.MaxAttributeDisplayNameLength]
+	}
+
+	return result
 }

@@ -485,7 +485,7 @@ func (c *IdentityClient) GetProfileSchema(orgHandle string) ([]model.ProfileSche
 					ValueType:     constants.ComplexDataType,
 					MergeStrategy: constants.MergeStrategyOverwrite,
 					Mutability:    constants.MutabilityReadWrite,
-					DisplayName:   utils.ResolveDisplayName(parent),
+					DisplayName:   utils.ResolveDisplayNameFromAttribute(parent),
 					SubAttributes: subs,
 					SCIMDialect:   dialect, // mark as generated
 				})
@@ -701,7 +701,7 @@ func ConvertSCIMClaimWithLocal(
 	if dn, ok := local["displayName"].(string); ok {
 		displayName = dn
 	} else {
-		displayName = utils.ResolveDisplayName(attrKey)
+		displayName = utils.ResolveDisplayNameFromAttribute(attrKey)
 	}
 
 	// Find sub-attributes for the current attribute (if it's a parent)

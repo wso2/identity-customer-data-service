@@ -108,7 +108,7 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 			if attr.DisplayName == "" {
 				log.GetLogger().Debug(fmt.Sprintf("Display name not provided for attribute: %s. "+
 					"Resolving display name from attribute name.", attr.AttributeName))
-				attr.DisplayName = utils.ResolveDisplayName(attr.AttributeName)
+				attr.DisplayName = utils.ResolveDisplayNameFromAttribute(attr.AttributeName)
 			}
 
 			validAttrs = append(validAttrs, attr)
@@ -274,6 +274,26 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
+
+	if attr.DisplayName != "" {
+		if len(attr.DisplayName) > constants.MaxAttributeDisplayNameLength {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Description: fmt.Sprintf("Display name exceeded %s characters", constants.MaxAttributeDisplayNameLength),
+			}, http.StatusBadRequest)
+			return clientError, false
+		}
+		if constants.DisplayNameRegex.MatchString(attr.DisplayName) {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Description: "Display name contains disallowed characters. It can only contain alphanumerics, periods (.), dashes (-), underscores (_), plus signs (+), and spaces",
+			}, http.StatusBadRequest)
+			return clientError, false
+		}
+	}
+
 	return nil, true
 }
 
