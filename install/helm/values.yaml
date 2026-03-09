@@ -61,12 +61,12 @@ cloud:
           isSystemAppGrantEnabled: true
           certName: "wso2carbontls.cer"
 
-      message_queue:
-        type: "activemq"
-        broker:
-          addr: "localhost"
-          profile_queue_name: "/queue/cds-profile-unification"
-          schema_sync_queue_name: "/queue/cds-schema-sync"
+        message_queue:
+          type: "activemq"
+          broker:
+            addr: "localhost"
+            profile_queue_name: "/queue/cds-profile-unification"
+            schema_sync_queue_name: "/queue/cds-schema-sync"
 
       tls:
         mtls_enabled: false
