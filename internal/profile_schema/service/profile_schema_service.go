@@ -31,6 +31,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 type ProfileSchemaServiceInterface interface {
@@ -107,7 +108,7 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 			if attr.DisplayName == "" {
 				log.GetLogger().Debug(fmt.Sprintf("Display name not provided for attribute: %s. "+
 					"Resolving display name from attribute name.", attr.AttributeName))
-				attr.DisplayName = resolveDisplayName(attr.AttributeName)
+				attr.DisplayName = utils.ResolveDisplayNameFromAttribute(attr.AttributeName)
 			}
 
 			validAttrs = append(validAttrs, attr)
@@ -117,26 +118,6 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 	}
 
 	return validAttrs, psstr.AddProfileSchemaAttributesForScope(validAttrs, scope, orgId)
-}
-
-func resolveDisplayName(attributeName string) string {
-	parts := strings.Split(attributeName, ".")
-	if len(parts) == 0 {
-		return ""
-	}
-
-	// Take leaf attribute for display name
-	leaf := parts[len(parts)-1]
-
-	// Title case each word
-	words := strings.Fields(leaf)
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
-		}
-	}
-
-	return strings.Join(words, " ")
 }
 
 func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaAttribute) (error, bool) {
@@ -293,6 +274,26 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 		}, http.StatusBadRequest)
 		return clientError, false
 	}
+
+	if attr.DisplayName != "" {
+		if len(attr.DisplayName) > constants.MaxAttributeDisplayNameLength {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Description: fmt.Sprintf("Display name exceeded %d characters", constants.MaxAttributeDisplayNameLength),
+			}, http.StatusBadRequest)
+			return clientError, false
+		}
+		if constants.DisplayNameRegex.MatchString(attr.DisplayName) {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Description: "Display name contains disallowed characters. It can only contain alphanumerics, periods (.), dashes (-), underscores (_), plus signs (+), and spaces",
+			}, http.StatusBadRequest)
+			return clientError, false
+		}
+	}
+
 	return nil, true
 }
 

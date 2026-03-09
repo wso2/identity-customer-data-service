@@ -18,6 +18,8 @@
 
 package constants
 
+import "regexp"
+
 const ApiBasePath = "/cds/api"
 const ProfileApiPath = "profiles"
 const UnificationRulesApiPath = "unification-rules"
@@ -40,6 +42,10 @@ const OrgHandleClaim = "org_handle"
 const AudienceClaim = "aud"
 const ExpiryClaim = "exp"
 const FilterRegex = `^[a-zA-Z0-9._-]+$`
+const MaxAttributeDisplayNameLength = 50
+
+var DisplayNameCamelCaseSplitter = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+var DisplayNameRegex = regexp.MustCompile(`[^a-zA-Z0-9.\-_+ ]`)
 
 type contextKey string
 

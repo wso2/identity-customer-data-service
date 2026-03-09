@@ -629,17 +629,32 @@ func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute
 	}
 	defer dbClient.Close()
 
-	// Step 1: Delete existing identity_attributes for this org
-	deleteQuery := scripts.DeleteIdentityClaimsOfProfileSchema[provider.NewDBProvider().GetDBType()]
-	if _, err := dbClient.ExecuteQuery(deleteQuery, orgID); err != nil {
-		errorMsg := fmt.Sprintf("Failed to delete existing identity attributes of profile schema for organization: %s", orgID)
+	tx, err := dbClient.BeginTx()
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to begin transaction for organization: %s", orgID)
 		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors.NewServerError(errors.ErrorMessage{
+		return errors.NewServerError(errors.ErrorMessage{
 			Code:        errors.SYNC_PROFILE_SCHEMA.Code,
 			Message:     errors.SYNC_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
-		return serverError
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Step 1: Delete existing identity_attributes for this org
+	deleteQuery := scripts.DeleteIdentityClaimsOfProfileSchema[provider.NewDBProvider().GetDBType()]
+	if _, err = tx.Exec(deleteQuery, orgID); err != nil {
+		errorMsg := fmt.Sprintf("Failed to delete existing identity attributes of profile schema for organization: %s", orgID)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors.NewServerError(errors.ErrorMessage{
+			Code:        errors.SYNC_PROFILE_SCHEMA.Code,
+			Message:     errors.SYNC_PROFILE_SCHEMA.Message,
+			Description: errorMsg,
+		}, err)
 	}
 
 	// Step 2: Insert new attributes
@@ -677,15 +692,24 @@ func UpsertIdentityAttributes(orgID string, attrs []model.ProfileSchemaAttribute
 	}
 
 	insertQuery += strings.Join(valueStrings, ",")
-	if _, err := dbClient.ExecuteQuery(insertQuery, valueArgs...); err != nil {
+	if _, err = tx.Exec(insertQuery, valueArgs...); err != nil {
 		errorMsg := fmt.Sprintf("Failed to insert new identity attributes of profile schema for organization: %s", orgID)
 		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors.NewServerError(errors.ErrorMessage{
+		return errors.NewServerError(errors.ErrorMessage{
 			Code:        errors.SYNC_PROFILE_SCHEMA.Code,
 			Message:     errors.SYNC_PROFILE_SCHEMA.Message,
 			Description: errorMsg,
 		}, err)
-		return serverError
+	}
+
+	if err = tx.Commit(); err != nil {
+		errorMsg := fmt.Sprintf("Failed to commit transaction for organization: %s", orgID)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors.NewServerError(errors.ErrorMessage{
+			Code:        errors.SYNC_PROFILE_SCHEMA.Code,
+			Message:     errors.SYNC_PROFILE_SCHEMA.Message,
+			Description: errorMsg,
+		}, err)
 	}
 	return nil
 }
