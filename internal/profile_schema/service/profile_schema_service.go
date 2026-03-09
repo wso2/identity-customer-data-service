@@ -280,7 +280,7 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
 				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
-				Description: fmt.Sprintf("Display name exceeded %s characters", constants.MaxAttributeDisplayNameLength),
+				Description: fmt.Sprintf("Display name exceeded %d characters", constants.MaxAttributeDisplayNameLength),
 			}, http.StatusBadRequest)
 			return clientError, false
 		}
