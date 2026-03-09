@@ -31,6 +31,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 type ProfileSchemaServiceInterface interface {
@@ -107,7 +108,7 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 			if attr.DisplayName == "" {
 				log.GetLogger().Debug(fmt.Sprintf("Display name not provided for attribute: %s. "+
 					"Resolving display name from attribute name.", attr.AttributeName))
-				attr.DisplayName = resolveDisplayName(attr.AttributeName)
+				attr.DisplayName = utils.ResolveDisplayName(attr.AttributeName)
 			}
 
 			validAttrs = append(validAttrs, attr)
@@ -117,26 +118,6 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 	}
 
 	return validAttrs, psstr.AddProfileSchemaAttributesForScope(validAttrs, scope, orgId)
-}
-
-func resolveDisplayName(attributeName string) string {
-	parts := strings.Split(attributeName, ".")
-	if len(parts) == 0 {
-		return ""
-	}
-
-	// Take leaf attribute for display name
-	leaf := parts[len(parts)-1]
-
-	// Title case each word
-	words := strings.Fields(leaf)
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
-		}
-	}
-
-	return strings.Join(words, " ")
 }
 
 func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaAttribute) (error, bool) {

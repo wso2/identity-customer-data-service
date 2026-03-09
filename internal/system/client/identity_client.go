@@ -485,7 +485,7 @@ func (c *IdentityClient) GetProfileSchema(orgHandle string) ([]model.ProfileSche
 					ValueType:     constants.ComplexDataType,
 					MergeStrategy: constants.MergeStrategyOverwrite,
 					Mutability:    constants.MutabilityReadWrite,
-					DisplayName:   resolveDisplayName(parent),
+					DisplayName:   utils.ResolveDisplayName(parent),
 					SubAttributes: subs,
 					SCIMDialect:   dialect, // mark as generated
 				})
@@ -701,7 +701,7 @@ func ConvertSCIMClaimWithLocal(
 	if dn, ok := local["displayName"].(string); ok {
 		displayName = dn
 	} else {
-		displayName = resolveDisplayName(attrKey)
+		displayName = utils.ResolveDisplayName(attrKey)
 	}
 
 	// Find sub-attributes for the current attribute (if it's a parent)
@@ -778,26 +778,6 @@ func ifThenElse(cond bool, a, b string) string {
 		return a
 	}
 	return b
-}
-
-func resolveDisplayName(attributeName string) string {
-	parts := strings.Split(attributeName, ".")
-	if len(parts) == 0 {
-		return ""
-	}
-
-	// Take leaf attribute for display name
-	leaf := parts[len(parts)-1]
-
-	// Title case each word
-	words := strings.Fields(leaf)
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
-		}
-	}
-
-	return strings.Join(words, " ")
 }
 
 // GetSCIMUser fetches a SCIM user by ID

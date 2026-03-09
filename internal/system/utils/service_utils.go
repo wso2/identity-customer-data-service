@@ -18,8 +18,32 @@
 
 package utils
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func BuildProfileLocation(orgId, profileId string) string {
 	return fmt.Sprintf("%s/cds/api/v1/profiles/%s", orgId, profileId)
+}
+
+// ResolveDisplayName takes an attribute name (potentially in dot notation) and converts it to a human-readable display name.
+func ResolveDisplayName(attributeName string) string {
+	parts := strings.Split(attributeName, ".")
+	if len(parts) == 0 {
+		return ""
+	}
+
+	// Take leaf attribute for display name
+	leaf := parts[len(parts)-1]
+
+	// Title case each word
+	words := strings.Fields(leaf)
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
+		}
+	}
+
+	return strings.Join(words, " ")
 }
