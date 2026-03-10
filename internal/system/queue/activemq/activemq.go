@@ -19,8 +19,11 @@
 package activemq
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,16 +85,44 @@ func newManagedConn(addr, username, password string) (*managedConn, error) {
 	return mc, nil
 }
 
+// parseAddr strips a URL scheme from addr and returns the bare "host:port"
+// and whether TLS should be used.
+func parseAddr(addr string) (hostPort string, useTLS bool) {
+	switch {
+	case strings.HasPrefix(addr, "ssl://"):
+		return strings.TrimPrefix(addr, "ssl://"), true
+	case strings.HasPrefix(addr, "https://"):
+		return strings.TrimPrefix(addr, "https://"), true
+	}
+	return addr, false
+}
+
 func (mc *managedConn) dial() error {
-	conn, err := stomp.Dial("tcp", mc.addr,
+	hostPort, useTLS := parseAddr(mc.addr)
+
+	opts := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mc.username, mc.password),
 		stomp.ConnOpt.HeartBeat(10*time.Second, 10*time.Second),
-	)
+	}
+
+	var stompConn *stomp.Conn
+	var err error
+
+	if useTLS {
+		var netConn net.Conn
+		netConn, err = tls.Dial("tcp", hostPort, &tls.Config{MinVersion: tls.VersionTLS12})
+		if err != nil {
+			return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
+		}
+		stompConn, err = stomp.Connect(netConn, opts...)
+	} else {
+		stompConn, err = stomp.Dial("tcp", hostPort, opts...)
+	}
 	if err != nil {
 		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
 	}
 	mc.mu.Lock()
-	mc.conn = conn
+	mc.conn = stompConn
 	mc.mu.Unlock()
 	return nil
 }
