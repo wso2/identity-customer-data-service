@@ -19,8 +19,11 @@
 package activemq
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,8 +58,11 @@ func init() {
 // managedConn holds a STOMP connection and re-dials transparently when the
 // connection is lost. The conn field is protected by mu to prevent data races
 // between concurrent Enqueue calls, consumer goroutines, and reconnect
-// attempts. The done channel is used to signal consumer goroutines to exit
-// during graceful shutdown.
+// attempts. The generation is incremented every time a new connection is
+// installed so consumers can detect whether a closed subscription belongs to
+// an intentionally retired connection or to the current live connection.
+// The done channel is used to signal consumer goroutines to exit during
+// graceful shutdown.
 type managedConn struct {
 	addr     string
 	username string
@@ -64,6 +70,7 @@ type managedConn struct {
 
 	mu          sync.RWMutex
 	conn        *stomp.Conn
+	generation  uint64
 	reconnectMu sync.Mutex
 	done        chan struct{}
 	doneOnce    sync.Once
@@ -82,17 +89,75 @@ func newManagedConn(addr, username, password string) (*managedConn, error) {
 	return mc, nil
 }
 
+// parseAddr strips a transport scheme from addr and returns the bare
+// "host:port" and whether TLS should be used.
+//
+// Supported schemes:
+//   - "ssl://"  → TLS (ActiveMQ SSL transport)
+//   - "tcp://"  → plain TCP
+//   - no scheme → plain TCP (bare "host:port")
+func parseAddr(addr string) (hostPort string, useTLS bool) {
+	switch {
+	case strings.HasPrefix(addr, "ssl://"):
+		return strings.TrimPrefix(addr, "ssl://"), true
+	case strings.HasPrefix(addr, "tcp://"):
+		return strings.TrimPrefix(addr, "tcp://"), false
+	}
+	return addr, false
+}
+
 func (mc *managedConn) dial() error {
-	conn, err := stomp.Dial("tcp", mc.addr,
+	hostPort, useTLS := parseAddr(mc.addr)
+
+	opts := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mc.username, mc.password),
-		stomp.ConnOpt.HeartBeat(10*time.Second, 10*time.Second),
-	)
+		// Disable STOMP-level heartbeats to avoid spurious read-timeout
+		// disconnects when the broker sends heartbeats less frequently than
+		// the negotiated interval. TCP keepalive (set below) provides
+		// equivalent liveness detection for half-open connections.
+		stomp.ConnOpt.HeartBeat(0, 0),
+	}
+
+	// Use a dialer with an explicit connect timeout and TCP keepalive.
+	// The timeout prevents indefinite blocking during reconnects. Keepalive
+	// lets the OS probe idle connections and surface half-open or
+	// load-balancer-dropped sockets without relying on STOMP heartbeats.
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+
+	var netConn net.Conn
+	var err error
+	if useTLS {
+		// For now, broker TLS support is limited to basic TLS using the host
+		// system's trusted CA store. Custom CA bundles and client certificates
+		// for mTLS are not yet supported via ExternalBrokerConfig.
+		netConn, err = tls.DialWithDialer(dialer, "tcp", hostPort, &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		})
+	} else {
+		netConn, err = dialer.Dial("tcp", hostPort)
+	}
 	if err != nil {
 		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
 	}
+
+	stompConn, err := stomp.Connect(netConn, opts...)
+	if err != nil {
+		_ = netConn.Close() // prevent fd leak if STOMP handshake fails
+		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
+	}
+
 	mc.mu.Lock()
-	mc.conn = conn
+	oldConn := mc.conn
+	mc.conn = stompConn
+	mc.generation++
 	mc.mu.Unlock()
+
+	if oldConn != nil {
+		_ = oldConn.Disconnect()
+	}
 	return nil
 }
 
@@ -101,6 +166,15 @@ func (mc *managedConn) getConn() *stomp.Conn {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 	return mc.conn
+}
+
+// getConnAndGeneration returns the current connection and its generation under
+// a read lock. Consumers use this to detect whether a closed subscription came
+// from a stale, intentionally retired connection.
+func (mc *managedConn) getConnAndGeneration() (*stomp.Conn, uint64) {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+	return mc.conn, mc.generation
 }
 
 // shutdown signals all consumer goroutines to stop. Safe to call more than
@@ -130,17 +204,24 @@ func (mc *managedConn) reconnectWithBackoff(context string, maxAttempts int) err
 	logger := log.GetLogger()
 	backoff := initialBackoff
 	attempt := 0
+
 	for {
 		if mc.isShuttingDown() {
 			return fmt.Errorf("activemq: reconnect aborted, shutting down (%s)", context)
 		}
+
 		attempt++
 		if maxAttempts > 0 && attempt > maxAttempts {
 			return fmt.Errorf("activemq: exhausted %d reconnect attempts (%s)", maxAttempts, context)
 		}
-		logger.Error(fmt.Sprintf("activemq: connection lost (%s), reconnecting in %s (attempt %d)…",
-			context, backoff, attempt))
+
+		logger.Error(fmt.Sprintf(
+			"activemq: connection lost (%s), reconnecting in %s (attempt %d)…",
+			context, backoff, attempt,
+		))
+
 		time.Sleep(backoff)
+
 		if err := mc.dial(); err != nil {
 			logger.Error(fmt.Sprintf("activemq: reconnect failed: %v", err))
 			backoff *= backoffMultiplier
@@ -149,9 +230,26 @@ func (mc *managedConn) reconnectWithBackoff(context string, maxAttempts int) err
 			}
 			continue
 		}
+
 		logger.Info(fmt.Sprintf("activemq: reconnected successfully (%s)", context))
 		return nil
 	}
+}
+
+// subscribeCurrent subscribes on the current live connection and returns the
+// subscription together with the generation the subscription belongs to.
+func (mc *managedConn) subscribeCurrent(destination string) (*stomp.Subscription, uint64, error) {
+	conn, generation := mc.getConnAndGeneration()
+	if conn == nil {
+		return nil, generation, fmt.Errorf("activemq: no active connection available for subscription")
+	}
+
+	sub, err := conn.Subscribe(destination, stomp.AckAuto)
+	if err != nil {
+		return nil, generation, err
+	}
+
+	return sub, generation, nil
 }
 
 // -----------------------------------------------------------------------
@@ -209,10 +307,12 @@ func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
 // exponential backoff when the subscription is lost, because the consumer is
 // a long-lived background goroutine that must stay alive for the lifetime of
 // the process. The loop exits cleanly when Close is called, which signals
-// shutdown via the done channel. This is intentionally different from the
-// bounded single-retry in Enqueue (see Enqueue docs for rationale).
+// shutdown via the done channel. If a subscription closes because its
+// underlying connection was intentionally retired during a managed reconnect,
+// the consumer simply re-subscribes on the current connection instead of
+// reconnecting again.
 func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
-	sub, err := q.mc.getConn().Subscribe(q.destination, stomp.AckAuto)
+	sub, subGen, err := q.mc.subscribeCurrent(q.destination)
 	if err != nil {
 		return fmt.Errorf("activemq: failed to subscribe to profile queue %s: %w", q.destination, err)
 	}
@@ -221,43 +321,71 @@ func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
 		for {
 			msg, ok := <-sub.C
 			if !ok {
-				// Channel closed — either shutdown or connection dropped.
 				if q.mc.isShuttingDown() {
 					log.GetLogger().Info("activemq: profile queue consumer stopped (shutdown)")
 					return
 				}
 
+				_, currentGen := q.mc.getConnAndGeneration()
+
+				// The subscription belongs to an older connection generation that
+				// was intentionally retired. Re-subscribe on the current live
+				// connection instead of reconnecting again.
+				if subGen != currentGen {
+					log.GetLogger().Info(
+						"activemq: profile queue subscription closed on retired connection, re-subscribing on current connection",
+					)
+					newSub, newGen, err := q.mc.subscribeCurrent(q.destination)
+					if err != nil {
+						log.GetLogger().Error(fmt.Sprintf(
+							"activemq: failed to re-subscribe to profile queue on current connection: %v", err,
+						))
+						continue
+					}
+					sub = newSub
+					subGen = newGen
+					continue
+				}
+
 				log.GetLogger().Error("activemq: profile queue subscription channel closed, reconnecting…")
 				if err := q.mc.reconnectWithBackoff("profile consumer", 0); err != nil {
 					log.GetLogger().Info(fmt.Sprintf(
-						"activemq: profile queue consumer exiting: %v", err))
+						"activemq: profile queue consumer exiting: %v", err,
+					))
 					return
 				}
-				newSub, err := q.mc.getConn().Subscribe(q.destination, stomp.AckAuto)
+
+				newSub, newGen, err := q.mc.subscribeCurrent(q.destination)
 				if err != nil {
 					log.GetLogger().Error(fmt.Sprintf(
-						"activemq: failed to re-subscribe to profile queue: %v", err))
+						"activemq: failed to re-subscribe to profile queue: %v", err,
+					))
 					continue
 				}
 				sub = newSub
+				subGen = newGen
 				continue
 			}
 
 			if msg.Err != nil {
 				log.GetLogger().Error(fmt.Sprintf(
-					"activemq: error receiving profile message: %v", msg.Err))
+					"activemq: error receiving profile message: %v", msg.Err,
+				))
 				continue
 			}
 
 			var profile profileModel.Profile
 			if err := json.Unmarshal(msg.Body, &profile); err != nil {
 				log.GetLogger().Error(fmt.Sprintf(
-					"activemq: failed to unmarshal profile message: %v", err))
+					"activemq: failed to unmarshal profile message: %v", err,
+				))
 				continue
 			}
+
 			handler(profile)
 		}
 	}()
+
 	return nil
 }
 
@@ -313,7 +441,7 @@ func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
 // Start subscribes to the destination and launches a consumer goroutine.
 // See ProfileQueue.Start for retry-policy rationale.
 func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) error {
-	sub, err := q.mc.getConn().Subscribe(q.destination, stomp.AckAuto)
+	sub, subGen, err := q.mc.subscribeCurrent(q.destination)
 	if err != nil {
 		return fmt.Errorf("activemq: failed to subscribe to schema sync queue %s: %w", q.destination, err)
 	}
@@ -327,19 +455,41 @@ func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) err
 					return
 				}
 
+				_, currentGen := q.mc.getConnAndGeneration()
+
+				if subGen != currentGen {
+					log.GetLogger().Info(
+						"activemq: schema sync subscription closed on retired connection, re-subscribing on current connection",
+					)
+					newSub, newGen, err := q.mc.subscribeCurrent(q.destination)
+					if err != nil {
+						log.GetLogger().Error(fmt.Sprintf(
+							"activemq: failed to re-subscribe to schema sync queue on current connection: %v", err,
+						))
+						continue
+					}
+					sub = newSub
+					subGen = newGen
+					continue
+				}
+
 				log.GetLogger().Error("activemq: schema sync subscription channel closed, reconnecting…")
 				if err := q.mc.reconnectWithBackoff("schema sync consumer", 0); err != nil {
 					log.GetLogger().Info(fmt.Sprintf(
-						"activemq: schema sync consumer exiting: %v", err))
+						"activemq: schema sync consumer exiting: %v", err,
+					))
 					return
 				}
-				newSub, err := q.mc.getConn().Subscribe(q.destination, stomp.AckAuto)
+
+				newSub, newGen, err := q.mc.subscribeCurrent(q.destination)
 				if err != nil {
 					log.GetLogger().Error(fmt.Sprintf(
-						"activemq: failed to re-subscribe to schema sync queue: %v", err))
+						"activemq: failed to re-subscribe to schema sync queue: %v", err,
+					))
 					continue
 				}
 				sub = newSub
+				subGen = newGen
 				continue
 			}
 
