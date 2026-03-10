@@ -126,6 +126,9 @@ func (mc *managedConn) dial() error {
 	var netConn net.Conn
 	var err error
 	if useTLS {
+		// For now, broker TLS support is limited to basic TLS using the host system's
+		// trusted CA store. Custom CA bundles and client certificates for mTLS are not
+		// yet supported via ExternalBrokerConfig.
 		netConn, err = tls.DialWithDialer(dialer, "tcp", hostPort, &tls.Config{MinVersion: tls.VersionTLS12})
 	} else {
 		netConn, err = dialer.Dial("tcp", hostPort)
@@ -140,8 +143,13 @@ func (mc *managedConn) dial() error {
 		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
 	}
 	mc.mu.Lock()
+	oldConn := mc.conn
 	mc.conn = stompConn
 	mc.mu.Unlock()
+
+	if oldConn != nil {
+		_ = oldConn.Disconnect()
+	}
 	return nil
 }
 
