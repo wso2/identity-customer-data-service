@@ -85,17 +85,19 @@ func newManagedConn(addr, username, password string) (*managedConn, error) {
 	return mc, nil
 }
 
-// parseAddr strips a URL scheme from addr and returns the bare "host:port"
-// and whether TLS should be used.
+// parseAddr strips a transport scheme from addr and returns the bare
+// "host:port" and whether TLS should be used.
+//
+// Supported schemes:
+//   - "ssl://"  → TLS (ActiveMQ SSL transport)
+//   - "tcp://"  → plain TCP
+//   - no scheme → plain TCP (bare "host:port")
 func parseAddr(addr string) (hostPort string, useTLS bool) {
 	switch {
 	case strings.HasPrefix(addr, "ssl://"):
 		return strings.TrimPrefix(addr, "ssl://"), true
-	case strings.HasPrefix(addr, "https://"):
-		return strings.TrimPrefix(addr, "https://"), true
-	case strings.HasPrefix(addr, "http://"):
-		// ActiveMQ supports non-TLS connections over "http" scheme.
-		return strings.TrimPrefix(addr, "http://"), false
+	case strings.HasPrefix(addr, "tcp://"):
+		return strings.TrimPrefix(addr, "tcp://"), false
 	}
 	return addr, false
 }
@@ -105,24 +107,36 @@ func (mc *managedConn) dial() error {
 
 	opts := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mc.username, mc.password),
-		// Disable STOMP heartbeats.
+		// Disable STOMP-level heartbeats to avoid spurious read-timeout
+		// disconnects when the broker sends heartbeats less frequently than
+		// the negotiated interval. TCP keepalive (set below) provides
+		// equivalent liveness detection for half-open connections.
 		stomp.ConnOpt.HeartBeat(0, 0),
 	}
 
-	var stompConn *stomp.Conn
-	var err error
+	// Use a dialer with an explicit connect timeout and TCP keepalive.
+	// The timeout prevents indefinite blocking during reconnects. Keepalive
+	// lets the OS probe idle connections and surface half-open or
+	// load-balancer-dropped sockets without relying on STOMP heartbeats.
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
 
+	var netConn net.Conn
+	var err error
 	if useTLS {
-		var netConn net.Conn
-		netConn, err = tls.Dial("tcp", hostPort, &tls.Config{MinVersion: tls.VersionTLS12})
-		if err != nil {
-			return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
-		}
-		stompConn, err = stomp.Connect(netConn, opts...)
+		netConn, err = tls.DialWithDialer(dialer, "tcp", hostPort, &tls.Config{MinVersion: tls.VersionTLS12})
 	} else {
-		stompConn, err = stomp.Dial("tcp", hostPort, opts...)
+		netConn, err = dialer.Dial("tcp", hostPort)
 	}
 	if err != nil {
+		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
+	}
+
+	stompConn, err := stomp.Connect(netConn, opts...)
+	if err != nil {
+		_ = netConn.Close() // prevent fd leak if STOMP handshake fails
 		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
 	}
 	mc.mu.Lock()
