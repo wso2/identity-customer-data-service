@@ -93,6 +93,9 @@ func parseAddr(addr string) (hostPort string, useTLS bool) {
 		return strings.TrimPrefix(addr, "ssl://"), true
 	case strings.HasPrefix(addr, "https://"):
 		return strings.TrimPrefix(addr, "https://"), true
+	case strings.HasPrefix(addr, "http://"):
+		// ActiveMQ supports non-TLS connections over "http" scheme.
+		return strings.TrimPrefix(addr, "http://"), false
 	}
 	return addr, false
 }
@@ -102,7 +105,8 @@ func (mc *managedConn) dial() error {
 
 	opts := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mc.username, mc.password),
-		stomp.ConnOpt.HeartBeat(10*time.Second, 10*time.Second),
+		// Disable STOMP heartbeats.
+		stomp.ConnOpt.HeartBeat(0, 0),
 	}
 
 	var stompConn *stomp.Conn
