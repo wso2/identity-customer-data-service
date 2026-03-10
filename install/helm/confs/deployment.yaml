@@ -82,3 +82,12 @@ tls:
   server_key: "{{ .Values.cloud.deployment.cds.tls.server_key }}"
   client_cert: "{{ .Values.cloud.deployment.cds.tls.client_cert }}"
   trust_store: "{{ .Values.cloud.deployment.cds.tls.trust_store }}"
+
+message_queue:
+  type: {{ .Values.cloud.deployment.cds.config.message_queue.type }}
+  broker:
+    addr: {{ .Values.cloud.deployment.cds.config.message_queue.broker.addr }}
+    username: "${ACTIVE_MQ_USERNAME}"
+    password: "${ACTIVE_MQ_PASSWORD}"
+    profile_queue_name: {{ .Values.cloud.deployment.cds.config.message_queue.broker.profile_queue_name }}
+    schema_sync_queue_name: {{ .Values.cloud.deployment.cds.config.message_queue.broker.schema_sync_queue_name }}
