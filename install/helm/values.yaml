@@ -62,7 +62,7 @@ cloud:
           certName: "wso2carbontls.cer"
 
         message_queue:
-          type: "activemq"
+          type: "memory" # Options: "activemq", "memory"
           broker:
             addr: "localhost"
             profile_queue_name: "/queue/cds-profile-unification"
