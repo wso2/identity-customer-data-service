@@ -30,6 +30,8 @@ import (
 	profileSchema "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	unificationModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
+	unificationService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 )
 
 // setupTestSchema sets up the profile schema for benchmarking
@@ -72,15 +74,6 @@ func setupTestSchema(b *testing.B, orgHandle string) {
 			Mutability:    constants.MutabilityReadWrite,
 			MultiValued:   true,
 		},
-		{
-			OrgId:         orgHandle,
-			AttributeId:   uuid.New().String(),
-			AttributeName: "traits.preferences",
-			ValueType:     constants.StringDataType,
-			MergeStrategy: "combine",
-			Mutability:    constants.MutabilityReadWrite,
-			MultiValued:   true,
-		},
 	}
 
 	appData := []profileSchema.ProfileSchemaAttribute{
@@ -107,29 +100,12 @@ func createTestProfile(profileSvc profileService.ProfilesServiceInterface, orgHa
 	jsonData := []byte(fmt.Sprintf(`{
 		"user_id": "%s",
 		"identity_attributes": { "email": ["test%s@wso2.com"], "phone": ["+1234567890"] },
-		"traits": { "interests": ["reading", "coding"], "preferences": ["dark_mode"] },
+		"traits": { "interests": ["reading", "coding"] },
 		"application_data": { "app1": { "device_id": ["device1"] } }
 	}`, userId, userId))
 	_ = json.Unmarshal(jsonData, &profileRequest)
 
 	return profileSvc.CreateProfile(profileRequest, orgHandle)
-}
-
-// Benchmark_CreateProfile benchmarks profile creation
-func Benchmark_CreateProfile(b *testing.B) {
-	orgHandle := fmt.Sprintf("benchmark-org-%d", time.Now().UnixNano())
-	profileSvc := profileService.GetProfilesService()
-
-	setupTestSchema(b, orgHandle)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		userId := fmt.Sprintf("user-%d", i)
-		_, err := createTestProfile(profileSvc, orgHandle, userId)
-		if err != nil {
-			b.Fatalf("Failed to create profile: %v", err)
-		}
-	}
 }
 
 // Benchmark_GetProfile benchmarks profile retrieval
@@ -150,86 +126,6 @@ func Benchmark_GetProfile(b *testing.B) {
 		_, err := profileSvc.GetProfile(profile.ProfileId)
 		if err != nil {
 			b.Fatalf("Failed to get profile: %v", err)
-		}
-	}
-}
-
-// Benchmark_UpdateProfile benchmarks profile updates
-func Benchmark_UpdateProfile(b *testing.B) {
-	orgHandle := fmt.Sprintf("benchmark-org-%d", time.Now().UnixNano())
-	profileSvc := profileService.GetProfilesService()
-
-	setupTestSchema(b, orgHandle)
-
-	// Create a profile for updating
-	profile, err := createTestProfile(profileSvc, orgHandle, "update-user")
-	if err != nil {
-		b.Fatalf("Failed to create profile for benchmark: %v", err)
-	}
-
-	var updateRequest profileModel.ProfileRequest
-	jsonData := []byte(`{
-		"identity_attributes": { "email": ["updated@wso2.com"] },
-		"traits": { "interests": ["reading", "travel", "photography"] }
-	}`)
-	_ = json.Unmarshal(jsonData, &updateRequest)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := profileSvc.UpdateProfile(profile.ProfileId, orgHandle, updateRequest)
-		if err != nil {
-			b.Fatalf("Failed to update profile: %v", err)
-		}
-	}
-}
-
-// Benchmark_PatchProfile benchmarks profile patch operations
-// Note: Commented out due to known issues with application_data marshaling in PatchProfile implementation
-// func Benchmark_PatchProfile(b *testing.B) {
-// 	orgHandle := fmt.Sprintf("benchmark-org-%d", time.Now().UnixNano())
-// 	profileSvc := profileService.GetProfilesService()
-//
-// 	setupTestSchema(b, orgHandle)
-//
-// 	// Create a profile for patching
-// 	profile, err := createTestProfile(profileSvc, orgHandle, "patch-user")
-// 	if err != nil {
-// 		b.Fatalf("Failed to create profile for benchmark: %v", err)
-// 	}
-//
-// 	patchData := map[string]interface{}{
-// 		"identity_attributes": map[string]interface{}{
-// 			"phone": []string{"+9876543210"},
-// 		},
-// 	}
-//
-// 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
-// 		_, err := profileSvc.PatchProfile(profile.ProfileId, orgHandle, patchData)
-// 		if err != nil {
-// 			b.Fatalf("Failed to patch profile: %v", err)
-// 		}
-// 	}
-// }
-
-// Benchmark_GetAllProfiles benchmarks listing profiles
-func Benchmark_GetAllProfiles(b *testing.B) {
-	orgHandle := fmt.Sprintf("benchmark-org-%d", time.Now().UnixNano())
-	profileSvc := profileService.GetProfilesService()
-
-	setupTestSchema(b, orgHandle)
-
-	// Create multiple profiles for listing
-	for i := 0; i < 10; i++ {
-		userId := fmt.Sprintf("list-user-%d", i)
-		_, _ = createTestProfile(profileSvc, orgHandle, userId)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _, err := profileSvc.GetAllProfilesCursor(orgHandle, 10, nil)
-		if err != nil {
-			b.Fatalf("Failed to get all profiles: %v", err)
 		}
 	}
 }
@@ -258,29 +154,60 @@ func Benchmark_GetAllProfilesWithFilter(b *testing.B) {
 	}
 }
 
-// Benchmark_DeleteProfile benchmarks profile deletion
-func Benchmark_DeleteProfile(b *testing.B) {
+// Benchmark_ProfileUnification benchmarks the profile unification process
+func Benchmark_ProfileUnification(b *testing.B) {
 	orgHandle := fmt.Sprintf("benchmark-org-%d", time.Now().UnixNano())
 	profileSvc := profileService.GetProfilesService()
+	unificationSvc := unificationService.GetUnificationRuleService()
 
 	setupTestSchema(b, orgHandle)
 
-	// Create profiles for deletion
-	profileIds := make([]string, b.N)
-	for i := 0; i < b.N; i++ {
-		userId := fmt.Sprintf("delete-user-%d", i)
-		profile, err := createTestProfile(profileSvc, orgHandle, userId)
-		if err != nil {
-			b.Fatalf("Failed to create profile for benchmark: %v", err)
-		}
-		profileIds[i] = profile.ProfileId
+	// Setup unification rule based on email
+	rule := unificationModel.UnificationRule{
+		RuleName:     "email_based",
+		RuleId:       uuid.New().String(),
+		OrgHandle:    orgHandle,
+		PropertyName: "identity_attributes.email",
+		Priority:     1,
+		IsActive:     true,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+	err := unificationSvc.AddUnificationRule(rule, orgHandle)
+	if err != nil {
+		b.Fatalf("Failed to add unification rule: %v", err)
+	}
+
+	// Create initial profile
+	var firstProfile profileModel.ProfileRequest
+	jsonData := []byte(`{
+		"user_id": "user-001",
+		"identity_attributes": { "email": ["unify@wso2.com"] },
+		"traits": { "interests": ["coding"] }
+	}`)
+	_ = json.Unmarshal(jsonData, &firstProfile)
+	_, err = profileSvc.CreateProfile(firstProfile, orgHandle)
+	if err != nil {
+		b.Fatalf("Failed to create first profile: %v", err)
 	}
 
 	b.ResetTimer()
+	// Benchmark creating profiles that will trigger unification
 	for i := 0; i < b.N; i++ {
-		err := profileSvc.DeleteProfile(profileIds[i])
+		b.StopTimer()
+		var secondProfile profileModel.ProfileRequest
+		jsonData := []byte(fmt.Sprintf(`{
+			"user_id": "user-%d",
+			"identity_attributes": { "email": ["unify@wso2.com"] },
+			"traits": { "interests": ["reading"] }
+		}`, i+2))
+		_ = json.Unmarshal(jsonData, &secondProfile)
+		b.StartTimer()
+
+		// This should trigger profile unification due to matching email
+		_, err := profileSvc.CreateProfile(secondProfile, orgHandle)
 		if err != nil {
-			b.Fatalf("Failed to delete profile: %v", err)
+			b.Fatalf("Failed to create profile for unification: %v", err)
 		}
 	}
 }

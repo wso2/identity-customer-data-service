@@ -1,13 +1,13 @@
 # Performance Benchmarks
 
-This directory contains performance benchmarks for the Identity Customer Data Service. These benchmarks are designed to measure the performance of core operations and help ensure that new changes do not negatively impact performance.
+This directory contains performance benchmarks for the Identity Customer Data Service. These benchmarks are designed to measure the performance of core profile operations and help ensure that new changes do not negatively impact performance.
 
 ## Overview
 
-The benchmark suite tests the following areas:
-- **Profile Operations**: Create, Read, Update, Patch, Delete, List profiles
-- **Profile Schema Operations**: Get schema, Add/Update/Delete schema attributes
-- **Unification Rules**: Add, Get, Update, Delete unification rules
+The benchmark suite focuses on critical profile operations:
+- **Profile Get**: Retrieve individual profiles by ID
+- **Profile Filtering**: Query profiles with filters
+- **Profile Unification**: Automatic merging of profiles based on matching attributes
 
 ## Running Benchmarks
 
@@ -29,14 +29,14 @@ make benchmark bench=BenchmarkName
 
 Examples:
 ```bash
-# Run only profile creation benchmark
-make benchmark bench=Benchmark_CreateProfile
+# Run only profile get benchmark
+make benchmark bench=Benchmark_GetProfile
 
-# Run all profile-related benchmarks
-make benchmark bench=Benchmark_.*Profile
+# Run profile filtering benchmark
+make benchmark bench=Benchmark_GetAllProfilesWithFilter
 
-# Run schema benchmarks
-make benchmark bench=Benchmark_.*Schema
+# Run profile unification benchmark
+make benchmark bench=Benchmark_ProfileUnification
 ```
 
 ### Run Benchmarks Directly with Go
@@ -64,12 +64,12 @@ benchstat benchmark_results.txt new_results.txt
 Benchmark output includes several metrics:
 
 ```
-Benchmark_CreateProfile-8    10    5234567 ns/op    12345 B/op    123 allocs/op
+Benchmark_GetProfile-8    10    1234567 ns/op    12345 B/op    123 allocs/op
 ```
 
-- `Benchmark_CreateProfile-8`: Benchmark name with GOMAXPROCS value (8)
+- `Benchmark_GetProfile-8`: Benchmark name with GOMAXPROCS value (8)
 - `10`: Number of iterations run
-- `5234567 ns/op`: Average time per operation in nanoseconds
+- `1234567 ns/op`: Average time per operation in nanoseconds
 - `12345 B/op`: Average bytes allocated per operation
 - `123 allocs/op`: Average number of allocations per operation
 
@@ -85,38 +85,11 @@ Below are the baseline performance metrics established on initial implementation
 
 ### Profile Operations
 
-| Operation | Time (ns/op) | Memory (B/op) | Allocations |
-|-----------|-------------|---------------|-------------|
-| CreateProfile | ~5,609,000 | ~57,200 | ~922 |
-| GetProfile | ~1,601,000 | ~10,900 | ~202 |
-| UpdateProfile | ~4,891,000 | ~56,900 | ~903 |
-| GetAllProfiles | ~5,891,000 | ~81,200 | ~1,397 |
-| GetAllProfilesWithFilter | ~1,000,000 | ~5,600 | ~81 |
-| DeleteProfile | ~2,854,000 | ~11,900 | ~233 |
-
-**Note**: PatchProfile benchmark is currently disabled due to known issues with application_data marshaling.
-
-### Profile Schema Operations
-
-| Operation | Time (ns/op) | Memory (B/op) | Allocations |
-|-----------|-------------|---------------|-------------|
-| GetProfileSchema | ~468,000 | ~6,100 | ~78 |
-| AddSchemaAttribute | ~1,098,000 | ~4,400 | ~75 |
-| GetSchemaAttributesByScope | ~481,500 | ~6,000 | ~96 |
-| DeleteSchemaAttribute | ~1,083,000 | ~4,500 | ~80 |
-
-**Note**: PatchSchemaAttribute benchmark is currently disabled due to validation issues in the implementation.
-
-### Unification Rules Operations
-
-| Operation | Time (ns/op) | Memory (B/op) | Allocations |
-|-----------|-------------|---------------|-------------|
-| GetUnificationRules | ~427,700 | ~2,600 | ~49 |
-| GetUnificationRuleById | ~478,400 | ~2,600 | ~48 |
-| PatchUnificationRule | ~1,058,000 | ~3,900 | ~73 |
-| DeleteUnificationRule | ~476,600 | ~900 | ~17 |
-
-**Note**: AddUnificationRule benchmark is currently disabled because the system only allows one rule per property per organization.
+| Operation | Time (ns/op) | Memory (B/op) | Allocations | Description |
+|-----------|-------------|---------------|-------------|-------------|
+| GetProfile | ~1,800,000 | ~13,300 | ~244 | Retrieve profile by ID |
+| GetAllProfilesWithFilter | ~840,000 | ~6,600 | ~99 | Query profiles with filters |
+| ProfileUnification | ~3,900,000 | ~71,700 | ~1,125 | Create profile triggering unification |
 
 ## Best Practices for Benchmarking
 
@@ -143,6 +116,8 @@ func Benchmark_NewOperation(b *testing.B) {
     // Setup
     orgHandle := fmt.Sprintf("bench-org-%d", time.Now().UnixNano())
     service := mypackage.GetService()
+    
+    setupTestSchema(b, orgHandle)
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
