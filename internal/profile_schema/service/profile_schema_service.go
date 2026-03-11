@@ -461,6 +461,11 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(orgId, attribute
 	attribute, err := s.GetProfileSchemaAttributeById(orgId, attributeId)
 	logger := log.GetLogger()
 	if err != nil {
+		// If the attribute does not exist, treat delete as a no-op (idempotent).
+		if _, ok := err.(*errors2.ClientError); ok {
+			logger.Debug(fmt.Sprintf("Attribute with Id '%s' does not exist in organization '%s', skipping delete", attributeId, orgId))
+			return nil
+		}
 		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for attribute id:%s in organization:%s", attributeId, orgId)
 		logger.Debug(errMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
@@ -470,10 +475,34 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(orgId, attribute
 		}, err)
 	}
 
-	if attribute.AttributeId == "" {
-		logger.Debug(fmt.Sprintf("Attribute with Id '%s' does not exist", attributeId))
-		return nil
+	// If this attribute is referenced as a sub-attribute of a parent, block the deletion.
+	// The caller must remove it from the parent attribute first.
+	if strings.Count(attribute.AttributeName, ".") >= 2 {
+		lastDot := strings.LastIndex(attribute.AttributeName, ".")
+		parentName := attribute.AttributeName[:lastDot]
+		parent, err := psstr.GetProfileSchemaAttributeByName(orgId, parentName)
+		if err != nil {
+			errMsg := fmt.Sprintf("Error retrieving parent attribute '%s' while validating deletion of '%s'", parentName, attribute.AttributeName)
+			logger.Debug(errMsg, log.Error(err))
+			return errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.DELETE_PROFILE_SCHEMA.Code,
+				Message:     errors2.DELETE_PROFILE_SCHEMA.Message,
+				Description: errMsg,
+			}, err)
+		}
+		if parent != nil {
+			for _, sa := range parent.SubAttributes {
+				if sa.AttributeId == attributeId {
+					return errors2.NewClientError(errors2.ErrorMessage{
+						Code:        errors2.DELETE_PROFILE_SCHEMA.Code,
+						Message:     errors2.DELETE_PROFILE_SCHEMA.Message,
+						Description: fmt.Sprintf("Cannot delete attribute '%s' as it is a sub-attribute of '%s'. Remove it from the parent attribute first.", attribute.AttributeName, parentName),
+					}, http.StatusBadRequest)
+				}
+			}
+		}
 	}
+
 	return psstr.DeleteProfileSchemaAttributeById(orgId, attributeId)
 }
 
