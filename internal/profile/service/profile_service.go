@@ -172,6 +172,9 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 
 	// Validate identity attributes
 	for key, val := range profile.IdentityAttributes {
+		if err := rejectIfFlattenedSubAttribute(key, "identity_attributes", schema.IdentityAttributes); err != nil {
+			return err
+		}
 		attrName := "identity_attributes." + key
 		attr, found := findAttributeInSchema(schema.IdentityAttributes, attrName)
 		if !found {
@@ -194,6 +197,9 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 
 	// Validate traits
 	for key, val := range profile.Traits {
+		if err := rejectIfFlattenedSubAttribute(key, "traits", schema.Traits); err != nil {
+			return err
+		}
 		attrName := "traits." + key
 		attr, found := findAttributeInSchema(schema.Traits, attrName)
 		if !found {
@@ -217,6 +223,9 @@ func ValidateProfileAgainstSchema(profile profileModel.ProfileRequest, existingP
 	// Validate application data
 	for appID, attrs := range profile.ApplicationData {
 		for key, val := range attrs {
+			if err := rejectIfFlattenedSubAttribute(key, "application_data", schema.ApplicationData[appID]); err != nil {
+				return err
+			}
 			attrName := "application_data." + key
 			attr, found := findAppAttributeInSchema(schema.ApplicationData, appID, attrName)
 			if !found {
@@ -397,6 +406,27 @@ func getAppDataValue(appDataList []profileModel.ApplicationData, appID, key stri
 		}
 	}
 	return nil, false
+}
+
+// rejectIfFlattenedSubAttribute returns a 400 error if the key uses flattened dot-notation
+// (e.g. "address.city") to address a sub-attribute of a complex parent (e.g. "traits.address").
+// Callers should provide the nested object instead: {"address": {"city": "..."}}.
+func rejectIfFlattenedSubAttribute(key, scope string, scopeAttrs []model.ProfileSchemaAttribute) error {
+	dotIdx := strings.Index(key, ".")
+	if dotIdx < 0 {
+		return nil
+	}
+	parentAttrName := scope + "." + key[:dotIdx]
+	parent, found := findAttributeInSchema(scopeAttrs, parentAttrName)
+	if !found || parent.ValueType != constants.ComplexDataType {
+		return nil
+	}
+	return errors2.NewClientError(errors2.ErrorMessage{
+		Code:    errors2.UPDATE_PROFILE.Code,
+		Message: errors2.UPDATE_PROFILE.Message,
+		Description: fmt.Sprintf("'%s' is a sub-attribute of complex attribute '%s'; provide '%s' as a nested object instead of using flattened key '%s'",
+			scope+"."+key, parentAttrName, key[:dotIdx], key),
+	}, http.StatusBadRequest)
 }
 
 func findAttributeInSchema(attrs []model.ProfileSchemaAttribute, name string) (model.ProfileSchemaAttribute, bool) {
@@ -666,7 +696,6 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 			_, ok := value.(map[string]interface{})
 			return ok
 		}
-		// todo: dont we need to validate the data within complex data - as in the sub attributes
 	default:
 		return false
 	}
