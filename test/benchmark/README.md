@@ -1,175 +1,188 @@
 # Performance Benchmarks
 
-This directory contains performance benchmarks for the Identity Customer Data Service. These benchmarks are designed to measure the performance of core profile operations and help ensure that new changes do not negatively impact performance.
+Enterprise-scale performance benchmark suite for the Identity Customer Data
+Service. The benchmarks validate profile ingestion throughput, query
+performance, filtering, identity resolution (unification) latency, queue
+stability under merge workloads, and database query efficiency.
 
-## Overview
+## Test Objectives
 
-The benchmark suite focuses on critical profile operations:
-- **Profile Get**: Retrieve individual profiles by ID
-- **Profile Filtering**: Query profiles with filters
-- **Profile Unification**: Automatic merging of profiles based on matching attributes
+| # | Objective | Benchmark |
+|---|-----------|-----------|
+| 1 | Profile ingestion throughput | `Benchmark_ProfileWriteLatency` |
+| 2 | Profile query performance | `Benchmark_ProfileReadLatency` |
+| 3 | Profile filtering performance | `Benchmark_ProfileFilterLatency` |
+| 4 | Identity resolution (unification) latency | `Benchmark_ProfileUnificationLatency` |
+| 5 | Queue stability under merge workloads | `Benchmark_QueueStability` |
+| 6 | Database query efficiency | `Benchmark_DatabaseQueryEfficiency` |
+
+## Data Generation
+
+The data generator (`data_generator.go`) creates realistic profile data with:
+
+### Identity Attributes
+- email, phone, username, customer_id, device_id
+- 10–20% attribute overlap between profiles to trigger unification
+
+### Traits
+- loyalty_tier, engagement_score, preferred_category, spending_score, campaign_affinity
+- Diverse values for segmentation testing
+
+### Application Data
+- device_type, session_id, login_method, app_preference, last_purchase
+
+### Scale Tiers
+
+| Tier | Seed Profiles | Spec Profiles | Spec Identity Attrs | Spec Traits | Spec App Data | Unification Rules |
+|------|--------------|---------------|---------------------|-------------|---------------|-------------------|
+| small | 50 | 10,000 | 100 | 100 | 100 | 3 |
+| medium | 200 | 100,000 | 150 | 250 | 250 | 5 |
+| large | 500 | 1,000,000 | 200 | 500 | 500 | 10 |
+
+> **Note**: Seed profiles are the number actually inserted during benchmarks.
+> Full-scale tiers represent the target deployment sizes in the specification.
+> Increase `benchtime` and tier for production-representative runs.
 
 ## Running Benchmarks
 
-### Run All Benchmarks
-
-To run all benchmarks with default settings (10 iterations per benchmark):
+### Run All Benchmarks (default: small tier)
 
 ```bash
 make benchmark
 ```
 
+### Run with Specific Tier
+
+```bash
+make benchmark tier=small                    # 50 seed profiles
+make benchmark tier=medium                   # 200 seed profiles
+make benchmark tier=large                    # 500 seed profiles
+```
+
 ### Run Specific Benchmark
 
-To run a specific benchmark by name:
+```bash
+make benchmark bench=Benchmark_ProfileWriteLatency
+make benchmark bench=Benchmark_ProfileFilterLatency tier=medium
+make benchmark bench=Benchmark_QueueStability benchtime=50x
+```
+
+### Run Directly with Go
 
 ```bash
-make benchmark bench=BenchmarkName
+TESTCONTAINERS_RYUK_DISABLED=true BENCH_TIER=medium \
+  go test -v ./test/benchmark -bench=. -benchmem -benchtime=20x -timeout 30m
 ```
 
-Examples:
+## Metrics Captured
+
+Every benchmark reports the following latency percentiles:
+
+| Metric | Description |
+|--------|-------------|
+| avg-ns/op | Average latency per operation (nanoseconds) |
+| p95-ns/op | 95th percentile latency |
+| p99-ns/op | 99th percentile latency |
+| errors | Number of failed operations |
+
+### Unification-Specific Metrics
+
+| Metric | Description |
+|--------|-------------|
+| max-ns/op | Maximum merge latency |
+| merges/s | Merge throughput |
+| merge-errors | Failed merge count |
+
+### Queue Health Metrics
+
+| Metric | Description |
+|--------|-------------|
+| max-queue-depth | Peak queue depth during test |
+| avg-queue-depth | Average queue depth |
+| final-queue-depth | Queue depth after test (0 = worker keeps up) |
+| processing-rate/s | Worker processing rate |
+
+## Filter Benchmarks
+
+The filter benchmark tests five realistic query patterns:
+
+| Sub-benchmark | Filter Expression | Tests |
+|---------------|-------------------|-------|
+| email_eq | `identity_attributes.email eq value` | Identity lookup |
+| loyalty_eq | `traits.loyalty_tier eq 'gold'` | Trait segmentation |
+| device_co | `application_data.device_type co 'mobile'` | App data search |
+| username_sw | `identity_attributes.username sw 'user_1'` | Prefix search |
+| category_eq | `traits.preferred_category eq 'electronics'` | Category filter |
+
+## Baseline Metrics (Small Tier, 10 iterations)
+
+| Benchmark | Avg | P95 | P99 | Allocs |
+|-----------|-----|-----|-----|--------|
+| ProfileWriteLatency | ~5.2ms | ~5.8ms | ~5.8ms | ~1,408 |
+| ProfileReadLatency | ~1.6ms | ~2.0ms | ~2.0ms | ~238 |
+| FilterLatency/email_eq | ~0.76ms | ~0.84ms | ~0.84ms | ~62 |
+| FilterLatency/loyalty_eq | ~0.72ms | ~0.78ms | ~0.78ms | ~62 |
+| FilterLatency/device_co | ~1.06ms | ~1.16ms | ~1.16ms | ~63 |
+| UnificationLatency | ~4.6ms | ~8.2ms | ~8.2ms | ~2,713 |
+| QueueStability | ~5.9ms | ~7.8ms | ~7.8ms | ~2,994 |
+| DB/SingleGet | ~1.5ms | ~1.7ms | ~1.7ms | ~216 |
+| DB/FilteredQuery | ~0.73ms | ~0.97ms | ~0.97ms | ~64 |
+
+## Test Execution Modes
+
+### Mode 1 — In-Memory Queue (Default)
+
+The default mode uses the built-in in-memory channel queue (`workers.UnificationQueue`).
+This establishes baseline performance without external broker overhead.
+
 ```bash
-# Run only profile get benchmark
-make benchmark bench=Benchmark_GetProfile
-
-# Run profile filtering benchmark
-make benchmark bench=Benchmark_GetAllProfilesWithFilter
-
-# Run profile unification benchmark
-make benchmark bench=Benchmark_ProfileUnification
+make benchmark
 ```
 
-### Run Benchmarks Directly with Go
+### Mode 2 — ActiveMQ Queue
 
-You can also run benchmarks directly using the Go testing tool for more control:
+For production-representative testing, configure CDS to use ActiveMQ:
 
-```bash
-# Run with custom iteration count
-TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark -bench=. -benchmem -benchtime=100x
+1. Start ActiveMQ broker
+2. Configure CDS queue settings to use ActiveMQ
+3. Run the same benchmarks
 
-# Run with custom duration
-TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark -bench=. -benchmem -benchtime=10s
+Queue health metrics (depth, worker lag, merge throughput) are captured
+automatically in both modes.
 
-# Save results to file for comparison
-TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark -bench=. -benchmem -benchtime=10x > benchmark_results.txt
+> **Important**: Tests should be run in both modes. In-memory results alone
+> are not sufficient to validate production readiness.
 
-# Compare benchmark results
-TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark -bench=. -benchmem -benchtime=10x > new_results.txt
-go install golang.org/x/perf/cmd/benchstat@latest
-benchstat benchmark_results.txt new_results.txt
-```
-
-## Understanding Benchmark Results
-
-Benchmark output includes several metrics:
+## Architecture
 
 ```
-Benchmark_GetProfile-8    10    1234567 ns/op    12345 B/op    123 allocs/op
-```
-
-- `Benchmark_GetProfile-8`: Benchmark name with GOMAXPROCS value (8)
-- `10`: Number of iterations run
-- `1234567 ns/op`: Average time per operation in nanoseconds
-- `12345 B/op`: Average bytes allocated per operation
-- `123 allocs/op`: Average number of allocations per operation
-
-### Performance Metrics to Watch
-
-1. **ns/op (Time per operation)**: Lower is better. Watch for significant increases.
-2. **B/op (Bytes per operation)**: Lower is better. High values may indicate memory inefficiency.
-3. **allocs/op (Allocations per operation)**: Lower is better. Many allocations can cause GC pressure.
-
-## Baseline Performance Metrics
-
-Below are the baseline performance metrics established on initial implementation (AMD EPYC 7763 64-Core Processor, 4 cores, 10 iterations). Use these as a reference point for comparison:
-
-### Profile Operations
-
-| Operation | Time (ns/op) | Memory (B/op) | Allocations | Description |
-|-----------|-------------|---------------|-------------|-------------|
-| GetProfile | ~1,800,000 | ~13,300 | ~244 | Retrieve profile by ID |
-| GetAllProfilesWithFilter | ~840,000 | ~6,600 | ~99 | Query profiles with filters |
-| ProfileUnification | ~3,900,000 | ~71,700 | ~1,125 | Create profile triggering unification |
-
-## Best Practices for Benchmarking
-
-1. **Consistent Environment**: Always run benchmarks on the same hardware with similar system load.
-2. **Multiple Runs**: Run benchmarks multiple times to account for variability.
-3. **Baseline Comparison**: Compare results against baseline to detect regressions.
-4. **Isolated Changes**: When testing performance of a change, isolate the change to understand its impact.
-5. **Document Changes**: If baseline metrics change significantly due to intentional optimization or feature addition, update this document.
-
-## Adding New Benchmarks
-
-When adding new benchmarks, follow these guidelines:
-
-1. Use the `Benchmark_` prefix for benchmark function names
-2. Accept `*testing.B` as the parameter
-3. Call `b.ResetTimer()` before the benchmarked code
-4. Use `b.StopTimer()` and `b.StartTimer()` for setup/teardown within the loop
-5. Use `b.Helper()` for helper functions
-6. Clean up resources using `b.Cleanup()`
-
-Example:
-```go
-func Benchmark_NewOperation(b *testing.B) {
-    // Setup
-    orgHandle := fmt.Sprintf("bench-org-%d", time.Now().UnixNano())
-    service := mypackage.GetService()
-    
-    setupTestSchema(b, orgHandle)
-    
-    b.ResetTimer()
-    for i := 0; i < b.N; i++ {
-        // Benchmarked code
-        _, err := service.DoOperation(orgHandle)
-        if err != nil {
-            b.Fatalf("Operation failed: %v", err)
-        }
-    }
-}
+test/benchmark/
+├── main_test.go                  # TestMain: DB setup, worker init
+├── profile_benchmark_test.go     # All benchmark functions
+├── data_generator.go             # Profile data generation & tiers
+├── metrics.go                    # Latency collector & queue monitor
+└── README.md                     # This file
 ```
 
 ## Troubleshooting
 
-### Docker Container Issues
+### Docker Container Conflicts
 
-If you encounter Docker container issues:
 ```bash
-# Clean up Docker containers
 docker rm -f cds-test-postgres
-
-# List running containers
-docker ps -a | grep cds-test
 ```
 
-### Test Database Issues
+### Slow Benchmarks
 
-If benchmarks fail due to database issues:
-1. Ensure PostgreSQL test container is running
-2. Check that schema files are properly loaded
-3. Verify TESTCONTAINERS_RYUK_DISABLED is set
+Reduce tier or iteration count:
+```bash
+make benchmark tier=small benchtime=5x
+```
 
-### Performance Degradation
+### Performance Profiling
 
-If you notice performance degradation:
-1. Profile the code using Go's built-in profiler:
-   ```bash
-   go test -v ./test/benchmark -bench=. -cpuprofile=cpu.prof -memprofile=mem.prof
-   go tool pprof cpu.prof
-   ```
-2. Look for increased allocations or time spent in specific functions
-3. Compare with previous benchmark results using `benchstat`
-
-## Continuous Integration
-
-These benchmarks should be run periodically in CI to track performance trends over time. Consider:
-- Running benchmarks on a schedule (e.g., nightly)
-- Storing benchmark results for historical comparison
-- Setting up alerts for significant performance regressions
-
-## References
-
-- [Go Benchmark Documentation](https://golang.org/pkg/testing/#hdr-Benchmarks)
-- [Go Performance Testing Best Practices](https://dave.cheney.net/2013/06/30/how-to-write-benchmarks-in-go)
-- [benchstat Tool](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat)
+```bash
+TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark \
+  -bench=Benchmark_ProfileReadLatency -cpuprofile=cpu.prof -memprofile=mem.prof
+go tool pprof cpu.prof
+```

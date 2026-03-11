@@ -20,6 +20,7 @@ package benchmark
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"os/exec"
@@ -32,6 +33,9 @@ import (
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
 	"github.com/wso2/identity-customer-data-service/test/setup"
 )
+
+// testDB holds the shared database connection for benchmarks.
+var testDB *sql.DB
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -53,10 +57,9 @@ func TestMain(m *testing.M) {
 		fmt.Println("Failed to start test DB:", err)
 		os.Exit(1)
 	}
+	testDB = pg.DB
 
-	workers.StartProfileWorker() // Start the real enrichment queue worker
-
-	// Initialize Schema Sync worker
+	workers.StartProfileWorker()
 	workers.StartSchemaSyncWorker()
 
 	provider.SetTestDB(pg.DB)
@@ -66,13 +69,10 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	// Run benchmarks
 	code := m.Run()
 
-	// Terminate container manually after benchmarks complete
 	_ = pg.Container.Terminate(ctx)
 
-	// Remove the docker image used for tests
 	cmd := exec.Command("docker", "rm", "-f", "cds-test-postgres")
 	_, _ = cmd.CombinedOutput()
 

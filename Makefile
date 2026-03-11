@@ -42,9 +42,9 @@ endif
 
 benchmark:
 ifdef bench
-	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark -bench=$(bench) -benchmem -benchtime=10x
+	TESTCONTAINERS_RYUK_DISABLED=true BENCH_TIER=$(or $(tier),small) go test -v ./test/benchmark -bench=$(bench) -benchmem -benchtime=$(or $(benchtime),10x) -timeout 30m
 else
-	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/benchmark -bench=. -benchmem -benchtime=10x
+	TESTCONTAINERS_RYUK_DISABLED=true BENCH_TIER=$(or $(tier),small) go test -v ./test/benchmark -bench=. -benchmem -benchtime=$(or $(benchtime),10x) -timeout 30m
 endif
 
 
@@ -70,7 +70,8 @@ help:
 	@echo "  clean             - Remove build artifacts."
 	@echo "  build             - Build the Go project."
 	@echo "  integration-test  - Run integration tests (use test=TestName to filter specific test)."
-	@echo "  benchmark         - Run benchmark tests (use bench=BenchmarkName to filter specific benchmark)."
+	@echo "  benchmark         - Run benchmark tests."
+	@echo "                      Options: bench=Name tier=small|medium|large benchtime=10x"
 	@echo "  lint              - Run golangci-lint."
 	@echo "  help              - Show this help message."
 
