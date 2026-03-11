@@ -143,12 +143,13 @@ make benchmark
 
 For production-representative testing, configure CDS to use ActiveMQ:
 
-1. Start ActiveMQ broker
-2. Configure CDS queue settings to use ActiveMQ
-3. Run the same benchmarks
-
-Queue health metrics (depth, worker lag, merge throughput) are captured
-automatically in both modes.
+1. Start an ActiveMQ broker (e.g., `docker run -p 61616:61616 apache/activemq-artemis`)
+2. Update the CDS runtime configuration to point at the broker and switch
+   the queue implementation from the in-memory channel to the ActiveMQ
+   adapter (refer to the CDS deployment documentation for the specific
+   config keys)
+3. Run the same benchmarks — queue health metrics (depth, worker lag,
+   merge throughput) are captured automatically
 
 > **Important**: Tests should be run in both modes. In-memory results alone
 > are not sufficient to validate production readiness.

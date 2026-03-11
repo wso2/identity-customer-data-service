@@ -195,7 +195,7 @@ func generateEmail(index, totalProfiles int, overlapPct float64, rng *rand.Rand)
 	if overlapPool < 1 {
 		overlapPool = 1
 	}
-	if rng.Float64() < overlapPct && overlapPool > 0 {
+	if rng.Float64() < overlapPct {
 		sharedIdx := rng.Intn(overlapPool)
 		return fmt.Sprintf("shared_%d@example.com", sharedIdx)
 	}
