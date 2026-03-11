@@ -43,7 +43,7 @@ var (
 // error is returned when the queue cannot be created or started; the caller
 // should treat this as a fatal startup failure.
 func StartSchemaSyncWorker() error {
-	cfg := config.GetCDSRuntime().Config.MessageQueue
+	cfg := config.GetCDSRuntime().Config
 	q, err := queue.NewSchemaSyncQueue(cfg)
 	if err != nil {
 		return fmt.Errorf("workers: failed to create schema sync queue: %w", err)

@@ -20,9 +20,12 @@ package activemq
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +36,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/queue"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 const (
@@ -44,13 +48,13 @@ const (
 
 func init() {
 	queue.RegisterProfileQueueProvider(queue.TypeActiveMQ,
-		func(cfg config.ExternalBrokerConfig) (queue.ProfileUnificationQueue, error) {
-			return NewProfileQueue(cfg.Addr, cfg.Username, cfg.Password, cfg.ProfileQueueName)
+		func(cfg config.ExternalBrokerConfig, tlsCfg config.TLSConfig) (queue.ProfileUnificationQueue, error) {
+			return NewProfileQueue(cfg.Addr, cfg.Username, cfg.Password, cfg.ProfileQueueName, tlsCfg)
 		},
 	)
 	queue.RegisterSchemaSyncQueueProvider(queue.TypeActiveMQ,
-		func(cfg config.ExternalBrokerConfig) (queue.SchemaSyncQueue, error) {
-			return NewSchemaSyncQueue(cfg.Addr, cfg.Username, cfg.Password, cfg.SchemaSyncQueueName)
+		func(cfg config.ExternalBrokerConfig, tlsCfg config.TLSConfig) (queue.SchemaSyncQueue, error) {
+			return NewSchemaSyncQueue(cfg.Addr, cfg.Username, cfg.Password, cfg.SchemaSyncQueueName, tlsCfg)
 		},
 	)
 }
@@ -67,6 +71,7 @@ type managedConn struct {
 	addr     string
 	username string
 	password string
+	tlsCfg   config.TLSConfig
 
 	mu          sync.RWMutex
 	conn        *stomp.Conn
@@ -76,11 +81,12 @@ type managedConn struct {
 	doneOnce    sync.Once
 }
 
-func newManagedConn(addr, username, password string) (*managedConn, error) {
+func newManagedConn(addr, username, password string, tlsCfg config.TLSConfig) (*managedConn, error) {
 	mc := &managedConn{
 		addr:     addr,
 		username: username,
 		password: password,
+		tlsCfg:   tlsCfg,
 		done:     make(chan struct{}),
 	}
 	if err := mc.dial(); err != nil {
@@ -130,11 +136,35 @@ func (mc *managedConn) dial() error {
 	var netConn net.Conn
 	var err error
 	if useTLS {
-		// For now, broker TLS support is limited to basic TLS using the host
-		// system's trusted CA store. Custom CA bundles and client certificates
-		// for mTLS are not yet supported via ExternalBrokerConfig.
+		// Build CA pool from system roots, then append the trust store if
+		// configured — same pattern as identity_client.go. This allows the
+		// broker's internal CA cert to be added to the existing trust_store
+		// without any new config fields.
+		rootCAs, sysErr := x509.SystemCertPool()
+		if sysErr != nil || rootCAs == nil {
+			rootCAs = x509.NewCertPool()
+		}
+		if mc.tlsCfg.TrustStore != "" {
+			certDir := mc.tlsCfg.CertDir
+			if certDir == "" {
+				certDir = filepath.Join(utils.GetCDSHome(), "etc", "certs")
+			}
+			if !filepath.IsAbs(certDir) {
+				if abs, absErr := filepath.Abs(certDir); absErr == nil {
+					certDir = abs
+				}
+			}
+			trustPEM, readErr := os.ReadFile(filepath.Join(certDir, mc.tlsCfg.TrustStore))
+			if readErr != nil {
+				return fmt.Errorf("activemq: failed to read trust_store: %w", readErr)
+			}
+			if ok := rootCAs.AppendCertsFromPEM(trustPEM); !ok {
+				return fmt.Errorf("activemq: failed to append certs from trust_store")
+			}
+		}
 		netConn, err = tls.DialWithDialer(dialer, "tcp", hostPort, &tls.Config{
 			MinVersion: tls.VersionTLS12,
+			RootCAs:    rootCAs,
 		})
 	} else {
 		netConn, err = dialer.Dial("tcp", hostPort)
@@ -262,8 +292,8 @@ type ProfileQueue struct {
 	destination string
 }
 
-func NewProfileQueue(addr, username, password, destination string) (*ProfileQueue, error) {
-	mc, err := newManagedConn(addr, username, password)
+func NewProfileQueue(addr, username, password, destination string, tlsCfg config.TLSConfig) (*ProfileQueue, error) {
+	mc, err := newManagedConn(addr, username, password, tlsCfg)
 	if err != nil {
 		return nil, fmt.Errorf("activemq: failed to connect for profile queue: %w", err)
 	}
@@ -406,8 +436,8 @@ type SchemaSyncQueue struct {
 	destination string
 }
 
-func NewSchemaSyncQueue(addr, username, password, destination string) (*SchemaSyncQueue, error) {
-	mc, err := newManagedConn(addr, username, password)
+func NewSchemaSyncQueue(addr, username, password, destination string, tlsCfg config.TLSConfig) (*SchemaSyncQueue, error) {
+	mc, err := newManagedConn(addr, username, password, tlsCfg)
 	if err != nil {
 		return nil, fmt.Errorf("activemq: failed to connect for schema sync queue: %w", err)
 	}
