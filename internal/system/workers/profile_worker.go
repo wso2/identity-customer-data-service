@@ -55,7 +55,7 @@ var (
 // goroutine. An error is returned when the queue cannot be created or
 // started; the caller should treat this as a fatal startup failure.
 func StartProfileWorker() error {
-	cfg := config.GetCDSRuntime().Config.MessageQueue
+	cfg := config.GetCDSRuntime().Config
 	q, err := queue.NewProfileUnificationQueue(cfg)
 	if err != nil {
 		return fmt.Errorf("workers: failed to create profile unification queue: %w", err)
