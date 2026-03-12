@@ -448,8 +448,8 @@ func (psh *ProfileSchemaHandler) DeleteProfileSchemaAttributeForScope(w http.Res
 	}
 	if scope == constants.IdentityAttributes {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: "Identity attributes cannot be created or modified via this endpoint.",
 		}, http.StatusMethodNotAllowed)
 		utils.WriteErrorResponse(w, clientError)

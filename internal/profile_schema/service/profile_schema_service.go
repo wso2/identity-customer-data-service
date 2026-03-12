@@ -69,8 +69,8 @@ func (s *ProfileSchemaService) AddProfileSchemaAttributesForScope(schemaAttribut
 			if scope != scopeOfAttr {
 				errorMsg := fmt.Sprintf("Attribute '%s' does not match the scope '%s'", attr.AttributeName, scope)
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Code:        errors2.INVALID_ATTRIBUTE.Code,
+					Message:     errors2.INVALID_ATTRIBUTE.Message,
 					Description: errorMsg,
 				}, http.StatusBadRequest)
 				return nil, clientError
@@ -126,8 +126,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	logger := log.GetLogger()
 	if len(parts) < 2 {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: "Attribute name must be in the format <Scope>.<Name>",
 		}, http.StatusBadRequest)
 		return clientError, false
@@ -136,8 +136,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	if len(parts) > 5 {
 		logger.Warn("Attribute exceeds supported nesting. Maximum allowed depth is 4.")
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: "Attribute exceeds the maximum depth of 4.",
 		}, http.StatusBadRequest)
 		return clientError, false
@@ -146,8 +146,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	scope := parts[0]
 	if !constants.AllowedAttributesScope[scope] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:    errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message: errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:    errors2.INVALID_ATTRIBUTE.Code,
+			Message: errors2.INVALID_ATTRIBUTE.Message,
 			Description: fmt.Sprintf("Invalid scope: %s. Must be one of identity_attributes, traits, "+
 				"application_data", scope),
 		}, http.StatusBadRequest)
@@ -157,8 +157,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	if scope == constants.ApplicationData {
 		if attr.ApplicationIdentifier == "" {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Code:        errors2.INVALID_ATTRIBUTE.Code,
+				Message:     errors2.INVALID_ATTRIBUTE.Message,
 				Description: "Application identifier is required for application_data scope",
 			}, http.StatusBadRequest)
 			return clientError, false
@@ -180,8 +180,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 
 	if !constants.AllowedValueTypes[attr.ValueType] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: fmt.Sprintf("Invalid value_type: %s. Must be one of %v", attr.ValueType, keysOf(constants.AllowedValueTypes)),
 		}, http.StatusBadRequest)
 		return clientError, false
@@ -190,8 +190,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	if len(attr.SubAttributes) > 0 {
 		if attr.ValueType != constants.ComplexDataType {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Code:        errors2.INVALID_ATTRIBUTE.Code,
+				Message:     errors2.INVALID_ATTRIBUTE.Message,
 				Description: fmt.Sprintf("SubAttributes are meant for for value_type: %s", constants.ComplexDataType),
 			}, http.StatusBadRequest)
 			return clientError, false
@@ -213,8 +213,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 
 			if !strings.HasPrefix(subAttr.AttributeName, attr.AttributeName+".") {
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Code:        errors2.INVALID_ATTRIBUTE.Code,
+					Message:     errors2.INVALID_ATTRIBUTE.Message,
 					Description: fmt.Sprintf("Invalid sub-attribute name: %s. It must start with parent attribute name '%s' followed by a dot and sub-key.", subAttr.AttributeName, attr.AttributeName),
 				}, http.StatusBadRequest)
 				return clientError, false
@@ -222,8 +222,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 
 			if subDepth != parentDepth+1 {
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Code:        errors2.INVALID_ATTRIBUTE.Code,
+					Message:     errors2.INVALID_ATTRIBUTE.Message,
 					Description: fmt.Sprintf("Invalid sub-attribute '%s'. It must be exactly one level deeper than '%s'.", subAttr.AttributeName, attr.AttributeName),
 				}, http.StatusBadRequest)
 				return clientError, false
@@ -232,24 +232,24 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 			subAttribute, err := s.GetProfileSchemaAttributeById(attr.OrgId, subAttr.AttributeId)
 			if err != nil {
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Code:        errors2.INVALID_ATTRIBUTE.Code,
+					Message:     errors2.INVALID_ATTRIBUTE.Message,
 					Description: fmt.Sprintf("Sub-attribute with Id '%s' does not exist.", subAttr.AttributeId),
 				}, http.StatusBadRequest)
 				return clientError, false
 			}
 			if subAttribute.AttributeName != subAttr.AttributeName {
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Code:        errors2.INVALID_ATTRIBUTE.Code,
+					Message:     errors2.INVALID_ATTRIBUTE.Message,
 					Description: fmt.Sprintf("Sub-attribute name '%s' does not match the expected name.", subAttr.AttributeName),
 				}, http.StatusBadRequest)
 				return clientError, false
 			}
 			if subAttribute.ApplicationIdentifier != attr.ApplicationIdentifier {
 				clientError := errors2.NewClientError(errors2.ErrorMessage{
-					Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-					Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+					Code:        errors2.INVALID_ATTRIBUTE.Code,
+					Message:     errors2.INVALID_ATTRIBUTE.Message,
 					Description: fmt.Sprintf("Sub-attribute '%s' must have the same application identifier as the parent attribute '%s'.", subAttr.AttributeName, attr.AttributeName),
 				}, http.StatusBadRequest)
 				return clientError, false
@@ -259,8 +259,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 
 	if !constants.AllowedMutabilityValues[attr.Mutability] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: fmt.Sprintf("Invalid mutability: '%s'. Must be one of %v", attr.Mutability, keysOf(constants.AllowedMutabilityValues)),
 		}, http.StatusBadRequest)
 		return clientError, false
@@ -268,8 +268,8 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 
 	if !constants.AllowedMergeStrategies[attr.MergeStrategy] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: fmt.Sprintf("Invalid merge strategy: '%s'. Must be one of %v", attr.MergeStrategy, keysOf(constants.AllowedMergeStrategies)),
 		}, http.StatusBadRequest)
 		return clientError, false
@@ -278,16 +278,16 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 	if attr.DisplayName != "" {
 		if len(attr.DisplayName) > constants.MaxAttributeDisplayNameLength {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Code:        errors2.INVALID_ATTRIBUTE.Code,
+				Message:     errors2.INVALID_ATTRIBUTE.Message,
 				Description: fmt.Sprintf("Display name exceeded %d characters", constants.MaxAttributeDisplayNameLength),
 			}, http.StatusBadRequest)
 			return clientError, false
 		}
 		if constants.DisplayNameRegex.MatchString(attr.DisplayName) {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-				Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+				Code:        errors2.INVALID_ATTRIBUTE.Code,
+				Message:     errors2.INVALID_ATTRIBUTE.Message,
 				Description: "Display name contains disallowed characters. It can only contain alphanumerics, periods (.), dashes (-), underscores (_), plus signs (+), and spaces",
 			}, http.StatusBadRequest)
 			return clientError, false
@@ -347,8 +347,8 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 
 	if len(updates) == 0 {
 		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: "No updates provided for the profile schema attribute",
 		}, http.StatusBadRequest)
 	}
@@ -358,8 +358,8 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 	}
 	if attribute.AttributeId == "" {
 		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: fmt.Sprintf("Attribute with Id '%s' does not exist", attributeId),
 		}, http.StatusNotFound)
 	}
@@ -420,13 +420,25 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 			multiValued = mvBool
 		} else {
 			return errors2.NewClientError(errors2.ErrorMessage{
-				Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
+				Code:        errors2.INVALID_ATTRIBUTE.Code,
 				Message:     "Invalid value for multi_valued",
 				Description: "multi_valued must be a boolean",
 			}, http.StatusBadRequest)
 		}
 	} else {
 		log.GetLogger().Debug(fmt.Sprintf("multi_valued not provided in patch; defaulting to false for attribute: %s", attributeId))
+	}
+
+	requiredFields := []string{"attribute_name", "value_type", "merge_strategy", "mutability"}
+	for _, field := range requiredFields {
+		v, ok := updates[field].(string)
+		if !ok || v == "" {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.INVALID_ATTRIBUTE.Code,
+				Message:     errors2.INVALID_ATTRIBUTE.Message,
+				Description: fmt.Sprintf("Required field '%s' is missing or empty", field),
+			}, http.StatusBadRequest)
+		}
 	}
 
 	err, isValid := s.validateSchemaAttribute(model.ProfileSchemaAttribute{
@@ -447,8 +459,8 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(orgId, attribute
 		}
 		// If validation fails, return a bad request error
 		return errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.INVALID_ATTRIBUTE_NAME.Code,
-			Message:     errors2.INVALID_ATTRIBUTE_NAME.Message,
+			Code:        errors2.INVALID_ATTRIBUTE.Code,
+			Message:     errors2.INVALID_ATTRIBUTE.Message,
 			Description: "Invalid updates provided for the profile schema attribute",
 		}, http.StatusBadRequest)
 	}

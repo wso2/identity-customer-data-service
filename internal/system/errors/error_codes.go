@@ -297,9 +297,9 @@ var (
 		Message: "Invalid request payload.",
 	}
 
-	INVALID_ATTRIBUTE_NAME = ErrorMessage{
+	INVALID_ATTRIBUTE = ErrorMessage{
 		Code:    errorPrefix + "13002",
-		Message: "Invalid attribute name.",
+		Message: "Invalid attribute.",
 	}
 
 	SCHEMA_ATTRIBUTE_ALREADY_EXISTS = ErrorMessage{
