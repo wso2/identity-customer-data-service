@@ -17,6 +17,8 @@ addr:
   host: {{ .Values.cloud.deployment.cds.config.addr.host }}
   port: {{ .Values.cloud.deployment.cds.containerPort }}
 
+server_url: {{ .Values.cloud.deployment.cds.config.serverUrl | quote }}
+
 auth_server:
   host: {{ .Values.cloud.deployment.cds.config.identityServer.host }}
   port : {{ .Values.cloud.deployment.cds.config.identityServer.port }}
