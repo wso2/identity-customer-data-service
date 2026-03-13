@@ -93,6 +93,7 @@ type MessageQueueConfig struct {
 
 type Config struct {
 	Addr         AddrConfig         `yaml:"addr"`
+	ServerURL    string             `yaml:"server_url"`
 	Log          LogConfig          `yaml:"log"`
 	Auth         AuthConfig         `yaml:"auth"`
 	AuthServer   AuthServerConfig   `yaml:"auth_server"`

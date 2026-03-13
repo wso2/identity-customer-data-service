@@ -573,9 +573,10 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Construct Location header for created resource
-	location := fmt.Sprintf("%s://%s%s/profiles/%s",
-		detectScheme(r),
-		r.Host,
+	serverURL := config.GetCDSRuntime().Config.ServerURL
+	location := fmt.Sprintf("%s/t/%s%s/profiles/%s",
+		serverURL,
+		orgHandle,
 		constants.ApiBasePath+"/v1",
 		profileResponse.ProfileId,
 	)
@@ -625,13 +626,6 @@ func setProfileCookie(w http.ResponseWriter, cookieId string, r *http.Request) e
 func resolveDomain() string {
 	authServerConfig := config.GetCDSRuntime().Config.AuthServer
 	return authServerConfig.CookieDomain
-}
-
-func detectScheme(r *http.Request) string {
-	if strings.HasPrefix(r.Host, "localhost") {
-		return "http"
-	}
-	return "https"
 }
 
 func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {

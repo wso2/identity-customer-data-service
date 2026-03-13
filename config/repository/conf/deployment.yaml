@@ -21,6 +21,8 @@ addr:
   host: 127.0.0.1
   port: 8900
 
+server_url: "https://localhost:8900" # Public-facing base URL used for constructing Location headers
+
 auth_server:
   host: "localhost"
   port : 9443
