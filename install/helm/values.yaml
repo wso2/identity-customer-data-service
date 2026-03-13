@@ -49,6 +49,8 @@ cloud:
           name: "cds_db"
           sslmode: require
 
+        serverUrl : "http://localhost:8900"
+
         identityServer:
           host: localhost
           port: ""
