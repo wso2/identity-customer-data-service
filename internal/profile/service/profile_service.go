@@ -1389,6 +1389,18 @@ func (ps *ProfilesService) PatchProfile(profileId, orgHandle string, patch map[s
 		}, http.StatusNotFound)
 	}
 
+	logger := log.GetLogger()
+	if strings.TrimSpace(existingProfile.UserId) != "" {
+		if _, ok := patch["identity_attributes"]; ok {
+			logger.Debug(fmt.Sprintf("Attempt to patch identity attributes for profile: %s with user_id: %s", profileId, existingProfile.UserId))
+			return nil, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.UPDATE_PROFILE.Code,
+				Message:     errors2.UPDATE_PROFILE.Message,
+				Description: "Identity attributes cannot be updated. Use your Identity Provider to manage identity attributes.",
+			}, http.StatusBadRequest)
+		}
+	}
+
 	// Convert the full profile to map to allow patching
 	fullData, _ := json.Marshal(existingProfile)
 	var merged map[string]interface{}
