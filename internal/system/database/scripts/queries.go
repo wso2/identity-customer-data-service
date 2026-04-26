@@ -65,7 +65,7 @@ var GetProfileSchemaAttributeByName = map[string]string{
 }
 
 var InsertProfileSchemaAttributesForScope = map[string]string{
-	"postgres": `INSERT INTO profile_schema (org_handle, attribute_id, attribute_name, value_type, merge_strategy, 
+	"postgres": `INSERT INTO profile_schema (org_handle, attribute_id, attribute_name, value_type, merge_strategy,
                             application_identifier, mutability, multi_valued, sub_attributes, canonical_values, scope, display_name) VALUES `,
 }
 var GetProfileSchemaAttributeByScope = map[string]string{
@@ -109,25 +109,25 @@ var DeleteProfileSchemaAttributeById = map[string]string{
 }
 
 var GetUnificationRules = map[string]string{
-	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at 
+	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at
 FROM unification_rules WHERE org_handle = $1`,
 }
 
 var GetUnificationRule = map[string]string{
-	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`,
+	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at FROM unification_rules WHERE rule_id = $1`,
 }
 
 var DeleteUnificationRule = map[string]string{
 	"postgres": `DELETE FROM unification_rules WHERE rule_id = $1`,
 }
 var InsertUnificationRule = map[string]string{
-	"postgres": `INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, created_at, updated_at) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+	"postgres": `INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 }
 
 var UpdateUnificationRule = map[string]string{
-	"postgres": `UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3,updated_at = $4
-		 WHERE rule_id = $5;`,
+	"postgres": `UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3, attribute_type = $4, unification_method = $5, updated_at = $6
+		 WHERE rule_id = $7;`,
 }
 
 var InsertProfile = map[string]string{

@@ -50,6 +50,22 @@ var (
 	activeProfileQueue queue.ProfileUnificationQueue
 )
 
+// It is set at startup via RegisterFuzzyResolveFunc to avoid import cycles.
+var fuzzyResolveFunc func(profileModel.Profile)
+
+// RegisterFuzzyResolveFunc sets the callback for fuzzy identity resolution.
+func RegisterFuzzyResolveFunc(fn func(profileModel.Profile)) {
+	fuzzyResolveFunc = fn
+}
+
+// reindexAfterMergeFunc is called after a merge to update blocking keys.
+var reindexAfterMergeFunc func(primaryID, secondaryID, orgHandle string, merged profileModel.Profile)
+
+// RegisterReindexAfterMergeFunc sets the callback for post-merge blocking key reindex.
+func RegisterReindexAfterMergeFunc(fn func(primaryID, secondaryID, orgHandle string, merged profileModel.Profile)) {
+	reindexAfterMergeFunc = fn
+}
+
 // StartProfileWorker initialises the profile unification queue (using the
 // provider configured in the runtime config) and starts the consumer
 // goroutine. An error is returned when the queue cannot be created or
@@ -152,13 +168,22 @@ func unifyProfiles(newProfile profileModel.Profile) {
 			if existingMasterProfile.UserId == newProfile.UserId {
 				logger.Info(fmt.Sprintf("Profiles %s and %s share the same userId %s. Proceeding with merge.",
 					existingMasterProfile.ProfileId, newProfile.ProfileId, newProfile.UserId))
-				mergeMatchedProfiles(existingMasterProfile, newProfile, constants.SystemUserIdMatchReason)
+				MergeMatchedProfiles(existingMasterProfile, newProfile, constants.SystemUserIdMatchReason)
 				return
 			}
 		}
 	}
 
-	// Step 3b: Rule-based matching (email, phone, etc.)
+	// Step 3b: Rule-based matching.
+	// When fuzzy resolution is registered, delegate to the fuzzy pipeline which handles
+	// BOTH exact and fuzzy matches with proper threshold checks, auto_merge_enabled
+	// config, score penalties for missing attributes, and review task creation.
+	if fuzzyResolveFunc != nil {
+		fuzzyResolveFunc(newProfile)
+		return
+	}
+
+	// Fallback: deterministic exact matching (upstream default).
 	unificationRules = filterActiveRulesAndSortByPriority(unificationRules)
 	for _, rule := range unificationRules {
 		for _, existingMasterProfile := range existingMasterProfiles {
@@ -167,17 +192,17 @@ func unifyProfiles(newProfile profileModel.Profile) {
 				return
 			}
 			if doesProfileMatch(existingMasterProfile, newProfile, rule) {
-				mergeMatchedProfiles(existingMasterProfile, newProfile, rule.RuleName)
+				MergeMatchedProfiles(existingMasterProfile, newProfile, rule.RuleName)
 				return
 			}
 		}
 	}
 }
 
-// mergeMatchedProfiles handles all merge scenarios for two matched profiles.
+// MergeMatchedProfiles handles all merge scenarios for two matched profiles.
 // It determines the master/child relationship based on permanent (has userId) vs temporary,
 // and whether the existing profile already has child references.
-func mergeMatchedProfiles(existingMasterProfile profileModel.Profile, newProfile profileModel.Profile, reason string) {
+func MergeMatchedProfiles(existingMasterProfile profileModel.Profile, newProfile profileModel.Profile, reason string) {
 
 	logger := log.GetLogger()
 
@@ -413,6 +438,11 @@ func persistMergedProfileData(masterProfile profileModel.Profile, triggerProfile
 				masterProfile.ProfileId, triggerProfileId), log.Error(err))
 			return
 		}
+	}
+
+	// Update blocking keys after merge
+	if reindexAfterMergeFunc != nil {
+		reindexAfterMergeFunc(masterProfile.ProfileId, triggerProfileId, masterProfile.OrgHandle, masterProfile)
 	}
 }
 

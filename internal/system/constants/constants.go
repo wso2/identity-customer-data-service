@@ -27,6 +27,7 @@ const ConsentApiPath = "consent"
 const ProfileSchemaApiPath = "profile-schema"
 const IdentityServerDialectsPath = "/api/server/v1/claim-dialects"
 const Filter = "filter"
+const FuzzyFilter = "fuzzyFilter"
 const Attributes = "attributes"     // Query parameter to filter attributes in the request.
 const ProfileCookie = "cds_profile" // Cookie name to store cookie that corresponds to profile ID.
 const DefaultTenant = "carbon.super"
@@ -202,10 +203,101 @@ const (
 	ConfigCDSEnabled            = "cds_enabled"
 	ConfigInitialSchemaSyncDone = "initial_schema_sync_done"
 	ConfigSystemApplications    = "system_applications"
+
+	// Identity resolution config keys
+	ConfigAutoMergeEnabled      = "auto_merge_enabled"
+	ConfigAutoMergeThreshold    = "auto_merge_threshold"
+	ConfigManualReviewThreshold = "manual_review_threshold"
+)
+
+const (
+	AttributeTypePrimitiveExact = "PRIMITIVE_EXACT"
+	AttributeTypeFuzzyString    = "FUZZY_STRING"
+	AttributeTypeName           = "NAME"
+	AttributeTypeEmail          = "EMAIL"
+	AttributeTypePhone          = "PHONE"
+	AttributeTypeLocation       = "LOCATION"
+	AttributeTypeDate           = "DATE"
+	AttributeTypeUniqueID       = "UNIQUE_ID"
+)
+
+var AllowedAttributeTypes = map[string]bool{
+	AttributeTypePrimitiveExact: true,
+	AttributeTypeFuzzyString:    true,
+	AttributeTypeName:           true,
+	AttributeTypeEmail:          true,
+	AttributeTypePhone:          true,
+	AttributeTypeLocation:       true,
+	AttributeTypeDate:           true,
+	AttributeTypeUniqueID:       true,
+}
+
+var AllowedUnificationMethods = map[string]bool{
+	"fuzzy":         true,
+	"deterministic": true,
+}
+
+// FuzzyCapableAttributeTypes lists types where unification_method "fuzzy" has
+// an effect. Types NOT in this set always perform exact matching regardless of
+// the method field, so we reject "fuzzy" for them at the API level.
+var FuzzyCapableAttributeTypes = map[string]bool{
+	AttributeTypeFuzzyString: true,
+	AttributeTypeName:        true,
+	AttributeTypeEmail:       true,
+	AttributeTypePhone:       true,
+	AttributeTypeLocation:    true,
+}
+
+const (
+	ReviewStatusPending   = "PENDING"
+	ReviewStatusApproved  = "APPROVED"
+	ReviewStatusRejected  = "REJECTED"
+	ReviewStatusExpired   = "EXPIRED"
+	ReviewStatusCancelled = "CANCELLED"
+)
+
+const (
+	DecisionAutoMerge    = "AUTO_MERGE"
+	DecisionManualReview = "MANUAL_REVIEW"
+	DecisionUnique       = "UNIQUE"
+)
+
+const (
+	ProfileTypePermanent = "PERMANENT"
+	ProfileTypeTemp      = "TEMP"
+)
+
+const (
+	UnificationModeStrict = "STRICT"
+	UnificationModeSmart  = "SMART"
+)
+
+const (
+	MergeReasonAutoMerge   = "auto_merge"
+	MergeReasonReviewMerge = "review_merge"
+	MergeReasonManualMerge = "manual_merge"
 )
 
 const (
 	SystemUserIdMatchReason = "system:user_id_match"
+)
+
+const (
+	MaxCandidatesPerRule = 100
+)
+
+const (
+	DefaultAutoMergeThreshold    = 0.95
+	DefaultManualReviewThreshold = 0.75
+)
+
+const (
+	LSHSignatureSize = 8
+	LSHBands         = 4
+	LSHRows          = 2
+	LSHMinLength     = 4
+
+	MaxMetaphoneLen = 4
 )
 
 const (

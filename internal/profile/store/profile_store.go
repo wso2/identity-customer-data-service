@@ -1274,6 +1274,197 @@ func GetAllProfilesWithFilter(
 	return profiles, hasMore, nil
 }
 
+// GetProfileIDsWithFilters returns distinct profile IDs that match the given deterministic filters.
+// Used by the hybrid fuzzy+deterministic search to narrow the fuzzy candidate set.
+func GetProfileIDsWithFilters(orgHandle string, filters []string) ([]string, error) {
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := "Failed to get database client for GetProfileIDsWithFilters."
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FILTER_PROFILE.Code,
+			Message:     errors2.FILTER_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer dbClient.Close()
+
+	baseSQL := `SELECT DISTINCT p.profile_id FROM profiles p LEFT JOIN profile_reference r ON p.profile_id = r.profile_id`
+
+	var conditions []string
+	var args []interface{}
+	argID := 1
+	joinedAppIDs := map[string]bool{}
+
+	conditions = append(conditions, fmt.Sprintf("p.org_handle = $%d", argID))
+	args = append(args, orgHandle)
+	argID++
+
+	for _, f := range filters {
+		parts := strings.SplitN(f, " ", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		field, operator, value := parts[0], parts[1], parts[2]
+
+		var scope, key string
+		if field == "user_id" || field == "profile_id" {
+			scope = field
+			key = ""
+		} else {
+			scopeKey := strings.SplitN(field, ".", 2)
+			if len(scopeKey) != 2 {
+				continue
+			}
+			scope, key = scopeKey[0], scopeKey[1]
+		}
+
+		switch scope {
+		case "identity_attributes", "traits":
+			jsonCol := "p." + scope
+			switch operator {
+			case "eq":
+				valBytes, err := json.Marshal(value)
+				if err != nil {
+					continue
+				}
+				jsonObj := fmt.Sprintf(`{"%s": %s}`, key, string(valBytes))
+				conditions = append(conditions, fmt.Sprintf("%s @> $%d::jsonb", jsonCol, argID))
+				args = append(args, jsonObj)
+			case "co":
+				conditions = append(conditions, fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID))
+				args = append(args, "%"+value+"%")
+			case "sw":
+				conditions = append(conditions, fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID))
+				args = append(args, value+"%")
+			case "ew":
+				conditions = append(conditions, fmt.Sprintf("%s ->> '%s' ILIKE $%d", jsonCol, key, argID))
+				args = append(args, "%"+value)
+			default:
+				continue
+			}
+			argID++
+
+		case "user_id":
+			switch operator {
+			case "eq":
+				conditions = append(conditions, fmt.Sprintf("p.user_id = $%d", argID))
+				args = append(args, value)
+			case "co":
+				conditions = append(conditions, fmt.Sprintf("p.user_id ILIKE $%d", argID))
+				args = append(args, "%"+value+"%")
+			case "sw":
+				conditions = append(conditions, fmt.Sprintf("p.user_id ILIKE $%d", argID))
+				args = append(args, value+"%")
+			case "ew":
+				conditions = append(conditions, fmt.Sprintf("p.user_id ILIKE $%d", argID))
+				args = append(args, "%"+value)
+			default:
+				continue
+			}
+			argID++
+
+		case "profile_id":
+			switch operator {
+			case "eq":
+				conditions = append(conditions, fmt.Sprintf("p.profile_id = $%d", argID))
+				args = append(args, value)
+			case "co":
+				conditions = append(conditions, fmt.Sprintf("p.profile_id ILIKE $%d", argID))
+				args = append(args, "%"+value+"%")
+			case "sw":
+				conditions = append(conditions, fmt.Sprintf("p.profile_id ILIKE $%d", argID))
+				args = append(args, value+"%")
+			case "ew":
+				conditions = append(conditions, fmt.Sprintf("p.profile_id ILIKE $%d", argID))
+				args = append(args, "%"+value)
+			default:
+				continue
+			}
+			argID++
+
+		case "application_data":
+			var appAlias, appKey string
+
+			if strings.Contains(key, ".") {
+				appScope := strings.SplitN(key, ".", 2)
+				appID := appScope[0]
+				appKey = appScope[1]
+				appAlias = "a_" + sanitizeForAlias(appID)
+
+				if !joinedAppIDs[appID] {
+					baseSQL += fmt.Sprintf(`
+                INNER JOIN application_data %s
+                  ON %s.profile_id = p.profile_id AND %s.app_id = $%d`, appAlias, appAlias, appAlias, argID)
+					args = append(args, appID)
+					argID++
+					joinedAppIDs[appID] = true
+				}
+			} else {
+				appKey = key
+				appAlias = "a"
+				if !joinedAppIDs["__generic"] {
+					baseSQL += ` INNER JOIN application_data a ON a.profile_id = p.profile_id`
+					joinedAppIDs["__generic"] = true
+				}
+			}
+
+			switch operator {
+			case "eq":
+				valBytes, err := json.Marshal(value)
+				if err != nil {
+					continue
+				}
+				jsonObj := fmt.Sprintf(`{"app_specific_data": {"%s": %s}}`, appKey, string(valBytes))
+				conditions = append(conditions, fmt.Sprintf("%s.application_data @> $%d::jsonb", appAlias, argID))
+				args = append(args, jsonObj)
+				argID++
+			case "co":
+				conditions = append(conditions,
+					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID))
+				args = append(args, "%"+value+"%")
+				argID++
+			case "sw":
+				conditions = append(conditions,
+					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID))
+				args = append(args, value+"%")
+				argID++
+			case "ew":
+				conditions = append(conditions,
+					fmt.Sprintf("%s.application_data -> 'app_specific_data' ->> '%s' ILIKE $%d", appAlias, appKey, argID))
+				args = append(args, "%"+value)
+				argID++
+			default:
+				continue
+			}
+		}
+	}
+
+	conditions = append(conditions, "r.profile_status = 'REFERENCE_PROFILE'")
+	whereClause := "WHERE " + strings.Join(conditions, " AND ")
+	finalSQL := fmt.Sprintf("%s\n%s", baseSQL, whereClause)
+
+	results, err := dbClient.ExecuteQuery(finalSQL, args...)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to execute GetProfileIDsWithFilters query: %s", err)
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.FILTER_PROFILE.Code,
+			Message:     errors2.FILTER_PROFILE.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	ids := make([]string, 0, len(results))
+	for _, row := range results {
+		if id, ok := row["profile_id"].(string); ok {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
 // sanitizeForAlias converts a string to a valid SQL alias by replacing special characters
 func sanitizeForAlias(input string) string {
 	// Replace any non-alphanumeric character with underscore
