@@ -53,23 +53,23 @@ var getProfileByID = map[string]string{
 }
 
 var insertReviewTaskSQL = map[string]string{
-	"postgres": `INSERT INTO review_tasks (id, org_handle, source_profile_id, candidate_profile_id, match_score, status, score_breakdown)
+	"postgres": `INSERT INTO review_tasks (id, org_handle, source_profile_id, target_profile_id, match_score, status, score_breakdown)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7)
-				 ON CONFLICT (source_profile_id, candidate_profile_id) 
+				 ON CONFLICT (source_profile_id, target_profile_id) 
 				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6`,
 }
 
 // mirrorTaskExistsSQL checks whether a PENDING review task already exists for the reverse pair (candidate→source).
 var mirrorTaskExistsSQL = map[string]string{
 	"postgres": `SELECT COUNT(*) FROM review_tasks 
-				 WHERE source_profile_id = $1 AND candidate_profile_id = $2 AND status = $3`,
+				 WHERE source_profile_id = $1 AND target_profile_id = $2 AND status = $3`,
 }
 
 // updateMirrorTaskSQL flips the direction of an existing mirror task and refreshes the score.
 var updateMirrorTaskSQL = map[string]string{
 	"postgres": `UPDATE review_tasks 
-				 SET source_profile_id = $1, candidate_profile_id = $2, match_score = $3, score_breakdown = $4
-				 WHERE source_profile_id = $5 AND candidate_profile_id = $6 AND status = $7`,
+				 SET source_profile_id = $1, target_profile_id = $2, match_score = $3, score_breakdown = $4
+				 WHERE source_profile_id = $5 AND target_profile_id = $6 AND status = $7`,
 }
 
 // cancelRelatedReviewTasksSQL cancels all PENDING review tasks that reference either profile.
@@ -77,7 +77,7 @@ var cancelRelatedReviewTasksSQL = map[string]string{
 	"postgres": `UPDATE review_tasks 
 				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
 				 WHERE id != $4 AND status = $5
-				   AND (source_profile_id IN ($6, $7) OR candidate_profile_id IN ($6, $7))`,
+				   AND (source_profile_id IN ($6, $7) OR target_profile_id IN ($6, $7))`,
 }
 
 // findRelatedPendingTasksSQL finds source profile IDs of PENDING tasks that will be affected by cascade cancel.
@@ -85,7 +85,7 @@ var findRelatedPendingTasksSQL = map[string]string{
 	"postgres": `SELECT DISTINCT source_profile_id 
 				 FROM review_tasks
 				 WHERE id != $1 AND status = $2
-				   AND (source_profile_id IN ($3, $4) OR candidate_profile_id IN ($3, $4))`,
+				   AND (source_profile_id IN ($3, $4) OR target_profile_id IN ($3, $4))`,
 }
 
 // Rejection pair queries — IDs stored in canonical order (id_1 < id_2).
@@ -101,14 +101,14 @@ var getRejectedProfileIDsSQL = map[string]string{
 }
 
 var getReviewTaskByIDSQL = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, candidate_profile_id, match_score, status, 
+	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status, 
 				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes 
 				 FROM review_tasks 
 				 WHERE id = $1`,
 }
 
 var getPendingReviewTasksSQL = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, candidate_profile_id, match_score, status, 
+	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status, 
 				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes 
 				 FROM review_tasks 
 				 WHERE org_handle = $1 AND status = $2
@@ -121,7 +121,7 @@ var countPendingReviewTasksSQL = map[string]string{
 }
 
 var getPendingReviewTasksByProfileSQL = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, candidate_profile_id, match_score, status, 
+	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status, 
 				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes 
 				 FROM review_tasks 
 				 WHERE org_handle = $1 AND status = $2
@@ -132,7 +132,7 @@ var getPendingReviewTasksByProfileSQL = map[string]string{
 
 var countPendingReviewTasksByProfileSQL = map[string]string{
 	"postgres": `SELECT COUNT(*) FROM review_tasks WHERE org_handle = $1 AND status = $2
-				   AND (source_profile_id = $3 OR candidate_profile_id = $3)`,
+				   AND (source_profile_id = $3 OR target_profile_id = $3)`,
 }
 
 var updateReviewTaskStatusSQL = map[string]string{
@@ -603,7 +603,7 @@ func scanReviewTask(row map[string]interface{}) model.ReviewTask {
 	if v, ok := row["source_profile_id"]; ok && v != nil {
 		task.SourceProfileID = fmt.Sprintf("%v", v)
 	}
-	if v, ok := row["candidate_profile_id"]; ok && v != nil {
+	if v, ok := row["target_profile_id"]; ok && v != nil {
 		task.TargetProfileID = fmt.Sprintf("%v", v)
 	}
 	if v, ok := row["match_score"]; ok && v != nil {

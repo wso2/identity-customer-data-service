@@ -320,8 +320,8 @@ func insertReviewTaskSafe(orgHandle, sourceID, targetID string, score float64, b
 
 	task := model.ReviewTask{
 		OrgHandle:       orgHandle,
-		SourceProfileID: sourceID,
-		TargetProfileID: targetID,
+		SourceProfileID: sourceID, // new profile
+		TargetProfileID: targetID, // candidate profile
 		MatchScore:      score,
 		Status:          constants.ReviewStatusPending,
 		ScoreBreakdown:  breakdown,

@@ -24,7 +24,7 @@ type ReviewTask struct {
 	ID              string             `json:"id"`
 	OrgHandle       string             `json:"org_handle"`
 	SourceProfileID string             `json:"source_profile_id"`
-	TargetProfileID string             `json:"candidate_profile_id"`
+	TargetProfileID string             `json:"target_profile_id"`
 	MatchScore      float64            `json:"match_score"`
 	Status          string             `json:"status"`
 	MatchReason     string             `json:"match_reason,omitempty"`

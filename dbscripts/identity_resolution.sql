@@ -14,8 +14,8 @@ CREATE INDEX IF NOT EXISTS idx_blocking_keys_profile ON blocking_keys(profile_id
 CREATE TABLE IF NOT EXISTS review_tasks (
     id                  VARCHAR(255) PRIMARY KEY,
     org_handle          VARCHAR(255) NOT NULL,
-    source_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
-    candidate_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    source_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,  -- New profile that triggered the review
+    target_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,  -- Candidate profile that matched
     match_score         DECIMAL(5,4) NOT NULL,       -- Score between 0 and 1 (e.g., 0.8765)
     status              VARCHAR(50) NOT NULL DEFAULT 'PENDING',  -- PENDING, APPROVED, REJECTED, EXPIRED
     match_reason        TEXT,                        -- JSON or text explaining why matched
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS review_tasks (
     resolved_at         TIMESTAMPTZ,
     resolved_by         VARCHAR(255),                -- User ID who resolved
     resolution_notes    TEXT,
-    CONSTRAINT uq_review_task_profiles UNIQUE (source_profile_id, candidate_profile_id)
+    CONSTRAINT uq_review_task_profiles UNIQUE (source_profile_id, target_profile_id)
 );
 
 -- Index for fetching pending reviews by org

@@ -84,11 +84,13 @@ func ScoreCandidate(
 		}
 
 		effectiveMode := mode
-		switch rule.UnificationMethod {
-		case constants.UnificationMethodFuzzy:
-			effectiveMode = constants.UnificationModeSmart
-		case constants.UnificationMethodDeterministic:
-			effectiveMode = constants.UnificationModeStrict
+		if effectiveMode != constants.UnificationModeStrict {
+			switch rule.UnificationMethod {
+			case constants.UnificationMethodFuzzy:
+				effectiveMode = constants.UnificationModeSmart
+			case constants.UnificationMethodDeterministic:
+				effectiveMode = constants.UnificationModeStrict
+			}
 		}
 
 		score := MatchAttribute(val1, val2, rule.AttributeType, effectiveMode)
