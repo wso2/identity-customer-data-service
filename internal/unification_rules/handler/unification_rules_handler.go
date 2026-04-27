@@ -96,7 +96,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	}
 
 	// Validate UnificationMethod.
-	if ruleInRequest.UnificationMethod != "fuzzy" && ruleInRequest.UnificationMethod != "deterministic" {
+	if ruleInRequest.UnificationMethod != constants.UnificationMethodFuzzy && ruleInRequest.UnificationMethod != constants.UnificationMethodDeterministic {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.BAD_REQUEST.Code,
 			Message:     errors2.BAD_REQUEST.Message,
@@ -107,7 +107,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	}
 
 	// Reject fuzzy for attribute types that only support exact matching.
-	if ruleInRequest.UnificationMethod == "fuzzy" && !constants.FuzzyCapableAttributeTypes[ruleInRequest.AttributeType] {
+	if ruleInRequest.UnificationMethod == constants.UnificationMethodFuzzy && !constants.FuzzyCapableAttributeTypes[ruleInRequest.AttributeType] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.BAD_REQUEST.Code,
 			Message:     errors2.BAD_REQUEST.Message,
@@ -325,7 +325,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 
 	if ruleUpdateRequest.UnificationMethod != nil {
-		if *ruleUpdateRequest.UnificationMethod != "fuzzy" && *ruleUpdateRequest.UnificationMethod != "deterministic" {
+		if *ruleUpdateRequest.UnificationMethod != constants.UnificationMethodFuzzy && *ruleUpdateRequest.UnificationMethod != constants.UnificationMethodDeterministic {
 			clientError := errors2.NewClientError(errors2.ErrorMessage{
 				Code:        errors2.BAD_REQUEST.Code,
 				Message:     errors2.BAD_REQUEST.Message,
@@ -338,7 +338,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 
 	// Cross-validate: reject fuzzy for attribute types that only support exact matching.
-	if updatedRule.UnificationMethod == "fuzzy" && !constants.FuzzyCapableAttributeTypes[updatedRule.AttributeType] {
+	if updatedRule.UnificationMethod == constants.UnificationMethodFuzzy && !constants.FuzzyCapableAttributeTypes[updatedRule.AttributeType] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.BAD_REQUEST.Code,
 			Message:     errors2.BAD_REQUEST.Message,

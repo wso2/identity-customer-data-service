@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS blocking_keys (
-    key_id          VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    key_id          VARCHAR(255) PRIMARY KEY,
     profile_id      VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
     org_handle      VARCHAR(255) NOT NULL,
     attribute_name  VARCHAR(255) NOT NULL,       -- Rule property name (e.g., "identity_attributes.emailaddress")
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS blocking_keys (
 CREATE INDEX IF NOT EXISTS idx_blocking_keys_profile ON blocking_keys(profile_id);
 
 CREATE TABLE IF NOT EXISTS review_tasks (
-    id                  VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    id                  VARCHAR(255) PRIMARY KEY,
     org_handle          VARCHAR(255) NOT NULL,
     source_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
     candidate_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_review_tasks_source ON review_tasks(source_profil
 
 -- Rejection pairs: profiles that an admin explicitly rejected as non-matches.
 CREATE TABLE IF NOT EXISTS rejection_pairs (
-    id              VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    id              VARCHAR(255) PRIMARY KEY,
     org_handle      VARCHAR(255) NOT NULL,
     profile_id_1    VARCHAR(255) NOT NULL,
     profile_id_2    VARCHAR(255) NOT NULL,
@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p1 ON rejection_pairs(org_handle,
 CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p2 ON rejection_pairs(org_handle, profile_id_2);
 
 CREATE TABLE IF NOT EXISTS merge_audit_log (
-    id                  VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    id                  VARCHAR(255) PRIMARY KEY,
     org_handle          VARCHAR(255) NOT NULL,
     primary_profile_id  VARCHAR(255) NOT NULL,
     secondary_profile_id VARCHAR(255) NOT NULL,

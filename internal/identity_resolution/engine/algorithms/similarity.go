@@ -28,10 +28,11 @@ func JaroWinkler(s1, s2 string) float64 {
 	if s1 == s2 {
 		return 1.0
 	}
-	jaro := jaroSimilarity(s1, s2)
+	r1, r2 := []rune(s1), []rune(s2)
+	jaro := jaroSimilarity(r1, r2)
 	prefixLen := 0
-	for i := 0; i < len(s1) && i < len(s2) && i < 4; i++ {
-		if s1[i] == s2[i] {
+	for i := 0; i < len(r1) && i < len(r2) && i < 4; i++ {
+		if r1[i] == r2[i] {
 			prefixLen++
 		} else {
 			break
@@ -40,34 +41,34 @@ func JaroWinkler(s1, s2 string) float64 {
 	return jaro + float64(prefixLen)*0.1*(1.0-jaro)
 }
 
-func jaroSimilarity(s1, s2 string) float64 {
-	if len(s1) == 0 && len(s2) == 0 {
+func jaroSimilarity(r1, r2 []rune) float64 {
+	if len(r1) == 0 && len(r2) == 0 {
 		return 1.0
 	}
-	if len(s1) == 0 || len(s2) == 0 {
+	if len(r1) == 0 || len(r2) == 0 {
 		return 0.0
 	}
 
-	matchDist := int(math.Max(float64(len(s1)), float64(len(s2))))/2 - 1
+	matchDist := int(math.Max(float64(len(r1)), float64(len(r2))))/2 - 1
 	if matchDist < 0 {
 		matchDist = 0
 	}
 
-	s1Matches := make([]bool, len(s1))
-	s2Matches := make([]bool, len(s2))
+	r1Matches := make([]bool, len(r1))
+	r2Matches := make([]bool, len(r2))
 
 	matches := 0
 	transpositions := 0
 
-	for i := 0; i < len(s1); i++ {
+	for i := 0; i < len(r1); i++ {
 		start := int(math.Max(0, float64(i-matchDist)))
-		end := int(math.Min(float64(len(s2)-1), float64(i+matchDist)))
+		end := int(math.Min(float64(len(r2)-1), float64(i+matchDist)))
 		for j := start; j <= end; j++ {
-			if s2Matches[j] || s1[i] != s2[j] {
+			if r2Matches[j] || r1[i] != r2[j] {
 				continue
 			}
-			s1Matches[i] = true
-			s2Matches[j] = true
+			r1Matches[i] = true
+			r2Matches[j] = true
 			matches++
 			break
 		}
@@ -78,21 +79,21 @@ func jaroSimilarity(s1, s2 string) float64 {
 	}
 
 	k := 0
-	for i := 0; i < len(s1); i++ {
-		if !s1Matches[i] {
+	for i := 0; i < len(r1); i++ {
+		if !r1Matches[i] {
 			continue
 		}
-		for !s2Matches[k] {
+		for !r2Matches[k] {
 			k++
 		}
-		if s1[i] != s2[k] {
+		if r1[i] != r2[k] {
 			transpositions++
 		}
 		k++
 	}
 
 	m := float64(matches)
-	return (m/float64(len(s1)) + m/float64(len(s2)) + (m-float64(transpositions)/2.0)/m) / 3.0
+	return (m/float64(len(r1)) + m/float64(len(r2)) + (m-float64(transpositions)/2.0)/m) / 3.0
 }
 
 func LevenshteinDistance(s1, s2 string) int {

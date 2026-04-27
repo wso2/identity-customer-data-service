@@ -113,14 +113,15 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 		}, http.StatusConflict)
 	}
 
-	if err := irStore.UpdateReviewTaskStatus(taskID, status, resolvedBy, notes); err != nil {
-		return err
-	}
-
 	if !approved {
-		// Store the rejection pair so this combination never resurfaces.
+		// Store the rejection pair before marking the task rejected so the pair
+		// is always present when the task enters REJECTED state.
 		if err := irStore.InsertRejectionPair(task.OrgHandle, task.SourceProfileID, task.TargetProfileID, resolvedBy); err != nil {
-			logger.Warn(fmt.Sprintf("Service: failed to store rejection pair for task %s", taskID), log.Error(err))
+			logger.Error(fmt.Sprintf("Service: failed to store rejection pair for task %s", taskID), log.Error(err))
+			return err
+		}
+		if err := irStore.UpdateReviewTaskStatus(taskID, status, resolvedBy, notes); err != nil {
+			return err
 		}
 		logger.Info(fmt.Sprintf("Service: review task %s rejected — rejection pair stored for '%s' ↔ '%s'",
 			taskID, task.SourceProfileID, task.TargetProfileID))
@@ -213,6 +214,11 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 			Message:     errors2.IR_CANNOT_MERGE.Message,
 			Description: "Two permanent profiles with different user IDs cannot be merged.",
 		}, http.StatusConflict)
+	}
+
+	// All pre-merge validation passed — mark the task approved before merging.
+	if err := irStore.UpdateReviewTaskStatus(taskID, status, resolvedBy, notes); err != nil {
+		return err
 	}
 
 	// Use the existing merge function from profile_worker — it handles all

@@ -232,9 +232,14 @@ var AllowedAttributeTypes = map[string]bool{
 	AttributeTypeUniqueID:       true,
 }
 
+const (
+	UnificationMethodFuzzy         = "fuzzy"
+	UnificationMethodDeterministic = "deterministic"
+)
+
 var AllowedUnificationMethods = map[string]bool{
-	"fuzzy":         true,
-	"deterministic": true,
+	UnificationMethodFuzzy:         true,
+	UnificationMethodDeterministic: true,
 }
 
 // FuzzyCapableAttributeTypes lists types where unification_method "fuzzy" has
@@ -252,7 +257,6 @@ const (
 	ReviewStatusPending   = "PENDING"
 	ReviewStatusApproved  = "APPROVED"
 	ReviewStatusRejected  = "REJECTED"
-	ReviewStatusExpired   = "EXPIRED"
 	ReviewStatusCancelled = "CANCELLED"
 )
 

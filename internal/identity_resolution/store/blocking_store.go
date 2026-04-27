@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -70,13 +71,13 @@ func UpsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 
 	for _, key := range keys {
 		valueClauses = append(valueClauses,
-			fmt.Sprintf("($%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3))
-		args = append(args, profileID, orgHandle, key.AttributeName, key.KeyValue)
-		argIdx += 4
+			fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3, argIdx+4))
+		args = append(args, uuid.New().String(), profileID, orgHandle, key.AttributeName, key.KeyValue)
+		argIdx += 5
 	}
 
 	insertQuery := fmt.Sprintf(
-		"INSERT INTO blocking_keys (profile_id, org_handle, attribute_name, key_value) VALUES %s ON CONFLICT DO NOTHING",
+		"INSERT INTO blocking_keys (key_id, profile_id, org_handle, attribute_name, key_value) VALUES %s ON CONFLICT DO NOTHING",
 		strings.Join(valueClauses, ", "),
 	)
 
@@ -176,13 +177,13 @@ func InsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 
 	for _, key := range keys {
 		valueClauses = append(valueClauses,
-			fmt.Sprintf("($%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3))
-		args = append(args, profileID, orgHandle, key.AttributeName, key.KeyValue)
-		argIdx += 4
+			fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3, argIdx+4))
+		args = append(args, uuid.New().String(), profileID, orgHandle, key.AttributeName, key.KeyValue)
+		argIdx += 5
 	}
 
 	insertQuery := fmt.Sprintf(
-		"INSERT INTO blocking_keys (profile_id, org_handle, attribute_name, key_value) VALUES %s ON CONFLICT DO NOTHING",
+		"INSERT INTO blocking_keys (key_id, profile_id, org_handle, attribute_name, key_value) VALUES %s ON CONFLICT DO NOTHING",
 		strings.Join(valueClauses, ", "),
 	)
 

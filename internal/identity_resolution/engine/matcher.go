@@ -19,7 +19,9 @@
 package engine
 
 import (
+	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/algorithms"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/normalization"
@@ -60,11 +62,22 @@ func MatchAttribute(val1, val2 string, attrType string, mode string) float64 {
 	logger.Debug("Matched attribute",
 		log.String("type", attrType),
 		log.String("mode", mode),
-		log.String("val1", truncate(val1, 30)),
-		log.String("val2", truncate(val2, 30)),
+		log.String("val1", safeLogVal(val1, attrType)),
+		log.String("val2", safeLogVal(val2, attrType)),
 		log.Any("score", score))
 
 	return score
+}
+
+// safeLogVal returns a non-PII representation for sensitive attribute types and
+// a truncated value for all others.
+func safeLogVal(val, attrType string) string {
+	switch attrType {
+	case constants.AttributeTypeName, constants.AttributeTypeEmail, constants.AttributeTypePhone:
+		return fmt.Sprintf("len=%d", utf8.RuneCountInString(val))
+	default:
+		return truncate(val, 30)
+	}
 }
 
 func matchName(val1, val2 string, mode string) float64 {

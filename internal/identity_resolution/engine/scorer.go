@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	urModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 )
@@ -82,12 +83,12 @@ func ScoreCandidate(
 			continue
 		}
 
-		// todo: should I remove mode?
 		effectiveMode := mode
-		if rule.UnificationMethod == "fuzzy" {
-			effectiveMode = "smart"
-		} else if rule.UnificationMethod == "deterministic" {
-			effectiveMode = "strict"
+		switch rule.UnificationMethod {
+		case constants.UnificationMethodFuzzy:
+			effectiveMode = constants.UnificationModeSmart
+		case constants.UnificationMethodDeterministic:
+			effectiveMode = constants.UnificationModeStrict
 		}
 
 		score := MatchAttribute(val1, val2, rule.AttributeType, effectiveMode)

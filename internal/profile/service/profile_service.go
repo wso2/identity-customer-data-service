@@ -190,7 +190,9 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 		// Only enqueue if the profile has at least one attribute matching an active unification rule.
 		activeRules, rulesErr := urStore.GetUnificationRules(orgHandle)
 		if rulesErr != nil {
-			logger.Warn("CreateProfile: failed to load unification rules, skipping enqueue", log.Error(rulesErr))
+			logger.Warn("CreateProfile: failed to load unification rules, enqueueing anyway", log.Error(rulesErr))
+			profile.OrgHandle = orgHandle
+			queue.Enqueue(profile)
 		} else {
 			hasMatchingRule := false
 			for _, rule := range activeRules {
@@ -870,7 +872,9 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 		// Only enqueue if the profile has at least one attribute matching an active unification rule.
 		activeRules, rulesErr := urStore.GetUnificationRules(orgHandle)
 		if rulesErr != nil {
-			logger.Warn("UpdateProfile: failed to load unification rules, skipping enqueue", log.Error(rulesErr))
+			logger.Warn("UpdateProfile: failed to load unification rules, enqueueing anyway", log.Error(rulesErr))
+			profileToUpDate.OrgHandle = orgHandle
+			queue.Enqueue(profileToUpDate)
 		} else {
 			hasMatchingRule := false
 			for _, rule := range activeRules {
@@ -883,7 +887,10 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 				}
 			}
 			if hasMatchingRule {
-				// Set organization handle for the profile before enqueuing
+				// Clear rejection pairs so the re-evaluation can re-match previously rejected candidates.
+				if err := irStore.DeleteRejectionPairsForProfile(orgHandle, profileToUpDate.ProfileId); err != nil {
+					logger.Warn(fmt.Sprintf("UpdateProfile: failed to clear rejection pairs for profile '%s'", profileToUpDate.ProfileId), log.Error(err))
+				}
 				profileToUpDate.OrgHandle = orgHandle
 				queue.Enqueue(profileToUpDate)
 			} else {

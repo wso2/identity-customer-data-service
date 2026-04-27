@@ -90,8 +90,8 @@ var findRelatedPendingTasksSQL = map[string]string{
 
 // Rejection pair queries — IDs stored in canonical order (id_1 < id_2).
 var insertRejectionPairSQL = map[string]string{
-	"postgres": `INSERT INTO rejection_pairs (org_handle, profile_id_1, profile_id_2, rejected_by)
-				 VALUES ($1, $2, $3, $4)
+	"postgres": `INSERT INTO rejection_pairs (id, org_handle, profile_id_1, profile_id_2, rejected_by)
+				 VALUES ($1, $2, $3, $4, $5)
 				 ON CONFLICT (profile_id_1, profile_id_2) DO NOTHING`,
 }
 
@@ -656,8 +656,8 @@ func scanReviewTask(row map[string]interface{}) model.ReviewTask {
 }
 
 var insertMergeAuditLogSQL = map[string]string{
-	"postgres": `INSERT INTO merge_audit_log (org_handle, primary_profile_id, secondary_profile_id, merge_type, match_score, merged_by)
-				 VALUES ($1, $2, $3, $4, $5, $6)`,
+	"postgres": `INSERT INTO merge_audit_log (id, org_handle, primary_profile_id, secondary_profile_id, merge_type, match_score, merged_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 }
 
 func InsertMergeAuditLog(entry model.MergeAuditEntry) error {
@@ -678,9 +678,11 @@ func InsertMergeAuditLog(entry model.MergeAuditEntry) error {
 	}
 	defer dbClient.Close()
 
+	auditID := uuid.New().String()
+
 	query := insertMergeAuditLogSQL[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query,
-		entry.OrgHandle, entry.PrimaryProfileID, entry.SecondaryProfileID,
+		auditID, entry.OrgHandle, entry.PrimaryProfileID, entry.SecondaryProfileID,
 		entry.MergeType, entry.MatchScore, entry.MergedBy)
 	if err != nil {
 		logger.Error("Store: failed to insert merge audit log", log.Error(err))
@@ -713,14 +715,42 @@ func InsertRejectionPair(orgHandle, profileA, profileB, rejectedBy string) error
 	}
 	defer dbClient.Close()
 
+	rejectionID := uuid.New().String()
+
 	query := insertRejectionPairSQL[provider.NewDBProvider().GetDBType()]
-	_, err = dbClient.ExecuteQuery(query, orgHandle, id1, id2, rejectedBy)
+	_, err = dbClient.ExecuteQuery(query, rejectionID, orgHandle, id1, id2, rejectedBy)
 	if err != nil {
 		logger.Error("Store: failed to insert rejection pair", log.Error(err))
 		return err
 	}
 
 	logger.Info(fmt.Sprintf("Store: rejection pair '%s' ↔ '%s' stored", id1, id2))
+	return nil
+}
+
+var deleteRejectionPairsForProfileSQL = map[string]string{
+	"postgres": `DELETE FROM rejection_pairs WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`,
+}
+
+// DeleteRejectionPairsForProfile removes all rejection pairs involving the given profile so that
+// a re-evaluation triggered by a profile update can match previously rejected candidates.
+func DeleteRejectionPairsForProfile(orgHandle, profileID string) error {
+	logger := log.GetLogger()
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return err
+	}
+	defer dbClient.Close()
+
+	query := deleteRejectionPairsForProfileSQL[provider.NewDBProvider().GetDBType()]
+	_, err = dbClient.ExecuteQuery(query, orgHandle, profileID)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("Store: failed to delete rejection pairs for profile '%s'", profileID), log.Error(err))
+		return err
+	}
+
+	logger.Info(fmt.Sprintf("Store: cleared rejection pairs for updated profile '%s'", profileID))
 	return nil
 }
 
