@@ -27,15 +27,9 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 )
-
-var deleteBlockingKeysSQL = map[string]string{
-	"postgres": `DELETE FROM blocking_keys WHERE profile_id = $1`,
-}
-
-var deleteBlockingKeysByAttributeSQL = map[string]string{
-	"postgres": `DELETE FROM blocking_keys WHERE org_handle = $1 AND attribute_name = $2`,
-}
 
 func UpsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) error {
 	logger := log.GetLogger()
@@ -54,10 +48,22 @@ func UpsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 	}
 	defer dbClient.Close()
 
-	deleteQuery := deleteBlockingKeysSQL[provider.NewDBProvider().GetDBType()]
-	_, err = dbClient.ExecuteQuery(deleteQuery, profileID)
+	tx, err := dbClient.BeginTx()
 	if err != nil {
+		logger.Error("BlockingStore: failed to begin transaction", log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_BLOCKING_KEYS_FAILED.Code,
+			Message:     errors2.IR_BLOCKING_KEYS_FAILED.Message,
+			Description: fmt.Sprintf("Failed to begin transaction for blocking key upsert: %s", profileID),
+		}, err)
+	}
+
+	deleteQuery := scripts.DeleteBlockingKeysSQL[provider.NewDBProvider().GetDBType()]
+	if _, err = tx.Exec(deleteQuery, profileID); err != nil {
 		logger.Error("BlockingStore: failed to delete existing blocking keys", log.Error(err))
+		if rbErr := tx.Rollback(); rbErr != nil {
+			logger.Error("BlockingStore: failed to rollback transaction", log.Error(rbErr))
+		}
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.IR_BLOCKING_KEYS_FAILED.Code,
 			Message:     errors2.IR_BLOCKING_KEYS_FAILED.Message,
@@ -81,13 +87,24 @@ func UpsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 		strings.Join(valueClauses, ", "),
 	)
 
-	_, err = dbClient.ExecuteQuery(insertQuery, args...)
-	if err != nil {
+	if _, err = tx.Exec(insertQuery, args...); err != nil {
 		logger.Error("BlockingStore: failed to insert blocking keys", log.Error(err))
+		if rbErr := tx.Rollback(); rbErr != nil {
+			logger.Error("BlockingStore: failed to rollback transaction", log.Error(rbErr))
+		}
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.IR_BLOCKING_KEYS_FAILED.Code,
 			Message:     errors2.IR_BLOCKING_KEYS_FAILED.Message,
 			Description: fmt.Sprintf("Failed to insert blocking keys for profile: %s", profileID),
+		}, err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		logger.Error("BlockingStore: failed to commit transaction", log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_BLOCKING_KEYS_FAILED.Code,
+			Message:     errors2.IR_BLOCKING_KEYS_FAILED.Message,
+			Description: fmt.Sprintf("Failed to commit blocking key upsert for profile: %s", profileID),
 		}, err)
 	}
 
@@ -108,7 +125,7 @@ func DeleteBlockingKeys(profileID string) error {
 	}
 	defer dbClient.Close()
 
-	deleteQuery := deleteBlockingKeysSQL[provider.NewDBProvider().GetDBType()]
+	deleteQuery := scripts.DeleteBlockingKeysSQL[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(deleteQuery, profileID)
 	if err != nil {
 		logger.Error("BlockingStore: failed to delete blocking keys", log.Error(err))
@@ -136,7 +153,7 @@ func DeleteBlockingKeysByAttribute(orgHandle, attributeName string) error {
 	}
 	defer dbClient.Close()
 
-	query := deleteBlockingKeysByAttributeSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.DeleteBlockingKeysByAttributeSQL[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query, orgHandle, attributeName)
 	if err != nil {
 		logger.Error(fmt.Sprintf("BlockingStore: failed to delete blocking keys for attribute '%s'", attributeName),

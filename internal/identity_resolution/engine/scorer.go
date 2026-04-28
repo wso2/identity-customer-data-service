@@ -31,16 +31,15 @@ import (
 // unification-rule priorities. The algorithm:
 //
 //  1. Each rule's weight comes from its priority rank (lower priority number = higher weight).
-//  2. Only rules where the input actually has data count toward the "applicable weight",
+//  2. Only rules where the input actually has data, count toward the "applicable weight",
 //     avoiding score dilution from missing fields.
-//  3. An anchor penalty is applied: if no high-priority ("anchor") rule was matched,
-//     the score is capped below autoMergeThreshold to prevent weak-only matches
-//     from triggering an auto-merge.
+//  3. An anchor penalty is applied: if no high-priority rule was matched,
+//     the score is capped below autoMergeThreshold to prevent weak only matches
+//     from triggering an auto merge.
 func ScoreCandidate(
 	inputAttrs map[string]interface{},
 	candidate *model.ProfileData,
 	rules []urModel.UnificationRule,
-	mode string,
 	autoMergeThreshold float64,
 ) (float64, map[string]float64) {
 	logger := log.GetLogger()
@@ -83,14 +82,12 @@ func ScoreCandidate(
 			continue
 		}
 
-		effectiveMode := mode
-		if effectiveMode != constants.UnificationModeStrict {
-			switch rule.UnificationMethod {
-			case constants.UnificationMethodFuzzy:
-				effectiveMode = constants.UnificationModeSmart
-			case constants.UnificationMethodDeterministic:
-				effectiveMode = constants.UnificationModeStrict
-			}
+		effectiveMode := constants.UnificationModeStrict
+		switch rule.UnificationMethod {
+		case constants.UnificationMethodFuzzy:
+			effectiveMode = constants.UnificationModeSmart
+		case constants.UnificationMethodDeterministic:
+			effectiveMode = constants.UnificationModeStrict
 		}
 
 		score := MatchAttribute(val1, val2, rule.AttributeType, effectiveMode)
@@ -128,6 +125,7 @@ func ScoreCandidate(
 	}
 
 	// Minimum coverage constraint: A single matching attribute should not trigger auto-merge.
+	// todo: justify why i choose 3 as the number of rules. should this be a configurable parameter?
 	if applicableCount > 0 && applicableCount*3 < n && finalScore >= autoMergeThreshold {
 		finalScore = autoMergeThreshold - 0.01
 		logger.Info(fmt.Sprintf("Scorer: coverage penalty for candidate '%s' — only %d/%d rules applicable, capped to %.4f",
@@ -157,10 +155,6 @@ func ScoreCandidate(
 	if finalScore < 0.0 {
 		finalScore = 0.0
 	}
-
-	logger.Info(fmt.Sprintf(
-		"Scorer: candidate '%s' — achievedWeight=%.2f, applicableWeight=%.2f, anchorMatched=%v, final=%.4f, mode=%s",
-		candidate.ProfileID, weightedSum, applicableWeight, anchorMatched, finalScore, mode))
 
 	return finalScore, breakdown
 }

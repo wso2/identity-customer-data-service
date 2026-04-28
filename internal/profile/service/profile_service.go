@@ -1735,10 +1735,6 @@ func (ps *ProfilesService) GetProfilesWithFuzzyResolution(
 	logger := log.GetLogger()
 	startTime := time.Now()
 
-	logger.Info("Service: starting fuzzy resolution search",
-		log.String("orgHandle", orgHandle),
-		log.Int("filterCount", len(filters)))
-
 	flatAttrs := parseFuzzyFiltersToFlatAttrs(filters)
 	if len(flatAttrs) == 0 {
 		logger.Warn("Service: no searchable attributes found in filters for fuzzy resolution")
@@ -1796,11 +1792,6 @@ func (ps *ProfilesService) GetProfilesHybrid(
 ) ([]profileModel.FuzzyMatchResult, error) {
 	logger := log.GetLogger()
 	startTime := time.Now()
-
-	logger.Info("Service: starting hybrid search",
-		log.String("orgHandle", orgHandle),
-		log.Int("fuzzyFilterCount", len(fuzzyFilters)),
-		log.Int("deterministicFilterCount", len(deterministicFilters)))
 
 	// Step 1: Parse fuzzy filters into flat attributes for the IR engine.
 	flatAttrs := parseFuzzyFiltersToFlatAttrs(fuzzyFilters)
@@ -2004,7 +1995,7 @@ func scoreAndBuildFuzzyResults(
 		if !exists {
 			continue
 		}
-		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, "smart", thresholds.AutoMerge)
+		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, thresholds.AutoMerge)
 		if finalScore >= threshold {
 			scoredMatches = append(scoredMatches, scoredMatch{
 				candidateID:    candidateID,
@@ -2083,7 +2074,7 @@ func filterActiveRules(rules []UnificationModel.UnificationRule) []UnificationMo
 				r.AttributeType = constants.AttributeTypePrimitiveExact
 			}
 			if r.UnificationMethod == "" {
-				r.UnificationMethod = "deterministic"
+				r.UnificationMethod = constants.UnificationMethodDeterministic
 			}
 			active = append(active, r)
 		}

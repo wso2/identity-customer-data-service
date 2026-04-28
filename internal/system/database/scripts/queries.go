@@ -430,3 +430,11 @@ var UpdateInitialSchemaSyncDoneConfig = map[string]string{
                  ON CONFLICT (org_handle, config) 
                  DO UPDATE SET value = EXCLUDED.value`,
 }
+
+var DeleteBlockingKeysSQL = map[string]string{
+	"postgres": `DELETE FROM blocking_keys WHERE profile_id = $1`,
+}
+
+var DeleteBlockingKeysByAttributeSQL = map[string]string{
+	"postgres": `DELETE FROM blocking_keys WHERE org_handle = $1 AND attribute_name = $2`,
+}

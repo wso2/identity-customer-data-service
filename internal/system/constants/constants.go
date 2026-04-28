@@ -56,7 +56,8 @@ const (
 	ProfileResource         = "profile"
 	UnificationRuleResource = "unification rule"
 	SchemaAttribute         = "schema attribute"
-	AdminConfigResource     = "admin config"
+	AdminConfigResource         = "admin config"
+	UnificationOptionsResource  = "unification options"
 )
 
 const (
@@ -221,6 +222,17 @@ const (
 	AttributeTypeUniqueID       = "UNIQUE_ID"
 )
 
+const (
+	AttributeTypeLabelPrimitiveExact = "Exact Match (Strictly identical)"
+	AttributeTypeLabelFuzzyString    = "General Text (Tolerates typos)"
+	AttributeTypeLabelName           = "Person / Company Name"
+	AttributeTypeLabelEmail          = "Email Address"
+	AttributeTypeLabelPhone          = "Phone Number"
+	AttributeTypeLabelLocation       = "Location / Address"
+	AttributeTypeLabelDate           = "Date (e.g. Date of Birth)"
+	AttributeTypeLabelUniqueID       = "Unique Identifier"
+)
+
 var AllowedAttributeTypes = map[string]bool{
 	AttributeTypePrimitiveExact: true,
 	AttributeTypeFuzzyString:    true,
@@ -235,6 +247,13 @@ var AllowedAttributeTypes = map[string]bool{
 const (
 	UnificationMethodFuzzy         = "fuzzy"
 	UnificationMethodDeterministic = "deterministic"
+)
+
+const (
+	UnificationMethodLabelDeterministic    = "Deterministic (Exact)"
+	UnificationMethodLabelFuzzyGeneral     = "Fuzzy (Typo tolerant)"
+	UnificationMethodLabelFuzzyPhonetic    = "Fuzzy (Phonetic / Typo tolerant)"
+	UnificationMethodLabelFuzzyFormat      = "Fuzzy (Format tolerant)"
 )
 
 var AllowedUnificationMethods = map[string]bool{
@@ -288,6 +307,10 @@ const (
 
 const (
 	MaxCandidatesPerRule = 100
+)
+
+const (
+	PhoneSuffixBlockingLength = 7
 )
 
 const (

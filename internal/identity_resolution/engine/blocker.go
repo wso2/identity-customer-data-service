@@ -23,8 +23,8 @@ import (
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/algorithms"
+	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/normalization"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
-	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/normalization"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	urModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
@@ -96,10 +96,10 @@ func GenerateBlockingKeys(attrType string, attrName string, value string) []mode
 
 		case constants.AttributeTypePhone:
 			keys = append(keys, model.BlockingKey{AttributeName: attrName, KeyValue: norm})
-			// Also index the last 7 digits so numbers differing only by
-			// country/area code land in the same blocking bucket.
-			if len(norm) >= 7 {
-				suffix := norm[len(norm)-7:]
+			// Grab the end of the phone number so we can match users even if they typed a different country code.
+			// We limit the length to prevent too many unrelated people from landing in the same search bucket.
+			if len(norm) >= constants.PhoneSuffixBlockingLength {
+				suffix := norm[len(norm)-constants.PhoneSuffixBlockingLength:]
 				if suffix != norm {
 					keys = append(keys, model.BlockingKey{AttributeName: attrName, KeyValue: suffix})
 				}

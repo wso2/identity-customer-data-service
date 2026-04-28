@@ -55,8 +55,9 @@ var getProfileByID = map[string]string{
 var insertReviewTaskSQL = map[string]string{
 	"postgres": `INSERT INTO review_tasks (id, org_handle, source_profile_id, target_profile_id, match_score, status, score_breakdown)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7)
-				 ON CONFLICT (source_profile_id, target_profile_id) 
-				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6`,
+				 ON CONFLICT (source_profile_id, target_profile_id)
+				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6
+				 WHERE review_tasks.status = 'PENDING'`,
 }
 
 // mirrorTaskExistsSQL checks whether a PENDING review task already exists for the reverse pair (candidate→source).

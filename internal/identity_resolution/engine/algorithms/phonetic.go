@@ -23,7 +23,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/normalization"
+	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/normalization"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 

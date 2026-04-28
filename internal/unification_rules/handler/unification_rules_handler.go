@@ -429,6 +429,19 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GetUnificationOptions handles GET /unification-rules/options.
+// Returns the supported attribute types and the matching methods available for each.
+func (urh *UnificationRulesHandler) GetUnificationOptions(w http.ResponseWriter, r *http.Request) {
+	if err := security.AuthnAndAuthz(r, "unification_rules:view"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	ruleService := provider.NewUnificationRuleProvider().GetUnificationRuleService()
+	resp := ruleService.GetUnificationOptions()
+	utils.RespondJSON(w, http.StatusOK, resp, constants.UnificationOptionsResource)
+}
+
 // isCDSEnabled checks if CDS is enabled for the given tenant
 func isCDSEnabled(orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)

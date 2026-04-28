@@ -24,13 +24,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/algorithms"
-	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/normalization"
+	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/normalization"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
 func MatchAttribute(val1, val2 string, attrType string, mode string) float64 {
-	logger := log.GetLogger()
 
 	if val1 == "" || val2 == "" {
 		return 0.0
@@ -59,13 +57,6 @@ func MatchAttribute(val1, val2 string, attrType string, mode string) float64 {
 		score = matchExact(val1, val2)
 	}
 
-	logger.Debug("Matched attribute",
-		log.String("type", attrType),
-		log.String("mode", mode),
-		log.String("val1", safeLogVal(val1, attrType)),
-		log.String("val2", safeLogVal(val2, attrType)),
-		log.Any("score", score))
-
 	return score
 }
 
@@ -85,6 +76,7 @@ func matchName(val1, val2 string, mode string) float64 {
 	if val1 == val2 {
 		return 1.0
 	}
+	// If values are not exactly the same, strict mode returns 0 immediately without further processing.
 	if mode == constants.UnificationModeStrict {
 		return 0.0
 	}
@@ -171,9 +163,6 @@ func matchEmail(val1, val2 string, mode string) float64 {
 		return 1.0
 	}
 	similarity := algorithms.LevenshteinSimilarity(n1, n2)
-	if similarity < 0.8 {
-		return 0.0
-	}
 	return similarity
 }
 

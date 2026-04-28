@@ -20,30 +20,11 @@ package model
 
 import (
 	"fmt"
-
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
 type BlockingKey struct {
 	AttributeName string
 	KeyValue      string
-}
-
-func DetermineProfileType(attrs map[string]interface{}) string {
-	if uid, ok := attrs["user_id"]; ok && uid != nil && uid != "" {
-		return constants.ProfileTypePermanent
-	}
-	return constants.ProfileTypeTemp
-}
-
-// DetermineMode returns the default matching mode for a pair of profile types.
-// The scorer overrides this per-rule based on each rule's UnificationMethod,
-// so this only sets the baseline when a rule has no explicit method.
-func DetermineMode(inputType, candidateType string) string {
-	if inputType == constants.ProfileTypeTemp && candidateType == constants.ProfileTypeTemp {
-		return constants.UnificationModeStrict
-	}
-	return constants.UnificationModeSmart
 }
 
 type ProfileData struct {
@@ -65,13 +46,6 @@ func (p *ProfileData) GetAttribute(name string) string {
 		return fmt.Sprintf("%v", v)
 	}
 	return ""
-}
-
-func (p *ProfileData) GetProfileType() string {
-	if p.UserID != "" {
-		return constants.ProfileTypePermanent
-	}
-	return constants.ProfileTypeTemp
 }
 
 // IsChild returns true if this profile has been merged into another profile.

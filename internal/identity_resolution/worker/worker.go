@@ -37,9 +37,6 @@ import (
 func ResolveProfileAsync(profile profileModel.Profile) {
 	logger := log.GetLogger()
 
-	logger.Info(fmt.Sprintf("AsyncWorker: starting identity resolution for profile '%s' (org=%s)",
-		profile.ProfileId, profile.OrgHandle))
-
 	freshProfile, err := profileStore.GetProfile(profile.ProfileId)
 	if err != nil || freshProfile == nil {
 		logger.Error(fmt.Sprintf("AsyncWorker: failed to fetch profile '%s', skipping", profile.ProfileId))
@@ -59,11 +56,8 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 
 	rules := filterActiveRules(rawRules)
 	if len(rules) == 0 {
-		logger.Info(fmt.Sprintf("AsyncWorker: no active unification rules for org '%s', skipping resolution", orgHandle))
 		return
 	}
-
-	logger.Info(fmt.Sprintf("AsyncWorker: loaded %d active rules", len(rules)))
 
 	// Check if profile has any attributes matching active rules.
 	hasMatchingAttr := false
@@ -74,8 +68,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 		}
 	}
 	if !hasMatchingAttr {
-		logger.Info(fmt.Sprintf("AsyncWorker: profile '%s' has no attributes matching active rules, skipping",
-			freshProfile.ProfileId))
 		return
 	}
 
@@ -86,9 +78,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 		if err := irStore.UpsertBlockingKeys(freshProfile.ProfileId, orgHandle, blockingKeys); err != nil {
 			logger.Warn(fmt.Sprintf("AsyncWorker: failed to index profile '%s' in blocking_keys",
 				freshProfile.ProfileId), log.Error(err))
-		} else {
-			logger.Info(fmt.Sprintf("AsyncWorker: indexed %d blocking keys for profile '%s'",
-				len(blockingKeys), freshProfile.ProfileId))
 		}
 	}
 
@@ -183,7 +172,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 		return
 	}
 
-	inputProfileType := model.DetermineProfileType(flatAttrs)
 	thresholds := model.LoadThresholds(orgHandle)
 
 	type scoredCandidate struct {
@@ -199,10 +187,7 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 			continue
 		}
 
-		candidateType := candidate.GetProfileType()
-		mode := model.DetermineMode(inputProfileType, candidateType)
-
-		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, mode, thresholds.AutoMerge)
+		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, thresholds.AutoMerge)
 
 		if finalScore >= thresholds.ManualReview {
 			scored = append(scored, scoredCandidate{
@@ -318,10 +303,18 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 func insertReviewTaskSafe(orgHandle, sourceID, targetID string, score float64, breakdown map[string]float64) {
 	logger := log.GetLogger()
 
+	rejectedIDs, err := irStore.GetRejectedProfileIDs(orgHandle, sourceID)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("AsyncWorker: could not check rejection pairs for '%s', proceeding with task creation", sourceID), log.Error(err))
+	} else if rejectedIDs[targetID] {
+		logger.Info(fmt.Sprintf("AsyncWorker: skipping review task for '%s' → '%s' — pair already rejected", sourceID, targetID))
+		return
+	}
+
 	task := model.ReviewTask{
 		OrgHandle:       orgHandle,
-		SourceProfileID: sourceID, // new profile
-		TargetProfileID: targetID, // candidate profile
+		SourceProfileID: sourceID,
+		TargetProfileID: targetID,
 		MatchScore:      score,
 		Status:          constants.ReviewStatusPending,
 		ScoreBreakdown:  breakdown,

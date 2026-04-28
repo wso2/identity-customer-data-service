@@ -1499,11 +1499,12 @@ func parseFilterStrings(raw []string) []string {
 func buildFuzzyResponseItems(fuzzyResults []model.FuzzyMatchResult, requestedAttrs map[string][]string) []model.ProfileListResponse {
 	items := make([]model.ProfileListResponse, 0, len(fuzzyResults))
 	for _, fr := range fuzzyResults {
+		score := fr.MatchScore
 		profileRes := model.ProfileListResponse{
 			ProfileId:      fr.Profile.ProfileId,
 			Meta:           fr.Profile.Meta,
 			UserId:         fr.Profile.UserId,
-			MatchScore:     &fr.MatchScore,
+			MatchScore:     &score,
 			ScoreBreakdown: fr.ScoreBreakdown,
 		}
 
