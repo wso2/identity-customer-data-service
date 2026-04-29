@@ -25,10 +25,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
-
-	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 )
 
 func UpsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) error {
@@ -83,7 +82,7 @@ func UpsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 	}
 
 	insertQuery := fmt.Sprintf(
-		"INSERT INTO blocking_keys (key_id, profile_id, org_handle, attribute_name, key_value) VALUES %s ON CONFLICT DO NOTHING",
+		scripts.IRInsertBlockingKeys[provider.NewDBProvider().GetDBType()],
 		strings.Join(valueClauses, ", "),
 	)
 
@@ -200,7 +199,7 @@ func InsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 	}
 
 	insertQuery := fmt.Sprintf(
-		"INSERT INTO blocking_keys (key_id, profile_id, org_handle, attribute_name, key_value) VALUES %s ON CONFLICT DO NOTHING",
+		scripts.IRInsertBlockingKeys[provider.NewDBProvider().GetDBType()],
 		strings.Join(valueClauses, ", "),
 	)
 
@@ -257,7 +256,7 @@ func FindCandidateIDsByKeys(
 	limitArgIdx := argIdx
 
 	query := fmt.Sprintf(
-		"SELECT DISTINCT profile_id FROM blocking_keys WHERE org_handle = $1 AND attribute_name = $2 AND key_value IN (%s) AND profile_id != $%d LIMIT $%d",
+		scripts.IRFindCandidateIDsByKeys[provider.NewDBProvider().GetDBType()],
 		strings.Join(inClauses, ", "),
 		excludeArgIdx,
 		limitArgIdx,
@@ -312,11 +311,7 @@ func GetProfilesByIDs(profileIDs []string) ([]model.ProfileData, error) {
 	}
 
 	query := fmt.Sprintf(
-		`SELECT p.profile_id, p.user_id, p.org_handle, p.traits, p.identity_attributes,
-		        pr.reference_profile_id
-		 FROM profiles p
-		 LEFT JOIN profile_reference pr ON p.profile_id = pr.profile_id
-		 WHERE p.profile_id IN (%s) AND p.delete_profile = FALSE`,
+		scripts.IRGetProfilesByIDs[provider.NewDBProvider().GetDBType()],
 		strings.Join(inClauses, ", "),
 	)
 

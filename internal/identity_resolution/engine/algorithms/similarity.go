@@ -22,6 +22,8 @@ import (
 	"math"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
 func JaroWinkler(s1, s2 string) float64 {
@@ -31,14 +33,14 @@ func JaroWinkler(s1, s2 string) float64 {
 	r1, r2 := []rune(s1), []rune(s2)
 	jaro := jaroSimilarity(r1, r2)
 	prefixLen := 0
-	for i := 0; i < len(r1) && i < len(r2) && i < 4; i++ {
+	for i := 0; i < len(r1) && i < len(r2) && i < constants.JaroWinklerMaxPrefix; i++ {
 		if r1[i] == r2[i] {
 			prefixLen++
 		} else {
 			break
 		}
 	}
-	return jaro + float64(prefixLen)*0.1*(1.0-jaro)
+	return jaro + float64(prefixLen)*constants.JaroWinklerPFactor*(1.0-jaro)
 }
 
 func jaroSimilarity(r1, r2 []rune) float64 {

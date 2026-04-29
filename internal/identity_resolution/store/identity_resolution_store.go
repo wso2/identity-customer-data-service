@@ -28,119 +28,10 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
-
-var getProfilesForOrg = map[string]string{
-	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
-				 FROM profiles
-				 WHERE org_handle = $1 AND delete_profile = FALSE`,
-}
-
-var getProfilesForOrgPaginated = map[string]string{
-	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
-				 FROM profiles
-				 WHERE org_handle = $1 AND delete_profile = FALSE
-				 ORDER BY profile_id
-				 LIMIT $2 OFFSET $3`,
-}
-
-var getProfileByID = map[string]string{
-	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes 
-				 FROM profiles 
-				 WHERE profile_id = $1 AND delete_profile = FALSE`,
-}
-
-var insertReviewTaskSQL = map[string]string{
-	"postgres": `INSERT INTO review_tasks (id, org_handle, source_profile_id, target_profile_id, match_score, status, score_breakdown)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7)
-				 ON CONFLICT (source_profile_id, target_profile_id)
-				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6
-				 WHERE review_tasks.status = 'PENDING'`,
-}
-
-// mirrorTaskExistsSQL checks whether a PENDING review task already exists for the reverse pair (candidate→source).
-var mirrorTaskExistsSQL = map[string]string{
-	"postgres": `SELECT COUNT(*) FROM review_tasks 
-				 WHERE source_profile_id = $1 AND target_profile_id = $2 AND status = $3`,
-}
-
-// updateMirrorTaskSQL flips the direction of an existing mirror task and refreshes the score.
-var updateMirrorTaskSQL = map[string]string{
-	"postgres": `UPDATE review_tasks 
-				 SET source_profile_id = $1, target_profile_id = $2, match_score = $3, score_breakdown = $4
-				 WHERE source_profile_id = $5 AND target_profile_id = $6 AND status = $7`,
-}
-
-// cancelRelatedReviewTasksSQL cancels all PENDING review tasks that reference either profile.
-var cancelRelatedReviewTasksSQL = map[string]string{
-	"postgres": `UPDATE review_tasks 
-				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
-				 WHERE id != $4 AND status = $5
-				   AND (source_profile_id IN ($6, $7) OR target_profile_id IN ($6, $7))`,
-}
-
-// findRelatedPendingTasksSQL finds source profile IDs of PENDING tasks that will be affected by cascade cancel.
-var findRelatedPendingTasksSQL = map[string]string{
-	"postgres": `SELECT DISTINCT source_profile_id 
-				 FROM review_tasks
-				 WHERE id != $1 AND status = $2
-				   AND (source_profile_id IN ($3, $4) OR target_profile_id IN ($3, $4))`,
-}
-
-// Rejection pair queries — IDs stored in canonical order (id_1 < id_2).
-var insertRejectionPairSQL = map[string]string{
-	"postgres": `INSERT INTO rejection_pairs (id, org_handle, profile_id_1, profile_id_2, rejected_by)
-				 VALUES ($1, $2, $3, $4, $5)
-				 ON CONFLICT (profile_id_1, profile_id_2) DO NOTHING`,
-}
-
-var getRejectedProfileIDsSQL = map[string]string{
-	"postgres": `SELECT profile_id_1, profile_id_2 FROM rejection_pairs
-				 WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`,
-}
-
-var getReviewTaskByIDSQL = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status, 
-				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes 
-				 FROM review_tasks 
-				 WHERE id = $1`,
-}
-
-var getPendingReviewTasksSQL = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status, 
-				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes 
-				 FROM review_tasks 
-				 WHERE org_handle = $1 AND status = $2
-				 ORDER BY created_at DESC
-				 LIMIT $3`,
-}
-
-var countPendingReviewTasksSQL = map[string]string{
-	"postgres": `SELECT COUNT(*) FROM review_tasks WHERE org_handle = $1 AND status = $2`,
-}
-
-var getPendingReviewTasksByProfileSQL = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status, 
-				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes 
-				 FROM review_tasks 
-				 WHERE org_handle = $1 AND status = $2
-				   AND (source_profile_id = $3)
-				 ORDER BY match_score DESC
-				 LIMIT $4`,
-}
-
-var countPendingReviewTasksByProfileSQL = map[string]string{
-	"postgres": `SELECT COUNT(*) FROM review_tasks WHERE org_handle = $1 AND status = $2
-				   AND (source_profile_id = $3 OR target_profile_id = $3)`,
-}
-
-var updateReviewTaskStatusSQL = map[string]string{
-	"postgres": `UPDATE review_tasks 
-				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3 
-				 WHERE id = $4`,
-}
 
 func GetProfilesForOrg(orgHandle string) ([]model.ProfileData, error) {
 	logger := log.GetLogger()
@@ -157,7 +48,7 @@ func GetProfilesForOrg(orgHandle string) ([]model.ProfileData, error) {
 	}
 	defer dbClient.Close()
 
-	query := getProfilesForOrg[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRGetProfilesForOrg[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, orgHandle)
 	if err != nil {
 		logger.Error("Store: failed to query profiles", log.Error(err))
@@ -195,7 +86,7 @@ func GetProfilesForOrgPaginated(orgHandle string, limit, offset int) ([]model.Pr
 	}
 	defer dbClient.Close()
 
-	query := getProfilesForOrgPaginated[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRGetProfilesForOrgPaginated[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, orgHandle, limit, offset)
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
@@ -219,9 +110,6 @@ func GetProfilesForOrgPaginated(orgHandle string, limit, offset int) ([]model.Pr
 }
 
 func GetProfileByID(profileID string) (*model.ProfileData, error) {
-	logger := log.GetLogger()
-	logger.Debug("Store: loading profile", log.String("profileID", profileID))
-
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
@@ -232,7 +120,7 @@ func GetProfileByID(profileID string) (*model.ProfileData, error) {
 	}
 	defer dbClient.Close()
 
-	query := getProfileByID[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRGetProfileByID[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, profileID)
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
@@ -310,7 +198,7 @@ func InsertReviewTask(task model.ReviewTask) error {
 
 	// Mirror check: if the reverse pair already exists as PENDING,
 	// update its score/breakdown to reflect the latest data instead of creating a duplicate.
-	mirrorQuery := mirrorTaskExistsSQL[provider.NewDBProvider().GetDBType()]
+	mirrorQuery := scripts.IRMirrorReviewTaskExists[provider.NewDBProvider().GetDBType()]
 	mirrorRows, err := dbClient.ExecuteQuery(mirrorQuery,
 		task.TargetProfileID, task.SourceProfileID, constants.ReviewStatusPending)
 	if err == nil && len(mirrorRows) > 0 {
@@ -325,7 +213,7 @@ func InsertReviewTask(task model.ReviewTask) error {
 			if count > 0 {
 				// Mirror task exists. Flip it so the latest profile
 				breakdownJSON, _ := json.Marshal(task.ScoreBreakdown)
-				updateQuery := updateMirrorTaskSQL[provider.NewDBProvider().GetDBType()]
+				updateQuery := scripts.IRUpdateMirrorReviewTask[provider.NewDBProvider().GetDBType()]
 				_, updateErr := dbClient.ExecuteQuery(updateQuery,
 					task.SourceProfileID, task.TargetProfileID,
 					task.MatchScore, string(breakdownJSON),
@@ -348,7 +236,7 @@ func InsertReviewTask(task model.ReviewTask) error {
 		task.ID = uuid.New().String()
 	}
 
-	query := insertReviewTaskSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRInsertReviewTask[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query,
 		task.ID, task.OrgHandle, task.SourceProfileID, task.TargetProfileID,
 		task.MatchScore, task.Status, string(breakdownJSON))
@@ -381,7 +269,7 @@ func CancelRelatedReviewTasks(excludeTaskID, sourceProfileID, targetProfileID, c
 	defer dbClient.Close()
 
 	// Step 1: Find source profile IDs that will be affected before cancelling.
-	findQuery := findRelatedPendingTasksSQL[provider.NewDBProvider().GetDBType()]
+	findQuery := scripts.IRFindRelatedPendingReviewTasks[provider.NewDBProvider().GetDBType()]
 	rows, err := dbClient.ExecuteQuery(findQuery,
 		excludeTaskID, constants.ReviewStatusPending,
 		sourceProfileID, targetProfileID)
@@ -402,7 +290,7 @@ func CancelRelatedReviewTasks(excludeTaskID, sourceProfileID, targetProfileID, c
 	}
 
 	// Step 2: Cancel the tasks.
-	cancelQuery := cancelRelatedReviewTasksSQL[provider.NewDBProvider().GetDBType()]
+	cancelQuery := scripts.IRCancelRelatedReviewTasks[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(cancelQuery,
 		constants.ReviewStatusCancelled, cancelledBy,
 		fmt.Sprintf("Auto-cancelled: related task %s was resolved", excludeTaskID),
@@ -419,8 +307,6 @@ func CancelRelatedReviewTasks(excludeTaskID, sourceProfileID, targetProfileID, c
 }
 
 func GetReviewTaskByID(taskID string) (*model.ReviewTask, error) {
-	logger := log.GetLogger()
-	logger.Debug("Store: loading review task", log.String("taskID", taskID))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -432,7 +318,7 @@ func GetReviewTaskByID(taskID string) (*model.ReviewTask, error) {
 	}
 	defer dbClient.Close()
 
-	query := getReviewTaskByIDSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRGetReviewTaskByID[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, taskID)
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
@@ -464,7 +350,7 @@ func GetPendingReviewTasks(orgHandle string, pageSize int) ([]model.ReviewTask, 
 	}
 	defer dbClient.Close()
 
-	countQuery := countPendingReviewTasksSQL[provider.NewDBProvider().GetDBType()]
+	countQuery := scripts.IRCountPendingReviewTasks[provider.NewDBProvider().GetDBType()]
 	countRows, err := dbClient.ExecuteQuery(countQuery, orgHandle, constants.ReviewStatusPending)
 	if err != nil {
 		return nil, 0, errors2.NewServerError(errors2.ErrorMessage{
@@ -485,7 +371,7 @@ func GetPendingReviewTasks(orgHandle string, pageSize int) ([]model.ReviewTask, 
 		}
 	}
 
-	query := getPendingReviewTasksSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRGetPendingReviewTasks[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, orgHandle, constants.ReviewStatusPending, pageSize)
 	if err != nil {
 		return nil, 0, errors2.NewServerError(errors2.ErrorMessage{
@@ -520,7 +406,7 @@ func GetPendingReviewTasksByProfile(orgHandle, profileID string, pageSize int) (
 	}
 	defer dbClient.Close()
 
-	countQuery := countPendingReviewTasksByProfileSQL[provider.NewDBProvider().GetDBType()]
+	countQuery := scripts.IRCountPendingReviewTasksByProfile[provider.NewDBProvider().GetDBType()]
 	countRows, err := dbClient.ExecuteQuery(countQuery, orgHandle, constants.ReviewStatusPending, profileID)
 	if err != nil {
 		return nil, 0, errors2.NewServerError(errors2.ErrorMessage{
@@ -541,7 +427,7 @@ func GetPendingReviewTasksByProfile(orgHandle, profileID string, pageSize int) (
 		}
 	}
 
-	query := getPendingReviewTasksByProfileSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRGetPendingReviewTasksByProfile[provider.NewDBProvider().GetDBType()]
 	results, err := dbClient.ExecuteQuery(query, orgHandle, constants.ReviewStatusPending, profileID, pageSize)
 	if err != nil {
 		return nil, 0, errors2.NewServerError(errors2.ErrorMessage{
@@ -576,7 +462,7 @@ func UpdateReviewTaskStatus(taskID string, status string, resolvedBy string, not
 	}
 	defer dbClient.Close()
 
-	query := updateReviewTaskStatusSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRUpdateReviewTaskStatus[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query, status, resolvedBy, notes, taskID)
 	if err != nil {
 		logger.Error("Store: failed to update review task", log.Error(err))
@@ -656,11 +542,6 @@ func scanReviewTask(row map[string]interface{}) model.ReviewTask {
 	return task
 }
 
-var insertMergeAuditLogSQL = map[string]string{
-	"postgres": `INSERT INTO merge_audit_log (id, org_handle, primary_profile_id, secondary_profile_id, merge_type, match_score, merged_by)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-}
-
 func InsertMergeAuditLog(entry model.MergeAuditEntry) error {
 	logger := log.GetLogger()
 	logger.Info("Store: inserting merge audit log",
@@ -681,7 +562,7 @@ func InsertMergeAuditLog(entry model.MergeAuditEntry) error {
 
 	auditID := uuid.New().String()
 
-	query := insertMergeAuditLogSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRInsertMergeAuditLog[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query,
 		auditID, entry.OrgHandle, entry.PrimaryProfileID, entry.SecondaryProfileID,
 		entry.MergeType, entry.MatchScore, entry.MergedBy)
@@ -708,8 +589,6 @@ func InsertRejectionPair(orgHandle, profileA, profileB, rejectedBy string) error
 		id1, id2 = id2, id1
 	}
 
-	logger.Info(fmt.Sprintf("Store: inserting rejection pair '%s' ↔ '%s'", id1, id2))
-
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		return err
@@ -718,19 +597,14 @@ func InsertRejectionPair(orgHandle, profileA, profileB, rejectedBy string) error
 
 	rejectionID := uuid.New().String()
 
-	query := insertRejectionPairSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRInsertRejectionPair[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query, rejectionID, orgHandle, id1, id2, rejectedBy)
 	if err != nil {
 		logger.Error("Store: failed to insert rejection pair", log.Error(err))
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Store: rejection pair '%s' ↔ '%s' stored", id1, id2))
 	return nil
-}
-
-var deleteRejectionPairsForProfileSQL = map[string]string{
-	"postgres": `DELETE FROM rejection_pairs WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`,
 }
 
 // DeleteRejectionPairsForProfile removes all rejection pairs involving the given profile so that
@@ -744,14 +618,13 @@ func DeleteRejectionPairsForProfile(orgHandle, profileID string) error {
 	}
 	defer dbClient.Close()
 
-	query := deleteRejectionPairsForProfileSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRDeleteRejectionPairsForProfile[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query, orgHandle, profileID)
 	if err != nil {
 		logger.Warn(fmt.Sprintf("Store: failed to delete rejection pairs for profile '%s'", profileID), log.Error(err))
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Store: cleared rejection pairs for updated profile '%s'", profileID))
 	return nil
 }
 
@@ -765,7 +638,7 @@ func GetRejectedProfileIDs(orgHandle, profileID string) (map[string]bool, error)
 	}
 	defer dbClient.Close()
 
-	query := getRejectedProfileIDsSQL[provider.NewDBProvider().GetDBType()]
+	query := scripts.IRGetRejectedProfileIDs[provider.NewDBProvider().GetDBType()]
 	rows, err := dbClient.ExecuteQuery(query, orgHandle, profileID)
 	if err != nil {
 		logger.Warn("Store: failed to query rejection pairs", log.Error(err))

@@ -19,9 +19,7 @@
 package engine
 
 import (
-	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/algorithms"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/normalization"
@@ -60,17 +58,6 @@ func MatchAttribute(val1, val2 string, attrType string, mode string) float64 {
 	return score
 }
 
-// safeLogVal returns a non-PII representation for sensitive attribute types and
-// a truncated value for all others.
-func safeLogVal(val, attrType string) string {
-	switch attrType {
-	case constants.AttributeTypeName, constants.AttributeTypeEmail, constants.AttributeTypePhone:
-		return fmt.Sprintf("len=%d", utf8.RuneCountInString(val))
-	default:
-		return truncate(val, 30)
-	}
-}
-
 func matchName(val1, val2 string, mode string) float64 {
 	// Raw exact check first (no normalization).
 	if val1 == val2 {
@@ -92,17 +79,10 @@ func matchName(val1, val2 string, mode string) float64 {
 	phoneticScore := algorithms.PhoneticSimilarity(sorted1, sorted2)
 
 	if phoneticScore >= 1.0 {
-		if jwScore < 0.92 {
-			return 0.92
+		if jwScore < constants.NamePhoneticExactJWMin {
+			return constants.NamePhoneticExactJWMin
 		}
 		return jwScore
-	}
-
-	if phoneticScore >= 0.9 && jwScore >= 0.70 {
-		boosted := jwScore + (1.0-jwScore)*0.15
-		if boosted > jwScore {
-			return boosted
-		}
 	}
 
 	return jwScore
@@ -118,11 +98,11 @@ func matchPhone(val1, val2 string, mode string) float64 {
 	if mode == constants.UnificationModeStrict {
 		return 0.0
 	}
-	if len(n1) >= 7 && len(n2) >= 7 {
-		suffix1 := n1[len(n1)-7:]
-		suffix2 := n2[len(n2)-7:]
+	if len(n1) >= constants.PhoneSuffixBlockingLength && len(n2) >= constants.PhoneSuffixBlockingLength {
+		suffix1 := n1[len(n1)-constants.PhoneSuffixBlockingLength:]
+		suffix2 := n2[len(n2)-constants.PhoneSuffixBlockingLength:]
 		if suffix1 == suffix2 {
-			return 0.9
+			return constants.PhoneSuffixMatchScore
 		}
 	}
 	return 0.0
@@ -210,11 +190,4 @@ func matchFuzzyString(val1, val2 string, mode string) float64 {
 	}
 	jwScore := algorithms.JaroWinkler(n1, n2)
 	return jwScore
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }

@@ -91,8 +91,8 @@ func MinHashSignature(bigrams []string) []uint64 {
 		baseHash := h.Sum64()
 
 		for i := 0; i < constants.LSHSignatureSize; i++ {
-			a := uint64(i*2654435761 + 1)
-			b := uint64(i*1103515245 + 12345)
+			a := constants.LSHHashKnuthMult*uint64(i) + 1
+			b := constants.LSHHashLCGMult*uint64(i) + constants.LSHHashLCGAdd
 			hVal := a*baseHash + b
 
 			if hVal < sig[i] {

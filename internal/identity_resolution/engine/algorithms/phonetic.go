@@ -633,7 +633,7 @@ func PhoneticSimilarity(name1, name2 string) float64 {
 	}
 
 	if pri1 == alt2 || alt1 == pri2 || (alt1 != "" && alt2 != "" && alt1 == alt2) {
-		return 0.9
+		return constants.PhoneticAlternateScore
 	}
 
 	return 0.0

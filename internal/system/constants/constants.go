@@ -53,11 +53,11 @@ type contextKey string
 const TenantContextKey contextKey = "org_handle"
 
 const (
-	ProfileResource         = "profile"
-	UnificationRuleResource = "unification rule"
-	SchemaAttribute         = "schema attribute"
-	AdminConfigResource         = "admin config"
-	UnificationOptionsResource  = "unification options"
+	ProfileResource            = "profile"
+	UnificationRuleResource    = "unification rule"
+	SchemaAttribute            = "schema attribute"
+	AdminConfigResource        = "admin config"
+	UnificationOptionsResource = "unification options"
 )
 
 const (
@@ -250,10 +250,10 @@ const (
 )
 
 const (
-	UnificationMethodLabelDeterministic    = "Deterministic (Exact)"
-	UnificationMethodLabelFuzzyGeneral     = "Fuzzy (Typo tolerant)"
-	UnificationMethodLabelFuzzyPhonetic    = "Fuzzy (Phonetic / Typo tolerant)"
-	UnificationMethodLabelFuzzyFormat      = "Fuzzy (Format tolerant)"
+	UnificationMethodLabelDeterministic = "Deterministic (Exact)"
+	UnificationMethodLabelFuzzyGeneral  = "Fuzzy (Typo tolerant)"
+	UnificationMethodLabelFuzzyPhonetic = "Fuzzy (Phonetic / Typo tolerant)"
+	UnificationMethodLabelFuzzyFormat   = "Fuzzy (Format tolerant)"
 )
 
 var AllowedUnificationMethods = map[string]bool{
@@ -325,6 +325,86 @@ const (
 	LSHMinLength     = 4
 
 	MaxMetaphoneLen = 4
+)
+
+// Scoring engine
+
+const (
+	// ScoreAnchorFraction is the lower bound for "anchor" weight as a fraction of the
+	// highest possible weight. Rules in the top third by weight are anchors; a match
+	// that only satisfies non-anchor (low-priority) rules is penalized to prevent weak
+	// combinations from triggering an auto-merge.
+	ScoreAnchorFraction = 2.0 / 3.0
+
+	// ScoreCoverageDenominator sets the minimum fraction of total rules that must have
+	// input data before an auto-merge is allowed. With a value of 3, at least
+	// 1/ScoreCoverageDenominator of all rules must be applicable.
+	ScoreCoverageDenominator = 3
+
+	// ScoreMajorityNumerator and ScoreMajorityDenominator define the non-match majority
+	// threshold. If non-matching rules are >= ScoreMajorityNumerator/ScoreMajorityDenominator
+	// of all applicable rules, the score is capped below the auto-merge threshold.
+	ScoreMajorityNumerator   = 2
+	ScoreMajorityDenominator = 3
+
+	// ScorePenaltyOffset is subtracted from autoMergeThreshold when capping a penalized
+	// score just below it. The small gap keeps the score detectable as sub-threshold
+	// while remaining high enough to route to manual review.
+	ScorePenaltyOffset = 0.01
+)
+
+// Name matching
+
+const (
+	// NamePhoneticExactJWMin acts as a score floor (safety net) when two names have identical
+	// primary phonetic codes. If the phonetic match is perfect (1.0), the final score is
+	// guaranteed to be at least this value. If the raw JW score is lower, it is bumped up
+	// to this minimum. If the raw JW score is higher, the JW score is kept.
+	NamePhoneticExactJWMin = 0.90
+
+	// PhoneticAlternateScore is returned by PhoneticSimilarity when two names share a
+	// Double Metaphone alternate code but not the primary code. Lower than 1.0 to reflect
+	// the reduced certainty of an alternate encoding.
+	PhoneticAlternateScore = 0.9
+)
+
+// Phone matching
+
+const (
+	// PhoneSuffixMatchScore is returned when two phone numbers share the same last
+	// PhoneSuffixBlockingLength digits but differ elsewhere (e.g., different country
+	// codes). A suffix-only match is strong evidence but not conclusive.
+	PhoneSuffixMatchScore = 0.9
+)
+
+// Jaro-Winkler algorithm
+
+const (
+	// JaroWinklerMaxPrefix is the maximum number of leading characters considered for
+	// the Winkler prefix bonus. The original Winkler paper caps this at 4.
+	JaroWinklerMaxPrefix = 4
+
+	// JaroWinklerPFactor is the scaling constant for the prefix bonus in Jaro-Winkler.
+	// The standard value from Winkler is 0.1. Values above 0.25 can produce
+	// scores > 1.0 and must not be used.
+	JaroWinklerPFactor = 0.1
+)
+
+// LSH MinHash hash mixing
+
+const (
+	// LSHHashKnuthMult is the multiplier in the row-a hash transform for MinHash
+	// signature generation. Derived from Knuth's multiplicative hashing constant
+	// (2654435761 ≈ 2^32 / φ), which produces a near-uniform hash distribution.
+	LSHHashKnuthMult uint64 = 2654435761
+
+	// LSHHashLCGMult is the multiplier in the row-b hash transform, taken from the
+	// glibc rand() linear congruential generator (multiplier = 1103515245).
+	LSHHashLCGMult uint64 = 1103515245
+
+	// LSHHashLCGAdd is the addend in the row-b hash transform. Standard glibc LCG
+	// addend (12345) paired with LSHHashLCGMult to form a full-period LCG sequence.
+	LSHHashLCGAdd uint64 = 12345
 )
 
 const (

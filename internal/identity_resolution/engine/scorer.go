@@ -28,14 +28,18 @@ import (
 )
 
 // ScoreCandidate computes a match score using a weighted approach derived from
-// unification-rule priorities. The algorithm:
+// unification rule priorities. The algorithm:
 //
 //  1. Each rule's weight comes from its priority rank (lower priority number = higher weight).
-//  2. Only rules where the input actually has data, count toward the "applicable weight",
-//     avoiding score dilution from missing fields.
-//  3. An anchor penalty is applied: if no high-priority rule was matched,
-//     the score is capped below autoMergeThreshold to prevent weak only matches
-//     from triggering an auto merge.
+//  2. Only rules where BOTH the input and the candidate have data are "mutually applicable"
+//     and count toward the weighted average. A rule where the candidate has no data is skipped
+//     entirely, absence of data cannot confirm or deny a match, so it must not dilute the score.
+//  3. The anchor threshold is computed from the highest weight among mutually applicable rules,
+//     not from all rules. This prevents penalizing a lower-priority attribute when it is the
+//     only one both profiles share.
+//  4. Three penalties cap the score below autoMergeThreshold when the match is not trustworthy:
+//     coverage (too few rules shared), anchor (only weak rules matched), majority (most rules
+//     scored zero).
 func ScoreCandidate(
 	inputAttrs map[string]interface{},
 	candidate *model.ProfileData,
@@ -46,41 +50,55 @@ func ScoreCandidate(
 
 	breakdown := make(map[string]float64)
 
-	n := len(rules)
-	if n == 0 {
+	numOfRules := len(rules)
+	if numOfRules == 0 {
 		logger.Warn("Scorer: no rules — returning score 0.0",
 			log.String("candidateID", candidate.ProfileID))
 		return 0.0, breakdown
 	}
 
-	// Determine the anchor threshold: rules whose weight is in the top third
-	// of the priority range are considered "anchors".
-	maxWeight := float64(n) // weight of the highest-priority rule
-	anchorThreshold := maxWeight * 2.0 / 3.0
+	// Find the maximum weight among mutually applicable rules that means rules where BOTH the
+	// input and the candidate have data. Rules are sorted by priority, so the first
+	// mutually applicable rule carries the highest weight and sets the anchor threshold.
+	maxApplicableWeight := 0.0
+	for i, rule := range rules {
+		if getStringValue(inputAttrs, rule.PropertyName) != "" &&
+			candidate.GetAttribute(rule.PropertyName) != "" {
+			maxApplicableWeight = float64(numOfRules - i)
+			break
+		}
+	}
+	if maxApplicableWeight == 0 {
+		logger.Info(fmt.Sprintf("Scorer: candidate '%s' — no mutually applicable rules, returning 0.0", candidate.ProfileID))
+		return 0.0, breakdown
+	}
+
+	// Anchor threshold relative to the applicable rules, not all rules.
+	// This prevents penalizing a lower-priority attribute when it is the only
+	// one both profiles share.
+	anchorThreshold := maxApplicableWeight * constants.ScoreAnchorFraction
 
 	weightedSum := 0.0
 	applicableWeight := 0.0
 	anchorMatched := false
 
 	for i, rule := range rules {
-		weight := float64(n - i) // highest-priority rule gets weight = n
+		weight := float64(numOfRules - i)
 
 		val1 := getStringValue(inputAttrs, rule.PropertyName)
 		if val1 == "" {
-			logger.Debug(fmt.Sprintf("Scorer: skipping rule '%s' — input has no value", rule.RuleName))
 			continue
 		}
-
-		// This rule is applicable (input has data for it).
-		applicableWeight += weight
-
 		val2 := candidate.GetAttribute(rule.PropertyName)
 		if val2 == "" {
-			logger.Debug(fmt.Sprintf("Scorer: rule '%s' — candidate missing value (score=0, weight=%.0f)",
-				rule.RuleName, weight))
-			// Counts toward applicable weight but contributes 0 to the sum.
+			// Candidate has no data for this rule — skip entirely.
+			// A missing attribute cannot confirm or deny a match, so it must not
+			// dilute the score by counting in the denominator.
 			continue
 		}
+
+		// Both profiles have data — this rule is mutually applicable.
+		applicableWeight += weight
 
 		effectiveMode := constants.UnificationModeStrict
 		switch rule.UnificationMethod {
@@ -99,23 +117,25 @@ func ScoreCandidate(
 			anchorMatched = true
 		}
 
-		logger.Info(fmt.Sprintf("Scorer: rule '%s' (%s) — matchScore=%.4f, weight=%.0f, weightedSum=%.4f",
-			rule.RuleName, rule.AttributeType, score, weight, weightedSum))
+		logger.Info(fmt.Sprintf("Scorer: rule '%s' (%s) — matchScore=%.4f, weight=%.0f",
+			rule.RuleName, rule.AttributeType, score, weight))
 	}
 
 	if applicableWeight == 0 {
-		logger.Info(fmt.Sprintf("Scorer: candidate '%s' — no applicable rules, returning 0.0", candidate.ProfileID))
+		logger.Info(fmt.Sprintf("Scorer: candidate '%s' — no mutually applicable rules after scoring, returning 0.0", candidate.ProfileID))
 		return 0.0, breakdown
 	}
 
 	finalScore := weightedSum / applicableWeight
 
-	// Count applicable rules upfront (used by multiple constraints below).
+	// Count mutually applicable rules (used by the penalty constraints below).
 	applicableCount := 0
 	nonMatchCount := 0
 	for _, rule := range rules {
-		val1 := getStringValue(inputAttrs, rule.PropertyName)
-		if val1 == "" {
+		if getStringValue(inputAttrs, rule.PropertyName) == "" {
+			continue
+		}
+		if candidate.GetAttribute(rule.PropertyName) == "" {
 			continue
 		}
 		applicableCount++
@@ -124,27 +144,28 @@ func ScoreCandidate(
 		}
 	}
 
-	// Minimum coverage constraint: A single matching attribute should not trigger auto-merge.
-	// todo: justify why i choose 3 as the number of rules. should this be a configurable parameter?
-	if applicableCount > 0 && applicableCount*3 < n && finalScore >= autoMergeThreshold {
-		finalScore = autoMergeThreshold - 0.01
+	// Minimum coverage constraint: if fewer than 1/ScoreCoverageDenominator of all rules
+	// have input data, a high score is likely an artifact of sparse data rather than a
+	// genuine match so cap it below auto-merge threshold.
+	if applicableCount > 0 && applicableCount*constants.ScoreCoverageDenominator < numOfRules && finalScore >= autoMergeThreshold {
+		finalScore = autoMergeThreshold - constants.ScorePenaltyOffset
 		logger.Info(fmt.Sprintf("Scorer: coverage penalty for candidate '%s' — only %d/%d rules applicable, capped to %.4f",
-			candidate.ProfileID, applicableCount, n, finalScore))
+			candidate.ProfileID, applicableCount, numOfRules, finalScore))
 	}
 
 	// Anchor penalty: if only weak (low-priority) rules matched, cap the score
 	// just below the auto-merge threshold so it can still trigger manual review
 	// but never auto-merge.
 	if !anchorMatched && finalScore >= autoMergeThreshold {
-		finalScore = autoMergeThreshold - 0.01
+		finalScore = autoMergeThreshold - constants.ScorePenaltyOffset
 		logger.Info(fmt.Sprintf("Scorer: anchor penalty applied for candidate '%s' — capped to %.4f",
 			candidate.ProfileID, finalScore))
 	}
 
-	// Rule majority constraint: if 2/3 or more of the applicable rules
-	// scored <= 0, cap below auto-merge threshold to prevent weak matches.
-	if applicableCount > 0 && nonMatchCount*3 >= applicableCount*2 && finalScore >= autoMergeThreshold {
-		finalScore = autoMergeThreshold - 0.01
+	// Rule majority constraint: if ScoreMajorityNumerator/ScoreMajorityDenominator or more
+	// of the applicable rules scored zero, the overall score is unreliable so cap it.
+	if applicableCount > 0 && nonMatchCount*constants.ScoreMajorityDenominator >= applicableCount*constants.ScoreMajorityNumerator && finalScore >= autoMergeThreshold {
+		finalScore = autoMergeThreshold - constants.ScorePenaltyOffset
 		logger.Info(fmt.Sprintf("Scorer: rule majority penalty for candidate '%s' — %d/%d rules non-matching, capped to %.4f",
 			candidate.ProfileID, nonMatchCount, applicableCount, finalScore))
 	}

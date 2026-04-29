@@ -30,13 +30,13 @@ import (
 	urModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 )
 
-type KeyLookupFunc func(orgHandle, attributeName string, keyValues []string, excludeProfileID string, maxResults int) ([]string, error)
+type CandidateLookupFunc func(orgHandle, attributeName string, keyValues []string, excludeProfileID string, maxResults int) ([]string, error)
 
 func FindCandidatesByIndex(
 	keys []model.BlockingKey,
 	orgHandle string,
 	excludeProfileID string,
-	lookupFn KeyLookupFunc,
+	candidateLookup CandidateLookupFunc,
 ) []string {
 	logger := log.GetLogger()
 
@@ -49,7 +49,7 @@ func FindCandidatesByIndex(
 	var candidateIDs []string
 
 	for attrName, keyValues := range grouped {
-		ids, err := lookupFn(orgHandle, attrName, keyValues, excludeProfileID, constants.MaxCandidatesPerRule)
+		ids, err := candidateLookup(orgHandle, attrName, keyValues, excludeProfileID, constants.MaxCandidatesPerRule)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Blocker: query failed for attribute '%s'", attrName), log.Error(err))
 			continue

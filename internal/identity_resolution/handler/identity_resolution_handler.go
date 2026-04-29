@@ -139,7 +139,6 @@ func (h *IdentityResolutionHandler) ResolveReviewTask(w http.ResponseWriter, r *
 		return
 	}
 
-	// TODO: Extract actual user from auth token
 	resolvedBy := constants.MergeByAdmin
 	approved := resolveReq.Decision == constants.ReviewStatusApproved
 
