@@ -1781,7 +1781,7 @@ func (ps *ProfilesService) GetProfilesWithFuzzyResolution(
 
 // GetProfilesHybrid combines fuzzy matching (blocking + scoring) with deterministic SQL
 // filtering. A result must appear in BOTH the fuzzy blocking candidate set AND the
-// deterministic SQL result set — i.e. it is similar to the fuzzy values AND exactly
+// deterministic SQL result set i.e. it is similar to the fuzzy values AND exactly
 // satisfies the deterministic conditions.
 func (ps *ProfilesService) GetProfilesHybrid(
 	orgHandle string,
@@ -1791,6 +1791,21 @@ func (ps *ProfilesService) GetProfilesHybrid(
 	limit int,
 ) ([]profileModel.FuzzyMatchResult, error) {
 	logger := log.GetLogger()
+
+	for _, f := range deterministicFilters {
+		parts := strings.SplitN(f, " ", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		field := parts[0]
+		if field != "user_id" && field != "profile_id" && !isValidFilterKey(field) {
+			return nil, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_PROFILE.Code,
+				Message:     errors2.FILTER_PROFILE.Message,
+				Description: "Invalid filter key: " + field,
+			}, http.StatusBadRequest)
+		}
+	}
 
 	// Step 1: Parse fuzzy filters into flat attributes for the IR engine.
 	flatAttrs := parseFuzzyFiltersToFlatAttrs(fuzzyFilters)
