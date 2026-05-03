@@ -114,8 +114,7 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 	}
 
 	if !approved {
-		// Store the rejection pair before marking the task rejected so the pair
-		// is always present when the task enters REJECTED state.
+		// Store the rejection pair before marking the task rejected.
 		if err := irStore.InsertRejectionPair(task.OrgHandle, task.IncomingProfileID, task.CandidateProfileID, resolvedBy); err != nil {
 			logger.Error(fmt.Sprintf("Service: failed to store rejection pair for task %s", taskID), log.Error(err))
 			return err
@@ -133,14 +132,14 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 	cancelledIncomingIDs, cancelErr := irStore.CancelRelatedReviewTasks(taskID, task.IncomingProfileID, task.CandidateProfileID, constants.CanceledBySystem)
 	if cancelErr != nil {
 		logger.Warn(fmt.Sprintf("Service: cascade cancel failed for task %s", taskID), log.Error(cancelErr))
-		// Non-fatal — the merge itself will still proceed.
+		// merge itself will still proceed.
 	}
 
 	// Re-enqueue cancelled incoming profiles for re-evaluation.
-	for _, srcID := range cancelledIncomingIDs {
-		p, loadErr := profileStore.GetProfile(srcID)
+	for _, incomingID := range cancelledIncomingIDs {
+		p, loadErr := profileStore.GetProfile(incomingID)
 		if loadErr != nil || p == nil {
-			logger.Warn(fmt.Sprintf("Service: skipping re-evaluation for '%s' — profile not found or error", srcID))
+			logger.Warn(fmt.Sprintf("Service: skipping re-evaluation for '%s' — profile not found or error", incomingID))
 			continue
 		}
 
@@ -153,7 +152,7 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 			continue
 		}
 
-		logger.Info(fmt.Sprintf("Service: re-enqueuing profile '%s' for re-evaluation after cascade cancel", srcID))
+		logger.Info(fmt.Sprintf("Service: re-enqueuing profile '%s' for re-evaluation after cascade cancel", incomingID))
 		workers.EnqueueProfileForProcessing(*p)
 	}
 

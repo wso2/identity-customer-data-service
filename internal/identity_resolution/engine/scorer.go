@@ -133,8 +133,6 @@ func ScoreCandidate(
 			anchorMatched = true
 		}
 
-		logger.Info(fmt.Sprintf("Scorer: rule '%s' (%s) — matchScore=%.4f, weight=%.0f",
-			rule.RuleName, rule.AttributeType, score, weight))
 	}
 
 	if applicableWeight == 0 {

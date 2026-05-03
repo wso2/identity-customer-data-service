@@ -207,9 +207,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 		return scored[i].score > scored[j].score
 	})
 
-	logger.Info(fmt.Sprintf("AsyncWorker: %d candidates above threshold (best=%.4f) for profile '%s'",
-		len(scored), scored[0].score, freshProfile.ProfileId))
-
 	// Filter out candidates that have been explicitly rejected against this profile.
 	rejectedIDs, _ := irStore.GetRejectedProfileIDs(orgHandle, freshProfile.ProfileId)
 	if len(rejectedIDs) > 0 {
@@ -372,11 +369,11 @@ func insertReviewTask(orgHandle, incomingProfileID, candidateProfileID string, s
 	}
 }
 
-func ReindexAfterMerge(primaryID, secondaryID, orgHandle string, mergedProfile profileModel.Profile) {
+func ReindexAfterMerge(masterProfileID, triggerProfileId, orgHandle string, mergedProfile profileModel.Profile) {
 	logger := log.GetLogger()
 
-	if err := irStore.DeleteBlockingKeys(secondaryID); err != nil {
-		logger.Warn(fmt.Sprintf("ReindexAfterMerge: failed to delete secondary '%s' blocking keys", secondaryID),
+	if err := irStore.DeleteBlockingKeys(triggerProfileId); err != nil {
+		logger.Warn(fmt.Sprintf("ReindexAfterMerge: failed to delete trigger '%s' blocking keys", triggerProfileId),
 			log.Error(err))
 	}
 
@@ -388,21 +385,14 @@ func ReindexAfterMerge(primaryID, secondaryID, orgHandle string, mergedProfile p
 	}
 	rules := filterActiveRules(rawRules)
 
-	flat := make(map[string]interface{})
-	model.FlattenMap("traits", mergedProfile.Traits, flat)
-	model.FlattenMap("identity_attributes", mergedProfile.IdentityAttributes, flat)
-	if mergedProfile.UserId != "" {
-		flat["user_id"] = mergedProfile.UserId
-	}
-
-	newKeys := engine.GenerateBlockingKeysFromRules(flat, rules)
+	newKeys := engine.GenerateBlockingKeysFromRules(flattenProfile(&mergedProfile), rules)
 	if len(newKeys) > 0 {
-		if err := irStore.UpsertBlockingKeys(primaryID, orgHandle, newKeys); err != nil {
-			logger.Warn(fmt.Sprintf("ReindexAfterMerge: failed to re-index primary '%s'", primaryID),
+		if err := irStore.UpsertBlockingKeys(masterProfileID, orgHandle, newKeys); err != nil {
+			logger.Warn(fmt.Sprintf("ReindexAfterMerge: failed to re-index master '%s'", masterProfileID),
 				log.Error(err))
 		} else {
-			logger.Info(fmt.Sprintf("ReindexAfterMerge: re-indexed %d blocking keys for primary '%s'",
-				len(newKeys), primaryID))
+			logger.Info(fmt.Sprintf("ReindexAfterMerge: re-indexed %d blocking keys for master '%s'",
+				len(newKeys), masterProfileID))
 		}
 	}
 }
