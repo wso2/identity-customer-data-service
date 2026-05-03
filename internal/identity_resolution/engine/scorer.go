@@ -129,7 +129,7 @@ func ScoreCandidate(
 		breakdown[rule.PropertyName] = score
 		weightedSum += score * weight
 
-		if score > 0 && weight >= anchorThreshold {
+		if score > constants.AnchorMatchMinScore && weight >= anchorThreshold {
 			anchorMatched = true
 		}
 

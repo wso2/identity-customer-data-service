@@ -355,6 +355,11 @@ const (
 	// score just below it. The small gap keeps the score detectable as sub-threshold
 	// while remaining high enough to route to manual review.
 	ScorePenaltyOffset = 0.01
+
+	// AnchorMatchMinScore is the minimum score for a match that satisfies at least one anchor rule.
+	// This prevents very weak matches from being considered valid anchor rule. The value of 0.7 is
+	// chosen to allow some flexibility while ensuring a reasonable level of confidence in the match.
+	AnchorMatchMinScore = 0.7
 )
 
 // Name matching
