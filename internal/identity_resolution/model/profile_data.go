@@ -35,20 +35,47 @@ type ProfileData struct {
 	Attributes         map[string]interface{}
 }
 
-func (p *ProfileData) GetAttribute(name string) string {
-	if p.Attributes == nil {
-		return ""
+// GetAllAttributeValues returns all non-empty string values for the given attribute name.
+func (profile *ProfileData) GetAllAttributeValues(name string) []string {
+	if profile.Attributes == nil {
+		return nil
 	}
-	if v, ok := p.Attributes[name]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			return s
+	attrValue, ok := profile.Attributes[name]
+	if !ok || attrValue == nil {
+		return nil
+	}
+	switch typed := attrValue.(type) {
+	case string:
+		if typed == "" {
+			return nil
 		}
-		return fmt.Sprintf("%v", v)
+		return []string{typed}
+	case []interface{}:
+		var result []string
+		for _, elem := range typed {
+			if s, ok := elem.(string); ok && s != "" {
+				result = append(result, s)
+			}
+		}
+		return result
+	case []string:
+		var result []string
+		for _, s := range typed {
+			if s != "" {
+				result = append(result, s)
+			}
+		}
+		return result
+	default:
+		s := fmt.Sprintf("%v", attrValue)
+		if s == "" {
+			return nil
+		}
+		return []string{s}
 	}
-	return ""
 }
 
 // IsChild returns true if this profile has been merged into another profile.
-func (p *ProfileData) IsChild() bool {
-	return p.ReferenceProfileID != ""
+func (profile *ProfileData) IsChild() bool {
+	return profile.ReferenceProfileID != ""
 }

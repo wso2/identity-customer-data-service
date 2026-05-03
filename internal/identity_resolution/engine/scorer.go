@@ -27,6 +27,21 @@ import (
 	urModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 )
 
+// bestMatchScore returns the highest MatchAttribute score across all pairs of
+// (input element) × (candidate element).
+func bestMatchScore(vals1, vals2 []string, attrType, mode string) float64 {
+	best := 0.0
+	for _, v1 := range vals1 {
+		for _, v2 := range vals2 {
+			s := MatchAttribute(v1, v2, attrType, mode)
+			if s > best {
+				best = s
+			}
+		}
+	}
+	return best
+}
+
 // ScoreCandidate computes a match score using a weighted approach derived from
 // unification rule priorities. The algorithm:
 //
@@ -40,6 +55,8 @@ import (
 //  4. Three penalties cap the score below autoMergeThreshold when the match is not trustworthy:
 //     coverage (too few rules shared), anchor (only weak rules matched), majority (most rules
 //     scored zero).
+//  5. Multi-value attributes (arrays) are scored by taking the best element level match across
+//     all pairs so any element match counts as a match for the rule.
 func ScoreCandidate(
 	inputAttrs map[string]interface{},
 	candidate *model.ProfileData,
@@ -62,8 +79,8 @@ func ScoreCandidate(
 	// mutually applicable rule carries the highest weight and sets the anchor threshold.
 	maxApplicableWeight := 0.0
 	for i, rule := range rules {
-		if getStringValue(inputAttrs, rule.PropertyName) != "" &&
-			candidate.GetAttribute(rule.PropertyName) != "" {
+		if len(getStringValues(inputAttrs, rule.PropertyName)) > 0 &&
+			len(candidate.GetAllAttributeValues(rule.PropertyName)) > 0 {
 			maxApplicableWeight = float64(numOfRules - i)
 			break
 		}
@@ -85,19 +102,17 @@ func ScoreCandidate(
 	for i, rule := range rules {
 		weight := float64(numOfRules - i)
 
-		val1 := getStringValue(inputAttrs, rule.PropertyName)
-		if val1 == "" {
+		vals1 := getStringValues(inputAttrs, rule.PropertyName)
+		if len(vals1) == 0 {
 			continue
 		}
-		val2 := candidate.GetAttribute(rule.PropertyName)
-		if val2 == "" {
-			// Candidate has no data for this rule — skip entirely.
-			// A missing attribute cannot confirm or deny a match, so it must not
-			// dilute the score by counting in the denominator.
+		vals2 := candidate.GetAllAttributeValues(rule.PropertyName)
+		if len(vals2) == 0 {
+			// Candidate has no data for this rule so skip entirely.
 			continue
 		}
 
-		// Both profiles have data — this rule is mutually applicable.
+		// Both profiles have data, this rule is mutually applicable.
 		applicableWeight += weight
 
 		effectiveMode := constants.UnificationModeStrict
@@ -108,7 +123,8 @@ func ScoreCandidate(
 			effectiveMode = constants.UnificationModeStrict
 		}
 
-		score := MatchAttribute(val1, val2, rule.AttributeType, effectiveMode)
+		// For multi-value attributes, take the best score across all element pairs.
+		score := bestMatchScore(vals1, vals2, rule.AttributeType, effectiveMode)
 
 		breakdown[rule.PropertyName] = score
 		weightedSum += score * weight
@@ -132,10 +148,10 @@ func ScoreCandidate(
 	applicableCount := 0
 	nonMatchCount := 0
 	for _, rule := range rules {
-		if getStringValue(inputAttrs, rule.PropertyName) == "" {
+		if len(getStringValues(inputAttrs, rule.PropertyName)) == 0 {
 			continue
 		}
-		if candidate.GetAttribute(rule.PropertyName) == "" {
+		if len(candidate.GetAllAttributeValues(rule.PropertyName)) == 0 {
 			continue
 		}
 		applicableCount++

@@ -65,10 +65,11 @@ func NormalizePhone(phone string) string {
 	return string(digits)
 }
 
+// ("01/02/2006", "02/01/2006") are excluded because the same input
+// (e.g. "03/04/2026") parses successfully under both US (Mar 4) and EU
+// (Apr 3) interpretations
 var dateFormats = []string{
 	"2006-01-02",
-	"01/02/2006",
-	"02/01/2006",
 	"2006/01/02",
 	"Jan 2, 2006",
 	"January 2, 2006",

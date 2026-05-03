@@ -21,18 +21,18 @@ package model
 import "github.com/wso2/identity-customer-data-service/internal/system/pagination"
 
 type ReviewTask struct {
-	ID              string             `json:"id"`
-	OrgHandle       string             `json:"org_handle"`
-	SourceProfileID string             `json:"source_profile_id"`
-	TargetProfileID string             `json:"target_profile_id"`
-	MatchScore      float64            `json:"match_score"`
-	Status          string             `json:"status"`
-	MatchReason     string             `json:"match_reason,omitempty"`
-	ScoreBreakdown  map[string]float64 `json:"score_breakdown,omitempty"`
-	CreatedAt       string             `json:"created_at"`
-	ResolvedAt      string             `json:"resolved_at,omitempty"`
-	ResolvedBy      string             `json:"resolved_by,omitempty"`
-	Notes           string             `json:"notes,omitempty"`
+	ID                 string             `json:"id"`
+	OrgHandle          string             `json:"org_handle"`
+	IncomingProfileID  string             `json:"incoming_profile_id"`
+	CandidateProfileID string             `json:"candidate_profile_id"`
+	MatchScore         float64            `json:"match_score"`
+	Status             string             `json:"status"`
+	MatchReason        string             `json:"match_reason,omitempty"`
+	ScoreBreakdown     map[string]float64 `json:"score_breakdown,omitempty"`
+	CreatedAt          string             `json:"created_at"`
+	ResolvedAt         string             `json:"resolved_at,omitempty"`
+	ResolvedBy         string             `json:"resolved_by,omitempty"`
+	Notes              string             `json:"notes,omitempty"`
 }
 
 type ReviewTaskListResponse struct {

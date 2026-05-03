@@ -147,8 +147,8 @@ CREATE INDEX IF NOT EXISTS idx_blocking_keys_profile ON blocking_keys(profile_id
 CREATE TABLE IF NOT EXISTS review_tasks (
     id                      VARCHAR(255) PRIMARY KEY,
     org_handle              VARCHAR(255) NOT NULL,
-    source_profile_id       VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
-    target_profile_id    VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    incoming_profile_id       VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    candidate_profile_id    VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
     match_score             DECIMAL(5,4) NOT NULL,
     status                  VARCHAR(50) NOT NULL DEFAULT 'PENDING',
     match_reason            TEXT,
@@ -157,12 +157,12 @@ CREATE TABLE IF NOT EXISTS review_tasks (
     resolved_at             TIMESTAMPTZ,
     resolved_by             VARCHAR(255),
     resolution_notes        TEXT,
-    CONSTRAINT uq_review_task_profiles UNIQUE (source_profile_id, target_profile_id)
+    CONSTRAINT uq_review_task_profiles UNIQUE (incoming_profile_id, candidate_profile_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_review_tasks_org_status ON review_tasks(org_handle, status);
 CREATE INDEX IF NOT EXISTS idx_review_tasks_created ON review_tasks(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_review_tasks_source ON review_tasks(source_profile_id, status);
+CREATE INDEX IF NOT EXISTS idx_review_tasks_incoming ON review_tasks(incoming_profile_id, status);
 
 CREATE TABLE IF NOT EXISTS rejection_pairs (
     id              VARCHAR(255) PRIMARY KEY,

@@ -479,24 +479,24 @@ var IRFindCandidateIDsByKeys = map[string]string{
 }
 
 var IRInsertReviewTask = map[string]string{
-	"postgres": `INSERT INTO review_tasks (id, org_handle, source_profile_id, target_profile_id, match_score, status, score_breakdown)
+	"postgres": `INSERT INTO review_tasks (id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status, score_breakdown)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7)
-				 ON CONFLICT (source_profile_id, target_profile_id)
+				 ON CONFLICT (incoming_profile_id, candidate_profile_id)
 				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6
 				 WHERE review_tasks.status = 'PENDING'`,
 }
 
-// IRMirrorReviewTaskExists checks whether a PENDING task exists for the reverse pair (candidate→source).
+// IRMirrorReviewTaskExists checks whether a PENDING task exists for the reverse pair (candidate→incoming).
 var IRMirrorReviewTaskExists = map[string]string{
 	"postgres": `SELECT COUNT(*) FROM review_tasks
-				 WHERE source_profile_id = $1 AND target_profile_id = $2 AND status = $3`,
+				 WHERE incoming_profile_id = $1 AND candidate_profile_id = $2 AND status = $3`,
 }
 
 // IRUpdateMirrorReviewTask flips the direction of a mirror task and refreshes its score.
 var IRUpdateMirrorReviewTask = map[string]string{
 	"postgres": `UPDATE review_tasks
-				 SET source_profile_id = $1, target_profile_id = $2, match_score = $3, score_breakdown = $4
-				 WHERE source_profile_id = $5 AND target_profile_id = $6 AND status = $7`,
+				 SET incoming_profile_id = $1, candidate_profile_id = $2, match_score = $3, score_breakdown = $4
+				 WHERE incoming_profile_id = $5 AND candidate_profile_id = $6 AND status = $7`,
 }
 
 // IRCancelRelatedReviewTasks cancels all PENDING tasks that reference either profile.
@@ -504,26 +504,26 @@ var IRCancelRelatedReviewTasks = map[string]string{
 	"postgres": `UPDATE review_tasks
 				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
 				 WHERE id != $4 AND status = $5
-				   AND (source_profile_id IN ($6, $7) OR target_profile_id IN ($6, $7))`,
+				   AND (incoming_profile_id IN ($6, $7) OR candidate_profile_id IN ($6, $7))`,
 }
 
-// IRFindRelatedPendingReviewTasks finds source profile IDs of PENDING tasks affected by a cascade cancel.
+// IRFindRelatedPendingReviewTasks finds incoming profile IDs of PENDING tasks affected by a cascade cancel.
 var IRFindRelatedPendingReviewTasks = map[string]string{
-	"postgres": `SELECT DISTINCT source_profile_id
+	"postgres": `SELECT DISTINCT incoming_profile_id
 				 FROM review_tasks
 				 WHERE id != $1 AND status = $2
-				   AND (source_profile_id IN ($3, $4) OR target_profile_id IN ($3, $4))`,
+				   AND (incoming_profile_id IN ($3, $4) OR candidate_profile_id IN ($3, $4))`,
 }
 
 var IRGetReviewTaskByID = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status,
+	"postgres": `SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
 				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
 				 FROM review_tasks
 				 WHERE id = $1`,
 }
 
 var IRGetPendingReviewTasks = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status,
+	"postgres": `SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
 				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
 				 FROM review_tasks
 				 WHERE org_handle = $1 AND status = $2
@@ -536,18 +536,18 @@ var IRCountPendingReviewTasks = map[string]string{
 }
 
 var IRGetPendingReviewTasksByProfile = map[string]string{
-	"postgres": `SELECT id, org_handle, source_profile_id, target_profile_id, match_score, status,
+	"postgres": `SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
 				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
 				 FROM review_tasks
 				 WHERE org_handle = $1 AND status = $2
-				   AND (source_profile_id = $3)
+				   AND (incoming_profile_id = $3)
 				 ORDER BY match_score DESC
 				 LIMIT $4`,
 }
 
 var IRCountPendingReviewTasksByProfile = map[string]string{
 	"postgres": `SELECT COUNT(*) FROM review_tasks WHERE org_handle = $1 AND status = $2
-				   AND (source_profile_id = $3 OR target_profile_id = $3)`,
+				   AND (incoming_profile_id = $3 OR candidate_profile_id = $3)`,
 }
 
 var IRUpdateReviewTaskStatus = map[string]string{

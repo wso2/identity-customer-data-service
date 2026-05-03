@@ -26,6 +26,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	adminModel "github.com/wso2/identity-customer-data-service/internal/admin_config/model"
+	adminStore "github.com/wso2/identity-customer-data-service/internal/admin_config/store"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -126,6 +128,15 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 
 	_ = unificationSvc.AddUnificationRule(phoneBasedRule, SuperTenantOrg)
 
+	// The score-based pipeline only auto-merges when AutoMergeEnabled is true on the
+	// org's admin config; otherwise high-score matches are routed to manual review.
+	require.NoError(t, adminStore.UpdateAdminConfig(adminModel.AdminConfig{
+		OrgHandle:             SuperTenantOrg,
+		AutoMergeEnabled:      true,
+		AutoMergeThreshold:    constants.DefaultAutoMergeThreshold,
+		ManualReviewThreshold: constants.DefaultManualReviewThreshold,
+	}, SuperTenantOrg))
+
 	t.Run("Scenario1_TempProfiles_Email_Then_Phone_Unify", func(t *testing.T) {
 		p1 := mustUnmarshalProfile(`{"identity_attributes":{"email":["a@wso2.com"]},"traits":{"interests":["music"]}}`)
 		p2 := mustUnmarshalProfile(`{"identity_attributes":{"email":["a@wso2.com"],"phone_number":["0771234567"]},"traits":{"interests":["sports"]}}`)
@@ -142,9 +153,9 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(prof3.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, RuleNameEmailBased, merged1.MergedTo.Reason)
+		require.Equal(t, constants.MergeReasonAutoMerge, merged1.MergedTo.Reason)
 		require.Equal(t, merged2.MergedTo.ProfileId, merged3.MergedTo.ProfileId)
-		require.Equal(t, RuleNamePhoneBased, merged3.MergedTo.Reason)
+		require.Equal(t, constants.MergeReasonAutoMerge, merged3.MergedTo.Reason)
 
 		require.Contains(t, merged3.IdentityAttributes["email"].([]interface{}), "a@wso2.com")
 		require.Contains(t, merged1.IdentityAttributes["phone_number"].([]interface{}), "0771234567")
@@ -165,7 +176,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged2, _ := profileSvc.GetProfile(p2.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.ProfileId)
-		require.Equal(t, RuleNameEmailBased, merged1.MergedTo.Reason)
+		require.Equal(t, constants.MergeReasonAutoMerge, merged1.MergedTo.Reason)
 
 		require.Contains(t, merged1.IdentityAttributes["email"].([]interface{}), "b2@wso2.com")
 		require.ElementsMatch(t, []interface{}{"music", "sports"}, merged2.Traits["interests"].([]interface{}))
@@ -191,11 +202,10 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(p3.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, RuleNameEmailBased, merged1.MergedTo.Reason)
+		require.Equal(t, constants.MergeReasonAutoMerge, merged1.MergedTo.Reason)
 
 		require.Equal(t, merged2.MergedTo.ProfileId, merged3.ProfileId)
-		// todo: Verify if this is correct. Should it be PHONE_BASED since we merge perm to merged profiles of Temp using phone number?
-		require.Equal(t, RuleNameEmailBased, merged2.MergedTo.Reason)
+		require.Equal(t, constants.MergeReasonAutoMerge, merged2.MergedTo.Reason)
 
 		require.Equal(t, "perm-789", merged1.IdentityAttributes["user_id"])
 		require.ElementsMatch(t, []interface{}{"music", "art", "sports"}, merged3.Traits["interests"].([]interface{}))
@@ -221,9 +231,9 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(p3.ProfileId)
 
 		require.Equal(t, merged1.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, RuleNameEmailBased, merged2.MergedTo.Reason)
+		require.Equal(t, constants.MergeReasonAutoMerge, merged2.MergedTo.Reason)
 		require.Equal(t, merged1.ProfileId, merged3.MergedTo.ProfileId)
-		require.Equal(t, RuleNamePhoneBased, merged3.MergedTo.Reason)
+		require.Equal(t, constants.MergeReasonAutoMerge, merged3.MergedTo.Reason)
 
 		require.ElementsMatch(t, []interface{}{"music", "art", "sports"}, merged3.Traits["interests"].([]interface{}))
 		require.Contains(t, merged1.IdentityAttributes["phone_number"].([]interface{}), "0775554444")
@@ -261,7 +271,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged2, _ := profileSvc.GetProfile(p2.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, RuleNameEmailBased, merged2.MergedTo.Reason)
+		require.Equal(t, constants.MergeReasonAutoMerge, merged2.MergedTo.Reason)
 
 		cleanProfiles(profileSvc, SuperTenantOrg)
 	})

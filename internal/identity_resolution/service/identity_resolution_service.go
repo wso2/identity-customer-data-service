@@ -116,7 +116,7 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 	if !approved {
 		// Store the rejection pair before marking the task rejected so the pair
 		// is always present when the task enters REJECTED state.
-		if err := irStore.InsertRejectionPair(task.OrgHandle, task.SourceProfileID, task.TargetProfileID, resolvedBy); err != nil {
+		if err := irStore.InsertRejectionPair(task.OrgHandle, task.IncomingProfileID, task.CandidateProfileID, resolvedBy); err != nil {
 			logger.Error(fmt.Sprintf("Service: failed to store rejection pair for task %s", taskID), log.Error(err))
 			return err
 		}
@@ -124,91 +124,91 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 			return err
 		}
 		logger.Info(fmt.Sprintf("Service: review task %s rejected — rejection pair stored for '%s' ↔ '%s'",
-			taskID, task.SourceProfileID, task.TargetProfileID))
+			taskID, task.IncomingProfileID, task.CandidateProfileID))
 		return nil
 	}
 
 	// Cascade cancel: cancel all other PENDING tasks that reference either profile.
 	// Only on APPROVED — rejection doesn't change profile data, so other tasks remain valid.
-	cancelledSourceIDs, cancelErr := irStore.CancelRelatedReviewTasks(taskID, task.SourceProfileID, task.TargetProfileID, "system")
+	cancelledIncomingIDs, cancelErr := irStore.CancelRelatedReviewTasks(taskID, task.IncomingProfileID, task.CandidateProfileID, constants.CanceledBySystem)
 	if cancelErr != nil {
 		logger.Warn(fmt.Sprintf("Service: cascade cancel failed for task %s", taskID), log.Error(cancelErr))
 		// Non-fatal — the merge itself will still proceed.
 	}
 
-	// Re-enqueue cancelled source profiles for re-evaluation.
-	// The UnificationQueue processes them serially — no worker storm.
-	for _, srcID := range cancelledSourceIDs {
+	// Re-enqueue cancelled incoming profiles for re-evaluation.
+	for _, srcID := range cancelledIncomingIDs {
 		p, loadErr := profileStore.GetProfile(srcID)
 		if loadErr != nil || p == nil {
 			logger.Warn(fmt.Sprintf("Service: skipping re-evaluation for '%s' — profile not found or error", srcID))
 			continue
 		}
-		// Skip if the profile is already a child (merged into another profile).
+
 		if p.ProfileStatus != nil && p.ProfileStatus.ReferenceProfileId != "" {
-			logger.Info(fmt.Sprintf("Service: skipping re-evaluation for '%s' — already merged (child of '%s')",
-				srcID, p.ProfileStatus.ReferenceProfileId))
+			masterID := p.ProfileStatus.ReferenceProfileId
+			master, err := profileStore.GetProfile(masterID)
+			if err == nil && master != nil {
+				workers.EnqueueProfileForProcessing(*master)
+			}
 			continue
 		}
+
 		logger.Info(fmt.Sprintf("Service: re-enqueuing profile '%s' for re-evaluation after cascade cancel", srcID))
 		workers.EnqueueProfileForProcessing(*p)
 	}
 
-	logger.Info(fmt.Sprintf("Service: review task %s approved — merging profiles '%s' → '%s'",
-		taskID, task.SourceProfileID, task.TargetProfileID))
-
-	source, err := profileStore.GetProfile(task.SourceProfileID)
+	incomingProfile, err := profileStore.GetProfile(task.IncomingProfileID)
 	if err != nil {
-		logger.Error("Service: failed to load source profile for review merge", log.Error(err))
+		logger.Error("Service: failed to load incoming profile for review merge", log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.IR_MERGE_FAILED.Code,
 			Message:     errors2.IR_MERGE_FAILED.Message,
-			Description: fmt.Sprintf("Failed to load source profile: %s", task.SourceProfileID),
+			Description: fmt.Sprintf("Failed to load incoming profile: %s", task.IncomingProfileID),
 		}, err)
 	}
-	if source == nil {
+	if incomingProfile == nil {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_NOT_FOUND.Code,
 			Message:     errors2.PROFILE_NOT_FOUND.Message,
-			Description: fmt.Sprintf("Source profile %s no longer exists", task.SourceProfileID),
+			Description: fmt.Sprintf("incoming profile %s no longer exists", task.IncomingProfileID),
 		}, http.StatusNotFound)
 	}
 
-	target, err := profileStore.GetProfile(task.TargetProfileID)
+	candidate, err := profileStore.GetProfile(task.CandidateProfileID)
 	if err != nil {
-		logger.Error("Service: failed to load target profile for review merge", log.Error(err))
+		logger.Error("Service: failed to load candidate profile for review merge", log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.IR_MERGE_FAILED.Code,
 			Message:     errors2.IR_MERGE_FAILED.Message,
-			Description: fmt.Sprintf("Failed to load target profile: %s", task.TargetProfileID),
+			Description: fmt.Sprintf("Failed to load candidate profile: %s", task.CandidateProfileID),
 		}, err)
 	}
-	if target == nil {
+	if candidate == nil {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.PROFILE_NOT_FOUND.Code,
 			Message:     errors2.PROFILE_NOT_FOUND.Message,
-			Description: fmt.Sprintf("Target profile %s no longer exists", task.TargetProfileID),
+			Description: fmt.Sprintf("Candidate profile %s no longer exists", task.CandidateProfileID),
 		}, http.StatusNotFound)
 	}
 
 	// Redirect to master if either profile is a child (may have been merged since the task was created).
-	source, err = redirectToMasterIfChild(source, logger)
+	incomingProfile, err = redirectToMasterIfChild(incomingProfile, logger)
 	if err != nil {
 		return err
 	}
-	target, err = redirectToMasterIfChild(target, logger)
+	candidate, err = redirectToMasterIfChild(candidate, logger)
 	if err != nil {
 		return err
 	}
 
 	// After redirect both might now point to the same master — already merged.
-	if source.ProfileId == target.ProfileId {
-		logger.Info(fmt.Sprintf("Service: review task %s — source and target resolve to same profile '%s', skipping",
-			taskID, source.ProfileId))
+	if incomingProfile.ProfileId == candidate.ProfileId {
+		logger.Info(fmt.Sprintf("Service: review task %s — incoming and candidate resolve to same profile '%s', skipping",
+			taskID, incomingProfile.ProfileId))
 		return nil
 	}
 
-	if source.UserId != "" && target.UserId != "" && source.UserId != target.UserId {
+	if incomingProfile.UserId != "" && candidate.UserId != "" && incomingProfile.UserId != candidate.UserId {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.IR_CANNOT_MERGE.Code,
 			Message:     errors2.IR_CANNOT_MERGE.Message,
@@ -216,17 +216,28 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 		}, http.StatusConflict)
 	}
 
-	// All pre-merge validation passed — mark the task approved before merging.
+	// Run the merge BEFORE updating task status. If MergeMatchedProfiles surfaces
+	// an error, the task must stay PENDING so the caller can retry.
+	if mergeErr := workers.MergeMatchedProfiles(*candidate, *incomingProfile, constants.MergeReasonReviewMerge); mergeErr != nil {
+		logger.Error(fmt.Sprintf("Service: review merge failed for task %s — '%s' and '%s'",
+			taskID, incomingProfile.ProfileId, candidate.ProfileId), log.Error(mergeErr))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:    errors2.IR_MERGE_FAILED.Code,
+			Message: errors2.IR_MERGE_FAILED.Message,
+			Description: fmt.Sprintf("Failed to merge profiles '%s' and '%s' for review task %s",
+				incomingProfile.ProfileId, candidate.ProfileId, taskID),
+		}, mergeErr)
+	}
+
+	// Merge succeeded — commit task status.
 	if err := irStore.UpdateReviewTaskStatus(taskID, status, resolvedBy, notes); err != nil {
+		logger.Error(fmt.Sprintf("Service: merge succeeded but failed to update task %s status to %s",
+			taskID, status), log.Error(err))
 		return err
 	}
 
-	// Use the existing merge function from profile_worker — it handles all
-	// merge scenarios (same-type, mixed-type, master with children, etc.).
-	workers.MergeMatchedProfiles(*target, *source, constants.MergeReasonReviewMerge)
-
 	logger.Info(fmt.Sprintf("Service: review merge complete for task %s — '%s' and '%s'",
-		taskID, source.ProfileId, target.ProfileId))
+		taskID, incomingProfile.ProfileId, candidate.ProfileId))
 
 	return nil
 }

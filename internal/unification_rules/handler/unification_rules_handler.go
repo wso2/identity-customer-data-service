@@ -369,6 +369,14 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		go worker.RemoveAttributeIndex(orgHandle, newRule.PropertyName)
 	}
 
+	// AttributeType change on an already-active rule invalidates the blocking-key shape.
+	if wasActive && nowActive && oldRule.AttributeType != newRule.AttributeType {
+		go func() {
+			worker.RemoveAttributeIndex(orgHandle, newRule.PropertyName)
+			worker.IndexNewAttribute(orgHandle, *newRule)
+		}()
+	}
+
 	ruleResponse := model.UnificationRuleAPIResponse{
 		RuleId:            newRule.RuleId,
 		RuleName:          newRule.RuleName,

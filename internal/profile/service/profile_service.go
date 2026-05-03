@@ -1791,7 +1791,6 @@ func (ps *ProfilesService) GetProfilesHybrid(
 	limit int,
 ) ([]profileModel.FuzzyMatchResult, error) {
 	logger := log.GetLogger()
-	startTime := time.Now()
 
 	// Step 1: Parse fuzzy filters into flat attributes for the IR engine.
 	flatAttrs := parseFuzzyFiltersToFlatAttrs(fuzzyFilters)
@@ -1860,9 +1859,6 @@ func (ps *ProfilesService) GetProfilesHybrid(
 	if err != nil {
 		return nil, err
 	}
-
-	logger.Info(fmt.Sprintf("Service: hybrid search complete — %d matches above threshold %.2f in %dms",
-		len(results), threshold, time.Since(startTime).Milliseconds()))
 
 	return results, nil
 }

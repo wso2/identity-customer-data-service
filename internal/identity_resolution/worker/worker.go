@@ -121,7 +121,7 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 	// Resolve child candidates to their master profiles.
 	// If a candidate is a child (merged into a master), replace it with the master ID.
 	// This prevents creating redundant review tasks for both a master and its child
-	// against the same target profile — they share the same data.
+	// against the same candidate profile because they share the same data.
 	{
 		resolvedIDs := make([]string, 0, len(candidateIDs))
 		seen := make(map[string]bool)
@@ -251,48 +251,91 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 	}
 
 	merged := false
-	for _, sc := range scored {
+	var mergedMaster *profileModel.Profile
+	var remaining []scoredCandidate
+
+	for i, sc := range scored {
 		decision := model.Decide(sc.score, thresholds)
 
-		switch decision {
-		case constants.DecisionAutoMerge:
-			if !merged {
-				logger.Info(fmt.Sprintf("AsyncWorker: AUTO_MERGE (best-fit) — profile '%s' matches '%s' (score=%.4f)",
-					freshProfile.ProfileId, sc.id, sc.score))
+		if decision == constants.DecisionAutoMerge {
+			logger.Info(fmt.Sprintf("AsyncWorker: AUTO_MERGE (best-fit) — profile '%s' matches '%s' (score=%.4f)",
+				freshProfile.ProfileId, sc.id, sc.score))
 
-				matchedProfile, loadErr := profileStore.GetProfile(sc.id)
-				if loadErr != nil || matchedProfile == nil {
-					logger.Error(fmt.Sprintf("AsyncWorker: failed to load matched profile '%s' for auto-merge", sc.id))
-					insertReviewTaskSafe(orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
-				} else {
-					workers.MergeMatchedProfiles(*matchedProfile, *freshProfile, constants.MergeReasonAutoMerge)
-					merged = true
-					if auditErr := irStore.InsertMergeAuditLog(model.MergeAuditEntry{
-						OrgHandle:          orgHandle,
-						PrimaryProfileID:   matchedProfile.ProfileId,
-						SecondaryProfileID: freshProfile.ProfileId,
-						MergeType:          constants.DecisionAutoMerge,
-						MatchScore:         sc.score,
-						MergedBy:           "SYSTEM",
-					}); auditErr != nil {
-						logger.Error(fmt.Sprintf("AsyncWorker: failed to insert merge audit log for '%s' → '%s'",
-							matchedProfile.ProfileId, freshProfile.ProfileId), log.Error(auditErr))
-					}
-					logger.Info(fmt.Sprintf("AsyncWorker: profile '%s' consumed by merge — skipping remaining candidates",
-						freshProfile.ProfileId))
-				}
+			matchedProfile, loadErr := profileStore.GetProfile(sc.id)
+			if loadErr != nil || matchedProfile == nil {
+				logger.Error(fmt.Sprintf("AsyncWorker: failed to load matched profile '%s' for auto-merge", sc.id))
+				insertReviewTask(orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
+				continue
 			}
 
-		case constants.DecisionManualReview:
-			if !merged {
-				logger.Info(fmt.Sprintf("AsyncWorker: MANUAL_REVIEW — profile '%s' matches '%s' (score=%.4f)",
-					freshProfile.ProfileId, sc.id, sc.score))
-				insertReviewTaskSafe(orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
+			if mergeErr := workers.MergeMatchedProfiles(*matchedProfile, *freshProfile, constants.MergeReasonAutoMerge); mergeErr != nil {
+				// Merge failed so not mark merged=true, not write audit log, not
+				// cascade-cancel related tasks.
+				logger.Error(fmt.Sprintf("AsyncWorker: auto-merge failed for '%s' → '%s' — falling back to review task",
+					matchedProfile.ProfileId, freshProfile.ProfileId), log.Error(mergeErr))
+				insertReviewTask(orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
+				continue
 			}
+			merged = true
+			mergedMaster = matchedProfile
+			if auditErr := irStore.InsertMergeAuditLog(model.MergeAuditEntry{
+				OrgHandle:          orgHandle,
+				PrimaryProfileID:   matchedProfile.ProfileId,
+				SecondaryProfileID: freshProfile.ProfileId,
+				MergeType:          constants.DecisionAutoMerge,
+				MatchScore:         sc.score,
+				MergedBy:           constants.MergeOnTrigger,
+			}); auditErr != nil {
+				logger.Error(fmt.Sprintf("AsyncWorker: failed to insert merge audit log for '%s' → '%s'",
+					matchedProfile.ProfileId, freshProfile.ProfileId), log.Error(auditErr))
+			}
+			remaining = scored[i+1:]
+			break
 		}
 
-		if merged {
-			break
+		logger.Info(fmt.Sprintf("AsyncWorker: MANUAL_REVIEW — profile '%s' matches '%s' (score=%.4f)",
+			freshProfile.ProfileId, sc.id, sc.score))
+		insertReviewTask(orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
+	}
+
+	if merged {
+		// Cancel pending review tasks that referenced the freshly-merged profile.
+		cancelledIncomingIDs, cancelErr := irStore.CancelRelatedReviewTasks("", freshProfile.ProfileId,
+			mergedMaster.ProfileId, constants.CanceledBySystem)
+		if cancelErr != nil {
+			logger.Warn(fmt.Sprintf("AsyncWorker: cascade cancel failed after auto-merge of '%s' → '%s'",
+				freshProfile.ProfileId, mergedMaster.ProfileId), log.Error(cancelErr))
+		}
+		for _, srcID := range cancelledIncomingIDs {
+			p, loadErr := profileStore.GetProfile(srcID)
+			if loadErr != nil || p == nil {
+				continue
+			}
+			// If the cancelled task's incoming has itself become a child, re-enqueue its master instead.
+			if p.ProfileStatus != nil && p.ProfileStatus.ReferenceProfileId != "" {
+				masterID := p.ProfileStatus.ReferenceProfileId
+				if masterID == mergedMaster.ProfileId {
+					continue
+				}
+				master, mErr := profileStore.GetProfile(masterID)
+				if mErr != nil || master == nil {
+					continue
+				}
+				workers.EnqueueProfileForProcessing(*master)
+				continue
+			}
+			workers.EnqueueProfileForProcessing(*p)
+		}
+
+		// Surface remaining qualified candidates as review tasks against the new master.
+		// Incoming = mergedMaster.ProfileId, the new master is the live entity that holds the matched attributes.
+		for _, sc := range remaining {
+			decision := model.Decide(sc.score, thresholds)
+			if decision == constants.DecisionAutoMerge || decision == constants.DecisionManualReview {
+				logger.Info(fmt.Sprintf("AsyncWorker: downgrading '%s' (score=%.4f) to review task against new master '%s'",
+					sc.id, sc.score, mergedMaster.ProfileId))
+				insertReviewTask(orgHandle, mergedMaster.ProfileId, sc.id, sc.score, sc.breakdown)
+			}
 		}
 	}
 
@@ -300,32 +343,32 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 		freshProfile.ProfileId, merged))
 }
 
-func insertReviewTaskSafe(orgHandle, sourceID, targetID string, score float64, breakdown map[string]float64) {
+func insertReviewTask(orgHandle, incomingProfileID, candidateProfileID string, score float64, breakdown map[string]float64) {
 	logger := log.GetLogger()
 
-	rejectedIDs, err := irStore.GetRejectedProfileIDs(orgHandle, sourceID)
+	rejectedIDs, err := irStore.GetRejectedProfileIDs(orgHandle, incomingProfileID)
 	if err != nil {
-		logger.Warn(fmt.Sprintf("AsyncWorker: could not check rejection pairs for '%s', proceeding with task creation", sourceID), log.Error(err))
-	} else if rejectedIDs[targetID] {
-		logger.Info(fmt.Sprintf("AsyncWorker: skipping review task for '%s' → '%s' — pair already rejected", sourceID, targetID))
+		logger.Warn(fmt.Sprintf("AsyncWorker: could not check rejection pairs for '%s', proceeding with task creation", incomingProfileID), log.Error(err))
+	} else if rejectedIDs[candidateProfileID] {
+		logger.Info(fmt.Sprintf("AsyncWorker: skipping review task for '%s' → '%s' — pair already rejected", incomingProfileID, candidateProfileID))
 		return
 	}
 
 	task := model.ReviewTask{
-		OrgHandle:       orgHandle,
-		SourceProfileID: sourceID,
-		TargetProfileID: targetID,
-		MatchScore:      score,
-		Status:          constants.ReviewStatusPending,
-		ScoreBreakdown:  breakdown,
+		OrgHandle:          orgHandle,
+		IncomingProfileID:  incomingProfileID,
+		CandidateProfileID: candidateProfileID,
+		MatchScore:         score,
+		Status:             constants.ReviewStatusPending,
+		ScoreBreakdown:     breakdown,
 	}
 
 	if err := irStore.InsertReviewTask(task); err != nil {
 		logger.Error(fmt.Sprintf("AsyncWorker: failed to create review task for '%s' → '%s'",
-			sourceID, targetID), log.Error(err))
+			incomingProfileID, candidateProfileID), log.Error(err))
 	} else {
 		logger.Info(fmt.Sprintf("AsyncWorker: review task created for '%s' → '%s' (score=%.4f)",
-			sourceID, targetID, score))
+			incomingProfileID, candidateProfileID, score))
 	}
 }
 
@@ -393,14 +436,14 @@ func IndexNewAttribute(orgHandle string, rule urModel.UnificationRule) {
 
 	count := 0
 	for _, p := range profiles {
-		val := ""
-		if v, ok := p.Attributes[rule.PropertyName]; ok {
-			val = fmt.Sprintf("%v", v)
-		}
-		if val == "" {
+		values := p.GetAllAttributeValues(rule.PropertyName)
+		if len(values) == 0 {
 			continue
 		}
-		keys := engine.GenerateBlockingKeys(attrType, rule.PropertyName, val)
+		var keys []model.BlockingKey
+		for _, val := range values {
+			keys = append(keys, engine.GenerateBlockingKeys(attrType, rule.PropertyName, val)...)
+		}
 		if len(keys) > 0 {
 			if err := irStore.InsertBlockingKeys(p.ProfileID, orgHandle, keys); err != nil {
 				logger.Error(fmt.Sprintf("Reindexer: failed to insert keys for profile '%s'", p.ProfileID), log.Error(err))

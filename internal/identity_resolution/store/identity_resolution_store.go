@@ -183,8 +183,8 @@ func scanProfileData(row map[string]interface{}) (model.ProfileData, error) {
 func InsertReviewTask(task model.ReviewTask) error {
 	logger := log.GetLogger()
 	logger.Info("Store: inserting review task",
-		log.String("source", task.SourceProfileID),
-		log.String("target", task.TargetProfileID))
+		log.String("incoming", task.IncomingProfileID),
+		log.String("candidate", task.CandidateProfileID))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -200,7 +200,7 @@ func InsertReviewTask(task model.ReviewTask) error {
 	// update its score/breakdown to reflect the latest data instead of creating a duplicate.
 	mirrorQuery := scripts.IRMirrorReviewTaskExists[provider.NewDBProvider().GetDBType()]
 	mirrorRows, err := dbClient.ExecuteQuery(mirrorQuery,
-		task.TargetProfileID, task.SourceProfileID, constants.ReviewStatusPending)
+		task.CandidateProfileID, task.IncomingProfileID, constants.ReviewStatusPending)
 	if err == nil && len(mirrorRows) > 0 {
 		if cnt, ok := mirrorRows[0]["count"]; ok {
 			var count int
@@ -215,15 +215,15 @@ func InsertReviewTask(task model.ReviewTask) error {
 				breakdownJSON, _ := json.Marshal(task.ScoreBreakdown)
 				updateQuery := scripts.IRUpdateMirrorReviewTask[provider.NewDBProvider().GetDBType()]
 				_, updateErr := dbClient.ExecuteQuery(updateQuery,
-					task.SourceProfileID, task.TargetProfileID,
+					task.IncomingProfileID, task.CandidateProfileID,
 					task.MatchScore, string(breakdownJSON),
-					task.TargetProfileID, task.SourceProfileID, constants.ReviewStatusPending)
+					task.CandidateProfileID, task.IncomingProfileID, constants.ReviewStatusPending)
 				if updateErr != nil {
 					logger.Warn(fmt.Sprintf("Store: failed to flip mirror task '%s' ↔ '%s'",
-						task.SourceProfileID, task.TargetProfileID), log.Error(updateErr))
+						task.IncomingProfileID, task.CandidateProfileID), log.Error(updateErr))
 				} else {
 					logger.Info(fmt.Sprintf("Store: flipped mirror task: now '%s' → '%s' (score=%.4f)",
-						task.SourceProfileID, task.TargetProfileID, task.MatchScore))
+						task.IncomingProfileID, task.CandidateProfileID, task.MatchScore))
 				}
 				return nil
 			}
@@ -238,7 +238,7 @@ func InsertReviewTask(task model.ReviewTask) error {
 
 	query := scripts.IRInsertReviewTask[provider.NewDBProvider().GetDBType()]
 	_, err = dbClient.ExecuteQuery(query,
-		task.ID, task.OrgHandle, task.SourceProfileID, task.TargetProfileID,
+		task.ID, task.OrgHandle, task.IncomingProfileID, task.CandidateProfileID,
 		task.MatchScore, task.Status, string(breakdownJSON))
 	if err != nil {
 		logger.Error("Store: failed to insert review task", log.Error(err))
@@ -246,7 +246,7 @@ func InsertReviewTask(task model.ReviewTask) error {
 			Code:    errors2.IR_REVIEW_TASK_FAILED.Code,
 			Message: errors2.IR_REVIEW_TASK_FAILED.Message,
 			Description: fmt.Sprintf("Failed to create review task for profiles %s → %s",
-				task.SourceProfileID, task.TargetProfileID),
+				task.IncomingProfileID, task.CandidateProfileID),
 		}, err)
 	}
 
@@ -255,11 +255,11 @@ func InsertReviewTask(task model.ReviewTask) error {
 }
 
 // CancelRelatedReviewTasks cancels all PENDING review tasks that reference either of the given profile IDs.
-// Returns the source profile IDs of the cancelled tasks so they can be re-evaluated.
-func CancelRelatedReviewTasks(excludeTaskID, sourceProfileID, targetProfileID, cancelledBy string) ([]string, error) {
+// Returns the incoming profile IDs of the cancelled tasks so they can be re-evaluated.
+func CancelRelatedReviewTasks(excludeTaskID, IncomingProfileID, CandidateProfileID, cancelledBy string) ([]string, error) {
 	logger := log.GetLogger()
 	logger.Info(fmt.Sprintf("Store: cancelling related review tasks for profiles '%s' and '%s' (excluding task '%s')",
-		sourceProfileID, targetProfileID, excludeTaskID))
+		IncomingProfileID, CandidateProfileID, excludeTaskID))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -268,23 +268,23 @@ func CancelRelatedReviewTasks(excludeTaskID, sourceProfileID, targetProfileID, c
 	}
 	defer dbClient.Close()
 
-	// Step 1: Find source profile IDs that will be affected before cancelling.
+	// Step 1: Find incoming profile IDs that will be affected before cancelling.
 	findQuery := scripts.IRFindRelatedPendingReviewTasks[provider.NewDBProvider().GetDBType()]
 	rows, err := dbClient.ExecuteQuery(findQuery,
 		excludeTaskID, constants.ReviewStatusPending,
-		sourceProfileID, targetProfileID)
+		IncomingProfileID, CandidateProfileID)
 	if err != nil {
 		logger.Warn("Store: failed to query related tasks for re-evaluation", log.Error(err))
 		// Non-fatal for the find step — proceed with cancel anyway.
 	}
 
-	var affectedSourceIDs []string
+	var affectedIncomingIDs []string
 	for _, row := range rows {
-		if v, ok := row["source_profile_id"]; ok && v != nil {
+		if v, ok := row["incoming_profile_id"]; ok && v != nil {
 			id := fmt.Sprintf("%v", v)
-			// Don't re-evaluate profiles that were just merged (source or target of the resolved task).
-			if id != sourceProfileID && id != targetProfileID {
-				affectedSourceIDs = append(affectedSourceIDs, id)
+			// Don't re-evaluate profiles that were just merged (incoming or candidate of the resolved task).
+			if id != IncomingProfileID && id != CandidateProfileID {
+				affectedIncomingIDs = append(affectedIncomingIDs, id)
 			}
 		}
 	}
@@ -295,15 +295,15 @@ func CancelRelatedReviewTasks(excludeTaskID, sourceProfileID, targetProfileID, c
 		constants.ReviewStatusCancelled, cancelledBy,
 		fmt.Sprintf("Auto-cancelled: related task %s was resolved", excludeTaskID),
 		excludeTaskID, constants.ReviewStatusPending,
-		sourceProfileID, targetProfileID)
+		IncomingProfileID, CandidateProfileID)
 	if err != nil {
 		logger.Error("Store: failed to cancel related review tasks", log.Error(err))
 		return nil, err
 	}
 
-	logger.Info(fmt.Sprintf("Store: cancelled related tasks, %d source profiles eligible for re-evaluation",
-		len(affectedSourceIDs)))
-	return affectedSourceIDs, nil
+	logger.Info(fmt.Sprintf("Store: cancelled related tasks, %d incoming profiles eligible for re-evaluation",
+		len(affectedIncomingIDs)))
+	return affectedIncomingIDs, nil
 }
 
 func GetReviewTaskByID(taskID string) (*model.ReviewTask, error) {
@@ -487,11 +487,11 @@ func scanReviewTask(row map[string]interface{}) model.ReviewTask {
 	if v, ok := row["org_handle"]; ok && v != nil {
 		task.OrgHandle = fmt.Sprintf("%v", v)
 	}
-	if v, ok := row["source_profile_id"]; ok && v != nil {
-		task.SourceProfileID = fmt.Sprintf("%v", v)
+	if v, ok := row["incoming_profile_id"]; ok && v != nil {
+		task.IncomingProfileID = fmt.Sprintf("%v", v)
 	}
-	if v, ok := row["target_profile_id"]; ok && v != nil {
-		task.TargetProfileID = fmt.Sprintf("%v", v)
+	if v, ok := row["candidate_profile_id"]; ok && v != nil {
+		task.CandidateProfileID = fmt.Sprintf("%v", v)
 	}
 	if v, ok := row["match_score"]; ok && v != nil {
 		switch f := v.(type) {

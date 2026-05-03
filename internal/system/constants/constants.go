@@ -302,6 +302,10 @@ const (
 )
 
 const (
+	CanceledBySystem = "SYSTEM"
+)
+
+const (
 	SystemUserIdMatchReason = "system:user_id_match"
 )
 

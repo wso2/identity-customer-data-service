@@ -139,28 +139,54 @@ func GenerateBlockingKeys(attrType string, attrName string, value string) []mode
 }
 
 // GenerateBlockingKeysFromRules generates blocking keys only for attributes that have active unification rules.
+// For multi-value attributes (arrays) it generates one set of blocking keys per element so that each
+// individual value is independently searchable during candidate search.
 func GenerateBlockingKeysFromRules(flatAttrs map[string]interface{}, rules []urModel.UnificationRule) []model.BlockingKey {
 	var allKeys []model.BlockingKey
 	for _, rule := range rules {
-		strVal := getStringValue(flatAttrs, rule.PropertyName)
-		if strVal == "" {
-			continue
+		for _, strVal := range getStringValues(flatAttrs, rule.PropertyName) {
+			keys := GenerateBlockingKeys(rule.AttributeType, rule.PropertyName, strVal)
+			allKeys = append(allKeys, keys...)
 		}
-		keys := GenerateBlockingKeys(rule.AttributeType, rule.PropertyName, strVal)
-		allKeys = append(allKeys, keys...)
 	}
 	return allKeys
 }
 
-func getStringValue(attrs map[string]interface{}, key string) string {
+func getStringValues(attrs map[string]interface{}, key string) []string {
 	if attrs == nil {
-		return ""
+		return nil
 	}
-	if v, ok := attrs[key]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			return s
+	v, ok := attrs[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch typed := v.(type) {
+	case string:
+		if typed == "" {
+			return nil
 		}
-		return fmt.Sprintf("%v", v)
+		return []string{typed}
+	case []interface{}:
+		var result []string
+		for _, elem := range typed {
+			if s, ok := elem.(string); ok && s != "" {
+				result = append(result, s)
+			}
+		}
+		return result
+	case []string:
+		var result []string
+		for _, s := range typed {
+			if s != "" {
+				result = append(result, s)
+			}
+		}
+		return result
+	default:
+		s := fmt.Sprintf("%v", v)
+		if s == "" {
+			return nil
+		}
+		return []string{s}
 	}
-	return ""
 }

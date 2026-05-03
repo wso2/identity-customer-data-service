@@ -14,24 +14,26 @@ CREATE INDEX IF NOT EXISTS idx_blocking_keys_profile ON blocking_keys(profile_id
 CREATE TABLE IF NOT EXISTS review_tasks (
     id                  VARCHAR(255) PRIMARY KEY,
     org_handle          VARCHAR(255) NOT NULL,
-    source_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,  -- New profile that triggered the review
-    target_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,  -- Candidate profile that matched
-    match_score         DECIMAL(5,4) NOT NULL,       -- Score between 0 and 1 (e.g., 0.8765)
-    status              VARCHAR(50) NOT NULL DEFAULT 'PENDING',  -- PENDING, APPROVED, REJECTED, EXPIRED
+    incoming_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,  -- New/edited profile that triggered the review
+    candidate_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,  -- Candidate profile that matched
+    match_score         DECIMAL(5,4) NOT NULL,       -- Score between 0 and 1 (e.g., 0.87)
+    status              VARCHAR(50) NOT NULL DEFAULT 'PENDING',  -- PENDING, APPROVED, CANCELLED, REJECTED
     match_reason        TEXT,                        -- JSON or text explaining why matched
     score_breakdown     JSONB DEFAULT '{}'::jsonb,   -- Detailed score per attribute
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     resolved_at         TIMESTAMPTZ,
     resolved_by         VARCHAR(255),                -- User ID who resolved
     resolution_notes    TEXT,
-    CONSTRAINT uq_review_task_profiles UNIQUE (source_profile_id, target_profile_id)
+    CONSTRAINT uq_review_task_profiles UNIQUE (incoming_profile_id, candidate_profile_id)
 );
 
 -- Index for fetching pending reviews by org
 CREATE INDEX IF NOT EXISTS idx_review_tasks_org_status ON review_tasks(org_handle, status);
 CREATE INDEX IF NOT EXISTS idx_review_tasks_created ON review_tasks(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_review_tasks_source ON review_tasks(source_profile_id, status);
+CREATE INDEX IF NOT EXISTS idx_review_tasks_incoming ON review_tasks(incoming_profile_id, status);
 
+-- When a profile edited, or deleted we need to deleted rejected pairs, if we use review task table to mark rejection
+-- pairs as rejected we can not do that with keeping history correctly. But with this rejection pair table we can do that.
 -- Rejection pairs: profiles that an admin explicitly rejected as non-matches.
 CREATE TABLE IF NOT EXISTS rejection_pairs (
     id              VARCHAR(255) PRIMARY KEY,
