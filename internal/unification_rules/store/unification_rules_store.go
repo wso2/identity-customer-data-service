@@ -50,7 +50,7 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 	query := scripts.InsertUnificationRule[provider.NewDBProvider().GetDBType()]
 
 	_, err = dbClient.ExecuteQuery(query, rule.RuleId, orgId, rule.RuleName, rule.PropertyName, rule.PropertyId, rule.Priority, rule.IsActive,
-		rule.CreatedAt, rule.UpdatedAt)
+		rule.AttributeType, rule.UnificationMethod, rule.CreatedAt, rule.UpdatedAt)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while adding unification rule: %s", rule.RuleName)
 		logger.Debug(errorMsg, log.Error(err))
@@ -105,6 +105,12 @@ func GetUnificationRules(orgHandle string) ([]model.UnificationRule, error) {
 		rule.PropertyId = row["property_id"].(string)
 		rule.Priority = int(row["priority"].(int64))
 		rule.IsActive = row["is_active"].(bool)
+		if val, ok := row["attribute_type"].(string); ok {
+			rule.AttributeType = val
+		}
+		if val, ok := row["unification_method"].(string); ok {
+			rule.UnificationMethod = val
+		}
 		rule.CreatedAt = row["created_at"].(time.Time)
 		rule.UpdatedAt = row["updated_at"].(time.Time)
 
@@ -162,6 +168,12 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 	rule.PropertyId = row["property_id"].(string)
 	rule.Priority = int(row["priority"].(int64))
 	rule.IsActive = row["is_active"].(bool)
+	if val, ok := row["attribute_type"].(string); ok {
+		rule.AttributeType = val
+	}
+	if val, ok := row["unification_method"].(string); ok {
+		rule.UnificationMethod = val
+	}
 	rule.CreatedAt = row["created_at"].(time.Time)
 	rule.UpdatedAt = row["updated_at"].(time.Time)
 
@@ -187,7 +199,7 @@ func PatchUnificationRule(ruleId string, updatedRule model.UnificationRule) erro
 	defer dbClient.Close()
 
 	query := scripts.UpdateUnificationRule[provider.NewDBProvider().GetDBType()]
-	_, err = dbClient.ExecuteQuery(query, updatedRule.RuleName, updatedRule.Priority, updatedRule.IsActive, time.Now().UTC(), ruleId)
+	_, err = dbClient.ExecuteQuery(query, updatedRule.RuleName, updatedRule.Priority, updatedRule.IsActive, updatedRule.AttributeType, updatedRule.UnificationMethod, time.Now().UTC(), ruleId)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while updating unification rule for rule_id: %s", ruleId)

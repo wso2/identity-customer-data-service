@@ -50,6 +50,22 @@ var (
 	activeProfileQueue queue.ProfileUnificationQueue
 )
 
+// It is set at startup via RegisterFuzzyResolveFunc to avoid import cycles.
+var fuzzyResolveFunc func(profileModel.Profile)
+
+// RegisterFuzzyResolveFunc sets the callback for fuzzy identity resolution.
+func RegisterFuzzyResolveFunc(fn func(profileModel.Profile)) {
+	fuzzyResolveFunc = fn
+}
+
+// reindexAfterMergeFunc is called after a merge to update blocking keys.
+var reindexAfterMergeFunc func(primaryID, secondaryID, orgHandle string, merged profileModel.Profile)
+
+// RegisterReindexAfterMergeFunc sets the callback for post-merge blocking key reindex.
+func RegisterReindexAfterMergeFunc(fn func(primaryID, secondaryID, orgHandle string, merged profileModel.Profile)) {
+	reindexAfterMergeFunc = fn
+}
+
 // StartProfileWorker initialises the profile unification queue (using the
 // provider configured in the runtime config) and starts the consumer
 // goroutine. An error is returned when the queue cannot be created or
@@ -152,13 +168,25 @@ func unifyProfiles(newProfile profileModel.Profile) {
 			if existingMasterProfile.UserId == newProfile.UserId {
 				logger.Info(fmt.Sprintf("Profiles %s and %s share the same userId %s. Proceeding with merge.",
 					existingMasterProfile.ProfileId, newProfile.ProfileId, newProfile.UserId))
-				mergeMatchedProfiles(existingMasterProfile, newProfile, constants.SystemUserIdMatchReason)
+				if err := MergeMatchedProfiles(existingMasterProfile, newProfile, constants.SystemUserIdMatchReason); err != nil {
+					logger.Error(fmt.Sprintf("unifyProfiles: userId-match merge failed for profiles %s and %s",
+						existingMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+				}
 				return
 			}
 		}
 	}
 
-	// Step 3b: Rule-based matching (email, phone, etc.)
+	// Step 3b: Rule-based matching.
+	// When fuzzy resolution is registered, delegate to the fuzzy pipeline which handles
+	// BOTH exact and fuzzy matches with proper threshold checks, auto_merge_enabled
+	// config, score penalties for missing attributes, and review task creation.
+	if fuzzyResolveFunc != nil {
+		fuzzyResolveFunc(newProfile)
+		return
+	}
+
+	// Fallback: deterministic exact matching (upstream default).
 	unificationRules = filterActiveRulesAndSortByPriority(unificationRules)
 	for _, rule := range unificationRules {
 		for _, existingMasterProfile := range existingMasterProfiles {
@@ -167,31 +195,40 @@ func unifyProfiles(newProfile profileModel.Profile) {
 				return
 			}
 			if doesProfileMatch(existingMasterProfile, newProfile, rule) {
-				mergeMatchedProfiles(existingMasterProfile, newProfile, rule.RuleName)
+				if err := MergeMatchedProfiles(existingMasterProfile, newProfile, rule.RuleName); err != nil {
+					logger.Error(fmt.Sprintf("unifyProfiles: rule-based merge failed for profiles %s and %s (rule=%s)",
+						existingMasterProfile.ProfileId, newProfile.ProfileId, rule.RuleName), log.Error(err))
+				}
 				return
 			}
 		}
 	}
 }
 
-// mergeMatchedProfiles handles all merge scenarios for two matched profiles.
+// MergeMatchedProfiles handles all merge scenarios for two matched profiles.
 // It determines the master/child relationship based on permanent (has userId) vs temporary,
 // and whether the existing profile already has child references.
-func mergeMatchedProfiles(existingMasterProfile profileModel.Profile, newProfile profileModel.Profile, reason string) {
+
+// Returns an error when the merge cannot proceed safely.
+func MergeMatchedProfiles(existingMasterProfile profileModel.Profile, newProfile profileModel.Profile, reason string) error {
 
 	logger := log.GetLogger()
 
-	// Fetch references for the existing master profile
+	// Fetch references for the existing master.
 	refs, err := profileStore.FetchReferencedProfiles(existingMasterProfile.ProfileId)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to fetch references for profile: %s during unification with profile: %s", existingMasterProfile.ProfileId, newProfile.ProfileId))
+		logger.Error(fmt.Sprintf("Failed to fetch references for profile: %s during unification with profile: %s",
+			existingMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+		return fmt.Errorf("fetch references for master '%s': %w", existingMasterProfile.ProfileId, err)
 	}
 	existingMasterProfile.ProfileStatus.References = refs
 
 	// Merge profile data using schema rules
 	schemaRules, err := schemaStore.GetProfileSchemaAttributesForOrg(newProfile.OrgHandle)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to fetch profile schema attributes for org %s during unification of profile %s", newProfile.OrgHandle, newProfile.ProfileId))
+		logger.Error(fmt.Sprintf("Failed to fetch profile schema attributes for org %s during unification of profile %s",
+			newProfile.OrgHandle, newProfile.ProfileId), log.Error(err))
+		return fmt.Errorf("fetch schema rules for org '%s': %w", newProfile.OrgHandle, err)
 	}
 	newMasterProfile := MergeProfiles(existingMasterProfile, newProfile, schemaRules)
 
@@ -205,17 +242,16 @@ func mergeMatchedProfiles(existingMasterProfile profileModel.Profile, newProfile
 		logger.Info(fmt.Sprintf("Not merging profiles %s and %s — different userIds (%s vs %s)",
 			existingMasterProfile.ProfileId, newProfile.ProfileId,
 			existingMasterProfile.UserId, newProfile.UserId))
-		return
+		return nil
 	}
 
 	// ── Case: perm-temp or temp-perm ──
 	if hasUserIDExisting != hasUserIDNew {
-		mergePermanentAndTemporary(existingMasterProfile, newProfile, newMasterProfile, reason, hasExistingChildren)
-		return
+		return mergePermanentAndTemporary(existingMasterProfile, newProfile, newMasterProfile, reason, hasExistingChildren)
 	}
 
 	// ── Case: Both permanent with same userId OR both temporary ──
-	mergeSameKindProfiles(existingMasterProfile, newProfile, newMasterProfile, reason, hasUserIDExisting, hasExistingChildren)
+	return mergeSameKindProfiles(existingMasterProfile, newProfile, newMasterProfile, reason, hasUserIDExisting, hasExistingChildren)
 }
 
 // mergePermanentAndTemporary merges a permanent profile (has userId) with a temporary one.
@@ -226,7 +262,7 @@ func mergePermanentAndTemporary(
 	newMasterProfile profileModel.Profile,
 	reason string,
 	hasExistingChildren bool,
-) {
+) error {
 	logger := log.GetLogger()
 
 	hasUserIDExisting := existingMasterProfile.UserId != ""
@@ -248,7 +284,8 @@ func mergePermanentAndTemporary(
 		if err := profileStore.UpdateProfileReferences(newMasterProfile, children); err != nil {
 			logger.Error(fmt.Sprintf("Failed to add child profile %s to master %s",
 				newProfile.ProfileId, newMasterProfile.ProfileId), log.Error(err))
-			return
+			return fmt.Errorf("attach child '%s' to master '%s': %w",
+				newProfile.ProfileId, newMasterProfile.ProfileId, err)
 		}
 	} else {
 		// New is permanent — it becomes master, existing becomes child
@@ -263,7 +300,8 @@ func mergePermanentAndTemporary(
 			if err := profileStore.UpdateProfileReferences(newMasterProfile, existingMasterProfile.ProfileStatus.References); err != nil {
 				logger.Error(fmt.Sprintf("Failed to re-parent references from %s to %s",
 					existingMasterProfile.ProfileId, newMasterProfile.ProfileId), log.Error(err))
-				return
+				return fmt.Errorf("re-parent children from '%s' to '%s': %w",
+					existingMasterProfile.ProfileId, newMasterProfile.ProfileId, err)
 			}
 		}
 
@@ -276,12 +314,12 @@ func mergePermanentAndTemporary(
 		if err := profileStore.UpdateProfileReferences(newMasterProfile, children); err != nil {
 			logger.Error(fmt.Sprintf("Failed to add child profile %s to master %s",
 				existingMasterProfile.ProfileId, newMasterProfile.ProfileId), log.Error(err))
-			return
+			return fmt.Errorf("attach child '%s' to master '%s': %w",
+				existingMasterProfile.ProfileId, newMasterProfile.ProfileId, err)
 		}
 	}
 
-	// Write merged data to the master profile
-	persistMergedProfileData(newMasterProfile, newProfile.ProfileId)
+	return persistMergedProfileData(newMasterProfile, newProfile.ProfileId)
 }
 
 // mergeSameKindProfiles merges two profiles of the same kind:
@@ -293,7 +331,7 @@ func mergeSameKindProfiles(
 	reason string,
 	bothPermanent bool,
 	hasExistingChildren bool,
-) {
+) error {
 	logger := log.GetLogger()
 
 	if hasExistingChildren {
@@ -318,7 +356,8 @@ func mergeSameKindProfiles(
 		if err := profileStore.UpdateProfileReferences(newMasterProfile, children); err != nil {
 			logger.Error(fmt.Sprintf("Failed to add child profile %s to master %s",
 				newProfile.ProfileId, newMasterProfile.ProfileId), log.Error(err))
-			return
+			return fmt.Errorf("attach child '%s' to master '%s': %w",
+				newProfile.ProfileId, newMasterProfile.ProfileId, err)
 		}
 	} else if bothPermanent {
 		// Both permanent, same userId, no children — promote existing as master.
@@ -337,7 +376,8 @@ func mergeSameKindProfiles(
 		if err := profileStore.UpdateProfileReferences(newMasterProfile, children); err != nil {
 			logger.Error(fmt.Sprintf("Failed to add child profile %s to master %s",
 				newProfile.ProfileId, newMasterProfile.ProfileId), log.Error(err))
-			return
+			return fmt.Errorf("attach child '%s' to master '%s': %w",
+				newProfile.ProfileId, newMasterProfile.ProfileId, err)
 		}
 	} else {
 		// Both temporary, no children — create a new neutral master referencing both.
@@ -367,53 +407,56 @@ func mergeSameKindProfiles(
 			_ = profileStore.DeleteProfile(newMasterProfile.ProfileId) // cleanup
 			logger.Error(fmt.Sprintf("Failed to insert new master profile while unifying %s and %s",
 				newProfile.ProfileId, existingMasterProfile.ProfileId), log.Error(err))
-			return
+			return fmt.Errorf("insert new master for '%s' and '%s': %w",
+				newProfile.ProfileId, existingMasterProfile.ProfileId, err)
 		}
 
 		children := []profileModel.Reference{childProfile1, childProfile2}
 		if err := profileStore.UpdateProfileReferences(newMasterProfile, children); err != nil {
 			logger.Error(fmt.Sprintf("Failed to add child profiles to new master %s",
 				newMasterProfile.ProfileId), log.Error(err))
-			return
+			return fmt.Errorf("attach children to new master '%s': %w",
+				newMasterProfile.ProfileId, err)
 		}
 	}
 
-	// Write merged data to the master profile
-	persistMergedProfileData(newMasterProfile, newProfile.ProfileId)
+	return persistMergedProfileData(newMasterProfile, newProfile.ProfileId)
 }
 
 // persistMergedProfileData writes the merged application data, traits, and identity attributes
-// to the master profile in the store.
-func persistMergedProfileData(masterProfile profileModel.Profile, triggerProfileId string) {
+// to the master profile. Returns an error on the first persistence failure.
+func persistMergedProfileData(masterProfile profileModel.Profile, triggerProfileId string) error {
 
 	logger := log.GetLogger()
 
-	// Update ApplicationData
 	for _, appCtx := range masterProfile.ApplicationData {
 		if err := profileStore.InsertMergedMasterProfileAppData(masterProfile.ProfileId, appCtx); err != nil {
 			logger.Error(fmt.Sprintf("Failed to update app data for master profile %s while unifying profile %s",
 				masterProfile.ProfileId, triggerProfileId), log.Error(err))
-			return
+			return fmt.Errorf("persist app data for master '%s': %w", masterProfile.ProfileId, err)
 		}
 	}
 
-	// Update Traits
 	if masterProfile.Traits != nil {
 		if err := profileStore.InsertMergedMasterProfileTraitData(masterProfile.ProfileId, masterProfile.Traits); err != nil {
 			logger.Error(fmt.Sprintf("Failed to update traits for master profile %s while unifying profile %s",
 				masterProfile.ProfileId, triggerProfileId), log.Error(err))
-			return
+			return fmt.Errorf("persist traits for master '%s': %w", masterProfile.ProfileId, err)
 		}
 	}
 
-	// Update Identity Attributes
 	if masterProfile.IdentityAttributes != nil {
 		if err := profileStore.MergeIdentityDataOfProfiles(masterProfile.ProfileId, masterProfile.IdentityAttributes); err != nil {
 			logger.Error(fmt.Sprintf("Failed to update identity data for master profile %s while unifying profile %s",
 				masterProfile.ProfileId, triggerProfileId), log.Error(err))
-			return
+			return fmt.Errorf("persist identity attributes for master '%s': %w", masterProfile.ProfileId, err)
 		}
 	}
+
+	if reindexAfterMergeFunc != nil {
+		reindexAfterMergeFunc(masterProfile.ProfileId, triggerProfileId, masterProfile.OrgHandle, masterProfile)
+	}
+	return nil
 }
 
 func filterActiveRulesAndSortByPriority(rules []model.UnificationRule) []model.UnificationRule {

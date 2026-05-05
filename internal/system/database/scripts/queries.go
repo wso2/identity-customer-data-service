@@ -65,7 +65,7 @@ var GetProfileSchemaAttributeByName = map[string]string{
 }
 
 var InsertProfileSchemaAttributesForScope = map[string]string{
-	"postgres": `INSERT INTO profile_schema (org_handle, attribute_id, attribute_name, value_type, merge_strategy, 
+	"postgres": `INSERT INTO profile_schema (org_handle, attribute_id, attribute_name, value_type, merge_strategy,
                             application_identifier, mutability, multi_valued, sub_attributes, canonical_values, scope, display_name) VALUES `,
 }
 var GetProfileSchemaAttributeByScope = map[string]string{
@@ -109,25 +109,25 @@ var DeleteProfileSchemaAttributeById = map[string]string{
 }
 
 var GetUnificationRules = map[string]string{
-	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at 
+	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at
 FROM unification_rules WHERE org_handle = $1`,
 }
 
 var GetUnificationRule = map[string]string{
-	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`,
+	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at FROM unification_rules WHERE rule_id = $1`,
 }
 
 var DeleteUnificationRule = map[string]string{
 	"postgres": `DELETE FROM unification_rules WHERE rule_id = $1`,
 }
 var InsertUnificationRule = map[string]string{
-	"postgres": `INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, created_at, updated_at) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+	"postgres": `INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 }
 
 var UpdateUnificationRule = map[string]string{
-	"postgres": `UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3,updated_at = $4
-		 WHERE rule_id = $5;`,
+	"postgres": `UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3, attribute_type = $4, unification_method = $5, updated_at = $6
+		 WHERE rule_id = $7;`,
 }
 
 var InsertProfile = map[string]string{
@@ -429,4 +429,149 @@ var UpdateInitialSchemaSyncDoneConfig = map[string]string{
                  VALUES ($1, 'initial_schema_sync_done', $2) 
                  ON CONFLICT (org_handle, config) 
                  DO UPDATE SET value = EXCLUDED.value`,
+}
+
+var DeleteBlockingKeysSQL = map[string]string{
+	"postgres": `DELETE FROM blocking_keys WHERE profile_id = $1`,
+}
+
+var DeleteBlockingKeysByAttributeSQL = map[string]string{
+	"postgres": `DELETE FROM blocking_keys WHERE org_handle = $1 AND attribute_name = $2`,
+}
+
+var IRGetProfilesForOrg = map[string]string{
+	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
+				 FROM profiles
+				 WHERE org_handle = $1 AND delete_profile = FALSE`,
+}
+
+var IRGetProfilesForOrgPaginated = map[string]string{
+	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
+				 FROM profiles
+				 WHERE org_handle = $1 AND delete_profile = FALSE
+				 ORDER BY profile_id
+				 LIMIT $2 OFFSET $3`,
+}
+
+var IRGetProfileByID = map[string]string{
+	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
+				 FROM profiles
+				 WHERE profile_id = $1 AND delete_profile = FALSE`,
+}
+
+var IRGetProfilesByIDs = map[string]string{
+	"postgres": `SELECT p.profile_id, p.user_id, p.org_handle, p.traits, p.identity_attributes,
+				        pr.reference_profile_id
+				 FROM profiles p
+				 LEFT JOIN profile_reference pr ON p.profile_id = pr.profile_id
+				 WHERE p.profile_id IN (%s) AND p.delete_profile = FALSE`,
+}
+
+var IRInsertBlockingKeys = map[string]string{
+	"postgres": `INSERT INTO blocking_keys (key_id, profile_id, org_handle, attribute_name, key_value)
+				 VALUES %s ON CONFLICT DO NOTHING`,
+}
+
+var IRFindCandidateIDsByKeys = map[string]string{
+	"postgres": `SELECT DISTINCT profile_id FROM blocking_keys
+				 WHERE org_handle = $1 AND attribute_name = $2 AND key_value IN (%s)
+				   AND profile_id != $%d LIMIT $%d`,
+}
+
+var IRInsertReviewTask = map[string]string{
+	"postgres": `INSERT INTO review_tasks (id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status, score_breakdown)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)
+				 ON CONFLICT (incoming_profile_id, candidate_profile_id)
+				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6
+				 WHERE review_tasks.status = 'PENDING'`,
+}
+
+// IRMirrorReviewTaskExists checks whether a PENDING task exists for the reverse pair (candidate→incoming).
+var IRMirrorReviewTaskExists = map[string]string{
+	"postgres": `SELECT COUNT(*) FROM review_tasks
+				 WHERE incoming_profile_id = $1 AND candidate_profile_id = $2 AND status = $3`,
+}
+
+// IRUpdateMirrorReviewTask flips the direction of a mirror task and refreshes its score.
+var IRUpdateMirrorReviewTask = map[string]string{
+	"postgres": `UPDATE review_tasks
+				 SET incoming_profile_id = $1, candidate_profile_id = $2, match_score = $3, score_breakdown = $4
+				 WHERE incoming_profile_id = $5 AND candidate_profile_id = $6 AND status = $7`,
+}
+
+// IRCancelRelatedReviewTasks cancels all PENDING tasks that reference either profile.
+var IRCancelRelatedReviewTasks = map[string]string{
+	"postgres": `UPDATE review_tasks
+				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
+				 WHERE id != $4 AND status = $5
+				   AND (incoming_profile_id IN ($6, $7) OR candidate_profile_id IN ($6, $7))`,
+}
+
+// IRFindRelatedPendingReviewTasks finds incoming profile IDs of PENDING tasks affected by a cascade cancel.
+var IRFindRelatedPendingReviewTasks = map[string]string{
+	"postgres": `SELECT DISTINCT incoming_profile_id
+				 FROM review_tasks
+				 WHERE id != $1 AND status = $2
+				   AND (incoming_profile_id IN ($3, $4) OR candidate_profile_id IN ($3, $4))`,
+}
+
+var IRGetReviewTaskByID = map[string]string{
+	"postgres": `SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
+				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
+				 FROM review_tasks
+				 WHERE id = $1`,
+}
+
+var IRGetPendingReviewTasks = map[string]string{
+	"postgres": `SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
+				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
+				 FROM review_tasks
+				 WHERE org_handle = $1 AND status = $2
+				 ORDER BY created_at DESC
+				 LIMIT $3`,
+}
+
+var IRCountPendingReviewTasks = map[string]string{
+	"postgres": `SELECT COUNT(*) FROM review_tasks WHERE org_handle = $1 AND status = $2`,
+}
+
+var IRGetPendingReviewTasksByProfile = map[string]string{
+	"postgres": `SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
+				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
+				 FROM review_tasks
+				 WHERE org_handle = $1 AND status = $2
+				   AND (incoming_profile_id = $3)
+				 ORDER BY match_score DESC
+				 LIMIT $4`,
+}
+
+var IRCountPendingReviewTasksByProfile = map[string]string{
+	"postgres": `SELECT COUNT(*) FROM review_tasks WHERE org_handle = $1 AND status = $2
+				   AND (incoming_profile_id = $3 OR candidate_profile_id = $3)`,
+}
+
+var IRUpdateReviewTaskStatus = map[string]string{
+	"postgres": `UPDATE review_tasks
+				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
+				 WHERE id = $4`,
+}
+
+var IRInsertRejectionPair = map[string]string{
+	"postgres": `INSERT INTO rejection_pairs (id, org_handle, profile_id_1, profile_id_2, rejected_by)
+				 VALUES ($1, $2, $3, $4, $5)
+				 ON CONFLICT (profile_id_1, profile_id_2) DO NOTHING`,
+}
+
+var IRGetRejectedProfileIDs = map[string]string{
+	"postgres": `SELECT profile_id_1, profile_id_2 FROM rejection_pairs
+				 WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`,
+}
+
+var IRDeleteRejectionPairsForProfile = map[string]string{
+	"postgres": `DELETE FROM rejection_pairs WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`,
+}
+
+var IRInsertMergeAuditLog = map[string]string{
+	"postgres": `INSERT INTO merge_audit_log (id, org_handle, primary_profile_id, secondary_profile_id, merge_type, match_score, merged_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 }

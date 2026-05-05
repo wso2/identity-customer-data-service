@@ -24,15 +24,20 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine"
+	irModel "github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
+	irStore "github.com/wso2/identity-customer-data-service/internal/identity_resolution/store"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
+	urStore "github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
 
 	consentStore "github.com/wso2/identity-customer-data-service/internal/consent/store"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
@@ -51,6 +56,8 @@ type ProfilesServiceInterface interface {
 	GetProfile(profileId string) (*profileModel.ProfileResponse, error)
 	FindProfileByUserId(userId string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilterCursor(orgHandle string, filters []string, limit int, cursor *profileModel.ProfileCursor) ([]profileModel.ProfileResponse, bool, error)
+	GetProfilesWithFuzzyResolution(orgHandle string, filters []string, threshold float64, limit int) ([]profileModel.FuzzyMatchResult, error)
+	GetProfilesHybrid(orgHandle string, fuzzyFilters []string, deterministicFilters []string, threshold float64, limit int) ([]profileModel.FuzzyMatchResult, error)
 	GetProfileConsents(profileId string) ([]profileModel.ConsentRecord, error)
 	UpdateProfileConsents(profileId string, orgHandle string, consents []profileModel.ConsentRecord) error
 	PatchProfile(profileId, orgHandle string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
@@ -180,9 +187,28 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 	config := UnificationModel.DefaultConfig()
 
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
-		// Set organization handle for the profile before enqueuing
-		profile.OrgHandle = orgHandle
-		queue.Enqueue(profile)
+		// Only enqueue if the profile has at least one attribute matching an active unification rule.
+		activeRules, rulesErr := urStore.GetUnificationRules(orgHandle)
+		if rulesErr != nil {
+			logger.Warn("CreateProfile: failed to load unification rules, enqueueing anyway", log.Error(rulesErr))
+			profile.OrgHandle = orgHandle
+			queue.Enqueue(profile)
+		} else {
+			hasMatchingRule := false
+			for _, rule := range activeRules {
+				if !rule.IsActive {
+					continue
+				}
+				if _, ok := flattenProfileAttrs(profile)[rule.PropertyName]; ok {
+					hasMatchingRule = true
+					break
+				}
+			}
+			if hasMatchingRule {
+				profile.OrgHandle = orgHandle
+				queue.Enqueue(profile)
+			}
+		}
 	}
 
 	logger.Info(fmt.Sprintf("Profile created successfully with profile id: %s", profile.ProfileId))
@@ -841,9 +867,32 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 	config := UnificationModel.DefaultConfig()
 	queue := &workers.ProfileWorkerQueue{}
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
-		// Set organization handle for the profile before enqueuing
-		profileToUpDate.OrgHandle = orgHandle
-		queue.Enqueue(profileToUpDate)
+		// Only enqueue if the profile has at least one attribute matching an active unification rule.
+		activeRules, rulesErr := urStore.GetUnificationRules(orgHandle)
+		if rulesErr != nil {
+			logger.Warn("UpdateProfile: failed to load unification rules, enqueueing anyway", log.Error(rulesErr))
+			profileToUpDate.OrgHandle = orgHandle
+			queue.Enqueue(profileToUpDate)
+		} else {
+			hasMatchingRule := false
+			for _, rule := range activeRules {
+				if !rule.IsActive {
+					continue
+				}
+				if _, ok := flattenProfileAttrs(profileToUpDate)[rule.PropertyName]; ok {
+					hasMatchingRule = true
+					break
+				}
+			}
+			if hasMatchingRule {
+				// Clear rejection pairs so the re-evaluation can re-match previously rejected candidates.
+				if err := irStore.DeleteRejectionPairsForProfile(orgHandle, profileToUpDate.ProfileId); err != nil {
+					logger.Warn(fmt.Sprintf("UpdateProfile: failed to clear rejection pairs for profile '%s'", profileToUpDate.ProfileId), log.Error(err))
+				}
+				profileToUpDate.OrgHandle = orgHandle
+				queue.Enqueue(profileToUpDate)
+			}
+		}
 	}
 	logger.Info("Successfully updated profile: " + profileFetched.ProfileId)
 	return profileFetched, nil
@@ -1668,4 +1717,369 @@ func DeepMerge(dst, src map[string]interface{}) map[string]interface{} {
 		}
 	}
 	return dst
+}
+
+// GetProfilesWithFuzzyResolution uses the identity resolution engine to find
+// profiles that fuzzy-match the attributes extracted from query filters.
+// It returns profiles scored above the given threshold, sorted by score descending.
+func (ps *ProfilesService) GetProfilesWithFuzzyResolution(
+	orgHandle string,
+	filters []string,
+	threshold float64,
+	limit int,
+) ([]profileModel.FuzzyMatchResult, error) {
+	logger := log.GetLogger()
+
+	flatAttrs := parseFuzzyFiltersToFlatAttrs(filters)
+	if len(flatAttrs) == 0 {
+		logger.Warn("Service: no searchable attributes found in filters for fuzzy resolution")
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	rawRules, err := urStore.GetUnificationRules(orgHandle)
+	if err != nil {
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_SEARCH_FAILED.Code,
+			Message:     errors2.IR_SEARCH_FAILED.Message,
+			Description: fmt.Sprintf("Failed to load unification rules for org: %s", orgHandle),
+		}, err)
+	}
+	rules := filterActiveRules(rawRules)
+	if len(rules) == 0 {
+		logger.Warn("Service: no active unification rules, fuzzy resolution returning empty",
+			log.String("orgHandle", orgHandle))
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	blockingKeys := engine.GenerateBlockingKeysFromRules(flatAttrs, rules)
+	candidateIDs := engine.FindCandidatesByIndex(blockingKeys, orgHandle, "", irStore.FindCandidateIDsByKeys)
+	if len(candidateIDs) == 0 {
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	candidateIDs, profileMap, err := resolveAndLoadCandidates(candidateIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := scoreAndBuildFuzzyResults(candidateIDs, profileMap, flatAttrs, rules, threshold, limit, orgHandle)
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+// GetProfilesHybrid combines fuzzy matching (blocking + scoring) with deterministic SQL
+// filtering. A result must appear in BOTH the fuzzy blocking candidate set AND the
+// deterministic SQL result set i.e. it is similar to the fuzzy values AND exactly
+// satisfies the deterministic conditions.
+func (ps *ProfilesService) GetProfilesHybrid(
+	orgHandle string,
+	fuzzyFilters []string,
+	deterministicFilters []string,
+	threshold float64,
+	limit int,
+) ([]profileModel.FuzzyMatchResult, error) {
+	logger := log.GetLogger()
+
+	for _, f := range deterministicFilters {
+		parts := strings.SplitN(f, " ", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		field := parts[0]
+		if field != "user_id" && field != "profile_id" && !isValidFilterKey(field) {
+			return nil, errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.FILTER_PROFILE.Code,
+				Message:     errors2.FILTER_PROFILE.Message,
+				Description: "Invalid filter key: " + field,
+			}, http.StatusBadRequest)
+		}
+	}
+
+	// Step 1: Parse fuzzy filters into flat attributes for the IR engine.
+	flatAttrs := parseFuzzyFiltersToFlatAttrs(fuzzyFilters)
+	if len(flatAttrs) == 0 {
+		logger.Warn("Service: no searchable attributes in fuzzy filters for hybrid search")
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	// Step 2: Load unification rules.
+	rawRules, err := urStore.GetUnificationRules(orgHandle)
+	if err != nil {
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_SEARCH_FAILED.Code,
+			Message:     errors2.IR_SEARCH_FAILED.Message,
+			Description: fmt.Sprintf("Failed to load unification rules for org: %s", orgHandle),
+		}, err)
+	}
+	rules := filterActiveRules(rawRules)
+	if len(rules) == 0 {
+		logger.Warn("Service: no active unification rules, hybrid search returning empty")
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	// Step 3: Get fuzzy candidates via blocking.
+	blockingKeys := engine.GenerateBlockingKeysFromRules(flatAttrs, rules)
+	fuzzyIDs := engine.FindCandidatesByIndex(blockingKeys, orgHandle, "", irStore.FindCandidateIDsByKeys)
+	if len(fuzzyIDs) == 0 {
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	// Step 4: Get deterministic candidates via SQL.
+	deterministicIDs, err := profileStore.GetProfileIDsWithFilters(orgHandle, deterministicFilters)
+	if err != nil {
+		return nil, err
+	}
+	if len(deterministicIDs) == 0 {
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	// Step 5: Intersect — candidates must satisfy both paths.
+	deterministicSet := make(map[string]bool, len(deterministicIDs))
+	for _, id := range deterministicIDs {
+		deterministicSet[id] = true
+	}
+	candidateIDs := make([]string, 0, len(fuzzyIDs))
+	for _, id := range fuzzyIDs {
+		if deterministicSet[id] {
+			candidateIDs = append(candidateIDs, id)
+		}
+	}
+	if len(candidateIDs) == 0 {
+		return []profileModel.FuzzyMatchResult{}, nil
+	}
+
+	// Step 6: Resolve children to master profiles and load profiles.
+	candidateIDs, profileMap, err := resolveAndLoadCandidates(candidateIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 7: Score, threshold, sort, and build results.
+	results, err := scoreAndBuildFuzzyResults(candidateIDs, profileMap, flatAttrs, rules, threshold, limit, orgHandle)
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+// parseFuzzyFiltersToFlatAttrs extracts identity_attributes, traits, and user_id values
+// from fuzzy filter strings and returns a flat map keyed by fully-qualified attribute name.
+// The operator is ignored — fuzzy matching uses only the value.
+func parseFuzzyFiltersToFlatAttrs(filters []string) map[string]interface{} {
+	identityAttrs := make(map[string]interface{})
+	traits := make(map[string]interface{})
+	var userID string
+
+	for _, f := range filters {
+		parts := strings.SplitN(f, " ", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		field := parts[0]
+		value := parts[2]
+
+		if field == "user_id" {
+			userID = value
+			continue
+		}
+
+		dotIdx := strings.Index(field, ".")
+		if dotIdx < 0 {
+			continue
+		}
+		scope := field[:dotIdx]
+		key := field[dotIdx+1:]
+
+		switch scope {
+		case "identity_attributes":
+			identityAttrs[key] = value
+		case "traits":
+			traits[key] = value
+		}
+	}
+
+	flatAttrs := make(map[string]interface{})
+	irModel.FlattenMap("identity_attributes", identityAttrs, flatAttrs)
+	irModel.FlattenMap("traits", traits, flatAttrs)
+	if userID != "" {
+		flatAttrs["user_id"] = userID
+	}
+	return flatAttrs
+}
+
+// resolveAndLoadCandidates loads the given profile IDs into a map and resolves any child
+// profile IDs to their master reference profile ID. Returns the deduplicated master IDs
+// and the profile map (keyed by profile ID).
+func resolveAndLoadCandidates(candidateIDs []string) ([]string, map[string]*irModel.ProfileData, error) {
+	logger := log.GetLogger()
+
+	candidateProfiles, err := irStore.GetProfilesByIDs(candidateIDs)
+	if err != nil {
+		return nil, nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_SEARCH_FAILED.Code,
+			Message:     errors2.IR_SEARCH_FAILED.Message,
+			Description: "Failed to load candidate profiles.",
+		}, err)
+	}
+
+	profileMap := make(map[string]*irModel.ProfileData, len(candidateProfiles))
+	for i := range candidateProfiles {
+		profileMap[candidateProfiles[i].ProfileID] = &candidateProfiles[i]
+	}
+
+	resolvedIDs := make([]string, 0, len(candidateIDs))
+	seen := make(map[string]bool)
+	for _, cid := range candidateIDs {
+		candidate, exists := profileMap[cid]
+		if !exists {
+			continue
+		}
+		resolvedID := cid
+		if candidate.IsChild() {
+			masterID := candidate.ReferenceProfileID
+			resolvedID = masterID
+			if _, ok := profileMap[masterID]; !ok {
+				masterProfiles, loadErr := irStore.GetProfilesByIDs([]string{masterID})
+				if loadErr != nil || len(masterProfiles) == 0 {
+					logger.Warn(fmt.Sprintf("resolveAndLoadCandidates: could not load master '%s' for child '%s', skipping",
+						masterID, cid))
+					continue
+				}
+				profileMap[masterID] = &masterProfiles[0]
+			}
+		}
+		if !seen[resolvedID] {
+			seen[resolvedID] = true
+			resolvedIDs = append(resolvedIDs, resolvedID)
+		}
+	}
+	return resolvedIDs, profileMap, nil
+}
+
+// scoreAndBuildFuzzyResults scores the given candidates against flatAttrs using the provided
+// rules, filters by threshold, sorts by score descending, applies limit, and builds the
+// final FuzzyMatchResult slice.
+func scoreAndBuildFuzzyResults(
+	candidateIDs []string,
+	profileMap map[string]*irModel.ProfileData,
+	flatAttrs map[string]interface{},
+	rules []UnificationModel.UnificationRule,
+	threshold float64,
+	limit int,
+	orgHandle string,
+) ([]profileModel.FuzzyMatchResult, error) {
+	logger := log.GetLogger()
+
+	thresholds := irModel.LoadThresholds(orgHandle)
+	if threshold <= 0 {
+		threshold = thresholds.ManualReview
+	}
+	if threshold > 1.0 {
+		threshold = 1.0
+	}
+
+	type scoredMatch struct {
+		candidateID    string
+		finalScore     float64
+		scoreBreakdown map[string]float64
+	}
+
+	var scoredMatches []scoredMatch
+	for _, candidateID := range candidateIDs {
+		candidate, exists := profileMap[candidateID]
+		if !exists {
+			continue
+		}
+		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, thresholds.AutoMerge)
+		if finalScore >= threshold {
+			scoredMatches = append(scoredMatches, scoredMatch{
+				candidateID:    candidateID,
+				finalScore:     finalScore,
+				scoreBreakdown: breakdown,
+			})
+		}
+	}
+
+	sort.Slice(scoredMatches, func(i, j int) bool {
+		return scoredMatches[i].finalScore > scoredMatches[j].finalScore
+	})
+	if limit > 0 && len(scoredMatches) > limit {
+		scoredMatches = scoredMatches[:limit]
+	}
+
+	results := make([]profileModel.FuzzyMatchResult, 0, len(scoredMatches))
+	for _, sm := range scoredMatches {
+		profile, err := profileStore.GetProfile(sm.candidateID)
+		if err != nil {
+			logger.Warn(fmt.Sprintf("scoreAndBuildFuzzyResults: could not load profile '%s', skipping", sm.candidateID))
+			continue
+		}
+
+		baseMeta := profileModel.Meta{
+			CreatedAt: profile.CreatedAt,
+			UpdatedAt: profile.UpdatedAt,
+			Location:  profile.Location,
+		}
+		alias, _ := profileStore.FetchReferencedProfiles(profile.ProfileId)
+
+		profileResp := profileModel.ProfileResponse{
+			ProfileId:          profile.ProfileId,
+			UserId:             profile.UserId,
+			ApplicationData:    ConvertAppDataToMap(profile.ApplicationData),
+			Traits:             profile.Traits,
+			IdentityAttributes: profile.IdentityAttributes,
+			Meta:               baseMeta,
+		}
+		if profile.ProfileStatus.IsReferenceProfile {
+			profileResp.MergedFrom = alias
+		}
+
+		results = append(results, profileModel.FuzzyMatchResult{
+			Profile:        profileResp,
+			MatchScore:     sm.finalScore,
+			ScoreBreakdown: sm.scoreBreakdown,
+		})
+	}
+	return results, nil
+}
+
+// flattenProfileAttrs builds a flat map of a profile's attributes keyed by their
+// fully-qualified property name (e.g. "identity_attributes.email") so we can
+// quickly check whether the profile has a value for a given unification rule.
+func flattenProfileAttrs(p profileModel.Profile) map[string]interface{} {
+	flat := make(map[string]interface{})
+	for k, v := range p.IdentityAttributes {
+		flat["identity_attributes."+k] = v
+	}
+	for k, v := range p.Traits {
+		flat["traits."+k] = v
+	}
+	if p.UserId != "" {
+		flat["user_id"] = p.UserId
+	}
+	return flat
+}
+
+// filterActiveRules returns only active unification rules sorted by priority.
+func filterActiveRules(rules []UnificationModel.UnificationRule) []UnificationModel.UnificationRule {
+	active := make([]UnificationModel.UnificationRule, 0, len(rules))
+	for _, r := range rules {
+		if r.IsActive {
+			if r.AttributeType == "" {
+				r.AttributeType = constants.AttributeTypePrimitiveExact
+			}
+			if r.UnificationMethod == "" {
+				r.UnificationMethod = constants.UnificationMethodDeterministic
+			}
+			active = append(active, r)
+		}
+	}
+	sort.Slice(active, func(i, j int) bool {
+		return active[i].Priority < active[j].Priority
+	})
+	return active
 }
