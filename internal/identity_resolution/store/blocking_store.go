@@ -107,7 +107,6 @@ func UpsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 		}, err)
 	}
 
-	logger.Info(fmt.Sprintf("BlockingStore: indexed %d blocking keys for profile '%s'", len(keys), profileID))
 	return nil
 }
 
@@ -164,8 +163,6 @@ func DeleteBlockingKeysByAttribute(orgHandle, attributeName string) error {
 		}, err)
 	}
 
-	logger.Info(fmt.Sprintf("BlockingStore: deleted blocking keys for attribute '%s' in org '%s'",
-		attributeName, orgHandle))
 	return nil
 }
 
@@ -335,6 +332,5 @@ func GetProfilesByIDs(profileIDs []string) ([]model.ProfileData, error) {
 		profiles = append(profiles, pd)
 	}
 
-	logger.Info(fmt.Sprintf("BlockingStore: loaded %d profiles by ID", len(profiles)))
 	return profiles, nil
 }

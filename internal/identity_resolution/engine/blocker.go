@@ -64,11 +64,8 @@ func FindCandidatesByIndex(
 				candidateIDs = append(candidateIDs, id)
 			}
 		}
-
-		logger.Info(fmt.Sprintf("Blocker: attribute '%s' found %d candidates", attrName, len(ids)))
 	}
 
-	logger.Info(fmt.Sprintf("Blocker: total unique candidates: %d", len(candidateIDs)))
 	return candidateIDs
 }
 

@@ -48,9 +48,6 @@ func GetIdentityResolutionService() IdentityResolutionServiceInterface {
 }
 
 func (s *IdentityResolutionService) GetPendingReviewTasks(orgHandle string, pageSize int) (*model.ReviewTaskListResponse, error) {
-	logger := log.GetLogger()
-	logger.Info("Service: fetching pending review tasks", log.String("orgHandle", orgHandle))
-
 	tasks, totalCount, err := irStore.GetPendingReviewTasks(orgHandle, pageSize)
 	if err != nil {
 		return nil, err
@@ -66,9 +63,6 @@ func (s *IdentityResolutionService) GetPendingReviewTasks(orgHandle string, page
 }
 
 func (s *IdentityResolutionService) GetPendingReviewTasksByProfile(orgHandle string, profileID string, pageSize int) (*model.ReviewTaskListResponse, error) {
-	logger := log.GetLogger()
-	logger.Info("Service: fetching review tasks for profile",
-		log.String("orgHandle", orgHandle), log.String("profileID", profileID))
 
 	tasks, totalCount, err := irStore.GetPendingReviewTasksByProfile(orgHandle, profileID, pageSize)
 	if err != nil {
@@ -91,8 +85,6 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 	if approved {
 		status = constants.ReviewStatusApproved
 	}
-
-	logger.Info(fmt.Sprintf("Service: resolving review task %s → %s by %s", taskID, status, resolvedBy))
 
 	task, err := irStore.GetReviewTaskByID(taskID)
 	if err != nil {
@@ -122,8 +114,6 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 		if err := irStore.UpdateReviewTaskStatus(taskID, status, resolvedBy, notes); err != nil {
 			return err
 		}
-		logger.Info(fmt.Sprintf("Service: review task %s rejected — rejection pair stored for '%s' ↔ '%s'",
-			taskID, task.IncomingProfileID, task.CandidateProfileID))
 		return nil
 	}
 
@@ -152,7 +142,6 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 			continue
 		}
 
-		logger.Info(fmt.Sprintf("Service: re-enqueuing profile '%s' for re-evaluation after cascade cancel", incomingID))
 		workers.EnqueueProfileForProcessing(*p)
 	}
 
@@ -202,8 +191,6 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 
 	// After redirect both might now point to the same master — already merged.
 	if incomingProfile.ProfileId == candidate.ProfileId {
-		logger.Info(fmt.Sprintf("Service: review task %s — incoming and candidate resolve to same profile '%s', skipping",
-			taskID, incomingProfile.ProfileId))
 		return nil
 	}
 
@@ -235,9 +222,6 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Service: review merge complete for task %s — '%s' and '%s'",
-		taskID, incomingProfile.ProfileId, candidate.ProfileId))
-
 	return nil
 }
 
@@ -246,8 +230,6 @@ func redirectToMasterIfChild(p *profileModel.Profile, logger *log.Logger) (*prof
 		return p, nil
 	}
 	masterID := p.ProfileStatus.ReferenceProfileId
-	logger.Info(fmt.Sprintf("Service: profile '%s' is a child of master '%s' — redirecting merge to master",
-		p.ProfileId, masterID))
 
 	master, err := profileStore.GetProfile(masterID)
 	if err != nil || master == nil {

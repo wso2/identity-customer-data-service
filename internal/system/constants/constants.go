@@ -310,11 +310,10 @@ const (
 )
 
 const (
+	// Maximum number of candidates per rule. If we allow any number of
+	// candidates per rule, the issue is that rule attribute value is very common
+	// and we can not merge profile with very comman data.
 	MaxCandidatesPerRule = 100
-)
-
-const (
-	PhoneSuffixBlockingLength = 7
 )
 
 const (
@@ -323,31 +322,55 @@ const (
 )
 
 const (
+	// LSHSignatureSize is the total number of MinHash signatures generated.
 	LSHSignatureSize = 8
-	LSHBands         = 4
-	LSHRows          = 2
-	LSHMinLength     = 4
 
+	// LSHBands and LSHRows split those 8 hashes into 4 chunks (bands) of 2 hashes (rows).
+	// The Rule: Two strings only need to perfectly match ONE of these 4 chunks to be
+	// flagged as a potential typo/duplicate.
+	//
+	// Why 4 and 2? This specific ratio creates a mathematical "trap door" at 50% similarity.
+	// Strings that are >= 50% similar will almost certainly match at least one chunk.
+	// Strings < 50% similar will fail, effectively filtering out junk matches.
+	LSHBands = 4
+	LSHRows  = 2
+
+	// LSHMinLength is the minimum string length required to generate a hash.
+	LSHMinLength = 4
+
+	// MaxMetaphoneLen truncates phonetic codes to 4 characters (approx. 2 syllables).
+	// Industry standard: Lawrence Philips' Double Metaphone algorithm shows
+	// exceeding 4 characters increases false negatives due to trailing vowel differences.
 	MaxMetaphoneLen = 4
 )
 
 // Scoring engine
 
 const (
-	// ScoreAnchorFraction is the lower bound for "anchor" weight as a fraction of the
-	// highest possible weight. Rules in the top third by weight are anchors; a match
-	// that only satisfies non-anchor (low-priority) rules is penalized to prevent weak
-	// combinations from triggering an auto-merge.
+	// ScoreAnchorFraction is heuristic ensures that if profiles
+	// only share weak data (like "City" and "Gender"), they cannot auto-merge.
+	// They must match on at least one high-weight identifier which has weight greater
+	// than ScoreAnchorFraction*maximum applicable weight (like Email or SSN).
+	// NOTE: There is no universal "perfect" threshold for this. This value serves
+	// as a conservative initial placeholder to prevent weak rules (like City/Gender)
+	// from triggering auto-merges on their own.
+	// To find the optimal value for a specific tenant, this fraction should be
+	// tuned by running a Precision/Recall test against their actual, real-world data.
 	ScoreAnchorFraction = 2.0 / 3.0
 
-	// ScoreCoverageDenominator sets the minimum fraction of total rules that must have
-	// input data before an auto-merge is allowed. With a value of 3, at least
-	// 1/ScoreCoverageDenominator of all rules must be applicable.
+	// ScoreCoverageDenominator is baseline ensures we do not auto-merge highly sparse profiles.
+	// NOTE: There is no mathematically perfect universal constant for this value.
+	// It acts as a defensive starting point to prevent highly sparse profiles
+	// (e.g., profiles that only have 2 out of 10 configured fields filled in)
+	// from triggering unsupervised auto-merges. The true optimal value must be
+	// tuned via testing against real customer datasets.
 	ScoreCoverageDenominator = 3
 
-	// ScoreMajorityNumerator and ScoreMajorityDenominator define the non-match majority
-	// threshold. If non-matching rules are >= ScoreMajorityNumerator/ScoreMajorityDenominator
-	// of all applicable rules, the score is capped below the auto-merge threshold.
+	// ScoreMajorityNumerator and ScoreMajorityDenominator define the non-match majority threshold.
+	// NOTE: There is no mathematically perfect universal constant for this value.If non-matching
+	// rules are >= ScoreMajorityNumerator/ScoreMajorityDenominator of all applicable rules,
+	// the score is capped below the auto-merge threshold. This must be tuned per-tenant via
+	// testing against real-world datasets.
 	ScoreMajorityNumerator   = 2
 	ScoreMajorityDenominator = 3
 
@@ -359,6 +382,8 @@ const (
 	// AnchorMatchMinScore is the minimum score for a match that satisfies at least one anchor rule.
 	// This prevents very weak matches from being considered valid anchor rule. The value of 0.7 is
 	// chosen to allow some flexibility while ensuring a reasonable level of confidence in the match.
+	// NOTE: There is no mathematically perfect universal constant for this AnchorMatchMinScore.
+	// The optimal fuzzy threshold must be tuned via testing against real customer datasets.
 	AnchorMatchMinScore = 0.7
 )
 
@@ -369,17 +394,30 @@ const (
 	// primary phonetic codes. If the phonetic match is perfect (1.0), the final score is
 	// guaranteed to be at least this value. If the raw JW score is lower, it is bumped up
 	// to this minimum. If the raw JW score is higher, the JW score is kept.
-	NamePhoneticExactJWMin = 0.90
+	// NOTE: There is no mathematically perfect universal constant for this value. Must be tuned per-tenant.
+	NamePhoneticExactJWMin = 0.9
 
 	// PhoneticAlternateScore is returned by PhoneticSimilarity when two names share a
 	// Double Metaphone alternate code but not the primary code. Lower than 1.0 to reflect
 	// the reduced certainty of an alternate encoding.
+	// NOTE: The Double Metaphone algorithm calculates both a primary and an alternate
+	// pronunciation. This baseline dictates the score awarded when names only match
+	// on their alternate encoding.
 	PhoneticAlternateScore = 0.9
 )
 
 // Phone matching
 
 const (
+	// PhoneSuffixBlockingLength dictates how many trailing digits must perfectly align
+	// to be considered a valid "Suffix Match."
+	// NOTE: This is based on the standard Sri Lankan phone number format.
+	// This must be tuned based on a tenant's regional data.
+	PhoneSuffixBlockingLength = 7
+
+	// NOTE: There is no mathematically perfect constant for a partial phone match.
+	// This baseline dictates the score awarded when only the suffix matches,
+	// but the area/country codes actively differ or are completely missing.
 	// PhoneSuffixMatchScore is returned when two phone numbers share the same last
 	// PhoneSuffixBlockingLength digits but differ elsewhere (e.g., different country
 	// codes). A suffix-only match is strong evidence but not conclusive.
@@ -389,13 +427,12 @@ const (
 // Jaro-Winkler algorithm
 
 const (
-	// JaroWinklerMaxPrefix is the maximum number of leading characters considered for
-	// the Winkler prefix bonus. The original Winkler paper caps this at 4.
+	// JaroWinklerMaxPrefix is set to 4 based on William E. Winkler's original
+	// US Census Bureau paper (1990). Empirical studies showed prefix matches
+	// beyond 4 characters yield diminishing returns for duplicate detection.
 	JaroWinklerMaxPrefix = 4
 
-	// JaroWinklerPFactor is the scaling constant for the prefix bonus in Jaro-Winkler.
-	// The standard value from Winkler is 0.1. Values above 0.25 can produce
-	// scores > 1.0 and must not be used.
+	// JaroWinklerPFactor is the standard scaling constant (0.1) defined by Winkler.
 	JaroWinklerPFactor = 0.1
 )
 

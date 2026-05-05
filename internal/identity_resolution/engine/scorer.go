@@ -19,8 +19,6 @@
 package engine
 
 import (
-	"fmt"
-
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -86,7 +84,6 @@ func ScoreCandidate(
 		}
 	}
 	if maxApplicableWeight == 0 {
-		logger.Info(fmt.Sprintf("Scorer: candidate '%s' — no mutually applicable rules, returning 0.0", candidate.ProfileID))
 		return 0.0, breakdown
 	}
 
@@ -136,7 +133,6 @@ func ScoreCandidate(
 	}
 
 	if applicableWeight == 0 {
-		logger.Info(fmt.Sprintf("Scorer: candidate '%s' — no mutually applicable rules after scoring, returning 0.0", candidate.ProfileID))
 		return 0.0, breakdown
 	}
 
@@ -163,8 +159,6 @@ func ScoreCandidate(
 	// genuine match so cap it below auto-merge threshold.
 	if applicableCount > 0 && applicableCount*constants.ScoreCoverageDenominator < numOfRules && finalScore >= autoMergeThreshold {
 		finalScore = autoMergeThreshold - constants.ScorePenaltyOffset
-		logger.Info(fmt.Sprintf("Scorer: coverage penalty for candidate '%s' — only %d/%d rules applicable, capped to %.4f",
-			candidate.ProfileID, applicableCount, numOfRules, finalScore))
 	}
 
 	// Anchor penalty: if only weak (low-priority) rules matched, cap the score
@@ -172,16 +166,12 @@ func ScoreCandidate(
 	// but never auto-merge.
 	if !anchorMatched && finalScore >= autoMergeThreshold {
 		finalScore = autoMergeThreshold - constants.ScorePenaltyOffset
-		logger.Info(fmt.Sprintf("Scorer: anchor penalty applied for candidate '%s' — capped to %.4f",
-			candidate.ProfileID, finalScore))
 	}
 
 	// Rule majority constraint: if ScoreMajorityNumerator/ScoreMajorityDenominator or more
 	// of the applicable rules scored zero, the overall score is unreliable so cap it.
 	if applicableCount > 0 && nonMatchCount*constants.ScoreMajorityDenominator >= applicableCount*constants.ScoreMajorityNumerator && finalScore >= autoMergeThreshold {
 		finalScore = autoMergeThreshold - constants.ScorePenaltyOffset
-		logger.Info(fmt.Sprintf("Scorer: rule majority penalty for candidate '%s' — %d/%d rules non-matching, capped to %.4f",
-			candidate.ProfileID, nonMatchCount, applicableCount, finalScore))
 	}
 
 	if finalScore > 1.0 {

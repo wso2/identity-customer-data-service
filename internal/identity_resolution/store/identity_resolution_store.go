@@ -35,7 +35,6 @@ import (
 
 func GetProfilesForOrg(orgHandle string) ([]model.ProfileData, error) {
 	logger := log.GetLogger()
-	logger.Info("Store: loading profiles for org", log.String("orgHandle", orgHandle))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -69,7 +68,6 @@ func GetProfilesForOrg(orgHandle string) ([]model.ProfileData, error) {
 		profiles = append(profiles, pd)
 	}
 
-	logger.Info(fmt.Sprintf("Store: loaded %d profiles for org '%s'", len(profiles), orgHandle))
 	return profiles, nil
 }
 
@@ -182,9 +180,6 @@ func scanProfileData(row map[string]interface{}) (model.ProfileData, error) {
 
 func InsertReviewTask(task model.ReviewTask) error {
 	logger := log.GetLogger()
-	logger.Info("Store: inserting review task",
-		log.String("incoming", task.IncomingProfileID),
-		log.String("candidate", task.CandidateProfileID))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -221,9 +216,6 @@ func InsertReviewTask(task model.ReviewTask) error {
 				if updateErr != nil {
 					logger.Warn(fmt.Sprintf("Store: failed to flip mirror task '%s' ↔ '%s'",
 						task.IncomingProfileID, task.CandidateProfileID), log.Error(updateErr))
-				} else {
-					logger.Info(fmt.Sprintf("Store: flipped mirror task: now '%s' → '%s' (score=%.4f)",
-						task.IncomingProfileID, task.CandidateProfileID, task.MatchScore))
 				}
 				return nil
 			}
@@ -250,7 +242,6 @@ func InsertReviewTask(task model.ReviewTask) error {
 		}, err)
 	}
 
-	logger.Info("Store: review task inserted successfully")
 	return nil
 }
 
@@ -258,8 +249,6 @@ func InsertReviewTask(task model.ReviewTask) error {
 // Returns the incoming profile IDs of the cancelled tasks so they can be re-evaluated.
 func CancelRelatedReviewTasks(excludeTaskID, IncomingProfileID, CandidateProfileID, cancelledBy string) ([]string, error) {
 	logger := log.GetLogger()
-	logger.Info(fmt.Sprintf("Store: cancelling related review tasks for profiles '%s' and '%s' (excluding task '%s')",
-		IncomingProfileID, CandidateProfileID, excludeTaskID))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -301,8 +290,6 @@ func CancelRelatedReviewTasks(excludeTaskID, IncomingProfileID, CandidateProfile
 		return nil, err
 	}
 
-	logger.Info(fmt.Sprintf("Store: cancelled related tasks, %d incoming profiles eligible for re-evaluation",
-		len(affectedIncomingIDs)))
 	return affectedIncomingIDs, nil
 }
 
@@ -337,9 +324,6 @@ func GetReviewTaskByID(taskID string) (*model.ReviewTask, error) {
 }
 
 func GetPendingReviewTasks(orgHandle string, pageSize int) ([]model.ReviewTask, int, error) {
-	logger := log.GetLogger()
-	logger.Info("Store: loading pending review tasks", log.String("orgHandle", orgHandle))
-
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		return nil, 0, errors2.NewServerError(errors2.ErrorMessage{
@@ -387,15 +371,10 @@ func GetPendingReviewTasks(orgHandle string, pageSize int) ([]model.ReviewTask, 
 		tasks = append(tasks, task)
 	}
 
-	logger.Info(fmt.Sprintf("Store: loaded %d pending review tasks (total %d)", len(tasks), totalCount))
 	return tasks, totalCount, nil
 }
 
 func GetPendingReviewTasksByProfile(orgHandle, profileID string, pageSize int) ([]model.ReviewTask, int, error) {
-	logger := log.GetLogger()
-	logger.Info("Store: loading pending review tasks for profile",
-		log.String("orgHandle", orgHandle), log.String("profileID", profileID))
-
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
 		return nil, 0, errors2.NewServerError(errors2.ErrorMessage{
@@ -443,14 +422,11 @@ func GetPendingReviewTasksByProfile(orgHandle, profileID string, pageSize int) (
 		tasks = append(tasks, task)
 	}
 
-	logger.Info(fmt.Sprintf("Store: loaded %d review tasks for profile '%s' (total %d)", len(tasks), profileID, totalCount))
 	return tasks, totalCount, nil
 }
 
 func UpdateReviewTaskStatus(taskID string, status string, resolvedBy string, notes string) error {
 	logger := log.GetLogger()
-	logger.Info("Store: updating review task status",
-		log.String("taskID", taskID), log.String("status", status))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -473,7 +449,6 @@ func UpdateReviewTaskStatus(taskID string, status string, resolvedBy string, not
 		}, err)
 	}
 
-	logger.Info(fmt.Sprintf("Store: review task %s updated to %s", taskID, status))
 	return nil
 }
 
@@ -544,10 +519,6 @@ func scanReviewTask(row map[string]interface{}) model.ReviewTask {
 
 func InsertMergeAuditLog(entry model.MergeAuditEntry) error {
 	logger := log.GetLogger()
-	logger.Info("Store: inserting merge audit log",
-		log.String("primary", entry.PrimaryProfileID),
-		log.String("secondary", entry.SecondaryProfileID),
-		log.String("mergeType", entry.MergeType))
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -575,7 +546,6 @@ func InsertMergeAuditLog(entry model.MergeAuditEntry) error {
 		}, err)
 	}
 
-	logger.Info("Store: merge audit log inserted successfully")
 	return nil
 }
 
@@ -629,7 +599,7 @@ func DeleteRejectionPairsForProfile(orgHandle, profileID string) error {
 }
 
 // GetRejectedProfileIDs returns the set of profile IDs that have been rejected against the given profileID.
-func GetRejectedProfileIDs(orgHandle, profileID string) (map[string]bool, error) {
+func GetRejectedProfileIDs(orgHandle, profileID string) (map[string]struct{}, error) {
 	logger := log.GetLogger()
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -645,19 +615,16 @@ func GetRejectedProfileIDs(orgHandle, profileID string) (map[string]bool, error)
 		return nil, err
 	}
 
-	rejected := make(map[string]bool)
+	rejected := make(map[string]struct{})
 	for _, row := range rows {
 		p1 := fmt.Sprintf("%v", row["profile_id_1"])
 		p2 := fmt.Sprintf("%v", row["profile_id_2"])
 		if p1 == profileID {
-			rejected[p2] = true
+			rejected[p2] = struct{}{}
 		} else {
-			rejected[p1] = true
+			rejected[p1] = struct{}{}
 		}
 	}
 
-	if len(rejected) > 0 {
-		logger.Info(fmt.Sprintf("Store: found %d rejection pairs for profile '%s'", len(rejected), profileID))
-	}
 	return rejected, nil
 }

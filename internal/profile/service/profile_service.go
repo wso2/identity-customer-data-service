@@ -207,8 +207,6 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 			if hasMatchingRule {
 				profile.OrgHandle = orgHandle
 				queue.Enqueue(profile)
-			} else {
-				logger.Info("Profile has no attributes matching active rules")
 			}
 		}
 	}
@@ -893,8 +891,6 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 				}
 				profileToUpDate.OrgHandle = orgHandle
 				queue.Enqueue(profileToUpDate)
-			} else {
-				logger.Info("Profile has no attributes matching active rules")
 			}
 		}
 	}
@@ -1733,7 +1729,6 @@ func (ps *ProfilesService) GetProfilesWithFuzzyResolution(
 	limit int,
 ) ([]profileModel.FuzzyMatchResult, error) {
 	logger := log.GetLogger()
-	startTime := time.Now()
 
 	flatAttrs := parseFuzzyFiltersToFlatAttrs(filters)
 	if len(flatAttrs) == 0 {
@@ -1759,7 +1754,6 @@ func (ps *ProfilesService) GetProfilesWithFuzzyResolution(
 	blockingKeys := engine.GenerateBlockingKeysFromRules(flatAttrs, rules)
 	candidateIDs := engine.FindCandidatesByIndex(blockingKeys, orgHandle, "", irStore.FindCandidateIDsByKeys)
 	if len(candidateIDs) == 0 {
-		logger.Info("Service: fuzzy resolution found no candidates after blocking")
 		return []profileModel.FuzzyMatchResult{}, nil
 	}
 
@@ -1772,9 +1766,6 @@ func (ps *ProfilesService) GetProfilesWithFuzzyResolution(
 	if err != nil {
 		return nil, err
 	}
-
-	logger.Info(fmt.Sprintf("Service: fuzzy resolution complete — %d matches above threshold %.2f in %dms",
-		len(results), threshold, time.Since(startTime).Milliseconds()))
 
 	return results, nil
 }
@@ -1833,7 +1824,6 @@ func (ps *ProfilesService) GetProfilesHybrid(
 	blockingKeys := engine.GenerateBlockingKeysFromRules(flatAttrs, rules)
 	fuzzyIDs := engine.FindCandidatesByIndex(blockingKeys, orgHandle, "", irStore.FindCandidateIDsByKeys)
 	if len(fuzzyIDs) == 0 {
-		logger.Info("Service: hybrid search found no fuzzy candidates after blocking")
 		return []profileModel.FuzzyMatchResult{}, nil
 	}
 
@@ -1843,7 +1833,6 @@ func (ps *ProfilesService) GetProfilesHybrid(
 		return nil, err
 	}
 	if len(deterministicIDs) == 0 {
-		logger.Info("Service: hybrid search found no deterministic candidates")
 		return []profileModel.FuzzyMatchResult{}, nil
 	}
 
@@ -1859,7 +1848,6 @@ func (ps *ProfilesService) GetProfilesHybrid(
 		}
 	}
 	if len(candidateIDs) == 0 {
-		logger.Info("Service: hybrid search intersection produced no candidates")
 		return []profileModel.FuzzyMatchResult{}, nil
 	}
 

@@ -96,14 +96,10 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 				filtered = append(filtered, id)
 			}
 		}
-		if len(filtered) < len(candidateIDs) {
-			logger.Info(fmt.Sprintf("AsyncWorker: excluded parent profile '%s' from candidates", parentID))
-		}
 		candidateIDs = filtered
 	}
 
 	if len(candidateIDs) == 0 {
-		logger.Info(fmt.Sprintf("AsyncWorker: no candidates found for profile '%s'", freshProfile.ProfileId))
 		return
 	}
 
@@ -135,14 +131,10 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 				masterID := candidate.ReferenceProfileID
 				// Skip if the master is the incoming profile itself.
 				if masterID == freshProfile.ProfileId {
-					logger.Info(fmt.Sprintf("AsyncWorker: child '%s' belongs to incoming profile '%s' — skipping",
-						cid, freshProfile.ProfileId))
 					continue
 				}
 				// Skip if the master is the parent we already excluded.
 				if masterID == parentID {
-					logger.Info(fmt.Sprintf("AsyncWorker: child '%s' belongs to excluded parent '%s' — skipping",
-						cid, parentID))
 					continue
 				}
 				resolvedID = masterID
@@ -156,8 +148,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 					}
 					profileMap[masterID] = &masterProfiles[0]
 				}
-				logger.Info(fmt.Sprintf("AsyncWorker: resolved child candidate '%s' to master '%s'",
-					cid, masterID))
 			}
 			if !seen[resolvedID] {
 				seen[resolvedID] = true
@@ -168,7 +158,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 	}
 
 	if len(candidateIDs) == 0 {
-		logger.Info(fmt.Sprintf("AsyncWorker: no candidates left after resolving children for profile '%s'", freshProfile.ProfileId))
 		return
 	}
 
@@ -199,7 +188,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 	}
 
 	if len(scored) == 0 {
-		logger.Info(fmt.Sprintf("AsyncWorker: no candidates above review threshold for profile '%s'", freshProfile.ProfileId))
 		return
 	}
 
@@ -212,16 +200,13 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 	if len(rejectedIDs) > 0 {
 		var filtered []scoredCandidate
 		for _, sc := range scored {
-			if rejectedIDs[sc.id] {
-				logger.Info(fmt.Sprintf("AsyncWorker: skipping rejected pair '%s' ↔ '%s'",
-					freshProfile.ProfileId, sc.id))
+			if _, ok := rejectedIDs[sc.id]; ok {
 				continue
 			}
 			filtered = append(filtered, sc)
 		}
 		scored = filtered
 		if len(scored) == 0 {
-			logger.Info(fmt.Sprintf("AsyncWorker: all candidates rejected for profile '%s'", freshProfile.ProfileId))
 			return
 		}
 	}
@@ -233,16 +218,12 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 		for _, sc := range scored {
 			candidate := profileMap[sc.id]
 			if candidate.UserID != "" && candidate.UserID != freshProfile.UserId {
-				logger.Info(fmt.Sprintf("AsyncWorker: skipping unmergeable pair — '%s' (user=%s) ↔ '%s' (user=%s): different permanent users",
-					freshProfile.ProfileId, freshProfile.UserId, sc.id, candidate.UserID))
 				continue
 			}
 			mergeable = append(mergeable, sc)
 		}
 		scored = mergeable
 		if len(scored) == 0 {
-			logger.Info(fmt.Sprintf("AsyncWorker: no mergeable candidates left for profile '%s' after filtering unmergeable pairs",
-				freshProfile.ProfileId))
 			return
 		}
 	}
@@ -255,8 +236,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 		decision := model.Decide(sc.score, thresholds)
 
 		if decision == constants.DecisionAutoMerge {
-			logger.Info(fmt.Sprintf("AsyncWorker: AUTO_MERGE (best-fit) — profile '%s' matches '%s' (score=%.4f)",
-				freshProfile.ProfileId, sc.id, sc.score))
 
 			matchedProfile, loadErr := profileStore.GetProfile(sc.id)
 			if loadErr != nil || matchedProfile == nil {
@@ -290,8 +269,6 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 			break
 		}
 
-		logger.Info(fmt.Sprintf("AsyncWorker: MANUAL_REVIEW — profile '%s' matches '%s' (score=%.4f)",
-			freshProfile.ProfileId, sc.id, sc.score))
 		insertReviewTask(orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
 	}
 
@@ -329,15 +306,10 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 		for _, sc := range remaining {
 			decision := model.Decide(sc.score, thresholds)
 			if decision == constants.DecisionAutoMerge || decision == constants.DecisionManualReview {
-				logger.Info(fmt.Sprintf("AsyncWorker: downgrading '%s' (score=%.4f) to review task against new master '%s'",
-					sc.id, sc.score, mergedMaster.ProfileId))
 				insertReviewTask(orgHandle, mergedMaster.ProfileId, sc.id, sc.score, sc.breakdown)
 			}
 		}
 	}
-
-	logger.Info(fmt.Sprintf("AsyncWorker: resolution complete for profile '%s' (merged=%v)",
-		freshProfile.ProfileId, merged))
 }
 
 func insertReviewTask(orgHandle, incomingProfileID, candidateProfileID string, score float64, breakdown map[string]float64) {
@@ -346,8 +318,7 @@ func insertReviewTask(orgHandle, incomingProfileID, candidateProfileID string, s
 	rejectedIDs, err := irStore.GetRejectedProfileIDs(orgHandle, incomingProfileID)
 	if err != nil {
 		logger.Warn(fmt.Sprintf("AsyncWorker: could not check rejection pairs for '%s', proceeding with task creation", incomingProfileID), log.Error(err))
-	} else if rejectedIDs[candidateProfileID] {
-		logger.Info(fmt.Sprintf("AsyncWorker: skipping review task for '%s' → '%s' — pair already rejected", incomingProfileID, candidateProfileID))
+	} else if _, ok := rejectedIDs[candidateProfileID]; ok {
 		return
 	}
 
@@ -363,9 +334,6 @@ func insertReviewTask(orgHandle, incomingProfileID, candidateProfileID string, s
 	if err := irStore.InsertReviewTask(task); err != nil {
 		logger.Error(fmt.Sprintf("AsyncWorker: failed to create review task for '%s' → '%s'",
 			incomingProfileID, candidateProfileID), log.Error(err))
-	} else {
-		logger.Info(fmt.Sprintf("AsyncWorker: review task created for '%s' → '%s' (score=%.4f)",
-			incomingProfileID, candidateProfileID, score))
 	}
 }
 
@@ -390,9 +358,6 @@ func ReindexAfterMerge(masterProfileID, triggerProfileId, orgHandle string, merg
 		if err := irStore.UpsertBlockingKeys(masterProfileID, orgHandle, newKeys); err != nil {
 			logger.Warn(fmt.Sprintf("ReindexAfterMerge: failed to re-index master '%s'", masterProfileID),
 				log.Error(err))
-		} else {
-			logger.Info(fmt.Sprintf("ReindexAfterMerge: re-indexed %d blocking keys for master '%s'",
-				len(newKeys), masterProfileID))
 		}
 	}
 }
@@ -411,7 +376,6 @@ func flattenProfile(p *profileModel.Profile) map[string]interface{} {
 // Called when a unification rule is added or activated.
 func IndexNewAttribute(orgHandle string, rule urModel.UnificationRule) {
 	logger := log.GetLogger()
-	logger.Info(fmt.Sprintf("Reindexer: indexing attribute '%s' for org '%s'", rule.PropertyName, orgHandle))
 
 	profiles, err := irStore.GetProfilesForOrg(orgHandle)
 	if err != nil {
@@ -441,14 +405,12 @@ func IndexNewAttribute(orgHandle string, rule urModel.UnificationRule) {
 			count++
 		}
 	}
-	logger.Info(fmt.Sprintf("Reindexer: done indexing attribute '%s', %d profiles indexed", rule.PropertyName, count))
 }
 
 // RemoveAttributeIndex removes all blocking keys for a specific attribute in an org.
 // Called when a unification rule is deleted or deactivated.
 func RemoveAttributeIndex(orgHandle string, attributeName string) {
 	logger := log.GetLogger()
-	logger.Info(fmt.Sprintf("Reindexer: removing attribute index '%s' for org '%s'", attributeName, orgHandle))
 	if err := irStore.DeleteBlockingKeysByAttribute(orgHandle, attributeName); err != nil {
 		logger.Error(fmt.Sprintf("Reindexer: failed to remove attribute index '%s'", attributeName), log.Error(err))
 	}

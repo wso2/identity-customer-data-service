@@ -19,8 +19,6 @@
 package model
 
 import (
-	"fmt"
-
 	adminStore "github.com/wso2/identity-customer-data-service/internal/admin_config/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -58,9 +56,6 @@ func LoadThresholds(orgHandle string) Thresholds {
 	if adminCfg.ManualReviewThreshold > 0 {
 		defaults.ManualReview = adminCfg.ManualReviewThreshold
 	}
-
-	logger.Info(fmt.Sprintf("LoadThresholds: org=%s autoMergeEnabled=%v autoMerge=%.2f manualReview=%.2f",
-		orgHandle, defaults.AutoMergeEnabled, defaults.AutoMerge, defaults.ManualReview))
 
 	return defaults
 }

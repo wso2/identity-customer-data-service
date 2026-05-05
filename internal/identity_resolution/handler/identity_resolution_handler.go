@@ -41,7 +41,6 @@ func NewIdentityResolutionHandler() *IdentityResolutionHandler {
 
 func (h *IdentityResolutionHandler) GetReviewTasks(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger()
-	logger.Info("Handler: get review tasks request received")
 
 	err := security.AuthnAndAuthz(r, "identity_resolution:review")
 	if err != nil {
@@ -85,15 +84,12 @@ func (h *IdentityResolutionHandler) GetReviewTasks(w http.ResponseWriter, r *htt
 		return
 	}
 
-	logger.Info(fmt.Sprintf("Handler: returning %d review tasks (total %d)", len(response.Tasks), response.Pagination.Count))
-
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (h *IdentityResolutionHandler) ResolveReviewTask(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger()
-	logger.Info("Handler: resolve review task request received")
 
 	err := security.AuthnAndAuthz(r, "identity_resolution:review")
 	if err != nil {
@@ -154,7 +150,6 @@ func (h *IdentityResolutionHandler) ResolveReviewTask(w http.ResponseWriter, r *
 	if approved {
 		action = "approved"
 	}
-	logger.Info(fmt.Sprintf("Handler: review task %s %s by %s", taskID, action, resolvedBy))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

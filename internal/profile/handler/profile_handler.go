@@ -340,10 +340,8 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		var fuzzyErr error
 
 		if hasDeterministic {
-			logger.Info("Fetching profiles with hybrid search (fuzzy + deterministic)")
 			fuzzyResults, fuzzyErr = profilesService.GetProfilesHybrid(orgHandle, fuzzyFilters, filters, threshold, limit)
 		} else {
-			logger.Info("Fetching profiles with fuzzy resolution")
 			fuzzyResults, fuzzyErr = profilesService.GetProfilesWithFuzzyResolution(orgHandle, fuzzyFilters, threshold, limit)
 		}
 
