@@ -68,6 +68,8 @@ CREATE TABLE unification_rules
     property_id   VARCHAR(255) REFERENCES profile_schema(attribute_id) ON DELETE CASCADE,
     priority      INT          NOT NULL,
     is_active     BOOLEAN      NOT NULL,
+    attribute_type     VARCHAR(255) NOT NULL DEFAULT 'PRIMITIVE_EXACT',
+    unification_method VARCHAR(255) NOT NULL DEFAULT 'deterministic',
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
