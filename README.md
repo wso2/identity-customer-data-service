@@ -126,7 +126,7 @@ docker run -d -p 5432:5432 --name postgres \
 ### 🗂 Step 2: Initialize the Database
 
 ```bash
-docker exec -i postgres psql -U cdsuser -d cdspwd < dbscripts/postgress.sql
+docker exec -i postgres psql -U cdsuser -d cdsdb < dbscripts/postgres.sql
 ```
 
 ---
