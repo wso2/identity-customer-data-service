@@ -439,24 +439,12 @@ var DeleteBlockingKeysByAttributeSQL = map[string]string{
 	"postgres": `DELETE FROM blocking_keys WHERE org_handle = $1 AND attribute_name = $2`,
 }
 
-var IRGetProfilesForOrg = map[string]string{
-	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
-				 FROM profiles
-				 WHERE org_handle = $1 AND delete_profile = FALSE`,
-}
-
 var IRGetProfilesForOrgPaginated = map[string]string{
 	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
 				 FROM profiles
 				 WHERE org_handle = $1 AND delete_profile = FALSE
 				 ORDER BY profile_id
 				 LIMIT $2 OFFSET $3`,
-}
-
-var IRGetProfileByID = map[string]string{
-	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
-				 FROM profiles
-				 WHERE profile_id = $1 AND delete_profile = FALSE`,
 }
 
 var IRGetProfilesByIDs = map[string]string{

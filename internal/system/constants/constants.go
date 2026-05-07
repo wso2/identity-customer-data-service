@@ -37,6 +37,7 @@ const DefaultQueueSize = 1000
 const DefaultLimit = 50
 const CONSOLE_APP = "CONSOLE"
 const AZPClaim = "azp"
+const SUBClaim = "sub"
 const ClientIdClaim = "client_id"
 const ActiveClaim = "active"
 const OrgHandleClaim = "org_handle"
@@ -44,6 +45,7 @@ const AudienceClaim = "aud"
 const ExpiryClaim = "exp"
 const FilterRegex = `^[a-zA-Z0-9._-]+$`
 const MaxAttributeDisplayNameLength = 50
+const GetProfilesPageSize = 500
 
 var DisplayNameCamelCaseSplitter = regexp.MustCompile(`([a-z0-9])([A-Z])`)
 var DisplayNameRegex = regexp.MustCompile(`[^a-zA-Z0-9.\-_+ ]`)
