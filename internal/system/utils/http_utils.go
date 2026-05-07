@@ -63,6 +63,13 @@ func HandleError(w http.ResponseWriter, err error) {
 	}
 }
 
+func ExtractPathPrefixFromContext(r *http.Request) string {
+	if prefix, ok := r.Context().Value(constants.PathPrefixContextKey).(string); ok && prefix != "" {
+		return prefix
+	}
+	return "/t/"
+}
+
 func ExtractOrgHandleFromPath(r *http.Request) string {
 	tenant := r.Context().Value(constants.TenantContextKey).(string)
 	if tenant == "" {
@@ -118,6 +125,7 @@ func mountPrefixDispatcher(mux *http.ServeMux, prefix string, handlerFunc http.H
 		remainingPath := "/" + parts[1]
 
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, orgHandle)
+		ctx = context.WithValue(ctx, constants.PathPrefixContextKey, prefix)
 		r = r.WithContext(ctx)
 		r.URL.Path = remainingPath
 
