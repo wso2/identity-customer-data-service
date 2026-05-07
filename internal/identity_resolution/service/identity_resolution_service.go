@@ -215,6 +215,18 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 		}, mergeErr)
 	}
 
+	if auditErr := irStore.InsertMergeAuditLog(model.MergeAuditEntry{
+		OrgHandle:          task.OrgHandle,
+		PrimaryProfileID:   candidate.ProfileId,
+		SecondaryProfileID: incomingProfile.ProfileId,
+		MergeType:          constants.DecisionManualReview,
+		MatchScore:         task.MatchScore,
+		MergedBy:           resolvedBy,
+	}); auditErr != nil {
+		logger.Error(fmt.Sprintf("Service: failed to insert merge audit log for review task %s — '%s' → '%s'",
+			taskID, incomingProfile.ProfileId, candidate.ProfileId), log.Error(auditErr))
+	}
+
 	// Merge succeeded — commit task status.
 	if err := irStore.UpdateReviewTaskStatus(taskID, status, resolvedBy, notes); err != nil {
 		logger.Error(fmt.Sprintf("Service: merge succeeded but failed to update task %s status to %s",
