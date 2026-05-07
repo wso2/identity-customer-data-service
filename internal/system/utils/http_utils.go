@@ -96,34 +96,45 @@ func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError
 	_ = json.NewEncoder(w).Encode("Invalid erquest format")
 }
 
-// MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
-// with the tenant added to the context. It preserves the remaining path (e.g., /api/v1/...).
-func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
-	mux.HandleFunc("/t/", func(w http.ResponseWriter, r *http.Request) {
+// mountPrefixDispatcher is the shared implementation for tenant-style prefix dispatchers.
+// It extracts the identifier segment immediately after prefix, stores it in context under
+// TenantContextKey, rewrites the request path to the remaining suffix, and calls handlerFunc.
+func mountPrefixDispatcher(mux *http.ServeMux, prefix string, handlerFunc http.HandlerFunc) {
+	mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 
-		if !strings.HasPrefix(path, "/t/") {
+		if !strings.HasPrefix(path, prefix) {
 			http.NotFound(w, r)
 			return
 		}
 
-		// Split: /t/{tenant}/...
-		parts := strings.SplitN(path[len("/t/"):], "/", 2)
+		parts := strings.SplitN(path[len(prefix):], "/", 2)
 		if len(parts) != 2 {
-			http.Error(w, "Invalid tenant path format", http.StatusBadRequest)
+			http.Error(w, "Invalid path format", http.StatusBadRequest)
 			return
 		}
 
 		orgHandle := parts[0]
 		remainingPath := "/" + parts[1]
 
-		// Add tenant to request context and preserve remaining path (including API version)
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, orgHandle)
 		r = r.WithContext(ctx)
 		r.URL.Path = remainingPath
 
 		handlerFunc(w, r)
 	})
+}
+
+// MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
+// with the tenant added to the context. It preserves the remaining path (e.g., /cds/api/v1/...).
+func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
+	mountPrefixDispatcher(mux, "/t/", handlerFunc)
+}
+
+// MountOrgDispatcher mounts a dispatcher under /o/{org-uuid}/... and forwards requests to handlerFunc
+// with the org UUID stored in context under TenantContextKey, preserving the remaining path.
+func MountOrgDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
+	mountPrefixDispatcher(mux, "/o/", handlerFunc)
 }
 
 // RespondJSON sends a JSON response with the given status code and payload

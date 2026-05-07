@@ -59,17 +59,18 @@ func (sm *ServiceManager) RegisterServices() error {
 	_ = services.NewAdminConfigService(routesMux)
 	_ = services.NewIdentityResolutionService(routesMux)
 
-	// Single tenant dispatcher for all services; services own the versioned path (e.g., /api/v1/...)
-	utils.MountTenantDispatcher(sm.mux, func(w http.ResponseWriter, r *http.Request) {
-		// Normalize trailing slash prior to routing
+	// Shared handler used by both /t/ and /o/ dispatchers.
+	tenantHandler := func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 		if path == "" {
 			r.URL.Path = "/"
 		} else {
 			r.URL.Path = path
 		}
-		// Delegate to the tenant routes mux; it will 404 for unknown paths
 		routesMux.ServeHTTP(w, r)
-	})
+	}
+
+	utils.MountTenantDispatcher(sm.mux, tenantHandler)
+	utils.MountOrgDispatcher(sm.mux, tenantHandler)
 	return nil
 }
