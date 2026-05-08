@@ -142,8 +142,25 @@ func matchEmail(val1, val2 string, mode string) float64 {
 	if n1 == n2 {
 		return 1.0
 	}
-	similarity := algorithms.LevenshteinSimilarity(n1, n2)
-	return similarity
+
+	local1, domain1, ok1 := strings.Cut(n1, "@")
+	local2, domain2, ok2 := strings.Cut(n2, "@")
+	if !ok1 || !ok2 {
+		// Malformed email (no '@')
+		return 0.0
+	}
+
+	localSim := algorithms.LevenshteinSimilarity(local1, local2)
+
+	domainSim := 1.0
+	if domain1 != domain2 {
+		domainSim = algorithms.JaroWinkler(domain1, domain2)
+	}
+
+	if localSim < domainSim {
+		return localSim
+	}
+	return domainSim
 }
 
 func matchExact(val1, val2 string) float64 {
