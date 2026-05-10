@@ -206,13 +206,24 @@ func (c *IdentityClient) fetchOrganizationToken(
 }
 
 // fetchClientCredentialsToken obtains an organization-scoped token directly using client_credentials grant.
+// For sub-orgs (UUID handles), sub_org_client_id/sub_org_client_secret are used if configured;
+// otherwise falls back to the parent org credentials.
 func (c *IdentityClient) fetchClientCredentialsToken(orgId string, authCfg config.AuthServerConfig, scope string) (string, error) {
 
 	endpoint := c.buildTokenEndpoint(orgId, authCfg.TokenEndpoint)
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Set("scope", scope)
-	return c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, form, orgId)
+
+	clientID := authCfg.ClientID
+	clientSecret := authCfg.ClientSecret
+	if _, err := uuid.Parse(orgId); err == nil && authCfg.SubOrgClientID != "" {
+		clientID = authCfg.SubOrgClientID
+		clientSecret = authCfg.SubOrgClientSecret
+		log.GetLogger().Debug(fmt.Sprintf("fetchClientCredentialsToken: using sub-org credentials for org=%s", orgId))
+	}
+
+	return c.requestToken(endpoint, clientID, clientSecret, form, orgId)
 }
 
 // requestToken performs the actual HTTP POST and extracts access_token from JSON.
@@ -687,7 +698,11 @@ func ConvertSCIMClaimWithLocal(
 	}
 	if props, ok := local["properties"].([]interface{}); ok {
 		for _, p := range props {
-			prop := p.(map[string]interface{})
+			prop, ok := p.(map[string]interface{})
+			if !ok {
+				log.GetLogger().Debug(fmt.Sprintf("GetProfileSchema: skipping non-map property entry (type=%T) for org=%s", p, orgId))
+				continue
+			}
 			if prop["key"] == "multiValued" && prop["value"] == "true" {
 				multiValued = true
 			}
