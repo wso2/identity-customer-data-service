@@ -176,7 +176,7 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 			continue
 		}
 
-		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, thresholds.AutoMerge)
+		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, thresholds)
 
 		if finalScore >= thresholds.ManualReview {
 			scored = append(scored, scoredCandidate{
