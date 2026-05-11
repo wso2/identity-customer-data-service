@@ -1994,7 +1994,7 @@ func scoreAndBuildFuzzyResults(
 		if !exists {
 			continue
 		}
-		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, thresholds.AutoMerge)
+		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, thresholds)
 		if finalScore >= threshold {
 			scoredMatches = append(scoredMatches, scoredMatch{
 				candidateID:    candidateID,
