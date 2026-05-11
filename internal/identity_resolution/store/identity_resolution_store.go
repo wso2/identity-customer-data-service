@@ -33,44 +33,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
-func GetProfilesForOrg(orgHandle string) ([]model.ProfileData, error) {
-	logger := log.GetLogger()
-
-	dbClient, err := provider.NewDBProvider().GetDBClient()
-	if err != nil {
-		logger.Error("Store: failed to get DB client", log.Error(err))
-		return nil, errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IR_SEARCH_FAILED.Code,
-			Message:     errors2.IR_SEARCH_FAILED.Message,
-			Description: "Failed to connect to database for profile lookup.",
-		}, err)
-	}
-	defer dbClient.Close()
-
-	query := scripts.IRGetProfilesForOrg[provider.NewDBProvider().GetDBType()]
-	results, err := dbClient.ExecuteQuery(query, orgHandle)
-	if err != nil {
-		logger.Error("Store: failed to query profiles", log.Error(err))
-		return nil, errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IR_SEARCH_FAILED.Code,
-			Message:     errors2.IR_SEARCH_FAILED.Message,
-			Description: fmt.Sprintf("Failed to load profiles for org: %s", orgHandle),
-		}, err)
-	}
-
-	profiles := make([]model.ProfileData, 0, len(results))
-	for _, row := range results {
-		pd, err := scanProfileData(row)
-		if err != nil {
-			logger.Warn("Store: skipping profile due to scan error", log.Error(err))
-			continue
-		}
-		profiles = append(profiles, pd)
-	}
-
-	return profiles, nil
-}
-
 func GetProfilesForOrgPaginated(orgHandle string, limit, offset int) ([]model.ProfileData, error) {
 	logger := log.GetLogger()
 
@@ -105,38 +67,6 @@ func GetProfilesForOrgPaginated(orgHandle string, limit, offset int) ([]model.Pr
 	}
 
 	return profiles, nil
-}
-
-func GetProfileByID(profileID string) (*model.ProfileData, error) {
-	dbClient, err := provider.NewDBProvider().GetDBClient()
-	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IR_SEARCH_FAILED.Code,
-			Message:     errors2.IR_SEARCH_FAILED.Message,
-			Description: "Failed to connect to database for profile lookup.",
-		}, err)
-	}
-	defer dbClient.Close()
-
-	query := scripts.IRGetProfileByID[provider.NewDBProvider().GetDBType()]
-	results, err := dbClient.ExecuteQuery(query, profileID)
-	if err != nil {
-		return nil, errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IR_SEARCH_FAILED.Code,
-			Message:     errors2.IR_SEARCH_FAILED.Message,
-			Description: fmt.Sprintf("Failed to load profile: %s", profileID),
-		}, err)
-	}
-
-	if len(results) == 0 {
-		return nil, nil
-	}
-
-	pd, err := scanProfileData(results[0])
-	if err != nil {
-		return nil, err
-	}
-	return &pd, nil
 }
 
 func scanProfileData(row map[string]interface{}) (model.ProfileData, error) {

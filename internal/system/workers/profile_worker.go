@@ -32,6 +32,8 @@ import (
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	irModel "github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
+	irStore "github.com/wso2/identity-customer-data-service/internal/identity_resolution/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/queue"
@@ -171,6 +173,18 @@ func unifyProfiles(newProfile profileModel.Profile) {
 				if err := MergeMatchedProfiles(existingMasterProfile, newProfile, constants.SystemUserIdMatchReason); err != nil {
 					logger.Error(fmt.Sprintf("unifyProfiles: userId-match merge failed for profiles %s and %s",
 						existingMasterProfile.ProfileId, newProfile.ProfileId), log.Error(err))
+					return
+				}
+				if auditErr := irStore.InsertMergeAuditLog(irModel.MergeAuditEntry{
+					OrgHandle:          newProfile.OrgHandle,
+					PrimaryProfileID:   existingMasterProfile.ProfileId,
+					SecondaryProfileID: newProfile.ProfileId,
+					MergeType:          constants.DecisionAutoMerge,
+					MatchScore:         1.0,
+					MergedBy:           constants.MergeOnTrigger,
+				}); auditErr != nil {
+					logger.Error(fmt.Sprintf("unifyProfiles: failed to insert audit log for userId-match merge of '%s' → '%s'",
+						existingMasterProfile.ProfileId, newProfile.ProfileId), log.Error(auditErr))
 				}
 				return
 			}
@@ -198,6 +212,18 @@ func unifyProfiles(newProfile profileModel.Profile) {
 				if err := MergeMatchedProfiles(existingMasterProfile, newProfile, rule.RuleName); err != nil {
 					logger.Error(fmt.Sprintf("unifyProfiles: rule-based merge failed for profiles %s and %s (rule=%s)",
 						existingMasterProfile.ProfileId, newProfile.ProfileId, rule.RuleName), log.Error(err))
+					return
+				}
+				if auditErr := irStore.InsertMergeAuditLog(irModel.MergeAuditEntry{
+					OrgHandle:          newProfile.OrgHandle,
+					PrimaryProfileID:   existingMasterProfile.ProfileId,
+					SecondaryProfileID: newProfile.ProfileId,
+					MergeType:          constants.DecisionAutoMerge,
+					MatchScore:         1.0,
+					MergedBy:           constants.MergeOnTrigger,
+				}); auditErr != nil {
+					logger.Error(fmt.Sprintf("unifyProfiles: failed to insert audit log for deterministic-rule merge of '%s' → '%s' (rule=%s)",
+						existingMasterProfile.ProfileId, newProfile.ProfileId, rule.RuleName), log.Error(auditErr))
 				}
 				return
 			}

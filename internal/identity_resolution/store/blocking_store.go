@@ -213,6 +213,58 @@ func InsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 	return nil
 }
 
+// InsertBlockingKeysBatch inserts blocking keys for many profiles in a single SQL statement.
+func InsertBlockingKeysBatch(orgHandle string, perProfileKeys map[string][]model.BlockingKey) error {
+	logger := log.GetLogger()
+
+	totalKeys := 0
+	for _, keys := range perProfileKeys {
+		totalKeys += len(keys)
+	}
+	if totalKeys == 0 {
+		return nil
+	}
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_BLOCKING_KEYS_FAILED.Code,
+			Message:     errors2.IR_BLOCKING_KEYS_FAILED.Message,
+			Description: "Failed to connect to database for batch blocking key insertion.",
+		}, err)
+	}
+	defer dbClient.Close()
+
+	valueClauses := make([]string, 0, totalKeys)
+	args := make([]interface{}, 0, totalKeys*5)
+	argIdx := 1
+
+	for profileID, keys := range perProfileKeys {
+		for _, key := range keys {
+			valueClauses = append(valueClauses,
+				fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3, argIdx+4))
+			args = append(args, uuid.New().String(), profileID, orgHandle, key.AttributeName, key.KeyValue)
+			argIdx += 5
+		}
+	}
+
+	insertQuery := fmt.Sprintf(
+		scripts.IRInsertBlockingKeys[provider.NewDBProvider().GetDBType()],
+		strings.Join(valueClauses, ", "),
+	)
+
+	if _, err := dbClient.ExecuteQuery(insertQuery, args...); err != nil {
+		logger.Error("BlockingStore: failed to batch insert blocking keys", log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_BLOCKING_KEYS_FAILED.Code,
+			Message:     errors2.IR_BLOCKING_KEYS_FAILED.Message,
+			Description: fmt.Sprintf("Failed to batch insert %d blocking keys for org: %s", totalKeys, orgHandle),
+		}, err)
+	}
+
+	return nil
+}
+
 func FindCandidateIDsByKeys(
 	orgHandle, attributeName string,
 	keyValues []string,

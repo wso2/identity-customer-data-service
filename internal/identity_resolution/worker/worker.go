@@ -373,37 +373,58 @@ func flattenProfile(p *profileModel.Profile) map[string]interface{} {
 }
 
 // IndexNewAttribute generates blocking keys for a specific attribute across all profiles in an org.
-// Called when a unification rule is added or activated.
+// Called when a unification rule is added or activated. Paginates the profile scan and batches
+// the inserts so the work scales to large tenants without loading all profiles into memory or
+// issuing one round-trip per profile.
 func IndexNewAttribute(orgHandle string, rule urModel.UnificationRule) {
 	logger := log.GetLogger()
-
-	profiles, err := irStore.GetProfilesForOrg(orgHandle)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Reindexer: failed to load profiles for org '%s'", orgHandle), log.Error(err))
-		return
-	}
 
 	attrType := rule.AttributeType
 	if attrType == "" {
 		attrType = constants.AttributeTypePrimitiveExact
 	}
 
-	count := 0
-	for _, p := range profiles {
-		values := p.GetAllAttributeValues(rule.PropertyName)
-		if len(values) == 0 {
-			continue
+	totalIndexed := 0
+	offset := 0
+	for {
+		profiles, err := irStore.GetProfilesForOrgPaginated(orgHandle, constants.GetProfilesPageSize, offset)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Reindexer: failed to load profiles for org '%s' (offset=%d)", orgHandle, offset),
+				log.Error(err))
+			return
 		}
-		var keys []model.BlockingKey
-		for _, val := range values {
-			keys = append(keys, engine.GenerateBlockingKeys(attrType, rule.PropertyName, val)...)
+		if len(profiles) == 0 {
+			break
 		}
-		if len(keys) > 0 {
-			if err := irStore.InsertBlockingKeys(p.ProfileID, orgHandle, keys); err != nil {
-				logger.Error(fmt.Sprintf("Reindexer: failed to insert keys for profile '%s'", p.ProfileID), log.Error(err))
+
+		perProfileKeys := make(map[string][]model.BlockingKey, len(profiles))
+		for _, p := range profiles {
+			values := p.GetAllAttributeValues(rule.PropertyName)
+			if len(values) == 0 {
+				continue
 			}
-			count++
+			var keys []model.BlockingKey
+			for _, val := range values {
+				keys = append(keys, engine.GenerateBlockingKeys(attrType, rule.PropertyName, val)...)
+			}
+			if len(keys) > 0 {
+				perProfileKeys[p.ProfileID] = keys
+			}
 		}
+
+		if len(perProfileKeys) > 0 {
+			if err := irStore.InsertBlockingKeysBatch(orgHandle, perProfileKeys); err != nil {
+				logger.Error(fmt.Sprintf("Reindexer: batch insert failed for org '%s' (offset=%d)", orgHandle, offset),
+					log.Error(err))
+			} else {
+				totalIndexed += len(perProfileKeys)
+			}
+		}
+
+		if len(profiles) < constants.GetProfilesPageSize {
+			break
+		}
+		offset += constants.GetProfilesPageSize
 	}
 }
 

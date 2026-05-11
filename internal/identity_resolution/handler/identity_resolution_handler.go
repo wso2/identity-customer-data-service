@@ -22,9 +22,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	irModel "github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -135,7 +137,10 @@ func (h *IdentityResolutionHandler) ResolveReviewTask(w http.ResponseWriter, r *
 		return
 	}
 
-	resolvedBy := constants.MergeByAdmin
+	resolvedBy := extractResolverIdentity(r)
+	if resolvedBy == "" {
+		resolvedBy = constants.MergeByAdmin
+	}
 	approved := resolveReq.Decision == constants.ReviewStatusApproved
 
 	svc := provider.NewIdentityResolutionProvider().GetIdentityResolutionService()
@@ -157,4 +162,30 @@ func (h *IdentityResolutionHandler) ResolveReviewTask(w http.ResponseWriter, r *
 		"status":  "success",
 		"message": fmt.Sprintf("Review task %s %s", taskID, action),
 	})
+}
+
+// extractResolverIdentity returns the identity of the caller resolving a review task,
+// derived from the validated Bearer token on the request.
+func extractResolverIdentity(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return ""
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+
+	claims, err := authn.ParseJWTClaims(token)
+	if err != nil {
+		return ""
+	}
+
+	if sub, ok := claims[constants.SUBClaim].(string); ok && sub != "" {
+		return sub
+	}
+	if azp, ok := claims[constants.AZPClaim].(string); ok && azp != "" {
+		return azp
+	}
+	if clientID, ok := claims[constants.ClientIdClaim].(string); ok && clientID != "" {
+		return clientID
+	}
+	return ""
 }
