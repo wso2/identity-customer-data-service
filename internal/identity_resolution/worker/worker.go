@@ -244,7 +244,15 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 				continue
 			}
 
-			if mergeErr := workers.MergeMatchedProfiles(*matchedProfile, *freshProfile, constants.MergeReasonAutoMerge); mergeErr != nil {
+			mergeReason := constants.MergeReasonAutoMerge
+			for _, rule := range rules {
+				if score, ok := sc.breakdown[rule.PropertyName]; ok && score == sc.score {
+					mergeReason = rule.RuleName
+					break
+				}
+			}
+
+			if mergeErr := workers.MergeMatchedProfiles(*matchedProfile, *freshProfile, mergeReason); mergeErr != nil {
 				// Merge failed so not mark merged=true, not write audit log, not
 				// cascade-cancel related tasks.
 				logger.Error(fmt.Sprintf("AsyncWorker: auto-merge failed for '%s' → '%s' — falling back to review task",
