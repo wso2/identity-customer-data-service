@@ -555,10 +555,15 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if a valid cookie exists
-	profileCookie, err := r.Cookie(constants.ProfileCookie)
-	if err == nil && profileCookie.Value != "" {
-		if ph.handleExistingCookie(w, r, profileCookie.Value) {
+	// Check if a valid cookie exists (header cookie takes precedence, fall back to query param)
+	cookieVal := ""
+	if profileCookie, cErr := r.Cookie(constants.ProfileCookie); cErr == nil && profileCookie.Value != "" {
+		cookieVal = profileCookie.Value
+	} else if qv := r.URL.Query().Get(constants.ProfileCookie); qv != "" {
+		cookieVal = qv
+	}
+	if cookieVal != "" {
+		if ph.handleExistingCookie(w, r, cookieVal) {
 			return
 		}
 	}
