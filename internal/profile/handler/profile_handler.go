@@ -582,6 +582,8 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	profileResponse.AnonymousProfileTracker = cookie.CookieId
+
 	// Construct Location header for created resource
 	serverURL := config.GetCDSRuntime().Config.ServerURL
 	location := fmt.Sprintf("%s/t/%s%s/profiles/%s",
@@ -615,6 +617,7 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 	}
 
 	_ = setProfileCookie(w, cookieObj.CookieId, r)
+	profileResponse.AnonymousProfileTracker = cookieObj.CookieId
 	utils.RespondJSON(w, http.StatusOK, profileResponse, constants.ProfileResource)
 	return true
 }
