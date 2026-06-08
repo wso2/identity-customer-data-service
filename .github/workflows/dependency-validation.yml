@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  DEPENDENCY_SCOPE: identity-customer-data-service # Change this value based on the repository. See https://github.com/wso2/engineering-governance/blob/main/dependency-registry/README.md#available-scopes
+  DEPENDENCY_SCOPE: identity-platform # Change this value based on the repository. See https://github.com/wso2/engineering-governance/blob/main/dependency-registry/README.md#available-scopes
 
 jobs:
   validate-go-dependencies:
@@ -25,6 +25,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
 
       - name: Detect modified go.mod files
         id: detect-changes
