@@ -131,7 +131,7 @@ jobs:
               comment += '⚠️ Please verify the scope of the dependencies usage is necessary\n';
             }
 
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -180,7 +180,7 @@ jobs:
 
             comment += '⚠️ Please verify the scope of the dependencies usage is necessary\n';
 
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
