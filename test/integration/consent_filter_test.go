@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	consentModel "github.com/wso2/identity-customer-data-service/internal/consent/model"
@@ -35,6 +34,7 @@ import (
 	profileSchemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 func Test_ConsentFilter(t *testing.T) {
@@ -56,7 +56,7 @@ func Test_ConsentFilter(t *testing.T) {
 		identityAttrs := []profileSchemaModel.ProfileSchemaAttribute{
 			{
 				OrgId:         org,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   utils.GenerateUUID(),
 				AttributeName: "identity_attributes.email",
 				DisplayName:   "Email",
 				ValueType:     constants.StringDataType,
@@ -65,7 +65,7 @@ func Test_ConsentFilter(t *testing.T) {
 			},
 			{
 				OrgId:         org,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   utils.GenerateUUID(),
 				AttributeName: "identity_attributes.phone",
 				DisplayName:   "Phone",
 				ValueType:     constants.StringDataType,
@@ -79,7 +79,7 @@ func Test_ConsentFilter(t *testing.T) {
 		traitAttrs := []profileSchemaModel.ProfileSchemaAttribute{
 			{
 				OrgId:         org,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   utils.GenerateUUID(),
 				AttributeName: "traits.interests",
 				DisplayName:   "Interests",
 				ValueType:     constants.StringDataType,

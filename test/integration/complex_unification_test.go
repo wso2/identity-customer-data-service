@@ -23,13 +23,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	unificationService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 )
@@ -53,29 +53,29 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 	profileSchemaSvc := schemaService.GetProfileSchemaService()
 
 	identityAttr := []schemaModel.ProfileSchemaAttribute{
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "identity_attributes.email",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "identity_attributes.email",
 			ValueType: constants.StringDataType, MergeStrategy: "combine", Mutability: constants.MutabilityReadWrite, MultiValued: true},
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "identity_attributes.phone_number",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "identity_attributes.phone_number",
 			ValueType: constants.StringDataType, MergeStrategy: "combine", Mutability: constants.MutabilityReadWrite, MultiValued: true},
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "identity_attributes.user_id",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "identity_attributes.user_id",
 			ValueType: constants.StringDataType, MergeStrategy: "combine", Mutability: constants.MutabilityReadWrite},
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "identity_attributes.secondary_email",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "identity_attributes.secondary_email",
 			ValueType: constants.StringDataType, MergeStrategy: "combine", Mutability: constants.MutabilityReadWrite, MultiValued: true},
 	}
 
 	traits := []schemaModel.ProfileSchemaAttribute{
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "traits.interests",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "traits.interests",
 			ValueType: constants.StringDataType, MergeStrategy: "combine", Mutability: constants.MutabilityReadWrite, MultiValued: true},
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "traits.preferences",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "traits.preferences",
 			ValueType: constants.StringDataType, MergeStrategy: "combine", Mutability: constants.MutabilityReadWrite, MultiValued: true},
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "traits.score",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "traits.score",
 			ValueType: constants.IntegerDataType, MergeStrategy: "overwrite", Mutability: constants.MutabilityReadWrite},
 	}
 
 	appData := []schemaModel.ProfileSchemaAttribute{
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "application_data.device_id",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "application_data.device_id",
 			ValueType: constants.StringDataType, MergeStrategy: "combine", Mutability: constants.MutabilityReadWrite, MultiValued: true, ApplicationIdentifier: AppId},
-		{OrgId: SuperTenantOrg, AttributeId: uuid.New().String(), AttributeName: "application_data.session_count",
+		{OrgId: SuperTenantOrg, AttributeId: utils.GenerateUUID(), AttributeName: "application_data.session_count",
 			ValueType: constants.IntegerDataType, MergeStrategy: "overwrite", Mutability: constants.MutabilityReadWrite, ApplicationIdentifier: AppId},
 	}
 
@@ -91,7 +91,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 	unificationSvc := unificationService.GetUnificationRuleService()
 
 	// Add user_id based rule with highest priority
-	userIdRuleId := uuid.New().String()
+	userIdRuleId := utils.GenerateUUID()
 	userIdRule := model.UnificationRule{
 		RuleId:       userIdRuleId,
 		OrgHandle:    SuperTenantOrg,
@@ -104,7 +104,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 	}
 	_ = unificationSvc.AddUnificationRule(userIdRule, SuperTenantOrg)
 
-	emailRuleId := uuid.New().String()
+	emailRuleId := utils.GenerateUUID()
 	emailRule := model.UnificationRule{
 		RuleId:       emailRuleId,
 		OrgHandle:    SuperTenantOrg,
@@ -117,7 +117,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 	}
 	_ = unificationSvc.AddUnificationRule(emailRule, SuperTenantOrg)
 
-	phoneRuleId := uuid.New().String()
+	phoneRuleId := utils.GenerateUUID()
 	phoneRule := model.UnificationRule{
 		RuleId:       phoneRuleId,
 		OrgHandle:    SuperTenantOrg,

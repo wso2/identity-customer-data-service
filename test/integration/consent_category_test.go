@@ -20,10 +20,10 @@ package integration
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	consentModel "github.com/wso2/identity-customer-data-service/internal/consent/model"
@@ -32,6 +32,7 @@ import (
 	profileSchemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 func Test_Consent(t *testing.T) {
@@ -50,7 +51,7 @@ func Test_Consent(t *testing.T) {
 		identityAttrs := []profileSchemaModel.ProfileSchemaAttribute{
 			{
 				OrgId:         org,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   utils.GenerateUUID(),
 				AttributeName: "identity_attributes.email",
 				DisplayName:   "Email",
 				ValueType:     constants.StringDataType,
@@ -64,7 +65,7 @@ func Test_Consent(t *testing.T) {
 		traitAttrs := []profileSchemaModel.ProfileSchemaAttribute{
 			{
 				OrgId:         org,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   utils.GenerateUUID(),
 				AttributeName: "traits.age",
 				DisplayName:   "Age",
 				ValueType:     constants.StringDataType,
@@ -78,7 +79,7 @@ func Test_Consent(t *testing.T) {
 		appAttrs := []profileSchemaModel.ProfileSchemaAttribute{
 			{
 				OrgId:                 org,
-				AttributeId:           uuid.New().String(),
+				AttributeId:           utils.GenerateUUID(),
 				AttributeName:         "application_data.events.event_name",
 				DisplayName:           "Event Name",
 				ValueType:             constants.StringDataType,
@@ -127,8 +128,8 @@ func Test_Consent(t *testing.T) {
 	})
 
 	t.Run("CategoryIdentifier_is_UUID", func(t *testing.T) {
-		_, err := uuid.Parse(categoryId)
-		assert.NoError(t, err, "category_identifier should be a valid UUID")
+		uuidPattern := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+		assert.True(t, uuidPattern.MatchString(categoryId), "category_identifier should be a valid UUID")
 	})
 
 	t.Run("Get_all_consent_categories", func(t *testing.T) {

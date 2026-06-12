@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
@@ -144,7 +143,7 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 
 	// convert profile request to model
 	createdTime := time.Now().UTC()
-	profileId := uuid.New().String()
+	profileId := utils.GenerateUUID()
 	appData, err := ConvertAppData(profileRequest.ApplicationData)
 	if err != nil {
 		return nil, err
@@ -1582,7 +1581,7 @@ func (ps *ProfilesService) CreateProfileCookie(profileId string) (*profileModel.
 
 	cookie := profileModel.ProfileCookie{
 		ProfileId: profileId,
-		CookieId:  uuid.New().String(),
+		CookieId:  utils.GenerateUUID(),
 		IsActive:  true,
 	}
 	err := profileStore.CreateProfileCookie(cookie)

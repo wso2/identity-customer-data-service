@@ -29,7 +29,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 
-	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -128,7 +127,7 @@ func (psh *ProfileSchemaHandler) AddProfileSchemaAttributesForScope(w http.Respo
 	// Generate a new UUID for each attribute if not provided
 	for i := range schemaAttributes {
 		if schemaAttributes[i].AttributeId == "" {
-			schemaAttributes[i].AttributeId = uuid.New().String()
+			schemaAttributes[i].AttributeId = utils.GenerateUUID()
 		}
 		if schemaAttributes[i].Mutability == "" {
 			schemaAttributes[i].Mutability = constants.MutabilityReadWrite

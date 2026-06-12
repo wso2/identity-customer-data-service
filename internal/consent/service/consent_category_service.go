@@ -23,12 +23,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	model "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/consent/store"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
 // ConsentCategoryServiceInterface defines the service interface.
@@ -105,7 +105,7 @@ func (cs *ConsentCategoryService) AddConsentCategory(category model.ConsentCateg
 	}
 
 	// category_identifier is always server-generated; ignore any caller-supplied value.
-	category.CategoryIdentifier = uuid.New().String()
+	category.CategoryIdentifier = utils.GenerateUUID()
 
 	resolved, err := resolveAttributeScopes(category.OrgHandle, category.Attributes)
 	if err != nil {

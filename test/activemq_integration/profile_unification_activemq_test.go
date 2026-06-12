@@ -24,13 +24,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	unificationService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 )
@@ -55,7 +55,7 @@ func Test_ActiveMQ_ProfileUnification_EmailBased(t *testing.T) {
 	identityAttrs := []schemaModel.ProfileSchemaAttribute{
 		{
 			OrgId:         orgHandle,
-			AttributeId:   uuid.New().String(),
+			AttributeId:   utils.GenerateUUID(),
 			AttributeName: "identity_attributes.email",
 			ValueType:     constants.StringDataType,
 			MergeStrategy: "combine",
@@ -66,7 +66,7 @@ func Test_ActiveMQ_ProfileUnification_EmailBased(t *testing.T) {
 	traitAttrs := []schemaModel.ProfileSchemaAttribute{
 		{
 			OrgId:         orgHandle,
-			AttributeId:   uuid.New().String(),
+			AttributeId:   utils.GenerateUUID(),
 			AttributeName: "traits.interests",
 			ValueType:     constants.StringDataType,
 			MergeStrategy: "combine",
@@ -82,7 +82,7 @@ func Test_ActiveMQ_ProfileUnification_EmailBased(t *testing.T) {
 	// ── Unification rule: match on email ─────────────────────────────────────
 	unificationSvc := unificationService.GetUnificationRuleService()
 	emailRule := model.UnificationRule{
-		RuleId:       uuid.New().String(),
+		RuleId:       utils.GenerateUUID(),
 		RuleName:     "email_match",
 		OrgHandle:    orgHandle,
 		PropertyName: "identity_attributes.email",

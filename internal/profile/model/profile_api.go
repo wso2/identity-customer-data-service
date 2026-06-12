@@ -22,15 +22,15 @@ import "time"
 import "github.com/wso2/identity-customer-data-service/internal/system/pagination"
 
 type ProfileResponse struct {
-	ProfileId          string                            `json:"profile_id" bson:"profile_id"`
-	UserId             string                            `json:"user_id,omitempty" bson:"user_id,omitempty"`
-	AnonymousProfileTracker string                         `json:"anonymous_profile_tracker,omitempty" bson:"anonymous_profile_tracker,omitempty"`
-	Meta               Meta                              `json:"meta" bson:"meta"`
-	IdentityAttributes map[string]interface{}            `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
-	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
-	ApplicationData    map[string]map[string]interface{} `json:"application_data,omitempty" bson:"application_data,omitempty"`
-	MergedTo           *Reference                        `json:"merged_to,omitempty" bson:"merged_to,omitempty"`
-	MergedFrom         []Reference                       `json:"merged_from,omitempty" bson:"merged_from,omitempty"`
+	ProfileId               string                            `json:"profile_id" bson:"profile_id"`
+	UserId                  string                            `json:"user_id,omitempty" bson:"user_id,omitempty"`
+	AnonymousProfileTracker string                            `json:"anonymous_profile_tracker,omitempty" bson:"anonymous_profile_tracker,omitempty"`
+	Meta                    Meta                              `json:"meta" bson:"meta"`
+	IdentityAttributes      map[string]interface{}            `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
+	Traits                  map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
+	ApplicationData         map[string]map[string]interface{} `json:"application_data,omitempty" bson:"application_data,omitempty"`
+	MergedTo                *Reference                        `json:"merged_to,omitempty" bson:"merged_to,omitempty"`
+	MergedFrom              []Reference                       `json:"merged_from,omitempty" bson:"merged_from,omitempty"`
 }
 
 type ProfileListResponse struct {

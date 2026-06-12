@@ -23,8 +23,8 @@ package models
 // automatically from the profile schema at write time and are never supplied by the caller.
 // For applicationData scope, ApplicationIdentifier identifies which app's data the attribute belongs to.
 type ConsentAttribute struct {
-	Scope                 string `json:"scope,omitempty" bson:"scope"`                                            // derived — "identityAttributes" | "traits" | "applicationData"
-	AttributeName         string `json:"attribute_name" bson:"attribute_name"`                                    // references ProfileSchemaAttribute.attribute_name
-	AttributeId           string `json:"attribute_id" bson:"attribute_id"`                                        // internal FK to profile_schema.attribute_id; enables ON DELETE CASCADE
+	Scope                 string `json:"scope,omitempty" bson:"scope"`                                             // derived — "identityAttributes" | "traits" | "applicationData"
+	AttributeName         string `json:"attribute_name" bson:"attribute_name"`                                     // references ProfileSchemaAttribute.attribute_name
+	AttributeId           string `json:"attribute_id" bson:"attribute_id"`                                         // internal FK to profile_schema.attribute_id; enables ON DELETE CASCADE
 	ApplicationIdentifier string `json:"application_identifier,omitempty" bson:"application_identifier,omitempty"` // only for applicationData scope
 }

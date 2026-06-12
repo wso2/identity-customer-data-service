@@ -31,8 +31,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
-
-	"github.com/google/uuid"
 )
 
 type UnificationRulesHandler struct {
@@ -83,7 +81,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 	// Set timestamps
 	now := time.Now().UTC()
 	rule := model.UnificationRule{
-		RuleId:       uuid.New().String(),
+		RuleId:       utils.GenerateUUID(),
 		OrgHandle:    orgHandle,
 		RuleName:     ruleInRequest.RuleName,
 		PropertyName: ruleInRequest.PropertyName,

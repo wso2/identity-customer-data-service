@@ -24,13 +24,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
 	profileSchema "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	unificationService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 )
 
@@ -50,7 +50,7 @@ func Test_Profile(t *testing.T) {
 		identityAttributes := []profileSchema.ProfileSchemaAttribute{
 			{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   utils.GenerateUUID(),
 				AttributeName: "identity_attributes.email",
 				ValueType:     constants.StringDataType,
 				MergeStrategy: "combine",
@@ -62,7 +62,7 @@ func Test_Profile(t *testing.T) {
 		traits := []profileSchema.ProfileSchemaAttribute{
 			{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   utils.GenerateUUID(),
 				AttributeName: "traits.interests",
 				ValueType:     constants.StringDataType,
 				MergeStrategy: "combine",
@@ -74,7 +74,7 @@ func Test_Profile(t *testing.T) {
 		appData := []profileSchema.ProfileSchemaAttribute{
 			{
 				OrgId:                 SuperTenantOrg,
-				AttributeId:           uuid.New().String(),
+				AttributeId:           utils.GenerateUUID(),
 				AttributeName:         "application_data.device_id",
 				ValueType:             constants.StringDataType,
 				MergeStrategy:         "combine",

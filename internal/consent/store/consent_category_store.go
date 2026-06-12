@@ -19,7 +19,6 @@ package store
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/lib/pq"
 	model "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -27,6 +26,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"strings"
 )
 
@@ -343,7 +343,6 @@ func UpdateConsentCategory(category model.ConsentCategory) error {
 	return tx.Commit()
 }
 
-
 func DeleteConsentCategory(categoryId string) error {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -403,7 +402,7 @@ func SeedDefaultIdentityDataCategory(orgHandle string) error {
 	defer dbClient.Close()
 
 	upsertQuery := scripts.UpsertDefaultIdentityDataCategory[provider.NewDBProvider().GetDBType()]
-	_, err = dbClient.ExecuteQuery(upsertQuery, constants.DefaultIdentityDataCategoryName, uuid.New().String(), orgHandle, constants.DefaultIdentityDataCategoryPurpose, pq.Array([]string{}))
+	_, err = dbClient.ExecuteQuery(upsertQuery, constants.DefaultIdentityDataCategoryName, utils.GenerateUUID(), orgHandle, constants.DefaultIdentityDataCategoryPurpose, pq.Array([]string{}))
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to upsert identity data category for org: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
@@ -421,7 +420,9 @@ func SeedDefaultIdentityDataCategory(orgHandle string) error {
 // resolveMandatoryAttributes fetches the attributes for a mandatory consent category live from
 // profile_schema (identity_attributes scope). This mirrors what the consent filter does at
 // query time, so the GET response always reflects the current schema state.
-func resolveMandatoryAttributes(dbClient interface{ ExecuteQuery(string, ...interface{}) ([]map[string]interface{}, error) }, orgHandle string) ([]model.ConsentAttribute, error) {
+func resolveMandatoryAttributes(dbClient interface {
+	ExecuteQuery(string, ...interface{}) ([]map[string]interface{}, error)
+}, orgHandle string) ([]model.ConsentAttribute, error) {
 	query := scripts.GetProfileSchemaAttributeByScope[provider.NewDBProvider().GetDBType()]
 	rows, err := dbClient.ExecuteQuery(query, orgHandle, constants.IdentityAttributes)
 	if err != nil {

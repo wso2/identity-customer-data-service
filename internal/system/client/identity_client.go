@@ -34,7 +34,6 @@ import (
 	idpModel "github.com/wso2/identity-customer-data-service/internal/identity_provider/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 
-	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 
@@ -480,7 +479,7 @@ func (c *IdentityClient) GetProfileSchema(orgHandle string) ([]model.ProfileSche
 				logger.Warn(fmt.Sprintf("Adding synthetic parent attribute: %s", parent))
 				result = append(result, model.ProfileSchemaAttribute{
 					OrgId:         orgHandle,
-					AttributeId:   uuid.New().String(),
+					AttributeId:   utils.GenerateUUID(),
 					AttributeName: parent,
 					ValueType:     constants.ComplexDataType,
 					MergeStrategy: constants.MergeStrategyOverwrite,
@@ -721,7 +720,7 @@ func ConvertSCIMClaimWithLocal(
 				}
 
 				subAttrs = append(subAttrs, model.SubAttribute{
-					AttributeId:   fmt.Sprintf("%v", uuid.New().String()),
+					AttributeId:   fmt.Sprintf("%v", utils.GenerateUUID()),
 					AttributeName: "identity_attributes." + attrKey + "." + subAttrKey,
 				})
 			}
@@ -739,7 +738,7 @@ func ConvertSCIMClaimWithLocal(
 	if strings.Contains(attrKey, ".") {
 		parentAttrName := "identity_attributes." + strings.Split(attrKey, ".")[0]
 		subAttr := model.SubAttribute{
-			AttributeId:   fmt.Sprintf("%v", uuid.New().String()),
+			AttributeId:   fmt.Sprintf("%v", utils.GenerateUUID()),
 			AttributeName: fullAttrName,
 		}
 		return model.ProfileSchemaAttribute{
@@ -760,7 +759,7 @@ func ConvertSCIMClaimWithLocal(
 	// It's a top-level or parent attribute
 	return model.ProfileSchemaAttribute{
 		OrgId:           orgId,
-		AttributeId:     fmt.Sprintf("%v", uuid.New().String()),
+		AttributeId:     fmt.Sprintf("%v", utils.GenerateUUID()),
 		AttributeName:   fullAttrName,
 		ValueType:       valueType,
 		MergeStrategy:   "overwrite",

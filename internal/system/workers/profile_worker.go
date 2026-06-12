@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -343,7 +342,7 @@ func mergeSameKindProfiles(
 		logger.Info(fmt.Sprintf("Both profiles are temporary. Creating new master for %s and %s",
 			newProfile.ProfileId, existingMasterProfile.ProfileId))
 
-		newMasterProfile.ProfileId = uuid.New().String()
+		newMasterProfile.ProfileId = utils.GenerateUUID()
 		newMasterProfile.UserId = ""
 		newMasterProfile.Location = utils.BuildProfileLocation(newMasterProfile.OrgHandle, newMasterProfile.ProfileId)
 

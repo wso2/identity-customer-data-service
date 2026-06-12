@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	sysutils "github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
 )
 
@@ -17,7 +17,7 @@ import (
 func createAttr(org, name, vType, merge, mut string) model.ProfileSchemaAttribute {
 	return model.ProfileSchemaAttribute{
 		OrgId:                 org,
-		AttributeId:           uuid.New().String(),
+		AttributeId:           sysutils.GenerateUUID(),
 		AttributeName:         name,
 		ValueType:             vType,
 		MergeStrategy:         merge,
@@ -51,7 +51,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			traits := []model.ProfileSchemaAttribute{
 				{
 					OrgId:         SuperTenantOrg,
-					AttributeId:   uuid.New().String(),
+					AttributeId:   sysutils.GenerateUUID(),
 					AttributeName: "traits.interests",
 					ValueType:     constants.StringDataType,
 					MergeStrategy: "combine",
@@ -66,7 +66,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			appData := []model.ProfileSchemaAttribute{
 				{
 					OrgId:                 SuperTenantOrg,
-					AttributeId:           uuid.New().String(),
+					AttributeId:           sysutils.GenerateUUID(),
 					AttributeName:         "application_data.device_id",
 					ValueType:             constants.StringDataType,
 					MergeStrategy:         "combine",
@@ -107,7 +107,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// Test that the same attribute name can be used for different applications
 			app1Attr := model.ProfileSchemaAttribute{
 				OrgId:                 SuperTenantOrg,
-				AttributeId:           uuid.New().String(),
+				AttributeId:           sysutils.GenerateUUID(),
 				AttributeName:         "application_data.theme",
 				ValueType:             constants.StringDataType,
 				MergeStrategy:         "overwrite",
@@ -120,7 +120,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// Add the SAME attribute name for a DIFFERENT application - should succeed
 			app2Attr := model.ProfileSchemaAttribute{
 				OrgId:                 SuperTenantOrg,
-				AttributeId:           uuid.New().String(),
+				AttributeId:           sysutils.GenerateUUID(),
 				AttributeName:         "application_data.theme",
 				ValueType:             constants.StringDataType,
 				MergeStrategy:         "overwrite",
@@ -159,7 +159,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// Test that duplicate attribute for the SAME application is blocked
 			app1Attr := model.ProfileSchemaAttribute{
 				OrgId:                 SuperTenantOrg,
-				AttributeId:           uuid.New().String(),
+				AttributeId:           sysutils.GenerateUUID(),
 				AttributeName:         "application_data.language",
 				ValueType:             constants.StringDataType,
 				MergeStrategy:         "overwrite",
@@ -172,7 +172,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// Try to add the SAME attribute for the SAME application - should fail
 			duplicateAttr := model.ProfileSchemaAttribute{
 				OrgId:                 SuperTenantOrg,
-				AttributeId:           uuid.New().String(),
+				AttributeId:           sysutils.GenerateUUID(),
 				AttributeName:         "application_data.language",
 				ValueType:             constants.StringDataType,
 				MergeStrategy:         "overwrite",
@@ -211,7 +211,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// Create parent with sub-attribute (valid: one level deeper)
 			parent := model.ProfileSchemaAttribute{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   sysutils.GenerateUUID(),
 				AttributeName: "traits.orders",
 				ValueType:     constants.ComplexDataType,
 				MergeStrategy: "combine",
@@ -234,7 +234,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// Step 1: Create sub-attribute first
 			subAttr := model.ProfileSchemaAttribute{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   sysutils.GenerateUUID(),
 				AttributeName: "traits.orders.payment.card.type", // depth 4
 				ValueType:     constants.StringDataType,
 				MergeStrategy: "combine",
@@ -246,7 +246,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// Step 2: Parent referencing invalid deeper sub-attribute
 			parent := model.ProfileSchemaAttribute{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   sysutils.GenerateUUID(),
 				AttributeName: "traits.orders",
 				ValueType:     constants.ComplexDataType,
 				MergeStrategy: "combine",
@@ -276,7 +276,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// 2️Level 3 parent (complex) → references level 4
 			l3 := model.ProfileSchemaAttribute{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   sysutils.GenerateUUID(),
 				AttributeName: "traits.orders.payment.card",
 				ValueType:     constants.ComplexDataType,
 				MergeStrategy: "combine",
@@ -291,7 +291,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// 3️ Level 2 parent → references level 3
 			l2 := model.ProfileSchemaAttribute{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   sysutils.GenerateUUID(),
 				AttributeName: "traits.orders.payment",
 				ValueType:     constants.ComplexDataType,
 				MergeStrategy: "combine",
@@ -306,7 +306,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 			// 4️Level 1 parent → references level 2
 			l1 := model.ProfileSchemaAttribute{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   sysutils.GenerateUUID(),
 				AttributeName: "traits.orders",
 				ValueType:     constants.ComplexDataType,
 				MergeStrategy: "combine",
@@ -336,7 +336,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 		traits := []model.ProfileSchemaAttribute{
 			{
 				OrgId:         SuperTenantOrg,
-				AttributeId:   uuid.New().String(),
+				AttributeId:   sysutils.GenerateUUID(),
 				AttributeName: "traits.interests",
 				ValueType:     constants.StringDataType,
 				MergeStrategy: "combine",
@@ -350,7 +350,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 		appData := []model.ProfileSchemaAttribute{
 			{
 				OrgId:                 SuperTenantOrg,
-				AttributeId:           uuid.New().String(),
+				AttributeId:           sysutils.GenerateUUID(),
 				AttributeName:         "application_data.device_id",
 				ValueType:             constants.StringDataType,
 				MergeStrategy:         "combine",
@@ -391,7 +391,7 @@ func Test_ProfileSchemaService(t *testing.T) {
 
 	t.Run("Update Operations", func(t *testing.T) {
 		t.Run("Patch_ProfileSchemaAttribute_ById", func(t *testing.T) {
-			attrId := uuid.New().String()
+			attrId := sysutils.GenerateUUID()
 			attr := createAttr(SuperTenantOrg, "identity_attributes.temp_field", constants.StringDataType, "combine", constants.MutabilityReadWrite)
 			attr.AttributeId = attrId
 

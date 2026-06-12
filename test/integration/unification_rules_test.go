@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	sysutils "github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/test/integration/utils"
 
 	"github.com/stretchr/testify/require"
@@ -30,7 +30,7 @@ func Test_UnificationRule(t *testing.T) {
 			{
 				OrgId:         SuperTenantOrg,
 				AttributeName: "identity_attributes.email",
-				AttributeId:   uuid.New().String(),
+				AttributeId:   sysutils.GenerateUUID(),
 				ValueType:     constants.StringDataType,
 				MergeStrategy: "combine",
 				Mutability:    constants.MutabilityReadWrite,
@@ -44,7 +44,7 @@ func Test_UnificationRule(t *testing.T) {
 
 	rule := model.UnificationRule{
 		RuleName:     "Email based",
-		RuleId:       uuid.New().String(),
+		RuleId:       sysutils.GenerateUUID(),
 		OrgHandle:    SuperTenantOrg,
 		PropertyName: "identity_attributes.email",
 		Priority:     1,
@@ -62,7 +62,7 @@ func Test_UnificationRule(t *testing.T) {
 		//  Add a valid sub-attribute
 		subAttr := profileSchema.ProfileSchemaAttribute{
 			OrgId:         SuperTenantOrg,
-			AttributeId:   uuid.New().String(),
+			AttributeId:   sysutils.GenerateUUID(),
 			AttributeName: "traits.orders.payment.method",
 			ValueType:     constants.StringDataType,
 			MergeStrategy: "combine",
@@ -74,7 +74,7 @@ func Test_UnificationRule(t *testing.T) {
 		//  Add parent complex attribute referencing sub-attribute
 		parentAttr := profileSchema.ProfileSchemaAttribute{
 			OrgId:         SuperTenantOrg,
-			AttributeId:   uuid.New().String(),
+			AttributeId:   sysutils.GenerateUUID(),
 			AttributeName: "traits.orders.payment",
 			ValueType:     constants.ComplexDataType,
 			MergeStrategy: "combine",
@@ -92,7 +92,7 @@ func Test_UnificationRule(t *testing.T) {
 		// Try creating a unification rule with that complex attribute
 		rule := model.UnificationRule{
 			RuleName:     "Payment based",
-			RuleId:       uuid.New().String(),
+			RuleId:       sysutils.GenerateUUID(),
 			OrgHandle:    SuperTenantOrg,
 			PropertyName: "traits.orders.payment",
 			Priority:     2,
