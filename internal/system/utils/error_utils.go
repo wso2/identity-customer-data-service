@@ -20,12 +20,12 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
 	"strings"
 
-	"github.com/pkg/errors"
 	cdsErrors "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
