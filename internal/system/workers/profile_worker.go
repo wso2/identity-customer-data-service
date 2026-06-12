@@ -38,7 +38,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // activeProfileQueue is the queue implementation used for profile unification.
@@ -709,14 +708,6 @@ func toStringSlice(value interface{}) []string {
 			}
 		}
 		return result
-	case primitive.A:
-		var result []string
-		for _, item := range v {
-			if str, ok := item.(string); ok {
-				result = append(result, str)
-			}
-		}
-		return result
 	default:
 		return []string{}
 	}
@@ -757,8 +748,6 @@ func toInterfaceSlice(value interface{}) []interface{} {
 	switch v := value.(type) {
 	case []interface{}:
 		return v
-	case primitive.A:
-		return []interface{}(v)
 	case []map[string]interface{}:
 		result := make([]interface{}, 0, len(v))
 		for _, item := range v {
