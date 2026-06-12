@@ -19,11 +19,13 @@
 package authn
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -110,9 +112,35 @@ func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]
 	return introspectionClaims, nil
 }
 
+// parseUnverifiedJWT decodes the header and claims of a JWT without verifying the signature.
+func parseUnverifiedJWT(tokenString string) (map[string]interface{}, error) {
+
+	parts := strings.Split(tokenString, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("token must contain three parts separated by '.'")
+	}
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode token header: %w", err)
+	}
+	var header map[string]interface{}
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return nil, fmt.Errorf("failed to parse token header: %w", err)
+	}
+	claimBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode token claims: %w", err)
+	}
+	claims := map[string]interface{}{}
+	if err := json.Unmarshal(claimBytes, &claims); err != nil {
+		return nil, fmt.Errorf("failed to parse token claims: %w", err)
+	}
+	return claims, nil
+}
+
 // IsJWT is a simple check to determine if the token is a JWT based on its structure
 func IsJWT(tokenString string) bool {
-	_, _, err := jwt.NewParser().ParseUnverified(tokenString, jwt.MapClaims{})
+	_, err := parseUnverifiedJWT(tokenString)
 	return err == nil
 }
 
@@ -120,8 +148,7 @@ func IsJWT(tokenString string) bool {
 func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 
 	logger := log.GetLogger()
-	claims := jwt.MapClaims{}
-	_, _, err := new(jwt.Parser).ParseUnverified(tokenString, claims)
+	claims, err := parseUnverifiedJWT(tokenString)
 	if err != nil {
 		errMsg := "Error occurred when parsing claims from JWT token."
 		logger.Debug(errMsg, log.Error(err))
