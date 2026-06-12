@@ -4,7 +4,6 @@ go 1.26.3
 
 require (
 	github.com/go-stomp/stomp/v3 v3.1.5
-	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.37.0

@@ -30,7 +30,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -67,7 +66,7 @@ func main() {
 	if err != nil || len(envFiles) == 0 {
 		fmt.Println("No .env files found in config directory. ", err)
 	}
-	_ = godotenv.Load(envFiles...)
+	_ = utils.LoadEnvFiles(envFiles...)
 
 	// Load the configuration file
 	cdsConfig, err := config.LoadConfig(cdsHome, configFile)
