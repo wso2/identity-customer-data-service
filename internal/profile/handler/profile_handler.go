@@ -674,8 +674,11 @@ func setProfileCookie(w http.ResponseWriter, cookieId string, r *http.Request) e
 }
 
 func resolveDomain() string {
-	authServerConfig := config.GetCDSRuntime().Config.AuthServer
-	return authServerConfig.CookieDomain
+	domain := config.GetCDSRuntime().Config.AuthServer.CookieDomain
+	if domain == "localhost" {
+		return ""
+	}
+	return domain
 }
 
 func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
