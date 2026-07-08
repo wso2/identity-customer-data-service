@@ -655,22 +655,30 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 }
 
 func setProfileCookie(w http.ResponseWriter, cookieId string, r *http.Request) error {
+	secure := r.TLS != nil
+	sameSite := http.SameSiteLaxMode
+	if secure {
+		sameSite = http.SameSiteNoneMode
+	}
 	cookie := &http.Cookie{
 		Name:     constants.ProfileCookie,
 		Value:    cookieId,
 		Path:     "/",
 		Domain:   resolveDomain(),
 		HttpOnly: true,
-		Secure:   !strings.HasPrefix(r.Host, "localhost"),
-		SameSite: http.SameSiteNoneMode,
+		Secure:   secure,
+		SameSite: sameSite,
 	}
 	http.SetCookie(w, cookie)
 	return nil
 }
 
 func resolveDomain() string {
-	authServerConfig := config.GetCDSRuntime().Config.AuthServer
-	return authServerConfig.CookieDomain
+	domain := config.GetCDSRuntime().Config.AuthServer.CookieDomain
+	if domain == "localhost" {
+		return ""
+	}
+	return domain
 }
 
 func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
