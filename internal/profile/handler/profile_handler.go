@@ -655,14 +655,19 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 }
 
 func setProfileCookie(w http.ResponseWriter, cookieId string, r *http.Request) error {
+	secure := r.TLS != nil
+	sameSite := http.SameSiteLaxMode
+	if secure {
+		sameSite = http.SameSiteNoneMode
+	}
 	cookie := &http.Cookie{
 		Name:     constants.ProfileCookie,
 		Value:    cookieId,
 		Path:     "/",
 		Domain:   resolveDomain(),
 		HttpOnly: true,
-		Secure:   !strings.HasPrefix(r.Host, "localhost"),
-		SameSite: http.SameSiteNoneMode,
+		Secure:   secure,
+		SameSite: sameSite,
 	}
 	http.SetCookie(w, cookie)
 	return nil
