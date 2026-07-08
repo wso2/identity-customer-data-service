@@ -91,6 +91,12 @@ type MessageQueueConfig struct {
 	Broker ExternalBrokerConfig `yaml:"broker"`
 }
 
+// Application identifier types.
+const (
+	ApplicationIdentifierTypeClientID = "client_id"
+	ApplicationIdentifierTypeAppID    = "app_id"
+)
+
 type Config struct {
 	Addr         AddrConfig         `yaml:"addr"`
 	ServerURL    string             `yaml:"server_url"`
@@ -101,6 +107,13 @@ type Config struct {
 	TLS          TLSConfig          `yaml:"tls"`
 	Cleanup      CleanupConfig      `yaml:"cleanup"`
 	MessageQueue MessageQueueConfig `yaml:"message_queue"`
+	// ApplicationIdentifierType selects how applications are identified: "client_id" (default) or "app_id".
+	ApplicationIdentifierType string `yaml:"application_identifier_type"`
+}
+
+// UsesAppIDIdentifier reports whether applications are identified by the app ID.
+func (c Config) UsesAppIDIdentifier() bool {
+	return c.ApplicationIdentifierType == ApplicationIdentifierTypeAppID
 }
 
 type TLSConfig struct {

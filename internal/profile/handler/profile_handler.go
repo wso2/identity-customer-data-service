@@ -27,6 +27,7 @@ import (
 
 	adminConfigPkg "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	appProvider "github.com/wso2/identity-customer-data-service/internal/application/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
@@ -94,12 +95,26 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filterParams := parseApplicationDataParams(r)
-	callerAppID := getCallerAppIDFromRequest(r)
-	isSystemApp := isCallerSystemApplication(orgHandle, callerAppID)
+	// The token identifies the caller by its OAuth clientId; the system-app check remains clientId-based.
+	callerClientID := getCallerClientIDFromRequest(r)
+	isSystemApp := isCallerSystemApplication(orgHandle, callerClientID)
+
+	// Application data is keyed by the caller's application identifier. In app_id mode the token's clientId is
+	// resolved to the app ID; in the legacy client_id mode the clientId is itself the key. System apps filter by
+	// the identifiers supplied in the request, so they need no resolution.
+	callerAppIdentifier := ""
+	if !isSystemApp && callerClientID != "" {
+		if config.GetCDSRuntime().Config.UsesAppIDIdentifier() {
+			callerAppIdentifier = appProvider.NewApplicationProvider().GetApplicationService().
+				ResolveAppIdentifierByClientID(orgHandle, callerClientID)
+		} else {
+			callerAppIdentifier = callerClientID
+		}
+	}
 
 	profile.ApplicationData = profileService.FilterApplicationData(
 		profile.ApplicationData,
-		callerAppID,
+		callerAppIdentifier,
 		isSystemApp,
 		filterParams,
 	)
@@ -1375,7 +1390,7 @@ func extractClaimKeyFromLocalURI(localURI string) string {
 	return parts[len(parts)-1]
 }
 
-func getCallerAppIDFromRequest(r *http.Request) string {
+func getCallerClientIDFromRequest(r *http.Request) string {
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
 		return ""

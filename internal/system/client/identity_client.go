@@ -342,6 +342,62 @@ func (c *IdentityClient) FetchApplicationIdentifier(applicationIdentifier, orgHa
 	return result, nil
 }
 
+// GetApplication fetches an application by ID. exists is false when it is not found.
+func (c *IdentityClient) GetApplication(appID, orgHandle string) (idpModel.ApplicationItem, bool, error) {
+
+	logger := log.GetLogger()
+	var app idpModel.ApplicationItem
+
+	token, err := c.FetchToken(orgHandle)
+	if err != nil {
+		logger.Debug(fmt.Sprintf("Failed to get token for resolving application:%s of org:%s", appID, orgHandle),
+			log.Error(err))
+		return app, false, err
+	}
+
+	appsFailed := func(desc string, cause error) error {
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_APPLICATIONS_FAILED.Code,
+			Message:     errors2.GET_APPLICATIONS_FAILED.Message,
+			Description: desc,
+		}, cause)
+	}
+
+	appEndpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/applications/%s", c.BaseURL, orgHandle, appID)
+	req, err := http.NewRequest("GET", appEndpoint, nil)
+	if err != nil {
+		return app, false, err
+	}
+	authCfg := config.GetCDSRuntime().Config.AuthServer
+	if authCfg.IsSystemAppGrantEnabled {
+		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return app, false, appsFailed(fmt.Sprintf("Failed to fetch application:%s for org:%s", appID, orgHandle), err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return app, false, nil
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		errorMsg := fmt.Sprintf("Applications endpoint returned status %d for app:%s org:%s. Response: %s",
+			resp.StatusCode, appID, orgHandle, strings.TrimSpace(string(body)))
+		return app, false, appsFailed(errorMsg, fmt.Errorf("applications endpoint non-200: %d", resp.StatusCode))
+	}
+
+	if err := json.Unmarshal(body, &app); err != nil {
+		return app, false, appsFailed(fmt.Sprintf("Failed to parse application response for app:%s org:%s",
+			appID, orgHandle), err)
+	}
+	return app, true, nil
+}
+
 // IntrospectToken introspects an opaque token using the introspection endpoint.
 func (c *IdentityClient) IntrospectToken(token, orgHandle string) (map[string]interface{}, error) {
 

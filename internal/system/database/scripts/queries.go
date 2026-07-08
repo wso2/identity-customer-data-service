@@ -18,6 +18,22 @@
 
 package scripts
 
+// UpsertApplication inserts or updates the application information.
+var UpsertApplication = map[string]string{
+	"postgres": `INSERT INTO applications (app_id, org_handle, client_id, updated_at)
+		VALUES ($1, $2, $3, now())
+		ON CONFLICT (app_id) DO UPDATE SET
+			org_handle = EXCLUDED.org_handle,
+			client_id  = EXCLUDED.client_id,
+			updated_at = now()`,
+}
+
+// GetAppIdentifierByClientID resolves an OAuth clientId to the app_id.
+var GetAppIdentifierByClientID = map[string]string{
+	"postgres": `SELECT app_id FROM applications
+		WHERE org_handle = $1 AND client_id = $2 LIMIT 1`,
+}
+
 var DeleteProfileSchemaForOrg = map[string]string{
 	"postgres": `
         DELETE FROM profile_schema WHERE org_handle = $1 AND scope != 'identity_attributes' `,
