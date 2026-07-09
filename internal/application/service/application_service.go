@@ -31,7 +31,7 @@ import (
 // ApplicationServiceInterface defines the interface for the application service.
 type ApplicationServiceInterface interface {
 	ResolveAndRegisterApplication(appIdentifier, orgHandle string) (bool, error)
-	ResolveAppIdentifierByClientID(orgHandle, clientID string) string
+	ResolveAppIdentifierByClientID(orgHandle, clientID string) (string, error)
 }
 
 // ApplicationService is the default implementation of the ApplicationServiceInterface.
@@ -72,14 +72,9 @@ func (as *ApplicationService) ResolveAndRegisterApplication(appIdentifier, orgHa
 	return true, nil
 }
 
-// ResolveAppIdentifierByClientID resolves an OAuth clientId to the app ID via the local store.
-func (as *ApplicationService) ResolveAppIdentifierByClientID(orgHandle, clientID string) string {
+// ResolveAppIdentifierByClientID resolves an OAuth clientId to the app ID via the local store. A missing mapping
+// returns an empty string with a nil error; a store failure is returned so callers can distinguish the two.
+func (as *ApplicationService) ResolveAppIdentifierByClientID(orgHandle, clientID string) (string, error) {
 
-	appIdentifier, err := store.GetAppIdentifierByClientID(orgHandle, clientID)
-	if err != nil {
-		log.GetLogger().Debug(fmt.Sprintf("Failed to resolve clientId for organization '%s'", orgHandle),
-			log.Error(err))
-		return ""
-	}
-	return appIdentifier
+	return store.GetAppIdentifierByClientID(orgHandle, clientID)
 }

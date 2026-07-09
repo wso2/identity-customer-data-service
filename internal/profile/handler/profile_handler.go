@@ -105,8 +105,13 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	callerAppIdentifier := ""
 	if !isSystemApp && callerClientID != "" {
 		if config.GetCDSRuntime().Config.UsesAppIDIdentifier() {
-			callerAppIdentifier = appProvider.NewApplicationProvider().GetApplicationService().
+			resolved, resolveErr := appProvider.NewApplicationProvider().GetApplicationService().
 				ResolveAppIdentifierByClientID(orgHandle, callerClientID)
+			if resolveErr != nil {
+				utils.HandleError(w, resolveErr)
+				return
+			}
+			callerAppIdentifier = resolved
 		} else {
 			callerAppIdentifier = callerClientID
 		}

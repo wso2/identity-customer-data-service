@@ -71,7 +71,7 @@ All attributes — `traits`, `identity_attributes`, and `application_data` — a
 
 A profile's `application_data` is a two-level map:
 
-```
+```text
 application_data
   └── <app_id>                 ← outer key: the app ID
         └── <data_group_key>   ← inner key: logical data category (e.g. "events", "saas_signups")

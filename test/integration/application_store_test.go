@@ -58,7 +58,9 @@ func Test_ApplicationStore(t *testing.T) {
 		require.Equal(t, "", got)
 
 		// Service wrapper also returns empty on miss without surfacing an error.
-		require.Equal(t, "", appService.ResolveAppIdentifierByClientID(org, "unknown-client"))
+		resolved, err := appService.ResolveAppIdentifierByClientID(org, "unknown-client")
+		require.NoError(t, err)
+		require.Equal(t, "", resolved)
 	})
 
 	t.Run("Org_Scoped", func(t *testing.T) {

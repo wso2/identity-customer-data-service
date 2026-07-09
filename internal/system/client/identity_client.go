@@ -363,7 +363,8 @@ func (c *IdentityClient) GetApplication(appID, orgHandle string) (idpModel.Appli
 		}, cause)
 	}
 
-	appEndpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/applications/%s", c.BaseURL, orgHandle, appID)
+	appEndpoint := fmt.Sprintf("https://%s/t/%s/api/server/v1/applications/%s",
+		c.BaseURL, url.PathEscape(orgHandle), url.PathEscape(appID))
 	req, err := http.NewRequest("GET", appEndpoint, nil)
 	if err != nil {
 		return app, false, err
@@ -384,7 +385,11 @@ func (c *IdentityClient) GetApplication(appID, orgHandle string) (idpModel.Appli
 	if resp.StatusCode == http.StatusNotFound {
 		return app, false, nil
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return app, false, appsFailed(fmt.Sprintf("Failed to read application response for app:%s org:%s",
+			appID, orgHandle), err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		errorMsg := fmt.Sprintf("Applications endpoint returned status %d for app:%s org:%s. Response: %s",
 			resp.StatusCode, appID, orgHandle, strings.TrimSpace(string(body)))
