@@ -95,27 +95,19 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filterParams := parseApplicationDataParams(r)
-	// The token identifies the caller by its OAuth clientId; the system-app check remains clientId-based.
+	// In app_id mode the caller's clientId is resolved to its app ID; the system-app check runs on that identifier.
 	callerClientID := getCallerClientIDFromRequest(r)
-	isSystemApp := isCallerSystemApplication(orgHandle, callerClientID)
-
-	// Application data is keyed by the caller's application identifier. In app_id mode the token's clientId is
-	// resolved to the app ID; in the legacy client_id mode the clientId is itself the key. System apps filter by
-	// the identifiers supplied in the request, so they need no resolution.
-	callerAppIdentifier := ""
-	if !isSystemApp && callerClientID != "" {
-		if config.GetCDSRuntime().Config.UsesAppIDIdentifier() {
-			resolved, resolveErr := appProvider.NewApplicationProvider().GetApplicationService().
-				ResolveAppIdentifierByClientID(orgHandle, callerClientID)
-			if resolveErr != nil {
-				utils.HandleError(w, resolveErr)
-				return
-			}
-			callerAppIdentifier = resolved
-		} else {
-			callerAppIdentifier = callerClientID
+	callerAppIdentifier := callerClientID
+	if config.GetCDSRuntime().Config.UsesAppIDIdentifier() && callerClientID != "" {
+		resolved, resolveErr := appProvider.NewApplicationProvider().GetApplicationService().
+			ResolveAppIdentifierByClientID(orgHandle, callerClientID)
+		if resolveErr != nil {
+			utils.HandleError(w, resolveErr)
+			return
 		}
+		callerAppIdentifier = resolved
 	}
+	isSystemApp := isCallerSystemApplication(orgHandle, callerAppIdentifier)
 
 	profile.ApplicationData = profileService.FilterApplicationData(
 		profile.ApplicationData,
