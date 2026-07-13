@@ -82,6 +82,16 @@ CREATE TABLE application_data
     UNIQUE (profile_id, app_id)
 );
 
+CREATE TABLE applications
+(
+    app_id         VARCHAR(255) PRIMARY KEY,
+    org_handle     VARCHAR(255) NOT NULL,
+    client_id      VARCHAR(255),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (org_handle, client_id)
+);
+
 CREATE TABLE consent_categories
 (
     id                  SERIAL PRIMARY KEY,

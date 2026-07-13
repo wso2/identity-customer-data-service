@@ -19,10 +19,16 @@
 package service
 
 import (
+	"fmt"
+	"net/http"
+
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/store"
+	appProvider "github.com/wso2/identity-customer-data-service/internal/application/provider"
 	consentService "github.com/wso2/identity-customer-data-service/internal/consent/service"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	sysconfig "github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
 // AdminConfigServiceInterface defines the service interface.
@@ -104,6 +110,24 @@ func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, o
 			return err
 		}
 		updatedConfig.InitialSchemaSyncDone = true
+	}
+
+	// In app_id mode, register each system application so its clientId->app_id mapping exists for the GET path.
+	if sysconfig.GetCDSRuntime().Config.UsesAppIDIdentifier() {
+		appService := appProvider.NewApplicationProvider().GetApplicationService()
+		for _, appID := range updatedConfig.SystemApplications {
+			exists, err := appService.ResolveAndRegisterApplication(appID, orgHandle)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return errors.NewClientError(errors.ErrorMessage{
+					Code:        errors.UPDATE_CONFIG_BAD_REQUEST.Code,
+					Message:     errors.UPDATE_CONFIG_BAD_REQUEST.Message,
+					Description: fmt.Sprintf("System application '%s' does not exist in the identity server.", appID),
+				}, http.StatusBadRequest)
+			}
+		}
 	}
 
 	return store.UpdateAdminConfig(updatedConfig, orgHandle)

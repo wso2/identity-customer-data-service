@@ -98,6 +98,16 @@ var (
 		Message: "Error while fetching applications.",
 	}
 
+	UPSERT_APPLICATION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15112",
+		Message: "Error while persisting application information.",
+	}
+
+	GET_APPLICATION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15113",
+		Message: "Error while resolving application information.",
+	}
+
 	ADD_UNIFICATION_RULE = ErrorMessage{
 		Code:    errorPrefix + "15201",
 		Message: "Error while adding unification rules.",

@@ -65,22 +65,22 @@ All attributes — `traits`, `identity_attributes`, and `application_data` — a
 |---|---|
 | `identityAttributes` | Core identity fields (email, phone, name, etc.) |
 | `traits` | Behavioural and preference fields |
-| `applicationData` | Per-application data. `application_identifier` (the app's OAuth client ID) must match the schema's `application_identifier` |
+| `applicationData` | Per-application data. `application_identifier` (the app ID) must match the schema's `application_identifier` |
 
 ### applicationData attributes and application_identifier
 
 A profile's `application_data` is a two-level map:
 
-```
+```text
 application_data
-  └── <app_client_id>          ← outer key: the app's OAuth client ID
+  └── <app_id>                 ← outer key: the app ID
         └── <data_group_key>   ← inner key: logical data category (e.g. "events", "saas_signups")
               └── <value>
 ```
 
-When declaring consent attributes for application data, `application_identifier` is the **outer app client ID**. The attribute name encodes the inner data-group key: `application_data.<data_group>.<field>`.
+When declaring consent attributes for application data, `application_identifier` is the **outer app ID**. The attribute name encodes the inner data-group key: `application_data.<data_group>.<field>`.
 
-At filter time, consent is enforced by matching the **inner data-group key** against the consented attribute names — not the outer app client ID. This means if multiple apps write data under the same data-group key (e.g. `"events"`), they are all gated by the same consent entry.
+At filter time, consent is enforced by matching the **inner data-group key** against the consented attribute names — not the outer app ID. This means if multiple apps write data under the same data-group key (e.g. `"events"`), they are all gated by the same consent entry.
 
 ### Complex attributes
 
