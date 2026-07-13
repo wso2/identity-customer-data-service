@@ -82,6 +82,16 @@ Lightweight, extensible Customer Data Server built to power personalized experie
 
 ---
 
+## 🔑 Identity Provider
+
+By default CDS authenticates against **classic WSO2 Identity Server**. Early
+support for **WSO2 Thunder** is also available (`auth_server.provider:
+"thunder"`), with some gaps (no profile-schema auto-sync/SCIM, no real
+tenant isolation) — see [docs/guides/identity-providers.md](docs/guides/identity-providers.md)
+for setup steps and known limitations before using it.
+
+---
+
 ## 📨 Message Queue
 
 By default CDS uses an **in-memory queue** — no extra setup needed. For production or multi-instance deployments, switch to ActiveMQ for durable message delivery.
