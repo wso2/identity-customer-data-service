@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/wso2/identity-customer-data-service/internal/identity_provider"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	psstr "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
@@ -677,9 +678,17 @@ func (s *ProfileSchemaService) SyncProfileSchema(orgHandle string) error {
 
 	cfg := config.GetCDSRuntime().Config
 	identityClient := client.NewIdentityClient(cfg)
-
-	claims, err := identityClient.GetProfileSchema(orgHandle)
 	logger := log.GetLogger()
+
+	schemaSyncClient, ok := identityClient.(identity_provider.SchemaSyncCapable)
+	if !ok {
+		logger.Info(fmt.Sprintf(
+			"Profile schema auto-sync is not supported for auth_server.provider=%q; skipping for org %s. "+
+				"Manage the schema via the profile-schema API instead.", cfg.AuthServer.Provider, orgHandle))
+		return nil
+	}
+
+	claims, err := schemaSyncClient.GetProfileSchema(orgHandle)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to fetch profile schema from identity server for organization %s:", orgHandle)
 		logger.Debug(errMsg, log.Error(err))

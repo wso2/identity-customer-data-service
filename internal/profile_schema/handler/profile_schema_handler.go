@@ -32,6 +32,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -500,6 +501,19 @@ func (psh *ProfileSchemaHandler) SyncProfileSchema(w http.ResponseWriter, r *htt
 			Message:     errors2.CDS_NOT_ENABLED.Message,
 			Description: errMsg,
 		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
+	if config.GetCDSRuntime().Config.AuthServer.Provider == constants.IdentityProviderThunder {
+		errMsg := "Schema sync webhooks are not supported when auth_server.provider=thunder; " +
+			"manage the profile schema via the profile-schema API instead."
+		logger.Info(errMsg)
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.SCHEMA_SYNC_NOT_SUPPORTED.Code,
+			Message:     errors2.SCHEMA_SYNC_NOT_SUPPORTED.Message,
+			Description: errMsg,
+		}, http.StatusNotImplemented)
 		utils.HandleError(w, clientError)
 		return
 	}

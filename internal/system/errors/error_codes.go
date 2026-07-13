@@ -98,6 +98,21 @@ var (
 		Message: "Error while fetching applications.",
 	}
 
+	SCHEMA_SYNC_NOT_SUPPORTED = ErrorMessage{
+		Code:    errorPrefix + "15112",
+		Message: "Profile schema auto-sync is not supported for the configured identity provider.",
+	}
+
+	UNSUPPORTED_IDENTITY_PROVIDER = ErrorMessage{
+		Code:    errorPrefix + "15113",
+		Message: "Unsupported or misconfigured identity provider.",
+	}
+
+	JWT_VERIFICATION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15114",
+		Message: "JWT signature verification failed.",
+	}
+
 	ADD_UNIFICATION_RULE = ErrorMessage{
 		Code:    errorPrefix + "15201",
 		Message: "Error while adding unification rules.",

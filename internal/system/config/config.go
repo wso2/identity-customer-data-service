@@ -32,6 +32,10 @@ type AuthConfig struct {
 }
 
 type AuthServerConfig struct {
+	// Provider selects the identity_provider.Client implementation:
+	// "" or "wso2is" (default) for classic WSO2 Identity Server, or
+	// "thunder" for WSO2 Thunder. See internal/system/client.NewIdentityClient.
+	Provider                  string              `yaml:"provider"`
 	Host                      string              `yaml:"host"`
 	Port                      string              `yaml:"port"`
 	ADUISHostname             string              `yaml:"adu_is_hostname"`
@@ -48,6 +52,22 @@ type AuthServerConfig struct {
 	AdminPassword             string              `yaml:"admin_password"`
 	RequiredScopes            map[string][]string `yaml:"required_scopes"`
 	IsSystemAppGrantEnabled   bool                `yaml:"isSystemAppGrantEnabled"`
+	// Thunder holds connection settings specific to WSO2 Thunder, used only
+	// when Provider == "thunder".
+	Thunder ThunderConfig `yaml:"thunder"`
+}
+
+// ThunderConfig holds the connection settings CDS needs to talk to WSO2
+// Thunder as an identity provider. See internal/identity_provider/thunder.
+type ThunderConfig struct {
+	Host                  string `yaml:"host"`
+	Port                  string `yaml:"port"`
+	ClientID              string `yaml:"client_id"`
+	ClientSecret          string `yaml:"client_secret"`
+	TokenEndpoint         string `yaml:"tokenEndpoint"`
+	IntrospectionEndpoint string `yaml:"introspectionEndpoint"`
+	JWKSEndpoint          string `yaml:"jwksEndpoint"`
+	ApplicationsEndpoint  string `yaml:"applicationsEndpoint"`
 }
 
 type DataSourceConfig struct {

@@ -44,6 +44,11 @@ const ExpiryClaim = "exp"
 const FilterRegex = `^[a-zA-Z0-9._-]+$`
 const MaxAttributeDisplayNameLength = 50
 
+// Identity provider names, used to select an identity_provider.Client
+// implementation via the auth_server.provider config key.
+const IdentityProviderWSO2IS = "wso2is"
+const IdentityProviderThunder = "thunder"
+
 var DisplayNameCamelCaseSplitter = regexp.MustCompile(`([a-z0-9])([A-Z])`)
 var DisplayNameRegex = regexp.MustCompile(`[^a-zA-Z0-9.\-_+ ]`)
 

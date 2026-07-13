@@ -54,7 +54,7 @@ func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]
 		}
 
 		// Validate org claims against request org handle
-		if !validateClaims(orgHandle, claims) {
+		if !validateClaims(orgHandle, claims, cfg.AuthServer.Provider) {
 			logger.Debug("JWT claims validation failed")
 			return nil, unauthorizedError()
 		}
@@ -135,19 +135,28 @@ func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 	return claims, nil
 }
 
-// validateClaims ensures the token has `active: true` and the expected audience and org_handle
-func validateClaims(orgHandle string, claims map[string]interface{}) bool {
+// validateClaims ensures the token has `active: true` and the expected audience and org_handle.
+//
+// The org_handle cross-check is skipped for provider == "thunder": Thunder
+// tokens carry no org_handle claim, and Thunder has no tenant-isolation
+// mechanism to check it against in the first place — see
+// docs/guides/identity-providers.md for the resulting limitation (a valid
+// Thunder token is not cryptographically bound to one org/OU today).
+func validateClaims(orgHandle string, claims map[string]interface{}, provider string) bool {
 
 	logger := log.GetLogger()
-	orgHandleInClaimRaw, ok := claims[constants.OrgHandleClaim]
-	if !ok || orgHandleInClaimRaw != orgHandle {
-		logger.Debug("Token does not have the expected org_handle claim.")
-		return false
-	}
-	orgHandleInClaim, ok := orgHandleInClaimRaw.(string)
-	if !ok || orgHandleInClaim != orgHandle {
-		logger.Debug("Token org_handle claim is not valid.")
-		return false
+
+	if provider != constants.IdentityProviderThunder {
+		orgHandleInClaimRaw, ok := claims[constants.OrgHandleClaim]
+		if !ok || orgHandleInClaimRaw != orgHandle {
+			logger.Debug("Token does not have the expected org_handle claim.")
+			return false
+		}
+		orgHandleInClaim, ok := orgHandleInClaimRaw.(string)
+		if !ok || orgHandleInClaim != orgHandle {
+			logger.Debug("Token org_handle claim is not valid.")
+			return false
+		}
 	}
 
 	expRaw, ok := claims[constants.ExpiryClaim]

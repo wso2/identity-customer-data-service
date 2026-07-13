@@ -32,6 +32,7 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
@@ -73,6 +74,12 @@ func main() {
 	cdsConfig, err := config.LoadConfig(cdsHome, configFile)
 	if err != nil {
 		fmt.Println("Failed to load cdsConfig. ", err)
+		os.Exit(1)
+	}
+
+	// Fail fast on an unrecognized auth_server.provider value.
+	if err := client.ValidateAuthServerConfig(*cdsConfig); err != nil {
+		fmt.Println("Invalid auth_server configuration.", err)
 		os.Exit(1)
 	}
 
