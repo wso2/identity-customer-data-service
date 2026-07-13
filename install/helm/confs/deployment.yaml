@@ -20,6 +20,7 @@ addr:
 server_url: {{ .Values.cloud.deployment.cds.config.serverUrl | quote }}
 
 auth_server:
+  provider: {{ .Values.cloud.deployment.cds.config.identityServer.provider }}
   host: {{ .Values.cloud.deployment.cds.config.identityServer.host }}
   port : {{ .Values.cloud.deployment.cds.config.identityServer.port }}
   adu_is_hostname: {{ .Values.cloud.deployment.cds.config.identityServer.ADUISHostname }}
@@ -67,6 +68,17 @@ auth_server:
       - "internal_cds_admin_config_view"
     admin_config:update:
       - "internal_cds_admin_config_update"
+
+  # Used only when provider: "thunder". See docs/guides/identity-providers.md.
+  thunder:
+    host: {{ .Values.cloud.deployment.cds.config.thunder.host | quote }}
+    port: {{ .Values.cloud.deployment.cds.config.thunder.port | quote }}
+    client_id: "${THUNDER_CLIENT_ID}"
+    client_secret: "${THUNDER_CLIENT_SECRET}"
+    tokenEndpoint: {{ .Values.cloud.deployment.cds.config.thunder.tokenEndpoint | quote }}
+    introspectionEndpoint: {{ .Values.cloud.deployment.cds.config.thunder.introspectionEndpoint | quote }}
+    jwksEndpoint: {{ .Values.cloud.deployment.cds.config.thunder.jwksEndpoint | quote }}
+    applicationsEndpoint: {{ .Values.cloud.deployment.cds.config.thunder.applicationsEndpoint | quote }}
 
 datasource:
   type: {{ .Values.cloud.deployment.cds.config.datasource.type }}

@@ -24,6 +24,7 @@ addr:
 server_url: "https://localhost:8900" # Public-facing base URL used for constructing Location headers
 
 auth_server:
+  provider: "wso2is"   # "wso2is" (default) | "thunder" - see docs/guides/identity-providers.md
   host: "localhost"
   port : 9443
   adu_is_hostname : "localhost"
@@ -80,6 +81,19 @@ auth_server:
       - "internal_cds_consent_category_update"
     consent_category:delete:
       - "internal_cds_consent_category_delete"
+
+  # Used only when provider: "thunder". See docs/guides/identity-providers.md
+  # for setup steps and known limitations (no schema-sync/SCIM support, no
+  # real tenant isolation).
+  thunder:
+    host: "localhost"
+    port: "8090"
+    client_id: "${THUNDER_CLIENT_ID}"
+    client_secret: "${THUNDER_CLIENT_SECRET}"
+    tokenEndpoint: "/oauth2/token"
+    introspectionEndpoint: "/oauth2/introspect"
+    jwksEndpoint: "/oauth2/jwks"
+    applicationsEndpoint: "/applications"
 
 
 sync:

@@ -52,6 +52,7 @@ cloud:
         serverUrl : "http://localhost:8900"
 
         identityServer:
+          provider: "wso2is" # "wso2is" (default) | "thunder" - see docs/guides/identity-providers.md
           host: localhost
           port: ""
           ADUISHostname : "identity-server"
@@ -62,6 +63,15 @@ cloud:
           claimsEndpoint: "api/server/v1/claim-dialects"
           isSystemAppGrantEnabled: true
           certName: "wso2carbontls.cer"
+
+        # Used only when identityServer.provider: "thunder".
+        thunder:
+          host: ""
+          port: "8090"
+          tokenEndpoint: "/oauth2/token"
+          introspectionEndpoint: "/oauth2/introspect"
+          jwksEndpoint: "/oauth2/jwks"
+          applicationsEndpoint: "/applications"
 
         message_queue:
           type: "memory" # Options: "activemq", "memory"
@@ -89,6 +99,8 @@ cloud:
         introspectionClientSecret: "" # Add the introspection client secret
         activemqBrokerUsername: "" # Add the ActiveMQ broker username
         activemqBrokerPassword: "" # Add the ActiveMQ broker password
+        thunderClientId: "" # Add the Thunder client ID (only used when identityServer.provider: "thunder")
+        thunderClientSecret: "" # Add the Thunder client secret
       replicas: 2
       progressDeadlineSeconds: 300
       minReadySeconds: 30
