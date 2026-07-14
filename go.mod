@@ -1,6 +1,6 @@
 module github.com/wso2/identity-customer-data-service
 
-go 1.26.3
+go 1.26.5
 
 require (
 	github.com/go-stomp/stomp/v3 v3.1.5
@@ -12,7 +12,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/swaggo/swag v1.16.6
 	github.com/testcontainers/testcontainers-go v0.37.0
-	go.mongodb.org/mongo-driver v1.17.3
+	go.mongodb.org/mongo-driver v1.17.7
 	gopkg.in/yaml.v2 v2.4.0
 )
 
