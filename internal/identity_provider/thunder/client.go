@@ -84,6 +84,23 @@ func NewClient(cfg config.Config) *Client {
 	}
 }
 
+// NewClientWithHTTPClient constructs a Client from a caller-provided HTTP
+// client instead of one derived from TLS config. Intended for integration
+// tests that run against an ephemeral Thunder instance with a self-signed
+// certificate (see test/setup.SetupTestThunder) — production code should use
+// NewClient, which enforces CDS's configured trust store.
+func NewClientWithHTTPClient(thunderCfg config.ThunderConfig, httpClient *http.Client) *Client {
+	baseHostPort := thunderCfg.Host
+	if thunderCfg.Port != "" {
+		baseHostPort = thunderCfg.Host + ":" + thunderCfg.Port
+	}
+	return &Client{
+		BaseURL:    baseHostPort,
+		HTTPClient: httpClient,
+		cfg:        thunderCfg,
+	}
+}
+
 // Name identifies this provider for logging/diagnostics.
 func (c *Client) Name() string {
 	return constants.IdentityProviderThunder
@@ -217,7 +234,13 @@ type thunderApplicationsPage struct {
 // /applications API has no server-side filter, only limit/offset pagination,
 // so this pages through results and matches clientId client-side (capped at
 // applicationsPageMax pages). Unlike wso2is, Thunder exposes no "issuer"
-// field, so issuer-based matches are not supported here — see
+// field, so issuer-based matches are not supported here.
+//
+// Confirmed against a real Thunder v0.48.0 instance
+// (test/thunder_integration): this call always fails with 403, regardless of
+// the requested scope — Thunder's role-assignment model only accepts
+// user/group assignees, not applications, so a client_credentials token can
+// never be granted access to this management API. See
 // docs/guides/identity-providers.md.
 func (c *Client) FetchApplicationIdentifier(applicationIdentifier, _ string) (idpModel.ApplicationsListResponse, error) {
 	var result idpModel.ApplicationsListResponse
