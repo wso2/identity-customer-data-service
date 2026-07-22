@@ -22,13 +22,15 @@ import "time"
 
 // UnificationRule represents rules for merging user profiles
 type UnificationRule struct {
-	RuleId       string    `json:"rule_id" bson:"rule_id" binding:"required"`
-	OrgHandle    string    `json:"org_handle" bson:"org_handle" binding:"required"`
-	RuleName     string    `json:"rule_name" bson:"rule_name" binding:"required"`
-	PropertyName string    `json:"property_name" bson:"property_name" binding:"required"`
-	PropertyId   string    `json:"property_id" bson:"property_id" binding:"required"`
-	Priority     int       `json:"priority" bson:"priority" binding:"required"`
-	IsActive     bool      `json:"is_active" bson:"is_active" binding:"required"`
-	CreatedAt    time.Time `json:"created_at" bson:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at" bson:"updated_at"`
+	RuleId            string    `json:"rule_id" bson:"rule_id" binding:"required"`
+	OrgHandle         string    `json:"org_handle" bson:"org_handle" binding:"required"`
+	RuleName          string    `json:"rule_name" bson:"rule_name" binding:"required"`
+	PropertyName      string    `json:"property_name" bson:"property_name" binding:"required"`
+	PropertyId        string    `json:"property_id" bson:"property_id" binding:"required"`
+	Priority          int       `json:"priority" bson:"priority" binding:"required"`
+	IsActive          bool      `json:"is_active" bson:"is_active" binding:"required"`
+	AttributeType     string    `json:"attribute_type" bson:"attribute_type"`
+	UnificationMethod string    `json:"unification_method" bson:"unification_method"`
+	CreatedAt         time.Time `json:"created_at" bson:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at" bson:"updated_at"`
 }

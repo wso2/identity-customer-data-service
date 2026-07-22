@@ -81,6 +81,8 @@ auth_server:
     consent_category:delete:
       - "internal_cds_consent_category_delete"
 
+    identity_resolution:review:
+      - "internal_cds_identity_resolution_review"
 
 sync:
   schema:
