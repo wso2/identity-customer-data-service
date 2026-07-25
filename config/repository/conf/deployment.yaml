@@ -107,14 +107,24 @@ message_queue:
     profile_queue_name: "/queue/cds-profile-unification"
     schema_sync_queue_name: "/queue/cds-schema-sync"
 
+# Datasource configuration.
+# Set type to "sqlite" to use the inbuilt database, which needs no external
+# server: CDS creates the database file and its schema on first start. Keep type
+# as "postgres" for production and for any deployment that runs more than one
+# CDS instance, since the inbuilt database is a local file owned by one process.
 datasource:
-  type: "postgres"
+  type: "postgres" # Options: "postgres" (default), "sqlite"
   hostname: "localhost"
   port: 5432
   username: "postgres"
   password: "${DB_PASSWORD}"
   name: "cds_db"
   sslmode: disable
+  # Applies only when type is "sqlite".
+  # sqlite:
+  #   path: "repository/database/cds.db" # Relative paths resolve against the CDS home directory
+  #   options: ""                        # DSN options; leave empty to use the defaults
+  #   max_open_conns: 4                  # SQLite allows a single writer at a time
 
 tls:
   mtls_enabled: true

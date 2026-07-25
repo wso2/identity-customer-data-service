@@ -5,9 +5,9 @@ Lightweight, extensible Customer Data Server built to power personalized experie
 
 ### ✅ Prerequisites
 
-- Go 1.23+
-- Docker
+- Go 1.26+
 - cURL
+- Docker — only if you run CDS on PostgreSQL. The inbuilt database needs nothing extra.
 
 ---
 ### 🛠️ Configuration Steps
@@ -112,8 +112,43 @@ To plug in a different broker (Kafka, RabbitMQ, SQS, etc.) see [docs/guides/exte
 
 ---
 
-## 🏗 Build and Run
-### 🔧 Step 1: Start PostgreSQL
+## 🗄 Database
+
+CDS runs on either of two datasources, selected by `datasource.type` in
+`repository/conf/deployment.yaml`.
+
+| | Option A — inbuilt (SQLite) | Option B — PostgreSQL |
+|---|---|---|
+| Setup | none | run a server, apply the DDL |
+| `datasource.type` | `sqlite` | `postgres` (the default) |
+| Best for | local development, demos, evaluation | production, multi-instance deployments |
+
+### Option A: the inbuilt database
+
+Set the datasource type and start the server. It creates the database file and
+its schema on first start, so there is nothing to install and no DDL to run:
+
+```yaml
+datasource:
+  type: "sqlite"
+```
+
+The database lives at `repository/database/cds.db`, relative to the CDS home
+directory. Set `datasource.sqlite.path` to put it elsewhere.
+
+The inbuilt database is a single file written by a single process. Use PostgreSQL
+instead when you need any of the following:
+
+- More than one CDS instance against the same data. SQLite is not shared storage,
+  so the Helm chart's default of two replicas requires PostgreSQL.
+- Trigram-accelerated `co` (contains) and `sw` (starts with) profile filters.
+  These work on the inbuilt database but scan the table, since SQLite has no
+  `pg_trgm` or GIN indexes.
+- Case-insensitive matching beyond ASCII. SQLite's `LIKE` — which stands in for
+  PostgreSQL's `ILIKE` — is case-insensitive for ASCII characters only.
+- `VARCHAR(n)` length enforcement, which SQLite does not apply.
+
+### Option B: PostgreSQL
 
 ```bash
 docker run -d -p 5432:5432 --name postgres \
@@ -123,15 +158,30 @@ docker run -d -p 5432:5432 --name postgres \
   postgres
 ```
 
-### 🗂 Step 2: Initialize the Database
+Apply the schema:
 
 ```bash
-docker exec -i postgres psql -U cdsuser -d cdspwd < dbscripts/postgress.sql
+docker exec -i postgres psql -U cdsuser -d cdsdb < dbscripts/postgres.sql
+```
+
+Then point the datasource at it:
+
+```yaml
+datasource:
+  type: "postgres"
+  hostname: "localhost"
+  port: 5432
+  username: "cdsuser"
+  password: "${DB_PASSWORD}"
+  name: "cdsdb"
+  sslmode: disable
 ```
 
 ---
 
-### 🛠 Step 3: Build the Product
+## 🏗 Build and Run
+
+### 🛠 Step 1: Build the Product
 
 ```bash
 make all
@@ -139,7 +189,7 @@ make all
 
 ---
 
-### ▶️ Step 4: Run the Product
+### ▶️ Step 2: Run the Product
 
 ```bash
 cd target

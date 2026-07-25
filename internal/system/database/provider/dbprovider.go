@@ -21,7 +21,12 @@ package provider
 import (
 	"database/sql"
 	"fmt"
+	"path/filepath"
+	"strings"
+	"sync"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
 )
 
@@ -31,11 +36,32 @@ type DBConfig struct {
 	driverName string
 }
 
-var testDBOverride *sql.DB
+var (
+	testDBOverride     *sql.DB
+	testDBTypeOverride string
+)
 
-func SetTestDB(db *sql.DB) {
+// SetTestDB installs a database handle used by every subsequent GetDBClient
+// call, bypassing the configured datasource. dbType selects the SQL dialect and
+// the scan normalization behaviour; an empty value defaults to PostgreSQL so
+// existing callers keep their current semantics.
+func SetTestDB(db *sql.DB, dbType string) {
 	testDBOverride = db
+	testDBTypeOverride = dbType
 }
+
+// sqliteHandle caches the single *sql.DB used for the inbuilt database.
+//
+// Unlike PostgreSQL, where each store call opens and closes its own connection,
+// SQLite is a local file: reopening it per call would re-acquire locks and
+// checkpoint the WAL on every query. One shared pooled handle is opened on first
+// use instead, and the client handed to callers treats Close as a no-op so the
+// existing `defer dbClient.Close()` calls in the stores remain correct.
+var (
+	sqliteHandle *sql.DB
+	sqliteOnce   sync.Once
+	sqliteErr    error
+)
 
 // DBProviderInterface defines the interface for getting database clients.
 type DBProviderInterface interface {
@@ -52,15 +78,30 @@ func NewDBProvider() DBProviderInterface {
 	return &DBProvider{}
 }
 
-// GetDBClient returns a database client based on the provided database name.
+// GetDBClient returns a database client for the configured datasource.
 func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 
 	if testDBOverride != nil {
-		return client.NewDBClient(testDBOverride), nil
+		return client.NewDBClient(testDBOverride, resolveDBType(testDBTypeOverride)), nil
 	}
+
 	// Production DB setup
 	runtimeConfig := config.GetCDSRuntime().Config
-	dbConfig := getDBConfig(runtimeConfig)
+	dbType := resolveDBType(runtimeConfig.DataSource.Type)
+
+	// The inbuilt database is backed by a single shared handle.
+	if dbType == database.TypeSQLite {
+		db, err := getSQLiteDB()
+		if err != nil {
+			return nil, err
+		}
+		return client.NewSharedDBClient(db, dbType), nil
+	}
+
+	dbConfig, err := getDBConfig(runtimeConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	db, err := sql.Open(dbConfig.driverName, dbConfig.dsn)
 	if err != nil {
@@ -72,26 +113,129 @@ func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 		return nil, fmt.Errorf("failed to ping database: %v", err)
 	}
 
-	return client.NewDBClient(db), nil
+	return client.NewDBClient(db, dbType), nil
+}
+
+// getSQLiteDB opens the inbuilt database once and initializes its schema.
+func getSQLiteDB() (*sql.DB, error) {
+
+	sqliteOnce.Do(func() {
+		runtimeConfig := config.GetCDSRuntime()
+
+		dbConfig, err := getDBConfig(runtimeConfig.Config)
+		if err != nil {
+			sqliteErr = err
+			return
+		}
+
+		if err := ensureSQLiteDir(runtimeConfig.Config.DataSource.SQLite.Path); err != nil {
+			sqliteErr = err
+			return
+		}
+
+		db, err := sql.Open(dbConfig.driverName, dbConfig.dsn)
+		if err != nil {
+			sqliteErr = fmt.Errorf("failed to open the inbuilt database: %v", err)
+			return
+		}
+
+		maxOpenConns := runtimeConfig.Config.DataSource.SQLite.MaxOpenConns
+		if maxOpenConns <= 0 {
+			maxOpenConns = database.DefaultSQLiteMaxOpenConns
+		}
+		db.SetMaxOpenConns(maxOpenConns)
+		db.SetMaxIdleConns(maxOpenConns)
+
+		if err := db.Ping(); err != nil {
+			_ = db.Close()
+			sqliteErr = fmt.Errorf("failed to ping the inbuilt database: %v", err)
+			return
+		}
+
+		if err := initializeSQLiteSchema(db); err != nil {
+			_ = db.Close()
+			sqliteErr = err
+			return
+		}
+
+		sqliteHandle = db
+	})
+
+	return sqliteHandle, sqliteErr
 }
 
 // getDBConfig returns the database configuration based on the provided data source.
-func getDBConfig(dataSource config.Config) DBConfig {
+func getDBConfig(dataSource config.Config) (DBConfig, error) {
 
-	var dbConfig DBConfig
+	ds := dataSource.DataSource
 
-	dbConfig.driverName = dataSource.DataSource.Type
-	dbConfig.dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		dataSource.DataSource.Hostname, dataSource.DataSource.Port, dataSource.DataSource.Username, dataSource.DataSource.Password,
-		dataSource.DataSource.Name, dataSource.DataSource.SSLMode)
+	switch resolveDBType(ds.Type) {
+	case database.TypeSQLite:
+		path, err := resolveSQLitePath(ds.SQLite.Path)
+		if err != nil {
+			return DBConfig{}, err
+		}
 
-	return dbConfig
+		options := ds.SQLite.Options
+		if options == "" {
+			options = database.DefaultSQLiteOptions
+		}
+		if !strings.HasPrefix(options, "?") {
+			options = "?" + options
+		}
+
+		return DBConfig{
+			driverName: database.DriverSQLite,
+			dsn:        path + options,
+		}, nil
+
+	default:
+		// PostgreSQL. The driver name is taken verbatim from the configured type
+		// so that any other database/sql driver registered under that name keeps
+		// working exactly as before.
+		driverName := ds.Type
+		if driverName == "" {
+			driverName = database.DriverPostgres
+		}
+
+		return DBConfig{
+			driverName: driverName,
+			dsn: fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+				ds.Hostname, ds.Port, ds.Username, ds.Password, ds.Name, ds.SSLMode),
+		}, nil
+	}
 }
 
-// GetDBType returns the database configuration based on the provided data source.
+// resolveSQLitePath returns the absolute path of the inbuilt database file,
+// resolving a relative path against CDS_HOME.
+func resolveSQLitePath(path string) (string, error) {
+
+	if path == "" {
+		path = database.DefaultSQLitePath
+	}
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	return filepath.Join(config.GetCDSRuntime().CDSHome, path), nil
+}
+
+// resolveDBType normalizes a configured datasource type. An empty value means
+// PostgreSQL, preserving the behaviour of deployments that never set it.
+func resolveDBType(dbType string) string {
+
+	normalized := strings.ToLower(strings.TrimSpace(dbType))
+	if normalized == "" {
+		return database.TypePostgres
+	}
+	return normalized
+}
+
+// GetDBType returns the datasource type, which is also the dialect key used to
+// select a statement from the query maps in the scripts package.
 func (d *DBProvider) GetDBType() string {
 
-	runtimeConfig := config.GetCDSRuntime().Config
-	dbConfig := getDBConfig(runtimeConfig)
-	return dbConfig.driverName
+	if testDBOverride != nil {
+		return resolveDBType(testDBTypeOverride)
+	}
+	return resolveDBType(config.GetCDSRuntime().Config.DataSource.Type)
 }

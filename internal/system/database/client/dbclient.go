@@ -24,6 +24,8 @@ import (
 	"strings"
 
 	_ "github.com/lib/pq"
+	"github.com/wso2/identity-customer-data-service/internal/system/database"
+	_ "modernc.org/sqlite"
 )
 
 // DBClientInterface defines the interface for database operations.
@@ -36,18 +38,42 @@ type DBClientInterface interface {
 // DBClient is the implementation of DBClientInterface.
 type DBClient struct {
 	db *sql.DB
+	// dbType is the datasource type this client is connected to. It selects the
+	// result normalization applied to scanned rows.
+	dbType string
+	// shared marks a client over a connection pool owned by the provider rather
+	// than by this client, in which case Close must not close the pool.
+	shared bool
 }
 
 // NewDBClient creates a new instance of DBClient with the provided database connection.
-func NewDBClient(db *sql.DB) DBClientInterface {
+func NewDBClient(db *sql.DB, dbType string) DBClientInterface {
 
 	return &DBClient{
-		db: db,
+		db:     db,
+		dbType: dbType,
+	}
+}
+
+// NewSharedDBClient creates a client over a connection pool owned by the caller.
+// Close is a no-op, so the pool outlives the client and the existing
+// `defer dbClient.Close()` calls in the stores stay correct.
+func NewSharedDBClient(db *sql.DB, dbType string) DBClientInterface {
+
+	return &DBClient{
+		db:     db,
+		dbType: dbType,
+		shared: true,
 	}
 }
 
 // ExecuteQuery executes a SELECT query and returns the result as a slice of maps.
 func (client *DBClient) ExecuteQuery(query string, args ...interface{}) ([]map[string]interface{}, error) {
+
+	isSQLite := client.dbType == database.TypeSQLite
+	if isSQLite {
+		args = normalizeSQLiteArgs(args)
+	}
 
 	rows, err := client.db.Query(query, args...)
 	if err != nil {
@@ -58,6 +84,19 @@ func (client *DBClient) ExecuteQuery(query string, args ...interface{}) ([]map[s
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err
+	}
+
+	// Declared column types drive the SQLite result normalization.
+	var declaredTypes []string
+	if isSQLite {
+		columnTypes, err := rows.ColumnTypes()
+		if err != nil {
+			return nil, err
+		}
+		declaredTypes = make([]string, len(columnTypes))
+		for i, columnType := range columnTypes {
+			declaredTypes[i] = columnType.DatabaseTypeName()
+		}
 	}
 
 	var results []map[string]interface{}
@@ -74,10 +113,18 @@ func (client *DBClient) ExecuteQuery(query string, args ...interface{}) ([]map[s
 
 		result := map[string]interface{}{}
 		for i, col := range columns {
+			value := row[i]
+			if isSQLite {
+				value = normalizeSQLiteValue(value, declaredTypes[i])
+			}
 			// Normalize column names to lowercase for consistency.
-			result[strings.ToLower(col)] = row[i]
+			result[strings.ToLower(col)] = value
 		}
 		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return results, nil
@@ -89,9 +136,10 @@ func (client *DBClient) BeginTx() (*sql.Tx, error) {
 	return client.db.Begin()
 }
 
-// Close closes the database connection.
+// Close closes the database connection. It is a no-op when the connection pool
+// is owned by the provider (the inbuilt database) or when running under tests.
 func (c *DBClient) Close() error {
-	if os.Getenv("TEST_MODE") == "true" {
+	if c.shared || os.Getenv("TEST_MODE") == "true" {
 		return nil
 	}
 	return c.db.Close()

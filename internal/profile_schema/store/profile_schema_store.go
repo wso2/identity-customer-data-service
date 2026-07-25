@@ -761,7 +761,9 @@ func GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []s
 	}
 	defer dbClient.Close()
 
-	baseSQL := scripts.FilterProfileSchemaAttributes[provider.NewDBProvider().GetDBType()]
+	dbType := provider.NewDBProvider().GetDBType()
+	baseSQL := scripts.FilterProfileSchemaAttributes[dbType]
+	likeOperator := scripts.LikeOperator(dbType)
 	conditions := []string{}
 	args := []interface{}{orgId}
 	argID := 2
@@ -779,10 +781,10 @@ func GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []s
 			clause = fmt.Sprintf("%s = $%d", field, argID)
 			args = append(args, value)
 		case "co":
-			clause = fmt.Sprintf("%s ILIKE $%d", field, argID)
+			clause = fmt.Sprintf("%s %s $%d", field, likeOperator, argID)
 			args = append(args, "%"+value+"%")
 		case "sw":
-			clause = fmt.Sprintf("%s ILIKE $%d", field, argID)
+			clause = fmt.Sprintf("%s %s $%d", field, likeOperator, argID)
 			args = append(args, value+"%")
 		default:
 			continue

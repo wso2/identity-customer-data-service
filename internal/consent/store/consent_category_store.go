@@ -20,7 +20,6 @@ package store
 import (
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	model "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
@@ -45,7 +44,8 @@ func AddConsentCategory(category model.ConsentCategory) error {
 		}, err)
 	}
 	defer dbClient.Close()
-	query := scripts.InsertConsentCategory[provider.NewDBProvider().GetDBType()]
+	dbType := provider.NewDBProvider().GetDBType()
+	query := scripts.InsertConsentCategory[dbType]
 	tx, err := dbClient.BeginTx()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to begin transaction for inserting consent category: %s", category.CategoryIdentifier)
@@ -57,7 +57,8 @@ func AddConsentCategory(category model.ConsentCategory) error {
 		}, err)
 		return serverError
 	}
-	_, err = tx.Exec(query, category.CategoryName, category.CategoryIdentifier, category.OrgHandle, category.Purpose, pq.Array(category.Destinations), category.IsMandatory)
+	_, err = tx.Exec(query, category.CategoryName, category.CategoryIdentifier, category.OrgHandle, category.Purpose,
+		scripts.EncodeStringArray(dbType, category.Destinations), category.IsMandatory)
 	if err != nil {
 		errRollback := tx.Rollback()
 		if errRollback != nil {
@@ -300,8 +301,10 @@ func UpdateConsentCategory(category model.ConsentCategory) error {
 		return serverError
 	}
 
-	query := scripts.UpdateConsentCategory[provider.NewDBProvider().GetDBType()]
-	_, err = tx.Exec(query, category.CategoryName, category.Purpose, pq.Array(category.Destinations), category.CategoryIdentifier)
+	dbType := provider.NewDBProvider().GetDBType()
+	query := scripts.UpdateConsentCategory[dbType]
+	_, err = tx.Exec(query, category.CategoryName, category.Purpose,
+		scripts.EncodeStringArray(dbType, category.Destinations), category.CategoryIdentifier)
 	if err != nil {
 		_ = tx.Rollback()
 		logger.Debug("Failed to update consent category", log.Error(err))
@@ -402,8 +405,10 @@ func SeedDefaultIdentityDataCategory(orgHandle string) error {
 	}
 	defer dbClient.Close()
 
-	upsertQuery := scripts.UpsertDefaultIdentityDataCategory[provider.NewDBProvider().GetDBType()]
-	_, err = dbClient.ExecuteQuery(upsertQuery, constants.DefaultIdentityDataCategoryName, uuid.New().String(), orgHandle, constants.DefaultIdentityDataCategoryPurpose, pq.Array([]string{}))
+	dbType := provider.NewDBProvider().GetDBType()
+	upsertQuery := scripts.UpsertDefaultIdentityDataCategory[dbType]
+	_, err = dbClient.ExecuteQuery(upsertQuery, constants.DefaultIdentityDataCategoryName, uuid.New().String(), orgHandle,
+		constants.DefaultIdentityDataCategoryPurpose, scripts.EncodeStringArray(dbType, []string{}))
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to upsert identity data category for org: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
@@ -643,34 +648,8 @@ func parseBool(raw interface{}) bool {
 	return false
 }
 
+// parseStringArray reads the destinations column, which holds a PostgreSQL
+// TEXT[] on PostgreSQL and a JSON array on the inbuilt database.
 func parseStringArray(raw interface{}) []string {
-	if raw == nil {
-		return nil
-	}
-
-	var rawStr string
-	switch v := raw.(type) {
-	case []byte:
-		rawStr = string(v)
-	case string:
-		rawStr = v
-	default:
-		return nil
-	}
-
-	rawStr = strings.Trim(rawStr, "{}")
-	if rawStr == "" {
-		return nil
-	}
-
-	items := strings.Split(rawStr, ",")
-	var result []string
-	for _, item := range items {
-		// Trim spaces and surrounding double quotes
-		clean := strings.TrimSpace(item)
-		clean = strings.Trim(clean, `"`)
-		result = append(result, clean)
-	}
-
-	return result
+	return scripts.DecodeStringArray(raw)
 }
