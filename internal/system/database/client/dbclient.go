@@ -31,15 +31,13 @@ import (
 
 // DBClientInterface defines the interface for database operations.
 //
-// Statements are passed as a model.DBQuery rather than as text: the client owns
-// the datasource type, so it is the one place that decides which dialect a
-// statement runs as. Stores name a statement and stay dialect-agnostic.
+// Statements are passed as a model.DBQuery, so the client is the only place that
+// selects a dialect and the stores stay datasource-agnostic.
 type DBClientInterface interface {
 	ExecuteQuery(query model.DBQuery, args ...interface{}) ([]map[string]interface{}, error)
 	BeginTx() (*model.Tx, error)
-	// DBType exposes the dialect for the few runtime statement builders whose
-	// bind arguments — not just their SQL text — differ per engine. Stores must
-	// not use it to look up a statement.
+	// DBType is for the few statements a store builds at runtime, whose bind
+	// arguments differ per datasource. It is not for selecting a statement.
 	DBType() string
 	Close() error
 }
@@ -47,11 +45,10 @@ type DBClientInterface interface {
 // DBClient is the implementation of DBClientInterface.
 type DBClient struct {
 	db *sql.DB
-	// dbType is the datasource type this client is connected to. It selects the
-	// result normalization applied to scanned rows.
+	// dbType is the datasource type this client is connected to.
 	dbType string
-	// shared marks a client over a connection pool owned by the provider rather
-	// than by this client, in which case Close must not close the pool.
+	// shared marks a connection pool owned by the caller, which Close must
+	// leave open.
 	shared bool
 }
 
@@ -64,9 +61,8 @@ func NewDBClient(db *sql.DB, dbType string) DBClientInterface {
 	}
 }
 
-// NewSharedDBClient creates a client over a connection pool owned by the caller.
-// Close is a no-op, so the pool outlives the client and the existing
-// `defer dbClient.Close()` calls in the stores stay correct.
+// NewSharedDBClient creates a client over a connection pool owned by the
+// caller. Close is a no-op, so the pool outlives the client.
 func NewSharedDBClient(db *sql.DB, dbType string) DBClientInterface {
 
 	return &DBClient{
@@ -85,7 +81,6 @@ func (client *DBClient) ExecuteQuery(query model.DBQuery, args ...interface{}) (
 		args = database.NormalizeSQLiteArgs(args)
 	}
 
-	// The single place a statement is resolved to a dialect.
 	sqlText := query.GetQuery(client.dbType)
 
 	rows, err := client.db.Query(sqlText, args...)
@@ -99,7 +94,6 @@ func (client *DBClient) ExecuteQuery(query model.DBQuery, args ...interface{}) (
 		return nil, err
 	}
 
-	// Declared column types drive the SQLite result normalization.
 	var declaredTypes []string
 	if isSQLite {
 		columnTypes, err := rows.ColumnTypes()
@@ -143,9 +137,7 @@ func (client *DBClient) ExecuteQuery(query model.DBQuery, args ...interface{}) (
 	return results, nil
 }
 
-// BeginTx starts a new database transaction. The returned transaction carries
-// the dialect, so statements run inside it are resolved the same way as those
-// run through ExecuteQuery.
+// BeginTx starts a new database transaction.
 func (client *DBClient) BeginTx() (*model.Tx, error) {
 
 	tx, err := client.db.Begin()
@@ -161,8 +153,7 @@ func (client *DBClient) DBType() string {
 	return client.dbType
 }
 
-// Close closes the database connection. It is a no-op when the connection pool
-// is owned by the caller rather than by this client.
+// Close closes the database connection, unless the pool is owned by the caller.
 func (client *DBClient) Close() error {
 
 	if client.shared {

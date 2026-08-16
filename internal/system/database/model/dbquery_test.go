@@ -48,8 +48,7 @@ func Test_GetQuery(t *testing.T) {
 
 // Test_TemplateHelpersPreserveTheFallback covers the invariant that makes the
 // override optional: a statement with no SQLite text must still have none after
-// being completed, so it keeps falling back to the PostgreSQL text rather than
-// carrying a formatted copy of it that only looks resolved.
+// being completed.
 func Test_TemplateHelpersPreserveTheFallback(t *testing.T) {
 
 	t.Run("Format leaves an absent override absent", func(t *testing.T) {

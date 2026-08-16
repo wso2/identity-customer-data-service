@@ -756,9 +756,8 @@ func GetProfileSchemaAttributesByScopeAndFilter(orgId, scope string, filters []s
 	}
 	defer dbClient.Close()
 
-	// The dialect is needed here for the LIKE operator, which differs between
-	// the engines. It comes from the client rather than the provider so the
-	// statement and the operator are resolved against the same connection.
+	// The dialect is needed here for the LIKE operator, not to select a
+	// statement.
 	dbType := dbClient.DBType()
 	baseSQL := scripts.FilterProfileSchemaAttributes.GetQuery(dbType)
 	likeOperator := scripts.LikeOperator(dbType)

@@ -23,14 +23,12 @@ import (
 	"strings"
 )
 
-// Preparing a statement validates its grammar and every table and column it
-// references, without needing valid argument values. Two suites do it — the
-// unit tests against the inbuilt database and the integration suite against
-// whichever datasource it runs on — so the knowledge of how to complete a
-// runtime template lives here rather than in either of them.
+// Preparing a statement validates its grammar and the tables and columns it
+// references. Two suites do it, so the helpers live here rather than in either
+// of them.
 
-// QueryPlaceholders returns "($1, $2, ... $n)", the value tuple the stores build
-// at runtime for the batch-insert statements.
+// QueryPlaceholders returns "($1, $2, ... $n)", the value tuple the stores
+// build for the batch inserts.
 func QueryPlaceholders(n int) string {
 
 	parts := make([]string, n)
@@ -40,10 +38,8 @@ func QueryPlaceholders(n int) string {
 	return "(" + strings.Join(parts, ", ") + ")"
 }
 
-// CompleteStatement returns the statement as a store executes it. Some
-// statements are templates the stores complete at runtime, and an incomplete
-// statement cannot be prepared. name is the Go name the statement is declared
-// under in scripts.AllQueries.
+// CompleteStatement returns the statement as a store executes it, since a
+// template cannot be prepared. name is its name in scripts.AllQueries.
 func CompleteStatement(name, statement string) string {
 
 	switch name {
@@ -68,9 +64,8 @@ func CompleteStatement(name, statement string) string {
 func SkipPreparing(name string) string {
 
 	if name == "DeleteInactiveCookies" {
-		// Skipped on purpose: it targets a table named "cookie_profiles", while
-		// the schema defines "profile_cookies". That is a pre-existing defect on
-		// PostgreSQL too, and is not addressed here.
+		// It targets "cookie_profiles" while the schema defines
+		// "profile_cookies". A pre-existing defect, not addressed here.
 		return "targets a table the schema does not define"
 	}
 	return ""

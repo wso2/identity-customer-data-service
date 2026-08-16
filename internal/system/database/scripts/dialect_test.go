@@ -259,8 +259,8 @@ func Test_DecodeStringArray(t *testing.T) {
 	}
 }
 
-// Test_EncodeDecodeStringArrayRoundTrip checks that what SQLite stores is what is
-// read back, which is the property the consent stores rely on.
+// Test_EncodeDecodeStringArrayRoundTrip checks that what is stored is what is
+// read back.
 func Test_EncodeDecodeStringArrayRoundTrip(t *testing.T) {
 
 	values := []string{"crm", "marketing-tool", "a,b"}

@@ -26,13 +26,8 @@ import (
 )
 
 // Test_QueriesPrepare prepares every declared statement against the datasource
-// the suite is running on, which is a PostgreSQL container by default.
-//
-// Preparing validates the SQL grammar and every table and column the statement
-// references, so this catches a statement that names a column the schema does
-// not have — the failure mode the SQLite overrides introduce, since only the
-// dialect that a suite exercises would otherwise be checked. The unit tests
-// cover the SQLite text; this covers whichever text the suite resolves.
+// the suite runs on, which is PostgreSQL by default. The unit tests cover the
+// SQLite text.
 func Test_QueriesPrepare(t *testing.T) {
 
 	for name, query := range scripts.AllQueries() {

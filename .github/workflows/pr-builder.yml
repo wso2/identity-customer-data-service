@@ -143,8 +143,7 @@ jobs:
       - name: Run Unit Tests
         run: make unit-test
 
-      # The same integration suite as the `test` job, run against the inbuilt
-      # database. It needs no containers.
+      # The same suite as the `test` job, against the inbuilt database.
       - name: Run Integration Tests on the inbuilt database
         run: make integration-test-sqlite
 

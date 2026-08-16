@@ -26,9 +26,8 @@ import (
 	"github.com/wso2/identity-customer-data-service/test/setup"
 )
 
-// TestQueryIDsAreUniqueAndPopulated guards the property the IDs exist for: an ID
-// names a statement in the error a failing query returns, so an empty or reused
-// ID points at the wrong statement, or at none.
+// TestQueryIDsAreUniqueAndPopulated guards the property the IDs exist for: an
+// empty or reused ID names the wrong statement in a failure, or none.
 func TestQueryIDsAreUniqueAndPopulated(t *testing.T) {
 
 	owners := map[string]string{}
@@ -46,9 +45,7 @@ func TestQueryIDsAreUniqueAndPopulated(t *testing.T) {
 }
 
 // TestQueriesResolveForEverySupportedType guards against a statement that
-// resolves to the empty string, which a store would send to the database as-is.
-// An override is optional, so this also covers the fallback to the PostgreSQL
-// statement.
+// resolves to the empty string, which a store would send to the database.
 func TestQueriesResolveForEverySupportedType(t *testing.T) {
 
 	for name, query := range scripts.AllQueries() {
@@ -61,12 +58,8 @@ func TestQueriesResolveForEverySupportedType(t *testing.T) {
 }
 
 // TestSQLiteQueriesPrepare prepares every SQLite statement against the inbuilt
-// schema. Preparing validates the SQL grammar and every table and column the
-// statement references, so this covers both dbscripts/sqlite.sql and the SQLite
-// variants in queries.go without needing valid argument values.
-//
-// The PostgreSQL text is prepared by the integration suite, which is where a
-// PostgreSQL instance is available.
+// schema, covering both dbscripts/sqlite.sql and the SQLite variants in
+// queries.go. The integration suite prepares the PostgreSQL text.
 func TestSQLiteQueriesPrepare(t *testing.T) {
 
 	testDB, err := setup.SetupTestSQLite()

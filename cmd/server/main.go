@@ -47,12 +47,7 @@ func initDatabaseFromConfig(cdsConfig *config.Config) error {
 
 	logger := log.GetLogger()
 
-	// Reject an unsupported datasource type before anything branches on it. A
-	// statement carries PostgreSQL text and an optional SQLite override, and a
-	// dialect without an override falls back to the PostgreSQL text, so an
-	// unrecognised value would surface as a driver error on the first statement
-	// rather than as a configuration error at startup. An empty value keeps
-	// meaning PostgreSQL.
+	// An empty type means PostgreSQL.
 	dbType := strings.ToLower(strings.TrimSpace(cdsConfig.DataSource.Type))
 	if dbType == "" {
 		dbType = database.TypePostgres
@@ -62,8 +57,7 @@ func initDatabaseFromConfig(cdsConfig *config.Config) error {
 			cdsConfig.DataSource.Type, strings.Join(database.SupportedTypes, ", "))
 	}
 
-	// The inbuilt database needs no connection settings: it is a local file that
-	// is created and initialized on first use.
+	// The inbuilt database needs no connection settings.
 	if dbType == database.TypeSQLite {
 		if err := provider.EnsureDatabase(); err != nil {
 			return err

@@ -30,11 +30,9 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 )
 
-// Test_ProfileCursorPagination covers keyset pagination, which is the part of the
-// data access layer most sensitive to how a datasource stores and compares
-// timestamps: the cursor carries a timestamp and a profile id, and the query
-// compares them as a row value. The suite runs against whichever datasource
-// CDS_TEST_DB selects, so running it for both proves the two agree.
+// Test_ProfileCursorPagination covers keyset pagination, which is the part of
+// the data access layer most sensitive to how a datasource stores and compares
+// timestamps. It runs against whichever datasource CDS_TEST_DB selects.
 func Test_ProfileCursorPagination(t *testing.T) {
 
 	const (
@@ -189,8 +187,8 @@ func forceSharedCreatedAt(t *testing.T, org string, count int) []string {
 	return ids
 }
 
-// requireDescending asserts that a page is ordered newest first, with the profile
-// id breaking ties, which is the order the pagination query asks for.
+// requireDescending asserts that a page is ordered newest first, with the
+// profile id breaking ties.
 func requireDescending(t *testing.T, profiles []profileModel.ProfileResponse) {
 
 	t.Helper()

@@ -51,10 +51,8 @@ func (s *SQLiteTestDB) Terminate() {
 }
 
 // SetupTestSQLite creates a temporary inbuilt database with the schema applied.
-//
-// The database is file-backed rather than ":memory:" on purpose: an in-memory
-// SQLite database is private to a single connection, so a pooled *sql.DB would
-// hand out connections to different, empty databases.
+// It is file-backed rather than ":memory:", which would be private to a single
+// connection.
 func SetupTestSQLite() (*SQLiteTestDB, error) {
 
 	dir, err := os.MkdirTemp("", "cds-sqlite-test")
@@ -70,8 +68,7 @@ func SetupTestSQLite() (*SQLiteTestDB, error) {
 		return nil, fmt.Errorf("failed to open the test database: %w", err)
 	}
 
-	// Keep the pool bounded the same way the server does, so the tests exercise
-	// the same locking behaviour.
+	// Bound the pool the way the server does.
 	db.SetMaxOpenConns(database.DefaultSQLiteMaxOpenConns)
 	db.SetMaxIdleConns(database.DefaultSQLiteMaxOpenConns)
 

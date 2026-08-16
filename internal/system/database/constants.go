@@ -20,31 +20,20 @@
 // query layers.
 package database
 
-// Supported datasource types. These values are used both as the
-// `datasource.type` configuration value and as the dialect key when looking up
-// a statement in the query maps defined in the scripts package.
+// Supported values of the `datasource.type` configuration.
 const (
-	// TypePostgres is the PostgreSQL datasource. This is the default and the
-	// recommended type for production deployments.
+	// TypePostgres is the PostgreSQL datasource, and the default.
 	TypePostgres = "postgres"
-	// TypeSQLite is the inbuilt, file-backed SQLite datasource. It requires no
-	// external database server and is intended for development, demos and
+	// TypeSQLite is the inbuilt, file-backed datasource. It needs no external
+	// database server and is intended for development, demos and
 	// single-instance deployments.
 	TypeSQLite = "sqlite"
 )
 
-// SupportedTypes lists every value `datasource.type` accepts, in the order they
-// are reported to the operator when the configured value is rejected.
+// SupportedTypes lists every value `datasource.type` accepts.
 var SupportedTypes = []string{TypePostgres, TypeSQLite}
 
 // IsSupportedType reports whether dbType is a datasource CDS can run on.
-//
-// A statement carries PostgreSQL text and an optional SQLite override, and any
-// dialect without an override falls back to the PostgreSQL text. An unsupported
-// type would therefore run PostgreSQL SQL against whatever driver happens to be
-// registered under that name, which fails one statement at a time rather than
-// at startup. The configured type is validated once instead, before the first
-// connection is opened.
 func IsSupportedType(dbType string) bool {
 
 	for _, supported := range SupportedTypes {
@@ -55,9 +44,7 @@ func IsSupportedType(dbType string) bool {
 	return false
 }
 
-// Driver names registered with database/sql by the imported driver packages:
-// github.com/lib/pq registers "postgres" and modernc.org/sqlite registers
-// "sqlite".
+// Driver names registered with database/sql by the imported driver packages.
 const (
 	DriverPostgres = "postgres"
 	DriverSQLite   = "sqlite"
@@ -71,34 +58,18 @@ const (
 	DefaultSQLitePath = "repository/database/cds.db"
 
 	// DefaultSQLiteOptions is the DSN query string appended to the database
-	// file path.
-	//
-	// Each option is load-bearing:
-	//   - foreign_keys(1)    enforces the ON DELETE CASCADE constraints in the
-	//                        schema. Set through the DSN rather than a one-off
-	//                        `PRAGMA foreign_keys = ON` statement so that it
-	//                        applies to every pooled connection, not just the
-	//                        one that happened to serve the statement.
-	//   - journal_mode(WAL)  allows concurrent readers alongside a writer.
-	//   - busy_timeout(5000) waits instead of failing immediately when the
-	//                        write lock is held.
-	//   - _txlock=immediate  takes the write lock when a transaction begins, so
-	//                        a read-then-write transaction honours the busy
-	//                        timeout instead of failing to upgrade its lock.
-	//   - _time_format=sqlite and _timezone=UTC store time.Time values as
-	//                        fixed-shape UTC text ("2006-01-02 15:04:05.999-07:00")
-	//                        rather than time.Time.String(). This is mandatory:
-	//                        the default format is neither sortable nor
-	//                        parseable, and keyset pagination orders on these
-	//                        columns.
-	//   - _texttotime=true   scans TIMESTAMP/DATETIME columns back into
-	//                        time.Time. Stated explicitly even though it is the
-	//                        driver default.
+	// file path. Every option is required:
+	//   - foreign_keys(1)    enforces the schema's ON DELETE CASCADE.
+	//   - journal_mode(WAL)  allows readers alongside a writer.
+	//   - busy_timeout(5000) waits for the write lock instead of failing.
+	//   - _txlock=immediate  takes the write lock when a transaction begins.
+	//   - _time_format and _timezone store timestamps as sortable UTC text,
+	//                        which keyset pagination orders on.
+	//   - _texttotime=true   scans timestamp columns back into time.Time.
 	DefaultSQLiteOptions = "_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)" +
 		"&_txlock=immediate&_time_format=sqlite&_timezone=UTC&_texttotime=true"
 
 	// DefaultSQLiteMaxOpenConns bounds the connection pool. SQLite serialises
-	// writers, so a small pool avoids lock contention between the HTTP handlers
-	// and the background workers. WAL still permits concurrent reads.
+	// writers, so a small pool avoids lock contention.
 	DefaultSQLiteMaxOpenConns = 4
 )

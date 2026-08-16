@@ -33,13 +33,9 @@ import (
 
 // EnsureDatabase prepares the configured datasource for use.
 //
-// For the inbuilt SQLite datasource it creates the database file and its parent
-// directory if needed and applies the embedded schema, so that starting the
-// server requires no external database and no manual DDL step. For every other
-// datasource type it is a no-op: a PostgreSQL schema is provisioned out of band
-// by an operator using dbscripts/postgres.sql.
-//
-// It is safe to call more than once.
+// For the inbuilt datasource it creates the database file and applies the
+// schema. For every other type it is a no-op, since the schema is applied by
+// the operator. It is safe to call more than once.
 func EnsureDatabase() error {
 
 	runtimeConfig := config.GetCDSRuntime().Config
@@ -47,7 +43,7 @@ func EnsureDatabase() error {
 		return nil
 	}
 
-	// Opening the shared handle creates the file and applies the schema.
+	// Opening the handle creates the file and applies the schema.
 	if _, err := getSQLiteDB(); err != nil {
 		return err
 	}
@@ -77,13 +73,11 @@ func ensureSQLiteDir(configuredPath string) error {
 	return nil
 }
 
-// initializeSQLiteSchema applies the embedded SQLite schema. Every statement in
-// the script uses IF NOT EXISTS, so applying it to an existing database is a
-// no-op and concurrent starts are harmless.
+// initializeSQLiteSchema applies the embedded schema. The script is idempotent,
+// so applying it to an existing database is a no-op.
 func initializeSQLiteSchema(db *sql.DB) error {
 
-	// The driver executes a multi-statement script in a single Exec. A
-	// transaction keeps a partial failure from leaving a half-built database.
+	// A transaction keeps a partial failure from leaving a half-built database.
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin the inbuilt database schema transaction: %v", err)
@@ -107,11 +101,9 @@ func initializeSQLiteSchema(db *sql.DB) error {
 	return nil
 }
 
-// applySchemaStatements executes a DDL script one statement at a time.
-//
-// Comments are stripped before the script is split, because a comment may itself
-// contain a semicolon and would otherwise be split into a fragment that is not
-// valid SQL.
+// applySchemaStatements executes a DDL script one statement at a time. Comments
+// are stripped first, since one may contain a semicolon and split the script in
+// the wrong place.
 func applySchemaStatements(db *sql.DB, script string) error {
 
 	for _, statement := range strings.Split(stripSQLComments(script), ";") {

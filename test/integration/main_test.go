@@ -35,16 +35,15 @@ import (
 	"github.com/wso2/identity-customer-data-service/test/setup"
 )
 
-// suiteDB is the datasource the suite is running against, exposed for the tests
-// that need the handle itself rather than a client over it.
+// suiteDB is the datasource the suite is running against, for the tests that
+// need the handle rather than a client over it.
 var (
 	suiteDB     *sql.DB
 	suiteDBType string
 )
 
 // TestMain runs the suite against the datasource named by CDS_TEST_DB:
-// "postgres" (the default, using a Testcontainers PostgreSQL instance) or
-// "sqlite" (the inbuilt database, which needs no Docker).
+// "postgres" (the default) or "sqlite".
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 

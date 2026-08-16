@@ -16,18 +16,14 @@
  * under the License.
  */
 
-// Package dbscripts embeds the database schema scripts into the binary.
+// Package dbscripts embeds the schema of the inbuilt database.
 //
-// Only the SQLite script is embedded: it is applied automatically at startup so
-// the inbuilt database needs no external tooling. postgres.sql stays an
-// operator-applied artifact, since creating a PostgreSQL schema requires
-// privileges (CREATE EXTENSION pg_trgm) that the service is not assumed to have.
+// postgres.sql is not embedded; it is applied by the operator.
 package dbscripts
 
 import _ "embed"
 
-// SQLiteSchema is the DDL for the inbuilt SQLite database. Every statement is
-// idempotent, so it can be applied to an existing database safely.
+// SQLiteSchema is the schema of the inbuilt database.
 //
 //go:embed sqlite.sql
 var SQLiteSchema string

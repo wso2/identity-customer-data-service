@@ -25,14 +25,9 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 )
 
-// Tx is a transaction that carries the dialect of the connection it was started
-// on.
-//
-// A raw *sql.Tx takes statement text, which would force every store running a
-// transaction to resolve the dialect itself — the one thing this design removes
-// from the stores. Tx takes a DBQuery instead and resolves it the same way the
-// client does, so a transactional store and a non-transactional store are
-// written identically.
+// Tx is a transaction that carries the dialect of the connection it started on,
+// so a store runs statements inside a transaction the same way it runs them
+// outside one.
 type Tx struct {
 	internal *sql.Tx
 	dbType   string
@@ -73,8 +68,7 @@ func (t *Tx) Exec(query DBQuery, args ...interface{}) (sql.Result, error) {
 	return result, nil
 }
 
-// Query runs a statement that returns rows. The caller owns the returned rows
-// and must close them.
+// Query runs a statement that returns rows. The caller must close them.
 func (t *Tx) Query(query DBQuery, args ...interface{}) (*sql.Rows, error) {
 
 	if t.dbType == database.TypeSQLite {

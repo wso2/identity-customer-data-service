@@ -42,21 +42,15 @@ var (
 )
 
 // SetTestDB installs a database handle used by every subsequent GetDBClient
-// call, bypassing the configured datasource. dbType selects the SQL dialect and
-// the scan normalization behaviour; an empty value defaults to PostgreSQL so
-// existing callers keep their current semantics.
+// call, bypassing the configured datasource. An empty dbType means PostgreSQL.
 func SetTestDB(db *sql.DB, dbType string) {
 	testDBOverride = db
 	testDBTypeOverride = dbType
 }
 
-// sqliteHandle caches the single *sql.DB used for the inbuilt database.
-//
-// Unlike PostgreSQL, where each store call opens and closes its own connection,
-// SQLite is a local file: reopening it per call would re-acquire locks and
-// checkpoint the WAL on every query. One shared pooled handle is opened on first
-// use instead, and the client handed to callers treats Close as a no-op so the
-// existing `defer dbClient.Close()` calls in the stores remain correct.
+// sqliteHandle is the single pooled handle for the inbuilt database. Reopening
+// a local file per store call would re-acquire locks on every query, so it is
+// opened once and the client treats Close as a no-op.
 var (
 	sqliteHandle *sql.DB
 	sqliteOnce   sync.Once
@@ -81,10 +75,7 @@ func NewDBProvider() DBProviderInterface {
 // GetDBClient returns a database client for the configured datasource.
 func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 
-	// The test handle is owned by the suite that installed it and outlives every
-	// client handed out from it, so Close must not close the pool. A shared
-	// client makes that true by construction, rather than depending on an
-	// environment variable being set.
+	// The suite owns the test handle, so Close must leave it open.
 	if testDBOverride != nil {
 		return client.NewSharedDBClient(testDBOverride, resolveDBType(testDBTypeOverride)), nil
 	}
@@ -93,7 +84,6 @@ func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 	runtimeConfig := config.GetCDSRuntime().Config
 	dbType := resolveDBType(runtimeConfig.DataSource.Type)
 
-	// The inbuilt database is backed by a single shared handle.
 	if dbType == database.TypeSQLite {
 		db, err := getSQLiteDB()
 		if err != nil {
@@ -194,9 +184,7 @@ func getDBConfig(dataSource config.Config) (DBConfig, error) {
 		}, nil
 
 	default:
-		// PostgreSQL. The driver name is taken verbatim from the configured type
-		// so that any other database/sql driver registered under that name keeps
-		// working exactly as before.
+		// PostgreSQL.
 		driverName := ds.Type
 		if driverName == "" {
 			driverName = database.DriverPostgres
@@ -224,7 +212,7 @@ func resolveSQLitePath(path string) (string, error) {
 }
 
 // resolveDBType normalizes a configured datasource type. An empty value means
-// PostgreSQL, preserving the behaviour of deployments that never set it.
+// PostgreSQL.
 func resolveDBType(dbType string) string {
 
 	normalized := strings.ToLower(strings.TrimSpace(dbType))
@@ -234,8 +222,7 @@ func resolveDBType(dbType string) string {
 	return normalized
 }
 
-// GetDBType returns the datasource type, which is also the dialect key used to
-// select a statement from the query maps in the scripts package.
+// GetDBType returns the configured datasource type.
 func (d *DBProvider) GetDBType() string {
 
 	if testDBOverride != nil {

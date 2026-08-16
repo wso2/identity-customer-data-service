@@ -33,16 +33,12 @@ import (
 // to the same character set the filter values allow.
 var safeJSONKey = regexp.MustCompile(constants.FilterRegex)
 
-// This file holds the dialect-specific SQL fragments needed by the query
-// builders that assemble statements at runtime, which the static maps in
-// queries.go cannot cover. Keeping them here means the SQL differences between
-// datasource types live in one place.
+// This file holds the dialect-specific SQL fragments used by the statements
+// that stores assemble at runtime, which queries.go cannot cover.
 
-// LikeOperator returns the case-insensitive pattern-match operator.
-//
-// PostgreSQL needs ILIKE. SQLite's LIKE is already case-insensitive for ASCII,
-// which is the closest available equivalent; it remains case-sensitive for
-// non-ASCII characters.
+// LikeOperator returns the case-insensitive pattern-match operator. SQLite's
+// LIKE is case-insensitive for ASCII, which is the closest equivalent of
+// PostgreSQL's ILIKE.
 func LikeOperator(dbType string) string {
 
 	if dbType == database.TypeSQLite {
@@ -66,16 +62,11 @@ func ValidateJSONKey(key string) error {
 }
 
 // JSONEqCondition builds an equality condition against a key nested inside a
-// JSON column, together with the argument to bind for it.
+// JSON column, together with the argument to bind for it. The argument is
+// returned because the two dialects need different ones, though both select the
+// same rows.
 //
-// The two dialects need different arguments, which is why the argument is
-// returned alongside the condition: PostgreSQL matches with the containment
-// operator, so it binds a JSON document shaped like the column; SQLite extracts
-// the value first, so it binds the value on its own. Both compare the value as
-// text, so the two forms select the same rows.
-//
-// path is the chain of keys to the value, e.g. ["email"] or
-// ["app_specific_data", "email"].
+// path is the chain of keys to the value, e.g. ["app_specific_data", "email"].
 func JSONEqCondition(dbType, column string, path []string, value string, argID int) (string, interface{}, error) {
 
 	if len(path) == 0 {
@@ -92,8 +83,7 @@ func JSONEqCondition(dbType, column string, path []string, value string, argID i
 		return condition, value, nil
 	}
 
-	// PostgreSQL: build the JSON document to test for containment, so the GIN
-	// indexes on the JSON columns remain usable.
+	// PostgreSQL matches by containment, which keeps the GIN indexes usable.
 	valueJSON, err := json.Marshal(value)
 	if err != nil {
 		return "", nil, err
@@ -111,8 +101,7 @@ func JSONEqCondition(dbType, column string, path []string, value string, argID i
 }
 
 // JSONLikeCondition builds a case-insensitive pattern-match condition against a
-// key nested inside a JSON column. The caller binds the pattern itself, which is
-// the same for both dialects.
+// key nested inside a JSON column. The caller binds the pattern.
 func JSONLikeCondition(dbType, column string, path []string, argID int) (string, error) {
 
 	if len(path) == 0 {
@@ -142,8 +131,7 @@ func JSONLikeCondition(dbType, column string, path []string, argID int) (string,
 }
 
 // sqliteJSONPath renders a JSON path expression for json_extract. Each key is
-// quoted so that a key containing a dot is treated as a single key rather than
-// as a nested lookup, matching how PostgreSQL's ->> reads it.
+// quoted so that a key containing a dot is not read as a nested lookup.
 func sqliteJSONPath(path []string) string {
 
 	var builder strings.Builder
@@ -158,8 +146,6 @@ func sqliteJSONPath(path []string) string {
 }
 
 // KeysetCondition builds the row-value comparison used for cursor pagination.
-// SQLite supports row values but not the casts PostgreSQL needs to type the
-// parameters.
 func KeysetCondition(dbType, operator string, timestampArgID, idArgID int) string {
 
 	if dbType == database.TypeSQLite {
@@ -169,11 +155,9 @@ func KeysetCondition(dbType, operator string, timestampArgID, idArgID int) strin
 		operator, timestampArgID, idArgID)
 }
 
-// EncodeStringArray prepares a list of strings for storage.
-//
-// The destinations column is a PostgreSQL TEXT[], which lib/pq encodes; SQLite
-// has no array type, so the same data is stored as a JSON array. DecodeStringArray
-// reads back either representation.
+// EncodeStringArray prepares a list of strings for storage: a PostgreSQL array
+// or, since SQLite has no array type, a JSON array. DecodeStringArray reads
+// back either form.
 func EncodeStringArray(dbType string, values []string) interface{} {
 
 	if dbType != database.TypeSQLite {
@@ -192,8 +176,7 @@ func EncodeStringArray(dbType string, values []string) interface{} {
 }
 
 // DecodeStringArray reads a list of strings written by EncodeStringArray, in
-// either the PostgreSQL array literal form ("{a,b}") or the JSON array form
-// ("[\"a\",\"b\"]").
+// either form.
 func DecodeStringArray(raw interface{}) []string {
 
 	var text string

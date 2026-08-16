@@ -1,36 +1,8 @@
 -- SQLite schema for the inbuilt CDS database.
 --
--- This is the SQLite counterpart of postgres.sql and MUST be kept in sync with
--- it. It is embedded into the binary (see embed.go) and applied automatically on
--- startup when `datasource.type` is "sqlite", so every statement is written with
--- IF NOT EXISTS and the script is safe to re-run on an existing database.
---
--- Translation notes, relative to postgres.sql:
---   * SERIAL PRIMARY KEY          -> INTEGER PRIMARY KEY AUTOINCREMENT
---   * TIMESTAMPTZ                 -> TIMESTAMP. The declared type matters: the
---                                   driver scans TIMESTAMP/DATETIME columns back
---                                   into time.Time, but not TIMESTAMPTZ.
---   * DEFAULT now()               -> DEFAULT (strftime(...)||'+00:00'). Do NOT
---                                   replace this with datetime('now'): that drops
---                                   the sub-second part and the UTC offset, and
---                                   these columns are compared as text by the
---                                   keyset pagination in GetProfilesByOrgId.
---   * JSONB                       -> JSONB, holding JSON text. The declared type
---                                   is kept so the client can hand these columns
---                                   back to the stores as []byte, matching
---                                   lib/pq.
---   * TEXT[] (destinations)       -> TEXT, holding a JSON array.
---   * pg_trgm and all GIN indexes -> omitted; SQLite has no equivalent. The
---                                   `co`/`sw` filters and JSON filtering fall
---                                   back to table scans, which is acceptable at
---                                   the scale the inbuilt database targets.
---   * ALTER TABLE ... ADD CONSTRAINT -> omitted; SQLite does not support it, and
---                                   the inline UNIQUE (profile_id, app_id) on
---                                   application_data already provides the
---                                   constraint that ON CONFLICT relies on.
---
--- VARCHAR(n) lengths are retained for readability but are not enforced by
--- SQLite (TEXT affinity).
+-- This is the SQLite counterpart of postgres.sql and must be kept in sync with
+-- it. It is applied automatically on startup, so every statement is written with
+-- IF NOT EXISTS and the script is safe to re-run.
 
 CREATE TABLE IF NOT EXISTS profile_unification_modes
 (

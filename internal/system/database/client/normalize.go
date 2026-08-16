@@ -23,33 +23,23 @@ import (
 	"time"
 )
 
-// The stores read query results out of []map[string]interface{} with direct type
-// assertions, which means the concrete Go type each column arrives as is part of
-// the contract. lib/pq and modernc.org/sqlite disagree on several of those types:
+// The stores read query results with direct type assertions, so the Go type a
+// column arrives as is part of the contract. lib/pq and modernc.org/sqlite
+// disagree on several of those types:
 //
 //	column type   lib/pq       modernc.org/sqlite
 //	-----------   ----------   ------------------
 //	JSONB         []byte       string
 //	BOOLEAN       bool         int64 (0/1)
-//	TIMESTAMP     time.Time    time.Time, or text if the column is not declared
-//	              	           TIMESTAMP/DATETIME
+//	TIMESTAMP     time.Time    time.Time, or text
 //
-// The helpers below coerce SQLite results to the lib/pq shapes so the stores
-// need no engine-specific branching. They are driven by the column's *declared*
-// type, which SQLite reports through ColumnTypes, so adding a column to
-// dbscripts/sqlite.sql needs no change here as long as it is declared with one of
-// the types recognised below.
-//
-// Every coercion is idempotent and nil-safe: a value that already has the target
-// type, or is NULL, is returned unchanged.
+// The helpers below coerce SQLite results to the lib/pq shapes, driven by the
+// column's declared type, so the stores need no engine-specific branching and a
+// new column needs no change here. Every coercion is idempotent and nil-safe.
 
 // sqliteTimeLayouts are the formats the inbuilt database stores timestamps in.
-//
-// The first covers both driver-written values (`_time_format=sqlite`, variable
-// sub-second precision) and the schema's strftime defaults; it also matches
-// values with no sub-second part at all. The second is a defensive fallback for
-// databases written before `_time_format=sqlite` was set, where the driver used
-// time.Time.String().
+// The second is a fallback for databases written before the DSN pinned the
+// format.
 var sqliteTimeLayouts = []string{
 	"2006-01-02 15:04:05.999999999-07:00",
 	"2006-01-02 15:04:05.999999999 -0700 MST",
@@ -109,8 +99,7 @@ const (
 	columnClassTime
 )
 
-// sqliteColumnClass maps a declared column type to its coercion class. The
-// declared types come from dbscripts/sqlite.sql.
+// sqliteColumnClass maps a declared column type to its coercion class.
 func sqliteColumnClass(declaredType string) columnClass {
 
 	switch strings.ToUpper(strings.TrimSpace(declaredType)) {
@@ -142,7 +131,7 @@ func parseSQLiteTime(value string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// parseSQLiteBool interprets the textual boolean spellings SQLite may hold.
+// parseSQLiteBool interprets the boolean spellings SQLite may hold.
 func parseSQLiteBool(value string) bool {
 
 	switch strings.ToLower(strings.TrimSpace(value)) {

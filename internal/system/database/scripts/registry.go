@@ -20,16 +20,10 @@ package scripts
 
 import "github.com/wso2/identity-customer-data-service/internal/system/database/model"
 
-// AllQueries is the catalogue of every statement declared in queries.go, keyed
-// by its Go name.
+// AllQueries is every statement declared in queries.go, keyed by its Go name,
+// so the tests can check each one without executing it.
 //
-// It exists so a statement can be checked without being executed: the tests
-// prepare each one against a real database, which validates the SQL grammar and
-// every table and column it references, and assert that the IDs are unique.
-//
-// The list is maintained by hand. A statement added to queries.go and not added
-// here is simply never checked, which the ID uniqueness test cannot detect —
-// deriving it from the declarations is a separate change.
+// The list is maintained by hand: a statement missing from it is never checked.
 func AllQueries() map[string]model.DBQuery {
 
 	return map[string]model.DBQuery{
@@ -94,8 +88,7 @@ func AllQueries() map[string]model.DBQuery {
 		"UpdateInitialSchemaSyncDoneConfig":           UpdateInitialSchemaSyncDoneConfig,
 		"HealthCheckPing":                             HealthCheckPing,
 
-		// Templates the stores complete at runtime. See completeStatement in the
-		// tests for how each one is filled in before it is prepared.
+		// Templates the stores complete at runtime.
 		"InsertIdentityClaimsForProfileSchema":      InsertIdentityClaimsForProfileSchema,
 		"UpsertIdentityClaimsForProfileSchema":      UpsertIdentityClaimsForProfileSchema,
 		"InsertProfileSchemaAttributesForScope":     InsertProfileSchemaAttributesForScope,

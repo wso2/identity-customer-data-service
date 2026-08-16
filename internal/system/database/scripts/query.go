@@ -22,8 +22,8 @@ import "github.com/wso2/identity-customer-data-service/internal/system/database/
 
 // newQuery declares a statement.
 //
-// id permanently identifies the statement and follows the convention
-// `CDS-<DOMAIN>-<NN>`, where DOMAIN groups the tables the statement touches:
+// id follows the convention `CDS-<DOMAIN>-<NN>`, where DOMAIN groups the tables
+// the statement touches:
 //
 //	CDS-APP  applications
 //	CDS-SCH  profile_schema
@@ -32,17 +32,14 @@ import "github.com/wso2/identity-customer-data-service/internal/system/database/
 //	CDS-CON  consent_categories, consent_category_attributes, profile_consents
 //	CDS-CKI  profile_cookies, cookie_profiles
 //	CDS-CFG  cds_config
-//	CDS-SYS  statements bound to no table (connectivity checks)
+//	CDS-SYS  statements bound to no table
 //
-// An ID is an identifier, not a position: when a statement is added, take the
-// next unused number in its domain rather than renumbering the existing ones.
+// An id is permanent: give a new statement the next unused number in its
+// domain instead of renumbering the existing ones.
 //
-// base is the PostgreSQL statement and is also used for every other supported
-// datasource unless an override is supplied. Most statements need no override:
-// SQLite accepts `$N` placeholders, `ON CONFLICT ... DO UPDATE` and `EXCLUDED`,
-// and row-value comparisons. Pass sqliteOverride only where the dialects
-// genuinely differ — PostgreSQL `::` casts and `now()` are the cases in
-// practice.
+// base is the PostgreSQL statement, and is used for every other datasource
+// unless an override is supplied. Most statements need no override; pass one
+// only where the dialects differ.
 func newQuery(id, base string, sqliteOverride ...string) model.DBQuery {
 
 	query := model.DBQuery{

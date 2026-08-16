@@ -48,8 +48,8 @@ COPY --from=builder /app/dbscripts ./dbscripts
 COPY --from=builder /app/version.txt .
 
 # Ensure correct permissions.
-# The inbuilt SQLite datasource writes its database under /app/repository, which
-# the image owner can write to. Mount a volume there to keep it across restarts.
+# The inbuilt database is written under /app/repository; mount a volume there to
+# keep it across restarts.
 RUN chown -R 10001:10001 /app && \
     chmod 755 /app/cds
 

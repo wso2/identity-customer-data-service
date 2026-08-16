@@ -89,7 +89,7 @@ func Test_initializeSQLiteSchema(t *testing.T) {
 	}
 }
 
-// Test_applySchemaStatements covers the fallback used when the driver rejects a
+// Test_applySchemaStatements covers the fallback for drivers that reject a
 // multi-statement script.
 func Test_applySchemaStatements(t *testing.T) {
 
@@ -107,8 +107,8 @@ func Test_applySchemaStatements(t *testing.T) {
 	}
 }
 
-// Test_initializedSchemaAcceptsWrites checks that the schema is usable, not just
-// syntactically valid: an insert must round-trip and the foreign keys must be on.
+// Test_initializedSchemaAcceptsWrites checks that the schema is usable: an
+// insert must round-trip and the foreign keys must be on.
 func Test_initializedSchemaAcceptsWrites(t *testing.T) {
 
 	db, _ := openTestSQLite(t)

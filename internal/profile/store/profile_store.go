@@ -1022,10 +1022,8 @@ func GetAllProfilesWithFilter(
 		limit = 200
 	}
 
-	// The dialect is needed here, not to pick a statement, but because the bind
-	// arguments themselves differ: a containment document on PostgreSQL versus a
-	// scalar on SQLite. It comes from the client rather than the provider so the
-	// statement and the arguments are resolved against the same connection.
+	// The dialect is needed here because the bind arguments differ per
+	// datasource, not to select a statement.
 	dbType := dbClient.DBType()
 	baseSQL := scripts.GetAllProfilesWithFilterBase.GetQuery(dbType)
 	likeOperator := scripts.LikeOperator(dbType)

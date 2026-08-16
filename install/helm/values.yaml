@@ -42,11 +42,6 @@ cloud:
           schema:
             enabled: true
             interval: 3600 # in seconds
-        # CDS also supports an inbuilt SQLite datasource (type: "sqlite"), but it
-        # is a local file owned by a single process: it cannot be shared between
-        # pods and would give each replica its own data. Keep this as "postgres"
-        # unless the deployment is scaled down to a single replica with a
-        # persistent volume for the database directory.
         datasource:
           type: "postgres"
           hostname: "localhost"

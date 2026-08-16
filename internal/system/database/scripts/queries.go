@@ -26,8 +26,7 @@ var UpsertApplication = newQuery("CDS-APP-01",
 			org_handle = EXCLUDED.org_handle,
 			client_id  = EXCLUDED.client_id,
 			updated_at = now()`,
-	// SQLite has no now(); strftime is used so the value matches the format the
-	// schema defaults and the driver write for timestamp columns.
+	// SQLite has no now(). strftime matches the format the schema defaults use.
 	`INSERT INTO applications (app_id, org_handle, client_id, updated_at)
 		VALUES ($1, $2, $3, strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00')
 		ON CONFLICT (app_id) DO UPDATE SET
@@ -133,16 +132,13 @@ var DeleteProfileSchemaAttributeById = newQuery("CDS-SCH-13",
 	`DELETE FROM profile_schema WHERE org_handle = $1 AND attribute_id = $2`)
 
 // DeleteStaleIdentityClaimsForProfileSchema removes the identity attributes the
-// identity server no longer reports. The %s is the NOT IN list, whose width
-// depends on the number of incoming attributes; $1 is the organization and the
-// list starts at $2.
+// identity server no longer reports. The %s is the NOT IN list.
 var DeleteStaleIdentityClaimsForProfileSchema = newQuery("CDS-SCH-14",
 	`DELETE FROM profile_schema WHERE org_handle = $1 AND scope = 'identity_attributes'
 	 AND attribute_id NOT IN (%s)`)
 
 // UpdateProfileSchemaAttributeFields is the prefix of a partial update. The
-// caller appends the SET assignments and the WHERE clause, both of which depend
-// on which fields the request carries.
+// caller appends the SET assignments and the WHERE clause.
 var UpdateProfileSchemaAttributeFields = newQuery("CDS-SCH-15",
 	`UPDATE profile_schema SET `)
 
@@ -266,11 +262,8 @@ var GetProfilesByOrgId = newQuery("CDS-PRF-10",
 			CASE WHEN $4 <> 'prev' THEN p.created_at END DESC,
 			CASE WHEN $4 <> 'prev' THEN p.profile_id END DESC
 		LIMIT $5;`,
-	// Same statement without the casts, which PostgreSQL needs to type the
-	// parameters in the row-value comparison but SQLite does not accept. The
-	// row-value comparison itself and the placeholder order are unchanged:
-	// timestamps are stored as fixed-shape UTC text, so comparing them
-	// lexicographically matches chronological order.
+	// Same statement without the casts, which SQLite does not accept. The
+	// comparison is unchanged: timestamps are stored as sortable UTC text.
 	`
 		SELECT
 			p.profile_id,
@@ -308,8 +301,7 @@ var GetProfilesByOrgId = newQuery("CDS-PRF-10",
 var DeleteProfileByProfileId = newQuery("CDS-PRF-11",
 	`DELETE FROM application_data WHERE profile_id = $1`)
 
-// DeleteProfile removes the profile row itself, after its application data has
-// been deleted.
+// DeleteProfile removes the profile row, after its application data is gone.
 var DeleteProfile = newQuery("CDS-PRF-18",
 	`DELETE FROM profiles WHERE profile_id = $1`)
 
@@ -362,17 +354,11 @@ var GetAllReferenceProfileExceptCurrent = newQuery("CDS-PRF-15",
 		r.profile_status = 'REFERENCE_PROFILE'
 		AND p.profile_id != $1
 		AND p.org_handle = $2;`,
-	// Same statement, ordered by insertion. This query lists the candidate
-	// profiles that a newly created profile is matched against, and unification
-	// stops at the first match, so the row order decides which hierarchy a
-	// profile joins. PostgreSQL returns these rows in insertion order in
-	// practice, while SQLite is free to return them in any order, which would
-	// leave the outcome up to the storage layout. Ordering by rowid reproduces
-	// the insertion order PostgreSQL already yields.
-	//
-	// Ordering by created_at would not work here: this query does not select
-	// created_at, so a master profile built from these rows is persisted with a
-	// zero creation time, and every master would compare equal.
+	// Same statement, ordered by insertion. Unification stops at the first
+	// match, so the row order decides which hierarchy a profile joins.
+	// PostgreSQL returns these rows in insertion order in practice, while
+	// SQLite is free to return them in any order, so rowid reproduces it.
+	// created_at cannot be used: this statement does not select it.
 	`
 	SELECT
 		p.profile_id,
@@ -423,9 +409,7 @@ var UpsertDefaultIdentityDataCategory = newQuery("CDS-CON-05",
 				WHERE NOT EXISTS (
 					SELECT 1 FROM consent_categories WHERE org_handle = $3::VARCHAR AND is_mandatory = TRUE
 				)`,
-	// The casts exist so PostgreSQL can type the parameters through the
-	// sub-select; SQLite infers them. destinations holds a JSON array here
-	// rather than a TEXT[] (see scripts.EncodeStringArray).
+	// Same statement without the casts, which SQLite infers.
 	`INSERT INTO consent_categories (category_name, category_identifier, org_handle, purpose, destinations, is_mandatory)
 				SELECT $1, $2, $3, $4, $5, TRUE
 				WHERE NOT EXISTS (
@@ -462,8 +446,7 @@ var DeleteConsentCategoryAttributesByCategoryId = newQuery("CDS-CON-14",
 	`DELETE FROM consent_category_attributes WHERE category_id = $1`)
 
 // GetConsentCategoryAttributesByCategoryIds fetches the attributes of several
-// categories in one round trip. The %s is the IN list, whose width depends on
-// the number of categories.
+// categories in one round trip. The %s is the IN list.
 var GetConsentCategoryAttributesByCategoryIds = newQuery("CDS-CON-15",
 	`SELECT category_id, scope, attribute_name, attribute_id, application_identifier
 	 FROM consent_category_attributes WHERE category_id IN (%s)`)
@@ -511,6 +494,5 @@ var UpdateInitialSchemaSyncDoneConfig = newQuery("CDS-CFG-04",
                  ON CONFLICT (org_handle, config) 
                  DO UPDATE SET value = EXCLUDED.value`)
 
-// HealthCheckPing is the cheapest statement that proves the datasource answers.
-// It touches no table, so it is valid on both dialects as written.
+// HealthCheckPing checks that the datasource answers.
 var HealthCheckPing = newQuery("CDS-SYS-01", `SELECT 1;`)

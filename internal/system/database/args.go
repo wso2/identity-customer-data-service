@@ -20,16 +20,13 @@ package database
 
 // NormalizeSQLiteArgs prepares query arguments for the inbuilt database.
 //
-// The stores pass marshalled JSON as []byte, which binds as a BLOB. SQLite's
-// JSON functions treat a BLOB argument as the binary JSONB encoding rather than
-// JSON text, and a BLOB is opaque when inspecting the file with the sqlite3 CLI.
-// Binding these as text avoids both problems.
+// The stores pass marshalled JSON as []byte, which SQLite stores as a BLOB
+// rather than as JSON text. Binding these as text keeps the JSON functions
+// working and the column readable.
 //
-// This lives in the database package rather than next to the scan-side
-// normalization so that both statement paths reach it: the client for
-// standalone statements and the transaction wrapper for statements inside a
-// transaction. Applying it in only one of the two would store the same JSON
-// column as TEXT on one path and as a BLOB on the other.
+// It lives here so that both the client and the transaction wrapper can apply
+// it, and a JSON column is stored the same way inside and outside a
+// transaction.
 func NormalizeSQLiteArgs(args []interface{}) []interface{} {
 
 	if len(args) == 0 {

@@ -26,8 +26,8 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 )
 
-// postgresDataSource is the datasource configuration a PostgreSQL deployment has
-// today, with no sqlite block present.
+// postgresDataSource is the configuration of an existing PostgreSQL
+// deployment, with no sqlite block.
 func postgresDataSource(dbType string) config.Config {
 
 	return config.Config{
@@ -43,9 +43,8 @@ func postgresDataSource(dbType string) config.Config {
 	}
 }
 
-// Test_getDBConfig_postgres pins the PostgreSQL DSN. Adding the inbuilt database
-// must not change what an existing deployment connects with, so this asserts the
-// exact string rather than its parts.
+// Test_getDBConfig_postgres pins the PostgreSQL DSN, which the inbuilt database
+// must not change.
 func Test_getDBConfig_postgres(t *testing.T) {
 
 	expectedDSN := "host=localhost port=5432 user=cdsuser password=cdspwd dbname=cdsdb sslmode=disable"
@@ -163,10 +162,9 @@ func Test_resolveDBType(t *testing.T) {
 	}
 }
 
-// Test_unsupportedDBTypeIsRejected records that normalization is not validation.
-// resolveDBType lowercases and trims whatever it is given, so an unrecognised
-// value passes through unchanged; the startup check in cmd/server is what
-// refuses to run on it.
+// Test_unsupportedDBTypeIsRejected records that normalization is not
+// validation: resolveDBType passes an unrecognised value through, and the
+// startup check is what refuses to run on it.
 func Test_unsupportedDBTypeIsRejected(t *testing.T) {
 
 	if normalized := resolveDBType(" MySQL "); normalized != "mysql" {
