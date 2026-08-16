@@ -81,8 +81,12 @@ func NewDBProvider() DBProviderInterface {
 // GetDBClient returns a database client for the configured datasource.
 func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 
+	// The test handle is owned by the suite that installed it and outlives every
+	// client handed out from it, so Close must not close the pool. A shared
+	// client makes that true by construction, rather than depending on an
+	// environment variable being set.
 	if testDBOverride != nil {
-		return client.NewDBClient(testDBOverride, resolveDBType(testDBTypeOverride)), nil
+		return client.NewSharedDBClient(testDBOverride, resolveDBType(testDBTypeOverride)), nil
 	}
 
 	// Production DB setup

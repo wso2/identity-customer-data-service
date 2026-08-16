@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
+	dbmodel "github.com/wso2/identity-customer-data-service/internal/system/database/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 )
 
@@ -162,8 +163,10 @@ func forceSharedCreatedAt(t *testing.T, org string, count int) []string {
 	require.NoError(t, err)
 	defer dbClient.Close()
 
-	rows, err := dbClient.ExecuteQuery(
-		`SELECT profile_id FROM profiles WHERE org_handle = $1 ORDER BY created_at ASC`, org)
+	rows, err := dbClient.ExecuteQuery(dbmodel.DBQuery{
+		ID:    "TEST-PAG-01",
+		Query: `SELECT profile_id FROM profiles WHERE org_handle = $1 ORDER BY created_at ASC`,
+	}, org)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(rows), count)
 
@@ -174,8 +177,10 @@ func forceSharedCreatedAt(t *testing.T, org string, count int) []string {
 		profileId, ok := row["profile_id"].(string)
 		require.True(t, ok, "unexpected profile_id type %T", row["profile_id"])
 
-		_, err := dbClient.ExecuteQuery(
-			`UPDATE profiles SET created_at = $1 WHERE profile_id = $2`, shared, profileId)
+		_, err := dbClient.ExecuteQuery(dbmodel.DBQuery{
+			ID:    "TEST-PAG-02",
+			Query: `UPDATE profiles SET created_at = $1 WHERE profile_id = $2`,
+		}, shared, profileId)
 		require.NoError(t, err)
 
 		ids = append(ids, profileId)

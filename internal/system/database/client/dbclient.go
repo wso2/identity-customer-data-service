@@ -20,18 +20,27 @@ package client
 
 import (
 	"database/sql"
-	"os"
+	"fmt"
 	"strings"
 
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/model"
 	_ "modernc.org/sqlite"
 )
 
 // DBClientInterface defines the interface for database operations.
+//
+// Statements are passed as a model.DBQuery rather than as text: the client owns
+// the datasource type, so it is the one place that decides which dialect a
+// statement runs as. Stores name a statement and stay dialect-agnostic.
 type DBClientInterface interface {
-	ExecuteQuery(query string, args ...interface{}) ([]map[string]interface{}, error)
-	BeginTx() (*sql.Tx, error)
+	ExecuteQuery(query model.DBQuery, args ...interface{}) ([]map[string]interface{}, error)
+	BeginTx() (*model.Tx, error)
+	// DBType exposes the dialect for the few runtime statement builders whose
+	// bind arguments — not just their SQL text — differ per engine. Stores must
+	// not use it to look up a statement.
+	DBType() string
 	Close() error
 }
 
@@ -67,17 +76,21 @@ func NewSharedDBClient(db *sql.DB, dbType string) DBClientInterface {
 	}
 }
 
-// ExecuteQuery executes a SELECT query and returns the result as a slice of maps.
-func (client *DBClient) ExecuteQuery(query string, args ...interface{}) ([]map[string]interface{}, error) {
+// ExecuteQuery executes a query and returns the result as a slice of maps.
+func (client *DBClient) ExecuteQuery(query model.DBQuery, args ...interface{}) (
+	[]map[string]interface{}, error) {
 
 	isSQLite := client.dbType == database.TypeSQLite
 	if isSQLite {
-		args = normalizeSQLiteArgs(args)
+		args = database.NormalizeSQLiteArgs(args)
 	}
 
-	rows, err := client.db.Query(query, args...)
+	// The single place a statement is resolved to a dialect.
+	sqlText := query.GetQuery(client.dbType)
+
+	rows, err := client.db.Query(sqlText, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query %s failed: %w", query.ID, err)
 	}
 	defer rows.Close()
 
@@ -130,17 +143,30 @@ func (client *DBClient) ExecuteQuery(query string, args ...interface{}) ([]map[s
 	return results, nil
 }
 
-// BeginTx starts a new database transaction.
-func (client *DBClient) BeginTx() (*sql.Tx, error) {
+// BeginTx starts a new database transaction. The returned transaction carries
+// the dialect, so statements run inside it are resolved the same way as those
+// run through ExecuteQuery.
+func (client *DBClient) BeginTx() (*model.Tx, error) {
 
-	return client.db.Begin()
+	tx, err := client.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return model.NewTx(tx, client.dbType), nil
+}
+
+// DBType returns the datasource type this client is connected to.
+func (client *DBClient) DBType() string {
+
+	return client.dbType
 }
 
 // Close closes the database connection. It is a no-op when the connection pool
-// is owned by the provider (the inbuilt database) or when running under tests.
-func (c *DBClient) Close() error {
-	if c.shared || os.Getenv("TEST_MODE") == "true" {
+// is owned by the caller rather than by this client.
+func (client *DBClient) Close() error {
+
+	if client.shared {
 		return nil
 	}
-	return c.db.Close()
+	return client.db.Close()
 }

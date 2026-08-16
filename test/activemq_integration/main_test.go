@@ -42,7 +42,6 @@ import (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	os.Setenv("TEST_MODE", "true")
 
 	// ── Start PostgreSQL ──────────────────────────────────────────────────────
 	pg, err := setup.SetupTestPostgres(ctx)

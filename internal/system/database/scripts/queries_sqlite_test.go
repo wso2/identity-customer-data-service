@@ -19,8 +19,6 @@
 package scripts_test
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
@@ -28,113 +26,35 @@ import (
 	"github.com/wso2/identity-customer-data-service/test/setup"
 )
 
-// placeholders returns "($1, $2, ... $n)", the value tuple the stores build at
-// runtime for the batch-insert statements.
-func placeholders(n int) string {
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = fmt.Sprintf("$%d", i+1)
-	}
-	return "(" + strings.Join(parts, ", ") + ")"
-}
+// TestQueryIDsAreUniqueAndPopulated guards the property the IDs exist for: an ID
+// names a statement in the error a failing query returns, so an empty or reused
+// ID points at the wrong statement, or at none.
+func TestQueryIDsAreUniqueAndPopulated(t *testing.T) {
 
-// allQueries lists every statement declared in queries.go, keyed by its name.
-func allQueries() map[string]map[string]string {
-	return map[string]map[string]string{
-		"UpsertApplication":                           scripts.UpsertApplication,
-		"GetAppIdentifierByClientID":                  scripts.GetAppIdentifierByClientID,
-		"DeleteProfileSchemaForOrg":                   scripts.DeleteProfileSchemaForOrg,
-		"GetProfileSchemaByOrg":                       scripts.GetProfileSchemaByOrg,
-		"DeleteIdentityClaimsOfProfileSchema":         scripts.DeleteIdentityClaimsOfProfileSchema,
-		"GetProfileSchemaAttributeByName":             scripts.GetProfileSchemaAttributeByName,
-		"GetProfileSchemaAttributeByScope":            scripts.GetProfileSchemaAttributeByScope,
-		"UpdateProfileSchemaAttributesForSchema":      scripts.UpdateProfileSchemaAttributesForSchema,
-		"DeleteProfileSchemaAttributeForScope":        scripts.DeleteProfileSchemaAttributeForScope,
-		"GetProfileSchemaAttributeById":               scripts.GetProfileSchemaAttributeById,
-		"FilterProfileSchemaAttributes":               scripts.FilterProfileSchemaAttributes,
-		"DeleteProfileSchemaAttributeById":            scripts.DeleteProfileSchemaAttributeById,
-		"GetUnificationRules":                         scripts.GetUnificationRules,
-		"GetUnificationRule":                          scripts.GetUnificationRule,
-		"DeleteUnificationRule":                       scripts.DeleteUnificationRule,
-		"InsertUnificationRule":                       scripts.InsertUnificationRule,
-		"UpdateUnificationRule":                       scripts.UpdateUnificationRule,
-		"InsertProfile":                               scripts.InsertProfile,
-		"InsertProfileReference":                      scripts.InsertProfileReference,
-		"GetProfileById":                              scripts.GetProfileById,
-		"GetProfileConsentsByProfileId":               scripts.GetProfileConsentsByProfileId,
-		"DeleteProfileConsentsByProfileId":            scripts.DeleteProfileConsentsByProfileId,
-		"InsertProfileConsentsByProfileId":            scripts.InsertProfileConsentsByProfileId,
-		"GetAppDataByProfileId":                       scripts.GetAppDataByProfileId,
-		"GetAppDataByAppId":                           scripts.GetAppDataByAppId,
-		"UpdateProfile":                               scripts.UpdateProfile,
-		"UpsertProfileReference":                      scripts.UpsertProfileReference,
-		"UpdateProfileReference":                      scripts.UpdateProfileReference,
-		"GetProfilesByOrgId":                          scripts.GetProfilesByOrgId,
-		"DeleteProfileByProfileId":                    scripts.DeleteProfileByProfileId,
-		"InsertApplicationData":                       scripts.InsertApplicationData,
-		"DeleteProfileReference":                      scripts.DeleteProfileReference,
-		"GetAllProfilesWithFilterBase":                scripts.GetAllProfilesWithFilterBase,
-		"GetAllReferenceProfileExceptCurrent":         scripts.GetAllReferenceProfileExceptCurrent,
-		"FetchReferencedProfiles":                     scripts.FetchReferencedProfiles,
-		"GetProfileByUserId":                          scripts.GetProfileByUserId,
-		"InsertConsentCategory":                       scripts.InsertConsentCategory,
-		"UpsertDefaultIdentityDataCategory":           scripts.UpsertDefaultIdentityDataCategory,
-		"GetAllConsentCategories":                     scripts.GetAllConsentCategories,
-		"GetConsentCategoryById":                      scripts.GetConsentCategoryById,
-		"GetConsentCategoryByName":                    scripts.GetConsentCategoryByName,
-		"GetMandatoryConsentCategoryIdsByOrg":         scripts.GetMandatoryConsentCategoryIdsByOrg,
-		"UpdateConsentCategory":                       scripts.UpdateConsentCategory,
-		"DeleteConsentCategory":                       scripts.DeleteConsentCategory,
-		"InsertConsentCategoryAttribute":              scripts.InsertConsentCategoryAttribute,
-		"GetConsentCategoryAttributesByCategoryId":    scripts.GetConsentCategoryAttributesByCategoryId,
-		"DeleteConsentCategoryAttributesByCategoryId": scripts.DeleteConsentCategoryAttributesByCategoryId,
-		"InsertCookie":                                scripts.InsertCookie,
-		"GetCookieByCookieId":                         scripts.GetCookieByCookieId,
-		"GetCookieByProfileId":                        scripts.GetCookieByProfileId,
-		"UpdateCookieStatusByProfileId":               scripts.UpdateCookieStatusByProfileId,
-		"UpdateCookieStatusByCookieId":                scripts.UpdateCookieStatusByCookieId,
-		"DeleteCookieById":                            scripts.DeleteCookieById,
-		"DeleteCookieByProfileId":                     scripts.DeleteCookieByProfileId,
-		"GetOrgConfigurations":                        scripts.GetOrgConfigurations,
-		"UpdateOrgConfiguration":                      scripts.UpdateOrgConfiguration,
-		"GetOrgConfiguration":                         scripts.GetOrgConfiguration,
-		"UpdateInitialSchemaSyncDoneConfig":           scripts.UpdateInitialSchemaSyncDoneConfig,
-
-		"InsertIdentityClaimsForProfileSchema":  scripts.InsertIdentityClaimsForProfileSchema,
-		"UpsertIdentityClaimsForProfileSchema":  scripts.UpsertIdentityClaimsForProfileSchema,
-		"InsertProfileSchemaAttributesForScope": scripts.InsertProfileSchemaAttributesForScope,
-		"GetAppDataByProfileIds":                scripts.GetAppDataByProfileIds,
-		"DeleteInactiveCookies":                 scripts.DeleteInactiveCookies,
+	owners := map[string]string{}
+	for name, query := range scripts.AllQueries() {
+		if query.ID == "" {
+			t.Errorf("%s has no ID", name)
+			continue
+		}
+		if owner, taken := owners[query.ID]; taken {
+			t.Errorf("%s and %s share the ID %q", owner, name, query.ID)
+			continue
+		}
+		owners[query.ID] = name
 	}
 }
 
-// completeStatement returns the statement as a store executes it. Some statements
-// are templates that the stores complete at runtime, and an incomplete statement
-// cannot be prepared.
-func completeStatement(name, statement string) string {
-
-	switch name {
-	case "InsertIdentityClaimsForProfileSchema":
-		return statement + placeholders(13)
-	case "InsertProfileSchemaAttributesForScope":
-		return statement + placeholders(12)
-	case "UpsertIdentityClaimsForProfileSchema":
-		return fmt.Sprintf(statement, placeholders(13))
-	case "GetAppDataByProfileIds":
-		return fmt.Sprintf(statement, "$1")
-	default:
-		return statement
-	}
-}
-
-// TestQueriesAreDefinedForEverySupportedType guards against a statement that
+// TestQueriesResolveForEverySupportedType guards against a statement that
 // resolves to the empty string, which a store would send to the database as-is.
-func TestQueriesAreDefinedForEverySupportedType(t *testing.T) {
+// An override is optional, so this also covers the fallback to the PostgreSQL
+// statement.
+func TestQueriesResolveForEverySupportedType(t *testing.T) {
 
-	for name, query := range allQueries() {
-		for _, dbType := range []string{database.TypePostgres, database.TypeSQLite} {
-			if query[dbType] == "" {
-				t.Errorf("%s has no statement for %q", name, dbType)
+	for name, query := range scripts.AllQueries() {
+		for _, dbType := range database.SupportedTypes {
+			if query.GetQuery(dbType) == "" {
+				t.Errorf("%s resolves to an empty statement for %q", name, dbType)
 			}
 		}
 	}
@@ -144,6 +64,9 @@ func TestQueriesAreDefinedForEverySupportedType(t *testing.T) {
 // schema. Preparing validates the SQL grammar and every table and column the
 // statement references, so this covers both dbscripts/sqlite.sql and the SQLite
 // variants in queries.go without needing valid argument values.
+//
+// The PostgreSQL text is prepared by the integration suite, which is where a
+// PostgreSQL instance is available.
 func TestSQLiteQueriesPrepare(t *testing.T) {
 
 	testDB, err := setup.SetupTestSQLite()
@@ -152,16 +75,13 @@ func TestSQLiteQueriesPrepare(t *testing.T) {
 	}
 	defer testDB.Terminate()
 
-	for name, query := range allQueries() {
-		if name == "DeleteInactiveCookies" {
-			// Skipped on purpose: it targets a table named "cookie_profiles",
-			// while the schema defines "profile_cookies". That is a pre-existing
-			// defect on PostgreSQL too, and is not addressed here.
-			continue
-		}
-
+	for name, query := range scripts.AllQueries() {
 		t.Run(name, func(t *testing.T) {
-			statement := completeStatement(name, query[database.TypeSQLite])
+			if reason := setup.SkipPreparing(name); reason != "" {
+				t.Skip(reason)
+			}
+
+			statement := setup.CompleteStatement(name, query.GetQuery(database.TypeSQLite))
 			stmt, err := testDB.DB.Prepare(statement)
 			if err != nil {
 				t.Fatalf("failed to prepare the query: %v\n%s", err, statement)

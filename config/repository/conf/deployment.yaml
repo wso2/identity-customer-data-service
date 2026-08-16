@@ -113,7 +113,9 @@ message_queue:
 # as "postgres" for production and for any deployment that runs more than one
 # CDS instance, since the inbuilt database is a local file owned by one process.
 datasource:
-  type: "postgres" # Options: "postgres" (default), "sqlite"
+  # Only "postgres" (the default, also used when this is left empty) and "sqlite"
+  # are accepted. Any other value is rejected at startup.
+  type: "postgres"
   hostname: "localhost"
   port: 5432
   username: "postgres"

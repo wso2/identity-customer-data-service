@@ -1,0 +1,108 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package scripts
+
+import "github.com/wso2/identity-customer-data-service/internal/system/database/model"
+
+// AllQueries is the catalogue of every statement declared in queries.go, keyed
+// by its Go name.
+//
+// It exists so a statement can be checked without being executed: the tests
+// prepare each one against a real database, which validates the SQL grammar and
+// every table and column it references, and assert that the IDs are unique.
+//
+// The list is maintained by hand. A statement added to queries.go and not added
+// here is simply never checked, which the ID uniqueness test cannot detect —
+// deriving it from the declarations is a separate change.
+func AllQueries() map[string]model.DBQuery {
+
+	return map[string]model.DBQuery{
+		"UpsertApplication":                           UpsertApplication,
+		"GetAppIdentifierByClientID":                  GetAppIdentifierByClientID,
+		"DeleteProfileSchemaForOrg":                   DeleteProfileSchemaForOrg,
+		"GetProfileSchemaByOrg":                       GetProfileSchemaByOrg,
+		"DeleteIdentityClaimsOfProfileSchema":         DeleteIdentityClaimsOfProfileSchema,
+		"GetProfileSchemaAttributeByName":             GetProfileSchemaAttributeByName,
+		"GetProfileSchemaAttributeByScope":            GetProfileSchemaAttributeByScope,
+		"UpdateProfileSchemaAttributesForSchema":      UpdateProfileSchemaAttributesForSchema,
+		"DeleteProfileSchemaAttributeForScope":        DeleteProfileSchemaAttributeForScope,
+		"GetProfileSchemaAttributeById":               GetProfileSchemaAttributeById,
+		"FilterProfileSchemaAttributes":               FilterProfileSchemaAttributes,
+		"DeleteProfileSchemaAttributeById":            DeleteProfileSchemaAttributeById,
+		"GetUnificationRules":                         GetUnificationRules,
+		"GetUnificationRule":                          GetUnificationRule,
+		"DeleteUnificationRule":                       DeleteUnificationRule,
+		"InsertUnificationRule":                       InsertUnificationRule,
+		"UpdateUnificationRule":                       UpdateUnificationRule,
+		"InsertProfile":                               InsertProfile,
+		"InsertProfileReference":                      InsertProfileReference,
+		"GetProfileById":                              GetProfileById,
+		"GetProfileConsentsByProfileId":               GetProfileConsentsByProfileId,
+		"DeleteProfileConsentsByProfileId":            DeleteProfileConsentsByProfileId,
+		"InsertProfileConsentsByProfileId":            InsertProfileConsentsByProfileId,
+		"GetAppDataByProfileId":                       GetAppDataByProfileId,
+		"GetAppDataByAppId":                           GetAppDataByAppId,
+		"UpdateProfile":                               UpdateProfile,
+		"UpsertProfileReference":                      UpsertProfileReference,
+		"UpdateProfileReference":                      UpdateProfileReference,
+		"GetProfilesByOrgId":                          GetProfilesByOrgId,
+		"DeleteProfileByProfileId":                    DeleteProfileByProfileId,
+		"DeleteProfile":                               DeleteProfile,
+		"InsertApplicationData":                       InsertApplicationData,
+		"DeleteProfileReference":                      DeleteProfileReference,
+		"GetAllProfilesWithFilterBase":                GetAllProfilesWithFilterBase,
+		"GetAllReferenceProfileExceptCurrent":         GetAllReferenceProfileExceptCurrent,
+		"FetchReferencedProfiles":                     FetchReferencedProfiles,
+		"GetProfileByUserId":                          GetProfileByUserId,
+		"InsertConsentCategory":                       InsertConsentCategory,
+		"UpsertDefaultIdentityDataCategory":           UpsertDefaultIdentityDataCategory,
+		"GetAllConsentCategories":                     GetAllConsentCategories,
+		"GetConsentCategoryById":                      GetConsentCategoryById,
+		"GetConsentCategoryByName":                    GetConsentCategoryByName,
+		"GetMandatoryConsentCategoryIdsByOrg":         GetMandatoryConsentCategoryIdsByOrg,
+		"UpdateConsentCategory":                       UpdateConsentCategory,
+		"DeleteConsentCategory":                       DeleteConsentCategory,
+		"InsertConsentCategoryAttribute":              InsertConsentCategoryAttribute,
+		"GetConsentCategoryAttributesByCategoryId":    GetConsentCategoryAttributesByCategoryId,
+		"DeleteConsentCategoryAttributesByCategoryId": DeleteConsentCategoryAttributesByCategoryId,
+		"InsertCookie":                                InsertCookie,
+		"GetCookieByCookieId":                         GetCookieByCookieId,
+		"GetCookieByProfileId":                        GetCookieByProfileId,
+		"UpdateCookieStatusByProfileId":               UpdateCookieStatusByProfileId,
+		"UpdateCookieStatusByCookieId":                UpdateCookieStatusByCookieId,
+		"DeleteCookieById":                            DeleteCookieById,
+		"DeleteCookieByProfileId":                     DeleteCookieByProfileId,
+		"GetOrgConfigurations":                        GetOrgConfigurations,
+		"UpdateOrgConfiguration":                      UpdateOrgConfiguration,
+		"GetOrgConfiguration":                         GetOrgConfiguration,
+		"UpdateInitialSchemaSyncDoneConfig":           UpdateInitialSchemaSyncDoneConfig,
+		"HealthCheckPing":                             HealthCheckPing,
+
+		// Templates the stores complete at runtime. See completeStatement in the
+		// tests for how each one is filled in before it is prepared.
+		"InsertIdentityClaimsForProfileSchema":      InsertIdentityClaimsForProfileSchema,
+		"UpsertIdentityClaimsForProfileSchema":      UpsertIdentityClaimsForProfileSchema,
+		"InsertProfileSchemaAttributesForScope":     InsertProfileSchemaAttributesForScope,
+		"UpdateProfileSchemaAttributeFields":        UpdateProfileSchemaAttributeFields,
+		"DeleteStaleIdentityClaimsForProfileSchema": DeleteStaleIdentityClaimsForProfileSchema,
+		"GetAppDataByProfileIds":                    GetAppDataByProfileIds,
+		"GetConsentCategoryAttributesByCategoryIds": GetConsentCategoryAttributesByCategoryIds,
+		"DeleteInactiveCookies":                     DeleteInactiveCookies,
+	}
+}

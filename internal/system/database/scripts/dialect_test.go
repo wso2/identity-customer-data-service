@@ -29,29 +29,39 @@ import (
 func Test_newQuery(t *testing.T) {
 
 	t.Run("without an override both dialects share the statement", func(t *testing.T) {
-		query := newQuery(`SELECT 1`)
-		if query[database.TypePostgres] != `SELECT 1` {
-			t.Fatalf("unexpected PostgreSQL statement: %q", query[database.TypePostgres])
+		query := newQuery("CDS-TST-01", `SELECT 1`)
+		if query.ID != "CDS-TST-01" {
+			t.Fatalf("unexpected id: %q", query.ID)
 		}
-		if query[database.TypeSQLite] != `SELECT 1` {
-			t.Fatalf("unexpected SQLite statement: %q", query[database.TypeSQLite])
+		if statement := query.GetQuery(database.TypePostgres); statement != `SELECT 1` {
+			t.Fatalf("unexpected PostgreSQL statement: %q", statement)
+		}
+		if statement := query.GetQuery(database.TypeSQLite); statement != `SELECT 1` {
+			t.Fatalf("unexpected SQLite statement: %q", statement)
 		}
 	})
 
 	t.Run("an override applies to SQLite only", func(t *testing.T) {
-		query := newQuery(`SELECT now()`, `SELECT current_timestamp`)
-		if query[database.TypePostgres] != `SELECT now()` {
-			t.Fatalf("the override leaked into the PostgreSQL statement: %q", query[database.TypePostgres])
+		query := newQuery("CDS-TST-02", `SELECT now()`, `SELECT current_timestamp`)
+		if statement := query.GetQuery(database.TypePostgres); statement != `SELECT now()` {
+			t.Fatalf("the override leaked into the PostgreSQL statement: %q", statement)
 		}
-		if query[database.TypeSQLite] != `SELECT current_timestamp` {
-			t.Fatalf("unexpected SQLite statement: %q", query[database.TypeSQLite])
+		if statement := query.GetQuery(database.TypeSQLite); statement != `SELECT current_timestamp` {
+			t.Fatalf("unexpected SQLite statement: %q", statement)
 		}
 	})
 
 	t.Run("an empty override falls back to the base statement", func(t *testing.T) {
-		query := newQuery(`SELECT 1`, "")
-		if query[database.TypeSQLite] != `SELECT 1` {
-			t.Fatalf("unexpected SQLite statement: %q", query[database.TypeSQLite])
+		query := newQuery("CDS-TST-03", `SELECT 1`, "")
+		if statement := query.GetQuery(database.TypeSQLite); statement != `SELECT 1` {
+			t.Fatalf("unexpected SQLite statement: %q", statement)
+		}
+	})
+
+	t.Run("an unrecognised dialect falls back to the base statement", func(t *testing.T) {
+		query := newQuery("CDS-TST-04", `SELECT 1`, `SELECT 2`)
+		if statement := query.GetQuery("mysql"); statement != `SELECT 1` {
+			t.Fatalf("expected the PostgreSQL statement, got %q", statement)
 		}
 	})
 }

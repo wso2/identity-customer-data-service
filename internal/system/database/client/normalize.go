@@ -152,27 +152,3 @@ func parseSQLiteBool(value string) bool {
 		return false
 	}
 }
-
-// normalizeSQLiteArgs prepares query arguments for the inbuilt database.
-//
-// The stores pass marshalled JSON as []byte, which binds as a BLOB. SQLite's
-// JSON functions treat a BLOB argument as the binary JSONB encoding rather than
-// JSON text, and a BLOB is opaque when inspecting the file with the sqlite3 CLI.
-// Binding these as text avoids both problems.
-func normalizeSQLiteArgs(args []interface{}) []interface{} {
-
-	if len(args) == 0 {
-		return args
-	}
-
-	normalized := make([]interface{}, len(args))
-	for i, arg := range args {
-		if raw, ok := arg.([]byte); ok {
-			normalized[i] = string(raw)
-			continue
-		}
-		normalized[i] = arg
-	}
-
-	return normalized
-}

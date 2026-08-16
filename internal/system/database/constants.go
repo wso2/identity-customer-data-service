@@ -33,6 +33,28 @@ const (
 	TypeSQLite = "sqlite"
 )
 
+// SupportedTypes lists every value `datasource.type` accepts, in the order they
+// are reported to the operator when the configured value is rejected.
+var SupportedTypes = []string{TypePostgres, TypeSQLite}
+
+// IsSupportedType reports whether dbType is a datasource CDS can run on.
+//
+// A statement carries PostgreSQL text and an optional SQLite override, and any
+// dialect without an override falls back to the PostgreSQL text. An unsupported
+// type would therefore run PostgreSQL SQL against whatever driver happens to be
+// registered under that name, which fails one statement at a time rather than
+// at startup. The configured type is validated once instead, before the first
+// connection is opened.
+func IsSupportedType(dbType string) bool {
+
+	for _, supported := range SupportedTypes {
+		if dbType == supported {
+			return true
+		}
+	}
+	return false
+}
+
 // Driver names registered with database/sql by the imported driver packages:
 // github.com/lib/pq registers "postgres" and modernc.org/sqlite registers
 // "sqlite".

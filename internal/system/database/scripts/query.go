@@ -18,10 +18,24 @@
 
 package scripts
 
-import "github.com/wso2/identity-customer-data-service/internal/system/database"
+import "github.com/wso2/identity-customer-data-service/internal/system/database/model"
 
-// newQuery builds a statement keyed by datasource type, as returned by
-// DBProvider.GetDBType.
+// newQuery declares a statement.
+//
+// id permanently identifies the statement and follows the convention
+// `CDS-<DOMAIN>-<NN>`, where DOMAIN groups the tables the statement touches:
+//
+//	CDS-APP  applications
+//	CDS-SCH  profile_schema
+//	CDS-UNR  unification_rules, profile_unification_*
+//	CDS-PRF  profiles, profile_reference, application_data
+//	CDS-CON  consent_categories, consent_category_attributes, profile_consents
+//	CDS-CKI  profile_cookies, cookie_profiles
+//	CDS-CFG  cds_config
+//	CDS-SYS  statements bound to no table (connectivity checks)
+//
+// An ID is an identifier, not a position: when a statement is added, take the
+// next unused number in its domain rather than renumbering the existing ones.
 //
 // base is the PostgreSQL statement and is also used for every other supported
 // datasource unless an override is supplied. Most statements need no override:
@@ -29,18 +43,14 @@ import "github.com/wso2/identity-customer-data-service/internal/system/database"
 // and row-value comparisons. Pass sqliteOverride only where the dialects
 // genuinely differ — PostgreSQL `::` casts and `now()` are the cases in
 // practice.
-//
-// Populating every supported dialect here is what keeps a lookup from silently
-// resolving to an empty statement.
-func newQuery(base string, sqliteOverride ...string) map[string]string {
+func newQuery(id, base string, sqliteOverride ...string) model.DBQuery {
 
-	sqlite := base
-	if len(sqliteOverride) > 0 && sqliteOverride[0] != "" {
-		sqlite = sqliteOverride[0]
+	query := model.DBQuery{
+		ID:    id,
+		Query: base,
 	}
-
-	return map[string]string{
-		database.TypePostgres: base,
-		database.TypeSQLite:   sqlite,
+	if len(sqliteOverride) > 0 {
+		query.SQLiteQuery = sqliteOverride[0]
 	}
+	return query
 }

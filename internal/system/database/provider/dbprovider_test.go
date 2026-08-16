@@ -154,12 +154,30 @@ func Test_resolveDBType(t *testing.T) {
 		"Postgres":  database.TypePostgres,
 		"sqlite":    database.TypeSQLite,
 		" SQLite  ": database.TypeSQLite,
-		"mysql":     "mysql",
 	}
 
 	for configured, expected := range testCases {
 		if actual := resolveDBType(configured); actual != expected {
 			t.Errorf("resolveDBType(%q) = %q, expected %q", configured, actual, expected)
+		}
+	}
+}
+
+// Test_unsupportedDBTypeIsRejected records that normalization is not validation.
+// resolveDBType lowercases and trims whatever it is given, so an unrecognised
+// value passes through unchanged; the startup check in cmd/server is what
+// refuses to run on it.
+func Test_unsupportedDBTypeIsRejected(t *testing.T) {
+
+	if normalized := resolveDBType(" MySQL "); normalized != "mysql" {
+		t.Errorf("resolveDBType(%q) = %q, expected %q", " MySQL ", normalized, "mysql")
+	}
+	if database.IsSupportedType("mysql") {
+		t.Error("mysql is not a datasource CDS can run on and must not be reported as supported")
+	}
+	for _, supported := range []string{database.TypePostgres, database.TypeSQLite} {
+		if !database.IsSupportedType(supported) {
+			t.Errorf("%q must be reported as supported", supported)
 		}
 	}
 }

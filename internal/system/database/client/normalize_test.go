@@ -88,20 +88,3 @@ func Test_normalizeSQLiteValue_timeIsUTC(t *testing.T) {
 		t.Fatalf("expected %s, got %s", expected, parsed)
 	}
 }
-
-func Test_normalizeSQLiteArgs(t *testing.T) {
-
-	t.Run("json bytes are bound as text", func(t *testing.T) {
-		normalized := normalizeSQLiteArgs([]interface{}{[]byte(`{"a":1}`), "plain", 7, nil})
-		expected := []interface{}{`{"a":1}`, "plain", 7, nil}
-		if !reflect.DeepEqual(normalized, expected) {
-			t.Fatalf("expected %#v, got %#v", expected, normalized)
-		}
-	})
-
-	t.Run("no arguments", func(t *testing.T) {
-		if normalized := normalizeSQLiteArgs(nil); len(normalized) != 0 {
-			t.Fatalf("expected no arguments, got %#v", normalized)
-		}
-	})
-}

@@ -118,7 +118,7 @@ func InsertProfile(profile model.Profile) error {
 		profileStatus = constants.MergedTo
 	}
 
-	query := scripts.InsertProfile[provider.NewDBProvider().GetDBType()]
+	query := scripts.InsertProfile
 
 	_, err = dbClient.ExecuteQuery(query,
 		profile.ProfileId,
@@ -144,7 +144,7 @@ func InsertProfile(profile model.Profile) error {
 		return serverError
 	}
 
-	referenceQuery := scripts.InsertProfileReference[provider.NewDBProvider().GetDBType()]
+	referenceQuery := scripts.InsertProfileReference
 
 	_, err = dbClient.ExecuteQuery(referenceQuery,
 		profile.ProfileId,
@@ -228,7 +228,7 @@ func GetProfile(profileId string) (*model.Profile, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetProfileById[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetProfileById
 
 	results, err := dbClient.ExecuteQuery(query, profileId)
 
@@ -274,7 +274,7 @@ func GetProfileConsents(profileId string) ([]model.ConsentRecord, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetProfileConsentsByProfileId[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetProfileConsentsByProfileId
 
 	results, err := dbClient.ExecuteQuery(query, profileId)
 
@@ -328,7 +328,7 @@ func FetchApplicationData(profileId string) ([]model.ApplicationData, error) {
 		return nil, serverError
 	}
 	defer dbClient.Close()
-	query := scripts.GetAppDataByProfileId[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetAppDataByProfileId
 	results, err := dbClient.ExecuteQuery(query, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed fetching application data for profile with Id: %s", profileId)
@@ -386,7 +386,7 @@ func FetchApplicationDataWithAppId(profileId string, appId string) (model.Applic
 		return model.ApplicationData{}, serverError
 	}
 	defer dbClient.Close()
-	query := scripts.GetAppDataByAppId[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetAppDataByAppId
 	results, err := dbClient.ExecuteQuery(query, profileId, appId)
 	var app model.ApplicationData
 	if err != nil {
@@ -458,7 +458,7 @@ func UpdateProfile(profile model.Profile) error {
 		profileStatus = constants.MergedTo
 	}
 
-	query := scripts.UpdateProfile[provider.NewDBProvider().GetDBType()]
+	query := scripts.UpdateProfile
 
 	_, err = dbClient.ExecuteQuery(query,
 		profile.UserId,
@@ -480,7 +480,7 @@ func UpdateProfile(profile model.Profile) error {
 		return serverError
 	}
 
-	query = scripts.UpsertProfileReference[provider.NewDBProvider().GetDBType()]
+	query = scripts.UpsertProfileReference
 
 	_, err = dbClient.ExecuteQuery(query,
 		profile.ProfileId,
@@ -540,7 +540,7 @@ func GetAllProfiles(orgHandle string, limit int, cursor *model.ProfileCursor) ([
 		limit = 200
 	}
 
-	query := scripts.GetProfilesByOrgId[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetProfilesByOrgId
 
 	var cursorTime interface{} = nil
 	var cursorProfileId string = ""
@@ -641,8 +641,7 @@ func FetchApplicationDataBatch(profileIDs []string) (map[string][]model.Applicat
 		args = append(args, id)
 	}
 
-	base := scripts.GetAppDataByProfileIds[provider.NewDBProvider().GetDBType()]
-	query := fmt.Sprintf(base, strings.Join(placeholders, ","))
+	query := scripts.GetAppDataByProfileIds.Format(strings.Join(placeholders, ","))
 
 	rows, err := dbClient.ExecuteQuery(query, args...)
 	if err != nil {
@@ -705,7 +704,7 @@ func DeleteProfile(profileId string) error {
 	defer dbClient.Close()
 
 	// Step 1: Delete application_data explicitly (optional if ON DELETE CASCADE not enabled)
-	_, err = dbClient.ExecuteQuery(scripts.DeleteProfileByProfileId[provider.NewDBProvider().GetDBType()], profileId)
+	_, err = dbClient.ExecuteQuery(scripts.DeleteProfileByProfileId, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("failed to delete application data for profile: %s", profileId)
 		logger.Debug(errorMsg, log.Error(err))
@@ -733,7 +732,7 @@ func DeleteProfile(profileId string) error {
 	//}
 
 	// Step 3: Delete the profile itself
-	result, err := dbClient.ExecuteQuery(`DELETE FROM profiles WHERE profile_id = $1`, profileId)
+	result, err := dbClient.ExecuteQuery(scripts.DeleteProfile, profileId)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Debug(fmt.Sprintf("No profile found with the given Id: %s", profileId))
@@ -803,7 +802,7 @@ func UpsertAppDatum(profileId string, appId string, updates map[string]interface
 	}
 
 	// Upsert into application_data table
-	query := scripts.InsertApplicationData[provider.NewDBProvider().GetDBType()]
+	query := scripts.InsertApplicationData
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
@@ -851,7 +850,7 @@ func DetachRefererProfileFromReference(referenceProfileId, profileId string) err
 	defer dbClient.Close()
 
 	// todo: decide if we need to delete the references as well.
-	query := scripts.DeleteProfileReference[provider.NewDBProvider().GetDBType()]
+	query := scripts.DeleteProfileReference
 	result, err := dbClient.ExecuteQuery(query, referenceProfileId, profileId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to delete child relationship of child: %s of parent: %s",
@@ -1023,8 +1022,12 @@ func GetAllProfilesWithFilter(
 		limit = 200
 	}
 
-	dbType := provider.NewDBProvider().GetDBType()
-	baseSQL := scripts.GetAllProfilesWithFilterBase[dbType]
+	// The dialect is needed here, not to pick a statement, but because the bind
+	// arguments themselves differ: a containment document on PostgreSQL versus a
+	// scalar on SQLite. It comes from the client rather than the provider so the
+	// statement and the arguments are resolved against the same connection.
+	dbType := dbClient.DBType()
+	baseSQL := scripts.GetAllProfilesWithFilterBase.GetQuery(dbType)
 	likeOperator := scripts.LikeOperator(dbType)
 
 	var conditions []string
@@ -1237,7 +1240,7 @@ func GetAllProfilesWithFilter(
 	finalSQL := fmt.Sprintf("%s\n%s\n%s\nLIMIT $%d", baseSQL, whereClause, orderClause, argID)
 	args = append(args, limitPlusOne)
 
-	results, err := dbClient.ExecuteQuery(finalSQL, args...)
+	results, err := dbClient.ExecuteQuery(scripts.GetAllProfilesWithFilterBase.WithSQL(finalSQL), args...)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to execute filtered query: %s", err)
 		logger.Debug(errorMsg, log.Error(err))
@@ -1321,7 +1324,7 @@ func GetAllReferenceProfilesExceptForCurrent(currentProfile model.Profile) ([]mo
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetAllReferenceProfileExceptCurrent[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetAllReferenceProfileExceptCurrent
 
 	results, err := dbClient.ExecuteQuery(query, currentProfile.ProfileId, currentProfile.OrgHandle)
 	if err != nil {
@@ -1430,7 +1433,7 @@ func UpdateProfileReferences(parentProfile model.Profile, children []model.Refer
 		}, err)
 		return serverError
 	}
-	query := scripts.UpdateProfileReference[provider.NewDBProvider().GetDBType()]
+	query := scripts.UpdateProfileReference
 
 	for _, child := range children {
 		_, err := tx.Exec(query, parentProfile.ProfileId, child.Reason, constants.MergedTo, child.ProfileId)
@@ -1478,7 +1481,7 @@ func FetchReferencedProfiles(referenceProfileId string) ([]model.Reference, erro
 		return nil, serverError
 	}
 	defer dbClient.Close()
-	query := scripts.FetchReferencedProfiles[provider.NewDBProvider().GetDBType()]
+	query := scripts.FetchReferencedProfiles
 
 	results, err := dbClient.ExecuteQuery(query, referenceProfileId)
 	if err != nil {
@@ -1651,7 +1654,7 @@ func GetProfileWithUserId(userId string) (*model.Profile, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetProfileByUserId[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetProfileByUserId
 
 	results, err := dbClient.ExecuteQuery(query, userId)
 
@@ -1696,7 +1699,7 @@ func CreateProfileCookie(profileCookie model.ProfileCookie) error {
 	}
 	defer dbClient.Close()
 
-	query := scripts.InsertCookie[provider.NewDBProvider().GetDBType()]
+	query := scripts.InsertCookie
 
 	_, err = dbClient.ExecuteQuery(query, profileCookie.CookieId, profileCookie.ProfileId, profileCookie.IsActive)
 	if err != nil {
@@ -1730,7 +1733,7 @@ func GetProfileCookieByProfileId(profileId string) (*model.ProfileCookie, error)
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetCookieByProfileId[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetCookieByProfileId
 
 	results, err := dbClient.ExecuteQuery(query, profileId)
 
@@ -1768,7 +1771,7 @@ func GetProfileCookie(cookie string) (*model.ProfileCookie, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetCookieByCookieId[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetCookieByCookieId
 
 	results, err := dbClient.ExecuteQuery(query, cookie)
 
@@ -1806,7 +1809,7 @@ func UpdateProfileCookieByProfileId(profileId string, isActive bool) error {
 	}
 	defer dbClient.Close()
 
-	query := scripts.UpdateCookieStatusByProfileId[provider.NewDBProvider().GetDBType()]
+	query := scripts.UpdateCookieStatusByProfileId
 
 	_, err = dbClient.ExecuteQuery(query, isActive, profileId)
 	if err != nil {
@@ -1840,7 +1843,7 @@ func UpdateProfileCookieByCookieId(cookieId string, isActive bool) error {
 	}
 	defer dbClient.Close()
 
-	query := scripts.UpdateCookieStatusByCookieId[provider.NewDBProvider().GetDBType()]
+	query := scripts.UpdateCookieStatusByCookieId
 
 	_, err = dbClient.ExecuteQuery(query, isActive, cookieId)
 	if err != nil {
@@ -1873,7 +1876,7 @@ func DeleteProfileCookieByProfile(profileId string) error {
 	}
 	defer dbClient.Close()
 
-	query := scripts.DeleteCookieByProfileId[provider.NewDBProvider().GetDBType()]
+	query := scripts.DeleteCookieByProfileId
 
 	_, err = dbClient.ExecuteQuery(query, profileId)
 	if err != nil {
@@ -1907,7 +1910,7 @@ func DeleteInactiveCookieProfiles(batchSize int) (int, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.DeleteInactiveCookies[provider.NewDBProvider().GetDBType()]
+	query := scripts.DeleteInactiveCookies
 
 	results, err := dbClient.ExecuteQuery(query, batchSize)
 	if err != nil {
@@ -1959,7 +1962,7 @@ func UpdateProfileConsents(profileId string, consents []model.ConsentRecord) err
 
 	// First, delete existing consents for this profile to ensure a clean slate
 
-	deleteQuery := scripts.DeleteProfileConsentsByProfileId[provider.NewDBProvider().GetDBType()]
+	deleteQuery := scripts.DeleteProfileConsentsByProfileId
 	_, err = tx.Exec(deleteQuery, profileId)
 	if err != nil {
 		_ = tx.Rollback()
@@ -1974,7 +1977,7 @@ func UpdateProfileConsents(profileId string, consents []model.ConsentRecord) err
 	}
 
 	// Insert new consent records
-	insertQuery := scripts.InsertProfileConsentsByProfileId[provider.NewDBProvider().GetDBType()]
+	insertQuery := scripts.InsertProfileConsentsByProfileId
 	for _, consent := range consents {
 
 		_, err = tx.Exec(insertQuery,
