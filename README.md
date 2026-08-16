@@ -7,7 +7,8 @@ Lightweight, extensible Customer Data Server built to power personalized experie
 
 - Go 1.26+
 - cURL
-- Docker — only if you run CDS on PostgreSQL. The inbuilt database needs nothing extra.
+- Docker — only if you run CDS on PostgreSQL or ActiveMQ. The inbuilt database
+  and the in-memory queue need nothing extra.
 
 ---
 ### 🛠️ Configuration Steps
@@ -164,7 +165,7 @@ Apply the schema:
 docker exec -i postgres psql -U cdsuser -d cdsdb < dbscripts/postgres.sql
 ```
 
-Then point the datasource at it:
+Set `DB_PASSWORD=cdspwd` in your `dev.env`, and point the datasource at it:
 
 ```yaml
 datasource:
