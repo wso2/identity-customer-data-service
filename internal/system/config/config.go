@@ -65,7 +65,7 @@ type SQLiteConfig struct {
 
 // DataSourceConfig selects and configures the database.
 type DataSourceConfig struct {
-	Type string `yaml:"type"` // "postgres" (default) or "sqlite" (inbuilt)
+	Type string `yaml:"type"` // "sqlite" (inbuilt, the default) or "postgres"
 
 	// PostgreSQL settings. Read only when Type is "postgres".
 	Hostname string `yaml:"hostname"`

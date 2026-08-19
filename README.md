@@ -121,7 +121,7 @@ CDS runs on either of two datasources, selected by `datasource.type` in
 | | Option A — inbuilt (SQLite) | Option B — PostgreSQL |
 |---|---|---|
 | Setup | none | run a server, apply the DDL |
-| `datasource.type` | `sqlite` | `postgres` (the default) |
+| `datasource.type` | `sqlite` (the default) | `postgres` |
 | Best for | local development, demos, evaluation | production, multi-instance deployments |
 
 ### Option A: the inbuilt database
@@ -133,6 +133,9 @@ its schema on first start, so there is nothing to install and no DDL to run:
 datasource:
   type: "sqlite"
 ```
+
+Leaving `datasource.type` out selects the inbuilt database as well. The shipped
+`deployment.yaml` sets `postgres` explicitly, so edit it to switch.
 
 The database lives at `repository/database/cds.db`, relative to the CDS home
 directory. Set `datasource.sqlite.path` to put it elsewhere.

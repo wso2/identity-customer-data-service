@@ -42,7 +42,7 @@ var (
 )
 
 // SetTestDB installs a database handle used by every subsequent GetDBClient
-// call, bypassing the configured datasource. An empty dbType means PostgreSQL.
+// call, bypassing the configured datasource.
 func SetTestDB(db *sql.DB, dbType string) {
 	testDBOverride = db
 	testDBTypeOverride = dbType
@@ -77,12 +77,12 @@ func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 
 	// The suite owns the test handle, so Close must leave it open.
 	if testDBOverride != nil {
-		return client.NewSharedDBClient(testDBOverride, resolveDBType(testDBTypeOverride)), nil
+		return client.NewSharedDBClient(testDBOverride, database.ResolveType(testDBTypeOverride)), nil
 	}
 
 	// Production DB setup
 	runtimeConfig := config.GetCDSRuntime().Config
-	dbType := resolveDBType(runtimeConfig.DataSource.Type)
+	dbType := database.ResolveType(runtimeConfig.DataSource.Type)
 
 	if dbType == database.TypeSQLite {
 		db, err := getSQLiteDB()
@@ -163,7 +163,7 @@ func getDBConfig(dataSource config.Config) (DBConfig, error) {
 
 	ds := dataSource.DataSource
 
-	switch resolveDBType(ds.Type) {
+	switch database.ResolveType(ds.Type) {
 	case database.TypeSQLite:
 		path, err := resolveSQLitePath(ds.SQLite.Path)
 		if err != nil {
@@ -185,13 +185,8 @@ func getDBConfig(dataSource config.Config) (DBConfig, error) {
 
 	default:
 		// PostgreSQL.
-		driverName := ds.Type
-		if driverName == "" {
-			driverName = database.DriverPostgres
-		}
-
 		return DBConfig{
-			driverName: driverName,
+			driverName: ds.Type,
 			dsn: fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 				ds.Hostname, ds.Port, ds.Username, ds.Password, ds.Name, ds.SSLMode),
 		}, nil
@@ -211,22 +206,11 @@ func resolveSQLitePath(path string) (string, error) {
 	return filepath.Join(config.GetCDSRuntime().CDSHome, path), nil
 }
 
-// resolveDBType normalizes a configured datasource type. An empty value means
-// PostgreSQL.
-func resolveDBType(dbType string) string {
-
-	normalized := strings.ToLower(strings.TrimSpace(dbType))
-	if normalized == "" {
-		return database.TypePostgres
-	}
-	return normalized
-}
-
 // GetDBType returns the configured datasource type.
 func (d *DBProvider) GetDBType() string {
 
 	if testDBOverride != nil {
-		return resolveDBType(testDBTypeOverride)
+		return database.ResolveType(testDBTypeOverride)
 	}
-	return resolveDBType(config.GetCDSRuntime().Config.DataSource.Type)
+	return database.ResolveType(config.GetCDSRuntime().Config.DataSource.Type)
 }

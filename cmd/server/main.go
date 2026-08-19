@@ -27,7 +27,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -45,38 +44,17 @@ import (
 
 func initDatabaseFromConfig(cdsConfig *config.Config) error {
 
-	logger := log.GetLogger()
-
-	// An empty type means PostgreSQL.
-	dbType := strings.ToLower(strings.TrimSpace(cdsConfig.DataSource.Type))
-	if dbType == "" {
-		dbType = database.TypePostgres
-	}
-	if !database.IsSupportedType(dbType) {
-		return fmt.Errorf("unsupported datasource.type %q: supported types are %s",
-			cdsConfig.DataSource.Type, strings.Join(database.SupportedTypes, ", "))
+	if err := provider.ValidateDataSource(cdsConfig.DataSource); err != nil {
+		return err
 	}
 
-	// The inbuilt database needs no connection settings.
-	if dbType == database.TypeSQLite {
-		if err := provider.EnsureDatabase(); err != nil {
-			return err
-		}
-		return nil
+	ds := cdsConfig.DataSource
+	if database.ResolveType(ds.Type) == database.TypeSQLite {
+		return provider.EnsureDatabase()
 	}
 
-	host := cdsConfig.DataSource.Hostname
-	port := cdsConfig.DataSource.Port
-	user := cdsConfig.DataSource.Username
-	password := cdsConfig.DataSource.Password
-	dbname := cdsConfig.DataSource.Name
-
-	if host == "" || user == "" || password == "" || dbname == "" {
-		logger.Error("One or more Database configuration values are missing.")
-	}
-
-	logger.Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, db host:%s, "+
-		"db port:%d", dbname, host, port))
+	log.GetLogger().Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, "+
+		"db host:%s, db port:%d", ds.Name, ds.Hostname, ds.Port))
 
 	return nil
 }

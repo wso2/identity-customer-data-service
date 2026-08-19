@@ -31,6 +31,44 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
+// ValidateDataSource reports whether the datasource configuration is one CDS
+// can run on, so that a misconfigured server refuses to start rather than
+// answering every request with a database error.
+func ValidateDataSource(ds config.DataSourceConfig) error {
+
+	dbType := database.ResolveType(ds.Type)
+	if !database.IsSupportedType(dbType) {
+		return fmt.Errorf("unsupported datasource.type %q: supported types are %s",
+			ds.Type, strings.Join(database.SupportedTypes, ", "))
+	}
+
+	// The inbuilt database needs no connection settings.
+	if dbType == database.TypeSQLite {
+		return nil
+	}
+
+	var missing []string
+	for _, setting := range []struct {
+		name  string
+		value string
+	}{
+		{"hostname", ds.Hostname},
+		{"username", ds.Username},
+		{"password", ds.Password},
+		{"name", ds.Name},
+	} {
+		if setting.value == "" {
+			missing = append(missing, "datasource."+setting.name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("datasource.type is %q but these settings are missing: %s",
+			dbType, strings.Join(missing, ", "))
+	}
+
+	return nil
+}
+
 // EnsureDatabase prepares the configured datasource for use.
 //
 // For the inbuilt datasource it creates the database file and applies the
@@ -39,7 +77,7 @@ import (
 func EnsureDatabase() error {
 
 	runtimeConfig := config.GetCDSRuntime().Config
-	if resolveDBType(runtimeConfig.DataSource.Type) != database.TypeSQLite {
+	if database.ResolveType(runtimeConfig.DataSource.Type) != database.TypeSQLite {
 		return nil
 	}
 

@@ -62,19 +62,6 @@ func Test_getDBConfig_postgres(t *testing.T) {
 		}
 	})
 
-	t.Run("type not configured at all", func(t *testing.T) {
-		dbConfig, err := getDBConfig(postgresDataSource(""))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if dbConfig.dsn != expectedDSN {
-			t.Errorf("expected %q, got %q", expectedDSN, dbConfig.dsn)
-		}
-		if dbConfig.driverName != database.DriverPostgres {
-			t.Errorf("expected the postgres driver, got %q", dbConfig.driverName)
-		}
-	})
-
 	t.Run("an unrecognized type keeps using its own driver name", func(t *testing.T) {
 		dbConfig, err := getDBConfig(postgresDataSource("pgx"))
 		if err != nil {
@@ -144,39 +131,19 @@ func Test_getDBConfig_sqlite(t *testing.T) {
 	}
 }
 
-func Test_resolveDBType(t *testing.T) {
+// Test_unsetTypeUsesTheInbuiltDatabase pins the default: a configuration with
+// no type runs on the inbuilt database, even when PostgreSQL settings are
+// present. The startup check is what refuses that combination.
+func Test_unsetTypeUsesTheInbuiltDatabase(t *testing.T) {
 
-	testCases := map[string]string{
-		"":          database.TypePostgres,
-		"   ":       database.TypePostgres,
-		"postgres":  database.TypePostgres,
-		"Postgres":  database.TypePostgres,
-		"sqlite":    database.TypeSQLite,
-		" SQLite  ": database.TypeSQLite,
-	}
+	config.OverrideCDSRuntime(config.Config{})
 
-	for configured, expected := range testCases {
-		if actual := resolveDBType(configured); actual != expected {
-			t.Errorf("resolveDBType(%q) = %q, expected %q", configured, actual, expected)
-		}
+	dbConfig, err := getDBConfig(postgresDataSource(""))
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-// Test_unsupportedDBTypeIsRejected records that normalization is not
-// validation: resolveDBType passes an unrecognised value through, and the
-// startup check is what refuses to run on it.
-func Test_unsupportedDBTypeIsRejected(t *testing.T) {
-
-	if normalized := resolveDBType(" MySQL "); normalized != "mysql" {
-		t.Errorf("resolveDBType(%q) = %q, expected %q", " MySQL ", normalized, "mysql")
-	}
-	if database.IsSupportedType("mysql") {
-		t.Error("mysql is not a datasource CDS can run on and must not be reported as supported")
-	}
-	for _, supported := range []string{database.TypePostgres, database.TypeSQLite} {
-		if !database.IsSupportedType(supported) {
-			t.Errorf("%q must be reported as supported", supported)
-		}
+	if dbConfig.driverName != database.DriverSQLite {
+		t.Errorf("expected the sqlite driver, got %q", dbConfig.driverName)
 	}
 }
 
@@ -193,4 +160,59 @@ func Test_ensureSQLiteDir(t *testing.T) {
 	if err := ensureSQLiteDir(path); err != nil {
 		t.Fatalf("expected a second call to be a no-op: %v", err)
 	}
+}
+
+func Test_ValidateDataSource(t *testing.T) {
+
+	postgres := postgresDataSource("postgres").DataSource
+
+	// withoutSetting returns the PostgreSQL configuration with one setting
+	// cleared.
+	withoutSetting := func(clear func(*config.DataSourceConfig)) config.DataSourceConfig {
+		ds := postgres
+		clear(&ds)
+		return ds
+	}
+
+	t.Run("accepted", func(t *testing.T) {
+		accepted := map[string]config.DataSourceConfig{
+			"a complete PostgreSQL configuration": postgres,
+			"the inbuilt database, which needs no connection settings": {
+				Type: "sqlite",
+			},
+			"no datasource configuration at all": {},
+			// An unset type means the inbuilt database whatever else the
+			// configuration carries, so that the default has one meaning.
+			"PostgreSQL settings with no type": withoutSetting(
+				func(ds *config.DataSourceConfig) { ds.Type = "" }),
+			"the inbuilt database alongside PostgreSQL settings, which the " +
+				"Helm chart always renders": func() config.DataSourceConfig {
+				ds := postgres
+				ds.Type = "sqlite"
+				return ds
+			}(),
+		}
+
+		for name, ds := range accepted {
+			if err := ValidateDataSource(ds); err != nil {
+				t.Errorf("expected %s to be accepted: %v", name, err)
+			}
+		}
+	})
+
+	t.Run("rejected", func(t *testing.T) {
+		rejected := map[string]config.DataSourceConfig{
+			"an unsupported type": {Type: "mysql"},
+			"a missing hostname":  withoutSetting(func(ds *config.DataSourceConfig) { ds.Hostname = "" }),
+			"a missing username":  withoutSetting(func(ds *config.DataSourceConfig) { ds.Username = "" }),
+			"a missing password":  withoutSetting(func(ds *config.DataSourceConfig) { ds.Password = "" }),
+			"a missing name":      withoutSetting(func(ds *config.DataSourceConfig) { ds.Name = "" }),
+		}
+
+		for name, ds := range rejected {
+			if err := ValidateDataSource(ds); err == nil {
+				t.Errorf("expected %s to be rejected", name)
+			}
+		}
+	})
 }

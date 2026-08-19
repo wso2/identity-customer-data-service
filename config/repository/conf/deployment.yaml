@@ -109,9 +109,8 @@ message_queue:
 
 # Datasource configuration.
 # Use "sqlite" for the inbuilt database, which needs no external server, and
-# "postgres" for production.
+# "postgres" for production. An unset type means "sqlite".
 datasource:
-  # "postgres" or "sqlite". Anything else is rejected at startup.
   type: "postgres"
   hostname: "localhost"
   port: 5432

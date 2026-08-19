@@ -20,18 +20,36 @@
 // query layers.
 package database
 
+import "strings"
+
 // Supported values of the `datasource.type` configuration.
 const (
-	// TypePostgres is the PostgreSQL datasource, and the default.
+	// TypePostgres is the PostgreSQL datasource.
 	TypePostgres = "postgres"
-	// TypeSQLite is the inbuilt, file-backed datasource. It needs no external
-	// database server and is intended for development, demos and
-	// single-instance deployments.
+	// TypeSQLite is the inbuilt, file-backed datasource, and the default. It
+	// needs no external database server and is intended for development, demos
+	// and single-instance deployments.
 	TypeSQLite = "sqlite"
 )
 
+// DefaultType is the datasource used when `datasource.type` is not configured,
+// so that a server with no database settings starts on the inbuilt database.
+const DefaultType = TypeSQLite
+
 // SupportedTypes lists every value `datasource.type` accepts.
 var SupportedTypes = []string{TypePostgres, TypeSQLite}
+
+// ResolveType normalizes a configured `datasource.type`. An empty value means
+// DefaultType. The returned value may still be unsupported, which
+// IsSupportedType reports on.
+func ResolveType(dbType string) string {
+
+	normalized := strings.ToLower(strings.TrimSpace(dbType))
+	if normalized == "" {
+		return DefaultType
+	}
+	return normalized
+}
 
 // IsSupportedType reports whether dbType is a datasource CDS can run on.
 func IsSupportedType(dbType string) bool {
