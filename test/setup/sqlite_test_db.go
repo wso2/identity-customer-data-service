@@ -50,9 +50,8 @@ func (s *SQLiteTestDB) Terminate() {
 	}
 }
 
-// SetupTestSQLite creates a temporary inbuilt database with the schema applied.
-// It is file-backed rather than ":memory:", which would be private to a single
-// connection.
+// SetupTestSQLite creates a temporary inbuilt database with the schema
+// applied. The database is file-backed so that every pooled connection sees it.
 func SetupTestSQLite() (*SQLiteTestDB, error) {
 
 	dir, err := os.MkdirTemp("", "cds-sqlite-test")

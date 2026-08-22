@@ -1,9 +1,3 @@
--- SQLite schema for the inbuilt CDS database.
---
--- This is the SQLite counterpart of postgres.sql and must be kept in sync with
--- it. It is applied automatically on startup, so every statement is written with
--- IF NOT EXISTS and the script is safe to re-run.
-
 CREATE TABLE IF NOT EXISTS profile_unification_modes
 (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

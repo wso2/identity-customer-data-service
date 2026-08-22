@@ -32,8 +32,7 @@ import (
 )
 
 // ValidateDataSource reports whether the datasource configuration is one CDS
-// can run on, so that a misconfigured server refuses to start rather than
-// answering every request with a database error.
+// can run on. The server refuses to start when it is not.
 func ValidateDataSource(ds config.DataSourceConfig) error {
 
 	dbType := database.ResolveType(ds.Type)
@@ -124,8 +123,8 @@ func initializeSQLiteSchema(db *sql.DB) error {
 	if _, err := tx.Exec(dbscripts.SQLiteSchema); err != nil {
 		_ = tx.Rollback()
 
-		// Fall back to statement-by-statement execution in case a future driver
-		// version stops accepting multi-statement scripts.
+		// Fall back to statement-by-statement execution if the driver rejects
+		// a multi-statement script.
 		if fallbackErr := applySchemaStatements(db, dbscripts.SQLiteSchema); fallbackErr != nil {
 			return fmt.Errorf("failed to apply the inbuilt database schema: %v (%v)", err, fallbackErr)
 		}
@@ -139,9 +138,8 @@ func initializeSQLiteSchema(db *sql.DB) error {
 	return nil
 }
 
-// applySchemaStatements executes a DDL script one statement at a time. Comments
-// are stripped first, since one may contain a semicolon and split the script in
-// the wrong place.
+// applySchemaStatements executes a DDL script one statement at a time.
+// Comments are stripped first: a semicolon inside one would split the script.
 func applySchemaStatements(db *sql.DB, script string) error {
 
 	for _, statement := range strings.Split(stripSQLComments(script), ";") {

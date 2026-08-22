@@ -48,9 +48,9 @@ func SetTestDB(db *sql.DB, dbType string) {
 	testDBTypeOverride = dbType
 }
 
-// sqliteHandle is the single pooled handle for the inbuilt database. Reopening
-// a local file per store call would re-acquire locks on every query, so it is
-// opened once and the client treats Close as a no-op.
+// sqliteHandle is the single pooled handle for the inbuilt database, opened
+// once and kept open. The client treats Close as a no-op, so the file's locks
+// are held for the process rather than re-acquired on every query.
 var (
 	sqliteHandle *sql.DB
 	sqliteOnce   sync.Once

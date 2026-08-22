@@ -23,7 +23,8 @@ import "github.com/wso2/identity-customer-data-service/internal/system/database/
 // AllQueries is every statement declared in queries.go, keyed by its Go name,
 // so the tests can check each one without executing it.
 //
-// The list is maintained by hand: a statement missing from it is never checked.
+// The list is maintained by hand: add every new statement, or it goes
+// unchecked.
 func AllQueries() map[string]model.DBQuery {
 
 	return map[string]model.DBQuery{

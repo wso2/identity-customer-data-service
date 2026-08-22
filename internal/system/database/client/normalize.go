@@ -23,23 +23,21 @@ import (
 	"time"
 )
 
-// The stores read query results with direct type assertions, so the Go type a
-// column arrives as is part of the contract. lib/pq and modernc.org/sqlite
-// disagree on several of those types:
+// The stores read query results with direct type assertions, so a column's Go
+// type is part of the contract. The helpers below coerce SQLite results to the
+// types lib/pq returns:
 //
-//	column type   lib/pq       modernc.org/sqlite
-//	-----------   ----------   ------------------
-//	JSONB         []byte       string
-//	BOOLEAN       bool         int64 (0/1)
-//	TIMESTAMP     time.Time    time.Time, or text
+//	column type   lib/pq      modernc.org/sqlite
+//	-----------   ---------   ------------------
+//	JSONB         []byte      string
+//	BOOLEAN       bool        int64 (0/1)
+//	TIMESTAMP     time.Time   time.Time or text
 //
-// The helpers below coerce SQLite results to the lib/pq shapes, driven by the
-// column's declared type, so the stores need no engine-specific branching and a
-// new column needs no change here. Every coercion is idempotent and nil-safe.
+// Coercion is keyed on the column's declared type, so a new column of an
+// existing type needs no change here. Every coercion is idempotent and nil-safe.
 
-// sqliteTimeLayouts are the formats the inbuilt database stores timestamps in.
-// The second is a fallback for databases written before the DSN pinned the
-// format.
+// sqliteTimeLayouts are the timestamp formats the inbuilt database holds, in
+// the order they are tried.
 var sqliteTimeLayouts = []string{
 	"2006-01-02 15:04:05.999999999-07:00",
 	"2006-01-02 15:04:05.999999999 -0700 MST",
@@ -56,12 +54,12 @@ func normalizeSQLiteValue(value interface{}, declaredType string) interface{} {
 
 	switch sqliteColumnClass(declaredType) {
 	case columnClassJSON:
-		// The stores unmarshal these columns from []byte, as lib/pq returns.
+		// The stores unmarshal JSON columns from []byte.
 		if text, ok := value.(string); ok {
 			return []byte(text)
 		}
 	case columnClassBool:
-		// SQLite has no boolean storage class; it returns 0/1.
+		// SQLite has no boolean storage class; booleans arrive as 0/1.
 		switch typed := value.(type) {
 		case int64:
 			return typed != 0
@@ -71,9 +69,8 @@ func normalizeSQLiteValue(value interface{}, declaredType string) interface{} {
 			return parseSQLiteBool(typed)
 		}
 	case columnClassTime:
-		// Declaring the column TIMESTAMP makes the driver return time.Time, so
-		// this is a fallback for other declarations and for text values written
-		// by an older configuration.
+		// TIMESTAMP columns already arrive as time.Time. Other date
+		// declarations can arrive as text.
 		switch typed := value.(type) {
 		case string:
 			if parsed, ok := parseSQLiteTime(typed); ok {
