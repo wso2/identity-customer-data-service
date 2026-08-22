@@ -50,7 +50,7 @@ func UpsertApplication(app model.Application) error {
 		clientID = app.ClientID
 	}
 
-	query := scripts.UpsertApplication[provider.NewDBProvider().GetDBType()]
+	query := scripts.UpsertApplication
 	_, err = dbClient.ExecuteQuery(query, app.AppID, app.OrgHandle, clientID)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while persisting application: %s", app.AppID)
@@ -82,7 +82,7 @@ func GetAppIdentifierByClientID(orgHandle, clientID string) (string, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetAppIdentifierByClientID[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetAppIdentifierByClientID
 	results, err := dbClient.ExecuteQuery(query, orgHandle, clientID)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while resolving clientId for organization: %s", orgHandle)

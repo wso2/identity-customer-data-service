@@ -107,6 +107,9 @@ message_queue:
     profile_queue_name: "/queue/cds-profile-unification"
     schema_sync_queue_name: "/queue/cds-schema-sync"
 
+# Datasource configuration.
+# Use "sqlite" for the inbuilt database, which needs no external server, and
+# "postgres" for production. An unset type means "sqlite".
 datasource:
   type: "postgres"
   hostname: "localhost"
@@ -115,6 +118,11 @@ datasource:
   password: "${DB_PASSWORD}"
   name: "cds_db"
   sslmode: disable
+  # Applies only when type is "sqlite". Leave a value empty to use its default.
+  # sqlite:
+  #   path: "repository/database/cds.db" # Relative to the CDS home directory
+  #   options: ""                        # DSN options
+  #   max_open_conns: 4
 
 tls:
   mtls_enabled: true

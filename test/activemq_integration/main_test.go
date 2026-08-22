@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
@@ -41,7 +42,6 @@ import (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	os.Setenv("TEST_MODE", "true")
 
 	// ── Start PostgreSQL ──────────────────────────────────────────────────────
 	pg, err := setup.SetupTestPostgres(ctx)
@@ -77,7 +77,7 @@ func TestMain(m *testing.M) {
 	_ = log.Init("DEBUG")
 
 	// ── Database setup ────────────────────────────────────────────────────────
-	provider.SetTestDB(pg.DB)
+	provider.SetTestDB(pg.DB, database.TypePostgres)
 	if err := integrationUtils.CreateTablesFromFile(pg.DB, integrationUtils.GetSchemaPath()); err != nil {
 		fmt.Println("Failed to create tables:", err)
 		os.Exit(1)
