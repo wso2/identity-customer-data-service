@@ -473,7 +473,7 @@ var DeleteCookieByProfileId = newQuery("CDS-CKI-07",
 	`DELETE FROM profile_cookies WHERE profile_id = $1`)
 
 var DeleteInactiveCookies = newQuery("CDS-CKI-08",
-	`DELETE FROM cookie_profiles WHERE cookie_id IN (SELECT cookie_id FROM cookie_profiles 
+	`DELETE FROM profile_cookies WHERE cookie_id IN (SELECT cookie_id FROM profile_cookies 
                                                                  WHERE is_active = false LIMIT $1)`)
 
 var GetOrgConfigurations = newQuery("CDS-CFG-01",

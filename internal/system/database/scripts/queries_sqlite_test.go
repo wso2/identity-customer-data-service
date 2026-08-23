@@ -70,10 +70,6 @@ func TestSQLiteQueriesPrepare(t *testing.T) {
 
 	for name, query := range scripts.AllQueries() {
 		t.Run(name, func(t *testing.T) {
-			if reason := setup.SkipPreparing(name); reason != "" {
-				t.Skip(reason)
-			}
-
 			statement := setup.CompleteStatement(name, query.GetQuery(database.TypeSQLite))
 			stmt, err := testDB.DB.Prepare(statement)
 			if err != nil {

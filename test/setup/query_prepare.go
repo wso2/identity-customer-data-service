@@ -59,14 +59,3 @@ func CompleteStatement(name, statement string) string {
 		return statement
 	}
 }
-
-// SkipPreparing reports why a statement cannot be prepared, or "" when it can.
-func SkipPreparing(name string) string {
-
-	if name == "DeleteInactiveCookies" {
-		// It targets "cookie_profiles" while the schema defines
-		// "profile_cookies". A pre-existing defect, not addressed here.
-		return "targets a table the schema does not define"
-	}
-	return ""
-}

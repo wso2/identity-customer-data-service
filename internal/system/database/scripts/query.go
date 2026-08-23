@@ -30,7 +30,7 @@ import "github.com/wso2/identity-customer-data-service/internal/system/database/
 //	CDS-UNR  unification_rules, profile_unification_*
 //	CDS-PRF  profiles, profile_reference, application_data
 //	CDS-CON  consent_categories, consent_category_attributes, profile_consents
-//	CDS-CKI  profile_cookies, cookie_profiles
+//	CDS-CKI  profile_cookies
 //	CDS-CFG  cds_config
 //	CDS-SYS  statements bound to no table
 //
