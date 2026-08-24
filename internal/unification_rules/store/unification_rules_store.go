@@ -20,6 +20,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -47,7 +48,7 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 	}
 	defer dbClient.Close()
 
-	query := scripts.InsertUnificationRule[provider.NewDBProvider().GetDBType()]
+	query := scripts.InsertUnificationRule
 
 	_, err = dbClient.ExecuteQuery(query, rule.RuleId, orgId, rule.RuleName, rule.PropertyName, rule.PropertyId, rule.Priority, rule.IsActive,
 		rule.CreatedAt, rule.UpdatedAt)
@@ -83,7 +84,7 @@ func GetUnificationRules(orgHandle string) ([]model.UnificationRule, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetUnificationRules[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetUnificationRules
 	results, err := dbClient.ExecuteQuery(query, orgHandle)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed in fetching all unification rules for organization: %s", orgHandle)
@@ -132,10 +133,10 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetUnificationRule[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetUnificationRule
 	results, err := dbClient.ExecuteQuery(query, ruleId)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			logger.Debug(fmt.Sprintf("No unification rule found for rule_id: %s ", ruleId))
 			return nil, nil
 		}
@@ -186,7 +187,7 @@ func PatchUnificationRule(ruleId string, updatedRule model.UnificationRule) erro
 	}
 	defer dbClient.Close()
 
-	query := scripts.UpdateUnificationRule[provider.NewDBProvider().GetDBType()]
+	query := scripts.UpdateUnificationRule
 	_, err = dbClient.ExecuteQuery(query, updatedRule.RuleName, updatedRule.Priority, updatedRule.IsActive, time.Now().UTC(), ruleId)
 
 	if err != nil {
@@ -221,7 +222,7 @@ func DeleteUnificationRule(ruleId string) error {
 	}
 	defer dbClient.Close()
 
-	query := scripts.DeleteUnificationRule[provider.NewDBProvider().GetDBType()]
+	query := scripts.DeleteUnificationRule
 	_, err = dbClient.ExecuteQuery(query, ruleId)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to delete unification rule: %s", ruleId)

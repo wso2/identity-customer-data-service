@@ -21,7 +21,12 @@ package provider
 import (
 	"database/sql"
 	"fmt"
+	"path/filepath"
+	"strings"
+	"sync"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
 )
 
@@ -31,11 +36,26 @@ type DBConfig struct {
 	driverName string
 }
 
-var testDBOverride *sql.DB
+var (
+	testDBOverride     *sql.DB
+	testDBTypeOverride string
+)
 
-func SetTestDB(db *sql.DB) {
+// SetTestDB installs a database handle used by every subsequent GetDBClient
+// call, bypassing the configured datasource.
+func SetTestDB(db *sql.DB, dbType string) {
 	testDBOverride = db
+	testDBTypeOverride = dbType
 }
+
+// sqliteHandle is the single pooled handle for the inbuilt database, opened
+// once and kept open. The client treats Close as a no-op, so the file's locks
+// are held for the process rather than re-acquired on every query.
+var (
+	sqliteHandle *sql.DB
+	sqliteOnce   sync.Once
+	sqliteErr    error
+)
 
 // DBProviderInterface defines the interface for getting database clients.
 type DBProviderInterface interface {
@@ -52,15 +72,30 @@ func NewDBProvider() DBProviderInterface {
 	return &DBProvider{}
 }
 
-// GetDBClient returns a database client based on the provided database name.
+// GetDBClient returns a database client for the configured datasource.
 func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 
+	// The suite owns the test handle, so Close must leave it open.
 	if testDBOverride != nil {
-		return client.NewDBClient(testDBOverride), nil
+		return client.NewSharedDBClient(testDBOverride, database.ResolveType(testDBTypeOverride)), nil
 	}
+
 	// Production DB setup
 	runtimeConfig := config.GetCDSRuntime().Config
-	dbConfig := getDBConfig(runtimeConfig)
+	dbType := database.ResolveType(runtimeConfig.DataSource.Type)
+
+	if dbType == database.TypeSQLite {
+		db, err := getSQLiteDB()
+		if err != nil {
+			return nil, err
+		}
+		return client.NewSharedDBClient(db, dbType), nil
+	}
+
+	dbConfig, err := getDBConfig(runtimeConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	db, err := sql.Open(dbConfig.driverName, dbConfig.dsn)
 	if err != nil {
@@ -72,26 +107,110 @@ func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 		return nil, fmt.Errorf("failed to ping database: %v", err)
 	}
 
-	return client.NewDBClient(db), nil
+	return client.NewDBClient(db, dbType), nil
+}
+
+// getSQLiteDB opens the inbuilt database once and initializes its schema.
+func getSQLiteDB() (*sql.DB, error) {
+
+	sqliteOnce.Do(func() {
+		runtimeConfig := config.GetCDSRuntime()
+
+		dbConfig, err := getDBConfig(runtimeConfig.Config)
+		if err != nil {
+			sqliteErr = err
+			return
+		}
+
+		if err := ensureSQLiteDir(runtimeConfig.Config.DataSource.SQLite.Path); err != nil {
+			sqliteErr = err
+			return
+		}
+
+		db, err := sql.Open(dbConfig.driverName, dbConfig.dsn)
+		if err != nil {
+			sqliteErr = fmt.Errorf("failed to open the inbuilt database: %v", err)
+			return
+		}
+
+		maxOpenConns := runtimeConfig.Config.DataSource.SQLite.MaxOpenConns
+		if maxOpenConns <= 0 {
+			maxOpenConns = database.DefaultSQLiteMaxOpenConns
+		}
+		db.SetMaxOpenConns(maxOpenConns)
+		db.SetMaxIdleConns(maxOpenConns)
+
+		if err := db.Ping(); err != nil {
+			_ = db.Close()
+			sqliteErr = fmt.Errorf("failed to ping the inbuilt database: %v", err)
+			return
+		}
+
+		if err := initializeSQLiteSchema(db); err != nil {
+			_ = db.Close()
+			sqliteErr = err
+			return
+		}
+
+		sqliteHandle = db
+	})
+
+	return sqliteHandle, sqliteErr
 }
 
 // getDBConfig returns the database configuration based on the provided data source.
-func getDBConfig(dataSource config.Config) DBConfig {
+func getDBConfig(dataSource config.Config) (DBConfig, error) {
 
-	var dbConfig DBConfig
+	ds := dataSource.DataSource
 
-	dbConfig.driverName = dataSource.DataSource.Type
-	dbConfig.dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		dataSource.DataSource.Hostname, dataSource.DataSource.Port, dataSource.DataSource.Username, dataSource.DataSource.Password,
-		dataSource.DataSource.Name, dataSource.DataSource.SSLMode)
+	switch database.ResolveType(ds.Type) {
+	case database.TypeSQLite:
+		path, err := resolveSQLitePath(ds.SQLite.Path)
+		if err != nil {
+			return DBConfig{}, err
+		}
 
-	return dbConfig
+		options := ds.SQLite.Options
+		if options == "" {
+			options = database.DefaultSQLiteOptions
+		}
+		if !strings.HasPrefix(options, "?") {
+			options = "?" + options
+		}
+
+		return DBConfig{
+			driverName: database.DriverSQLite,
+			dsn:        path + options,
+		}, nil
+
+	default:
+		// PostgreSQL.
+		return DBConfig{
+			driverName: ds.Type,
+			dsn: fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+				ds.Hostname, ds.Port, ds.Username, ds.Password, ds.Name, ds.SSLMode),
+		}, nil
+	}
 }
 
-// GetDBType returns the database configuration based on the provided data source.
+// resolveSQLitePath returns the absolute path of the inbuilt database file,
+// resolving a relative path against CDS_HOME.
+func resolveSQLitePath(path string) (string, error) {
+
+	if path == "" {
+		path = database.DefaultSQLitePath
+	}
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	return filepath.Join(config.GetCDSRuntime().CDSHome, path), nil
+}
+
+// GetDBType returns the configured datasource type.
 func (d *DBProvider) GetDBType() string {
 
-	runtimeConfig := config.GetCDSRuntime().Config
-	dbConfig := getDBConfig(runtimeConfig)
-	return dbConfig.driverName
+	if testDBOverride != nil {
+		return database.ResolveType(testDBTypeOverride)
+	}
+	return database.ResolveType(config.GetCDSRuntime().Config.DataSource.Type)
 }

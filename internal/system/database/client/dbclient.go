@@ -20,44 +20,90 @@ package client
 
 import (
 	"database/sql"
-	"os"
+	"fmt"
 	"strings"
 
 	_ "github.com/lib/pq"
+	"github.com/wso2/identity-customer-data-service/internal/system/database"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/model"
+	_ "modernc.org/sqlite"
 )
 
 // DBClientInterface defines the interface for database operations.
+//
+// Statements are passed as a model.DBQuery, so the client is the only place that
+// selects a dialect and the stores stay datasource-agnostic.
 type DBClientInterface interface {
-	ExecuteQuery(query string, args ...interface{}) ([]map[string]interface{}, error)
-	BeginTx() (*sql.Tx, error)
+	ExecuteQuery(query model.DBQuery, args ...interface{}) ([]map[string]interface{}, error)
+	BeginTx() (*model.Tx, error)
+	// DBType is for the few statements a store builds at runtime, whose bind
+	// arguments differ per datasource. It is not for selecting a statement.
+	DBType() string
 	Close() error
 }
 
 // DBClient is the implementation of DBClientInterface.
 type DBClient struct {
 	db *sql.DB
+	// dbType is the datasource type this client is connected to.
+	dbType string
+	// shared marks a connection pool owned by the caller, which Close must
+	// leave open.
+	shared bool
 }
 
 // NewDBClient creates a new instance of DBClient with the provided database connection.
-func NewDBClient(db *sql.DB) DBClientInterface {
+func NewDBClient(db *sql.DB, dbType string) DBClientInterface {
 
 	return &DBClient{
-		db: db,
+		db:     db,
+		dbType: dbType,
 	}
 }
 
-// ExecuteQuery executes a SELECT query and returns the result as a slice of maps.
-func (client *DBClient) ExecuteQuery(query string, args ...interface{}) ([]map[string]interface{}, error) {
+// NewSharedDBClient creates a client over a connection pool owned by the
+// caller. Close is a no-op, so the pool outlives the client.
+func NewSharedDBClient(db *sql.DB, dbType string) DBClientInterface {
 
-	rows, err := client.db.Query(query, args...)
+	return &DBClient{
+		db:     db,
+		dbType: dbType,
+		shared: true,
+	}
+}
+
+// ExecuteQuery executes a query and returns the result as a slice of maps.
+func (client *DBClient) ExecuteQuery(query model.DBQuery, args ...interface{}) (
+	[]map[string]interface{}, error) {
+
+	isSQLite := client.dbType == database.TypeSQLite
+	if isSQLite {
+		args = database.NormalizeSQLiteArgs(args)
+	}
+
+	sqlText := query.GetQuery(client.dbType)
+
+	rows, err := client.db.Query(sqlText, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query %s failed: %w", query.ID, err)
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err
+	}
+
+	var declaredTypes []string
+	if isSQLite {
+		columnTypes, err := rows.ColumnTypes()
+		if err != nil {
+			return nil, err
+		}
+		declaredTypes = make([]string, len(columnTypes))
+		for i, columnType := range columnTypes {
+			declaredTypes[i] = columnType.DatabaseTypeName()
+		}
 	}
 
 	var results []map[string]interface{}
@@ -74,25 +120,44 @@ func (client *DBClient) ExecuteQuery(query string, args ...interface{}) ([]map[s
 
 		result := map[string]interface{}{}
 		for i, col := range columns {
+			value := row[i]
+			if isSQLite {
+				value = normalizeSQLiteValue(value, declaredTypes[i])
+			}
 			// Normalize column names to lowercase for consistency.
-			result[strings.ToLower(col)] = row[i]
+			result[strings.ToLower(col)] = value
 		}
 		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return results, nil
 }
 
 // BeginTx starts a new database transaction.
-func (client *DBClient) BeginTx() (*sql.Tx, error) {
+func (client *DBClient) BeginTx() (*model.Tx, error) {
 
-	return client.db.Begin()
+	tx, err := client.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return model.NewTx(tx, client.dbType), nil
 }
 
-// Close closes the database connection.
-func (c *DBClient) Close() error {
-	if os.Getenv("TEST_MODE") == "true" {
+// DBType returns the datasource type this client is connected to.
+func (client *DBClient) DBType() string {
+
+	return client.dbType
+}
+
+// Close closes the database connection, unless the pool is owned by the caller.
+func (client *DBClient) Close() error {
+
+	if client.shared {
 		return nil
 	}
-	return c.db.Close()
+	return client.db.Close()
 }

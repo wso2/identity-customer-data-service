@@ -50,14 +50,33 @@ type AuthServerConfig struct {
 	IsSystemAppGrantEnabled   bool                `yaml:"isSystemAppGrantEnabled"`
 }
 
+// SQLiteConfig holds the settings for the inbuilt datasource. Every field is
+// optional and falls back to a default.
+type SQLiteConfig struct {
+	// Path is the database file location, relative to CDS_HOME unless
+	// absolute.
+	Path string `yaml:"path"`
+	// Options is the DSN query string appended to Path. Setting it replaces
+	// the defaults, so include every option that is needed.
+	Options string `yaml:"options"`
+	// MaxOpenConns bounds the connection pool.
+	MaxOpenConns int `yaml:"max_open_conns"`
+}
+
+// DataSourceConfig selects and configures the database.
 type DataSourceConfig struct {
-	Type     string `yaml:"type"` // e.g., "postgres", "mysql"
+	Type string `yaml:"type"` // "sqlite" (inbuilt, the default) or "postgres"
+
+	// PostgreSQL settings. Read only when Type is "postgres".
 	Hostname string `yaml:"hostname"`
 	Port     int    `yaml:"port"`
 	Name     string `yaml:"name"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	SSLMode  string `yaml:"sslmode"`
+
+	// SQLite settings. Read only when Type is "sqlite".
+	SQLite SQLiteConfig `yaml:"sqlite"`
 }
 
 // ExternalBrokerConfig holds the connection settings that are common to

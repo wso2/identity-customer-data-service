@@ -33,6 +33,8 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/database"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
@@ -40,21 +42,21 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 )
 
-func initDatabaseFromConfig(config *config.Config) {
+func initDatabaseFromConfig(cdsConfig *config.Config) error {
 
-	logger := log.GetLogger()
-	host := config.DataSource.Hostname
-	port := config.DataSource.Port
-	user := config.DataSource.Username
-	password := config.DataSource.Password
-	dbname := config.DataSource.Name
-
-	if host == "" || user == "" || password == "" || dbname == "" {
-		logger.Error("One or more Database configuration values are missing.")
+	if err := provider.ValidateDataSource(cdsConfig.DataSource); err != nil {
+		return err
 	}
 
-	logger.Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, db host:%s, "+
-		"db port:%d", dbname, host, port))
+	ds := cdsConfig.DataSource
+	if database.ResolveType(ds.Type) == database.TypeSQLite {
+		return provider.EnsureDatabase()
+	}
+
+	log.GetLogger().Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, "+
+		"db host:%s, db port:%d", ds.Name, ds.Hostname, ds.Port))
+
+	return nil
 }
 
 func main() {
@@ -88,8 +90,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize database
-	initDatabaseFromConfig(cdsConfig)
+	// Initialize database. This creates and initializes the inbuilt database when
+	// one is configured, and must happen before the workers start since they
+	// query the database.
+	if err := initDatabaseFromConfig(cdsConfig); err != nil {
+		log.GetLogger().Error("Failed to initialize the database.", log.Error(err))
+		os.Exit(1)
+	}
 
 	// Initialize Profile worker
 	if err := workers.StartProfileWorker(); err != nil {
