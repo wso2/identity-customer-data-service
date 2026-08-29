@@ -2,8 +2,8 @@ ${TOML_BEGIN}
 
 # --- The CDS service IS talks to ------------------------------------------- #
 # Read by the org.wso2.identity.customer.data.service.* bundles in dropins.
-# admin_username/admin_password are the HTTP Basic credentials IS presents to
-# the CDS /sync endpoints, so they must match auth_server.admin_* in the CDS
+# admin_username/admin_password are the Basic-auth credentials IS presents to
+# the CDS sync endpoints; they must match auth_server.admin_* in the CDS
 # deployment.yaml.
 [customer_data_service]
 enable = true
@@ -13,7 +13,7 @@ admin_password = "${CDS_SYNC_PASS}"
 
 # --- Event handlers -------------------------------------------------------- #
 # Without these subscriptions AbstractEventHandler.canHandle() returns false and
-# the bundles never receive an event, even though they are deployed.
+# the deployed bundles never receive an event.
 [[event_handler]]
 name = "cds.identity.event.handler"
 subscriptions = ["POST_ADD_USER", "POST_SET_USER_CLAIM_VALUE_WITH_ID", "POST_SET_USER_CLAIM_VALUES_WITH_ID", "POST_DELETE_USER_WITH_ID"]
@@ -50,9 +50,9 @@ displayName = "Customer Data Service Edit Feature"
 description = "Edit Customer Data Service from the Console"
 
 # --- CDS API resources ----------------------------------------------------- #
-# Seeded through deployment.toml on purpose: IS reserves the "internal_" scope
-# prefix for system APIs and its REST API rejects it, but these are exactly the
-# scope names CDS expects in auth_server.required_scopes.
+# Seeded here rather than over REST: IS reserves the "internal_" scope prefix
+# for system APIs and its REST API rejects it, and these are the scope names
+# CDS expects in auth_server.required_scopes.
 [[api_resources]]
 name = "Customer Data Service profile management API"
 identifier = "/cds/api/v1/profiles"
@@ -248,8 +248,8 @@ name = "internal_cds_unification_rule_delete"
 name = "internal_cds_consent_category_delete"
 
 # --- Token introspection for CDS ------------------------------------------- #
-# CDS introspects every bearer token it receives, against the super tenant, with
-# its own client credentials. The stock policy does not allow that, so relax it.
+# CDS introspects every bearer token it receives against the super tenant, with
+# its own client credentials. The default policy does not allow that.
 [[resource.access_control]]
 context = "(.*)/oauth2/introspect(.*)"
 secure = "true"
@@ -267,8 +267,8 @@ supported_methods = ["GET", "POST", "HEAD", "OPTIONS", "PUT", "PATCH", "DELETE"]
 exposed_headers = ["Location"]
 
 # --- Console wiring -------------------------------------------------------- #
-# cds_host is what makes the Console call CDS directly. Without it the Console
-# builds CDS URLs off the IS origin, where nothing serves /cds/api/v1.
+# cds_host makes the Console call CDS directly. Without it the Console builds
+# CDS URLs off the IS origin, where nothing serves /cds/api/v1.
 [console.extensions]
 cds_host = "${CDS_BASE}"
 cds_application_identifier_type = "client_id"

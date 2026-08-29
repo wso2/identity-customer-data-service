@@ -1,11 +1,9 @@
 {
   "_comment": [
-    "Console feature blocks for the Customer Data section, used only by the",
-    "compatibility fallback in lib/patch_console_template.py: a pack whose",
-    "bundled Console already knows the cds_host key configures all of this",
-    "through deployment.toml instead, and this file is never touched.",
-    "Each entry becomes one feature under 'features' in the Console's",
-    "deployment.config.json.j2, alongside the cdsHost extension key."
+    "Customer Data feature blocks for the Console. Used only by",
+    "lib/patch_console_template.py, on packs whose bundled Console predates the",
+    "cds_host key; newer ones are configured through deployment.toml. Each entry",
+    "becomes one feature in deployment.config.json.j2."
   ],
   "customerDataService": {
     "create": [],

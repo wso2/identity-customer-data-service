@@ -1,43 +1,22 @@
 #!/usr/bin/env bash
 #
-# script.sh — bring up the Customer Data Service and a fully wired
-# WSO2 Identity Server locally, with no manual steps.
+# Sets up CDS with a WSO2 Identity Server for local development: builds CDS and
+# the IS extension bundles, generates and exchanges TLS certificates, writes
+# both configurations, registers the OAuth applications CDS needs, starts both
+# servers and runs smoke tests.
 #
-# The configuration it writes lives beside it: templates/ holds one file per
-# artifact it generates, lib/ the helpers that render and patch them. See
-# README.md in this directory.
-#
-# Nothing in a stock IS pack knows about CDS, so this script does all of it:
-# builds CDS and the IS extension bundles, generates and exchanges TLS
-# certificates, writes the IS and CDS configuration, registers the OAuth
-# applications CDS needs, starts both servers and smoke-tests both integration
-# directions.
-#
-# Usage:
-#   scripts/local-setup/script.sh up [options]     # provision and start everything
-#   scripts/local-setup/script.sh start            # quick start - skip provisioning
-#   scripts/local-setup/script.sh restart          # stop, then quick start
-#   scripts/local-setup/script.sh down [options]   # stop everything
+#   scripts/local-setup/script.sh up [options]     provision and start
+#   scripts/local-setup/script.sh start            start without provisioning
+#   scripts/local-setup/script.sh restart          stop, then start
+#   scripts/local-setup/script.sh down [options]   stop
 #   scripts/local-setup/script.sh status
 #   scripts/local-setup/script.sh logs [cds|is]
 #
-# `up` does the whole setup and is safe to re-run. Once it has succeeded for a
-# work directory, `start` brings the same setup back up in about half a minute:
-# it builds nothing, provisions nothing and reuses the settings and OAuth
-# applications recorded in the work directory, so it needs no options either.
+# `up` is idempotent. After it has succeeded once for a work directory, `start`
+# reuses the pack, applications and configuration it left behind.
 #
-# Common options:
-#   --db sqlite|postgres     CDS datasource (default: sqlite)
-#   --is-zip PATH            use a local IS pack zip instead of building one
-#   --work-dir PATH          runtime directory (default: <repo>/.local-dev)
-#   --extensions-src PATH    prebuilt clone of the IS extensions repo
-#   --extensions-jars PATH   directory holding the four extension jars
-#   --clean                  re-extract the IS pack and re-create the CDS home
-#   --force                  kill whatever already holds the ports
-#   --skip-tests             do not run the smoke tests
-#   --purge                  (down) delete the work directory as well
-#
-# Run `--help` for the full list.
+# Templates for the generated configuration are in templates/, the scripts that
+# render them in lib/.
 #
 set -euo pipefail
 
@@ -46,8 +25,6 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SELF_DIR/../.." && pwd)"
-# The configuration this script writes lives in templates/, the helpers that
-# render and patch it in lib/ - see README.md next to this script.
 TPL_DIR="$SELF_DIR/templates"
 LIB_DIR="$SELF_DIR/lib"
 
@@ -72,7 +49,7 @@ CDS_LISTEN_HOST="127.0.0.1"
 CDS_HOST="localhost"
 CDS_PORT="8900"
 CDS_LOG_LEVEL="DEBUG"
-# Shared secret for the IS -> CDS sync endpoints (HTTP Basic, both sides must match).
+# Basic-auth credentials for the IS -> CDS sync endpoints; both sides must match.
 CDS_SYNC_USER="admin"
 CDS_SYNC_PASS="admin"
 AUDIENCE="iam-cds"
@@ -101,9 +78,9 @@ EXT_REPO="https://github.com/wso2-extensions/identity-customer-data-service-exte
 
 SYS_APP_NAME="CDS System App"
 CLIENT_APP_NAME="CDS Client App"
-# Markers around the generated deployment.toml section. The *_MARK prefixes are
-# what a re-run matches on, so the rest of the marker text can change without
-# stranding a block written by an earlier version.
+# Markers around the generated deployment.toml section. A re-run matches on the
+# prefixes, so the rest of the marker text can change without stranding a block
+# written by an earlier version.
 TOML_BEGIN_MARK="# BEGIN cds-local-dev"
 TOML_END_MARK="# END cds-local-dev"
 TOML_BEGIN="$TOML_BEGIN_MARK (generated from templates/is-deployment.toml - do not edit)"
@@ -130,7 +107,7 @@ usage() {
   awk 'NR>2 && /^#/ {sub(/^# ?/, ""); print; next} NR>2 && !/^#/ {exit}' "${BASH_SOURCE[0]}"
   cat <<'USAGE'
 
-All options:
+Options:
   --db sqlite|postgres         CDS datasource (default: sqlite)
   --work-dir PATH              runtime directory (default: <repo>/.local-dev)
   --is-zip PATH                local IS pack zip (skips building one)
@@ -165,14 +142,14 @@ All options:
   --purge                      (down) delete the work directory too
   -h, --help                   this help
 
-start, restart, down, status and logs reuse the settings of the last successful
-`up` in that work directory, so they normally need nothing but --work-dir - and
-not even that for the default one.
+start, restart, down, status and logs reuse the settings recorded by the last
+successful `up` in the work directory, so they need only --work-dir, and not
+even that for the default one.
 USAGE
 }
 
 # --------------------------------------------------------------------------- #
-# Run state - $WORK_DIR/state.env, chmod 600, outside the repository
+# Run state - $WORK_DIR/state.env
 # --------------------------------------------------------------------------- #
 # state_get KEY -> value from $STATE_FILE (empty if absent)
 state_get() {
@@ -192,10 +169,8 @@ state_set() {
   chmod 600 "$STATE_FILE"
 }
 
-# What `up` was run with, so that every later command can pick the same values
-# back up instead of making the reader repeat --db, --is-offset, --cds-port and
-# friends. VAR:flag - the flag is what suppresses the restore when the caller
-# passes it explicitly.
+# Settings recorded by `up` so that later commands do not need the flags again.
+# VAR:flag - passing the flag skips the restore for that value.
 RUN_SETTINGS="DB:--db
 IS_HOST:--is-host IS_PORT:--is-port IS_OFFSET:--is-offset
 IS_ADMIN_USER:--is-admin-user IS_ADMIN_PASS:--is-admin-pass TENANT:--tenant
@@ -241,7 +216,7 @@ fi
 
 need_val() { [ $# -ge 2 ] || die "$1 requires a value"; }
 
-# The options actually typed on this invocation - see restore_run_settings.
+# The options given on this invocation - see restore_run_settings.
 ARGS_RAW=" $* "
 arg_given() {
   case "$ARGS_RAW" in
@@ -305,9 +280,8 @@ LOG_DIR="$WORK_DIR/logs"
 RUN_DIR="$WORK_DIR/run"
 STATE_FILE="$WORK_DIR/state.env"
 
-# Everything except `up` runs against a work directory `up` already provisioned,
-# so it takes that run's settings back from state.env. Options given on the
-# command line still win.
+# Commands other than `up` take their settings from the state file; options on
+# the command line still win.
 if [ "$CMD" != "up" ]; then restore_run_settings; fi
 
 case "$IS_OFFSET" in
@@ -342,9 +316,8 @@ require_bins() {
   [ -z "$missing" ] || die "missing required tool(s):$missing"
 }
 
-# resolve_java - export a JAVA_HOME the Identity Server can be built and run
-# with. Anything already exported wins; otherwise prefer a version IS supports
-# over whatever the machine happens to default to.
+# resolve_java - export a JAVA_HOME the Identity Server supports. An exported
+# JAVA_HOME wins; otherwise pick a supported version over the machine default.
 JAVA_RESOLVED="0"
 resolve_java() {
   if [ "$JAVA_RESOLVED" = "1" ]; then return 0; fi
@@ -417,7 +390,7 @@ wait_http() {
   return 1
 }
 
-# read_pid PIDFILE - the IS pid file is NUL-padded, so strip everything but digits.
+# read_pid PIDFILE - the IS pid file is NUL-padded, so keep only the digits.
 read_pid() {
   [ -f "$1" ] || return 1
   local pid
@@ -488,7 +461,7 @@ preflight() {
 
   [ -f "$REPO_DIR/go.mod" ] || die "$REPO_DIR does not look like the CDS repo (no go.mod)"
 
-  # This script is not self-contained: it renders the files next to it.
+  # The templates and helpers next to this script are required.
   local asset missing=""
   for asset in templates/is-deployment.toml templates/cds-deployment.yaml \
                templates/console-features.json templates/openssl.cnf \
@@ -496,8 +469,7 @@ preflight() {
                lib/render_cds_config.py; do
     [ -f "$SELF_DIR/$asset" ] || missing="$missing $asset"
   done
-  [ -z "$missing" ] || die "missing files under $SELF_DIR:$missing
-Run the script from a complete checkout - it needs its templates/ and lib/ directories."
+  [ -z "$missing" ] || die "missing files under $SELF_DIR:$missing"
 
   if [ "$SKIP_CDS" != "1" ] && ! is_running "$RUN_DIR/cds.pid"; then
     ensure_port_free "$CDS_PORT" "CDS"
@@ -556,7 +528,7 @@ generate_cds_cert() {
 setup_database() {
   step "CDS database ($DB)"
   if [ "$DB" = "sqlite" ]; then
-    ok "inbuilt SQLite - CDS creates $CDS_HOME/repository/database/cds.db and applies dbscripts/sqlite.sql on start"
+    ok "SQLite at $CDS_HOME/repository/database/cds.db (CDS creates it and applies dbscripts/sqlite.sql on start)"
     return 0
   fi
 
@@ -579,7 +551,6 @@ setup_database() {
     fi
   fi
 
-  # Wait for the server to accept connections.
   local waited=0
   printf '    waiting for PostgreSQL '
   while [ "$waited" -lt 90 ]; do
@@ -588,7 +559,7 @@ setup_database() {
   done
   pg_ready || { printf '\n'; die "PostgreSQL at $PG_HOST:$PG_PORT did not become ready"; }
 
-  # dbscripts/postgres.sql uses bare CREATE TABLE, so only apply it once.
+  # dbscripts/postgres.sql uses bare CREATE TABLE, so apply it only once.
   if [ "$(pg_query "SELECT to_regclass('public.profiles') IS NOT NULL")" = "t" ]; then
     ok "schema already present - skipping dbscripts/postgres.sql"
   else
@@ -626,10 +597,10 @@ pg_apply_file() {
 # --------------------------------------------------------------------------- #
 # 4. The Identity Server pack
 # --------------------------------------------------------------------------- #
-# CDS needs a recent IS: the Console only renders the Customer Data section if
-# its bundled build knows the `cds_host` key. Where that pack comes from:
+# The Console renders the Customer Data section only if its bundled build knows
+# the `cds_host` key, so the pack has to be recent:
 #
-#   --is-zip PATH   a pack you already have             (fastest)
+#   --is-zip PATH   an existing pack
 #   (default)       built from https://github.com/wso2/product-is
 #
 IS_PACK_ZIP=""
@@ -639,8 +610,8 @@ find_pack_zip() {
   { find "$1" -maxdepth 1 -name 'wso2is-*.zip' ! -name '*-src.zip' -type f 2>/dev/null || :; } | head -1
 }
 
-# Build the pack from source. Only github.com and the public WSO2 Maven
-# repository are needed, so this works from anywhere.
+# Build the pack from source. Needs github.com and the public WSO2 Maven
+# repository only.
 build_is_pack() {
   local src="$IS_SRC"
   if [ -n "$src" ]; then
@@ -662,7 +633,7 @@ build_is_pack() {
 
   IS_PACK_ZIP="$(find_pack_zip "$src/modules/distribution/target")"
   if [ -n "$IS_PACK_ZIP" ] && [ "$IS_REBUILD" != "1" ]; then
-    ok "reusing $(basename "$IS_PACK_ZIP") built earlier (--is-rebuild builds it again)"
+    ok "reusing $(basename "$IS_PACK_ZIP") (--is-rebuild to build it again)"
     return 0
   fi
 
@@ -670,13 +641,12 @@ build_is_pack() {
   local blog="$LOG_DIR/is-build.log" rc=0 mpid="" name="" last=""
   # Reactor module lines only - maven also logs "Building jar:" for every artifact.
   local modline='^\[INFO\] Building .*\[[0-9][0-9]*/[0-9][0-9]*\]$'
-  info "building the pack - 10-30 minutes the first time (mostly maven downloads),"
-  info "a minute or so once ~/.m2 is warm; later runs reuse the result"
+  info "building the pack - 10-30 minutes on a cold ~/.m2, a minute or so warm"
   info "full output: $blog"
   : > "$blog"
   ( cd "$src" && mvn -B clean install -Dmaven.test.skip=true >"$blog" 2>&1 ) &
   mpid=$!
-  # Ctrl-C during a 20-minute build must take maven down with it, not orphan it.
+  # An interrupt has to take maven down with the script rather than orphan it.
   trap 'pkill -P "$mpid" 2>/dev/null || :; kill "$mpid" 2>/dev/null || :; exit 130' INT TERM
   while kill -0 "$mpid" 2>/dev/null; do
     name="$(grep -E "$modline" "$blog" 2>/dev/null | tail -1 | sed 's/^\[INFO\] Building //' || true)"
@@ -703,8 +673,7 @@ $(tail -15 "$blog" 2>/dev/null)"
 fetch_is_pack() {
   step "Identity Server pack"
 
-  # An already-extracted pack is reused as is, so nothing is cloned or built
-  # on a re-run.
+  # An extracted pack is reused as is: a re-run clones and builds nothing.
   local existing
   existing="$(resolve_is_home 2>/dev/null || :)"
   if [ -n "$existing" ] && [ "$CLEAN" = "1" ]; then
@@ -821,8 +790,8 @@ exchange_certificates() {
 # --------------------------------------------------------------------------- #
 # 7. deployment.toml
 # --------------------------------------------------------------------------- #
-# Emits the generated CDS section. Kept in one block between markers so that
-# re-running the script replaces it instead of appending a second copy.
+# The generated CDS section, in one block between markers so that a re-run
+# replaces it instead of appending a second copy.
 cds_toml_block() {
   render "$TPL_DIR/is-deployment.toml" \
     "TOML_BEGIN=$TOML_BEGIN" "TOML_END=$TOML_END" \
@@ -835,7 +804,6 @@ patch_is_config() {
   local toml="$IS_HOME/repository/conf/deployment.toml"
   [ -f "$toml" ] || die "deployment.toml not found at $toml"
 
-  # Drop any previously generated block, then append the current one.
   if grep -qF "$TOML_BEGIN_MARK" "$toml"; then
     python3 "$LIB_DIR/patch_is_toml.py" strip "$toml" "$TOML_BEGIN_MARK" "$TOML_END_MARK" \
       || die "failed to remove the previously generated section from $toml"
@@ -845,8 +813,8 @@ patch_is_config() {
   cds_toml_block >> "$toml"
   ok "wrote the CDS section into repository/conf/deployment.toml"
 
-  # [server] already exists in the shipped file, so the offset has to be set
-  # inside it rather than appended as a second table.
+  # [server] already exists in the shipped file, so the offset goes inside it
+  # rather than into a second [server] table.
   python3 "$LIB_DIR/patch_is_toml.py" offset "$toml" "$IS_OFFSET" \
     || die "failed to set [server] offset in $toml"
   [ "$IS_OFFSET" = "0" ] || ok "set [server] offset = $IS_OFFSET (HTTPS $IS_PORT, HTTP $IS_HTTP_PORT)"
@@ -854,9 +822,9 @@ patch_is_config() {
   patch_console_template
 }
 
-# The Console feature blocks and the cdsHost key ship in current identity-apps
-# releases, gated behind the toml keys written above. Older bundled Consoles do
-# not have them, so patch the template directly in that case.
+# Current identity-apps releases ship the cdsHost key and the customerData
+# feature blocks, gated on the toml keys written above. Older bundled Consoles
+# do not, and need the template patched directly.
 patch_console_template() {
   local j2
   j2="$IS_HOME/repository/resources/conf/templates/repository/deployment/server/webapps/console/deployment.config.json.j2"
@@ -909,7 +877,7 @@ verify_extensions_loaded() {
     grep -q "$b" "$log" || missing="$missing $b"
   done
   if [ -n "$missing" ]; then
-    info "no startup log entries for:$missing (normal - the bundles log lazily)"
+    info "no startup log entries for:$missing (the bundles log lazily)"
   fi
   if grep -qi "ERROR.*customer.data.service\|Unresolved constraint.*customer.data.service" "$log"; then
     warn "the log mentions errors for the CDS bundles - check $LOG_DIR/is.log"
@@ -1010,7 +978,7 @@ assert_api_resources() {
   done
   [ -z "$missing" ] || die "IS did not register the CDS API resource(s):$missing
 The [[api_resources]] entries in $IS_HOME/repository/conf/deployment.toml were not picked up.
-Re-run with --clean so the pack starts from a fresh database."
+Re-run with --clean to start the pack from a fresh database."
   ok "all 5 CDS API resources registered"
 }
 
@@ -1119,8 +1087,8 @@ provision_is() {
   provision_console_app
 }
 
-# Adds $AUDIENCE to the token audience of an application, so the JWT it gets
-# satisfies the audience check in internal/system/authn.
+# Adds $AUDIENCE to an application's token audience, for the audience check in
+# internal/system/authn.
 set_token_audience() {
   local app_id="$1" current patched
   current="$(oidc_config "$app_id")"
@@ -1130,8 +1098,8 @@ set_token_audience() {
     -H 'Content-Type: application/json' -d "$patched" -o /dev/null
 }
 
-# The Console calls CDS with its own token, so it needs the CDS scopes and, if
-# it issues JWTs, the CDS audience.
+# The Console calls CDS with its own token, so it needs the CDS scopes and, for
+# JWTs, the CDS audience.
 provision_console_app() {
   local console_id token_type
   console_id="$(isapi "$MGMT_API/applications?filter=name+eq+Console" | jq -r '.applications[0].id // empty')"
@@ -1161,7 +1129,7 @@ provision_console_app() {
   grant_admin_role_scopes
 }
 
-# Make sure the tenant administrator actually holds the CDS scopes.
+# The tenant administrator has to hold the CDS scopes.
 grant_admin_role_scopes() {
   local role_id perms add s
   role_id="$(isapi "$IS_BASE/scim2/v2/Roles?filter=displayName+eq+admin" \
@@ -1198,7 +1166,7 @@ render_cds_config() {
   step "CDS configuration"
   local base="$REPO_DIR/config/repository/conf/deployment.yaml"
   local target="$CDS_HOME/repository/conf/deployment.yaml"
-  [ -f "$base" ] || die "template config not found at $base"
+  [ -f "$base" ] || die "base config not found at $base"
   mkdir -p "$(dirname "$target")"
 
   python3 "$LIB_DIR/render_cds_config.py" \
@@ -1225,8 +1193,8 @@ start_cds() {
     stop_cds
   fi
   mkdir -p "$CDS_HOME/repository/database"
-  # Run from the work directory: CDS globs <cwd>/config/*.env for environment files
-  # and we do not want it picking up anything from the repository.
+  # Run from the work directory: CDS globs <cwd>/config/*.env for environment
+  # files, and nothing in the repository should be picked up.
   cd "$WORK_DIR"
   CDS_HOME="$CDS_HOME" nohup "$BIN_DIR/cds" >>"$LOG_DIR/cds.log" 2>&1 </dev/null &
   echo $! > "$RUN_DIR/cds.pid"
@@ -1261,10 +1229,9 @@ stop_cds() {
 # --------------------------------------------------------------------------- #
 # 12. Enable CDS for the organization
 # --------------------------------------------------------------------------- #
-# CDS keeps a per-organization record in its own cds_config table, and every
-# profile, schema and rule endpoint returns 400 while cds_enabled is false.
-# Flipping it also triggers the initial profile-schema sync from IS and seeds the
-# default consent category, so this doubles as a live CDS -> IS check.
+# Every profile, schema and rule endpoint returns 400 while cds_enabled is false
+# for the organization. Setting it also runs the initial profile-schema sync
+# from IS and seeds the default consent category.
 enable_cds_for_org() {
   step "Enabling CDS for '$TENANT'"
   local token state body code
@@ -1290,7 +1257,7 @@ enable_cds_for_org() {
       ;;
     *)
       die "could not enable CDS for '$TENANT' (HTTP $code): $(cat "$LOG_DIR/enable-cds.json" 2>/dev/null)
-This step performs the initial schema sync, so it fails when CDS cannot reach the IS claim APIs.
+This runs the initial schema sync, so it fails when CDS cannot reach the IS claim APIs.
 Check $LOG_DIR/cds.log."
       ;;
   esac
@@ -1364,7 +1331,7 @@ run_smoke_tests() {
     t_fail "CDS is not enabled for '$TENANT'"
   fi
 
-  # 4. Authenticated + authorized CDS call: proves introspection and scope mapping.
+  # 4. An authorized CDS call: covers introspection and scope mapping.
   code="$(curl -sk -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" \
     "$CDS_URL_LOCAL/t/$TENANT/cds/api/v1/profiles")"
   if [ "$code" = "200" ]; then
@@ -1373,7 +1340,7 @@ run_smoke_tests() {
     t_fail "GET /t/$TENANT/cds/api/v1/profiles returned $code (expected 200)"
   fi
 
-  # 4. Proves the CDS -> IS direction: this handler reads the IS claim dialects.
+  # 5. The CDS -> IS direction: this handler reads the IS claim dialects.
   code="$(curl -sk -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" \
     "$CDS_URL_LOCAL/t/$TENANT/cds/api/v1/profile-schema")"
   if [ "$code" = "200" ]; then
@@ -1385,7 +1352,7 @@ run_smoke_tests() {
   test_is_to_cds_sync "$token"
 }
 
-# Proves the IS -> CDS direction end to end: the dropin bundles, the event
+# Covers the IS -> CDS direction end to end: the dropin bundles, the event
 # handler subscriptions and the shared Basic credentials.
 test_is_to_cds_sync() {
   local token="$1"
@@ -1431,7 +1398,6 @@ test_is_to_cds_sync() {
 # --------------------------------------------------------------------------- #
 print_summary() {
   local db_desc wd_opt=""
-  # The default work directory needs no flag; anything else does.
   [ "$WORK_DIR" = "$REPO_DIR/.local-dev" ] || wd_opt=" --work-dir '$WORK_DIR'"
   if [ "$DB" = "sqlite" ]; then
     db_desc="SQLite at $CDS_HOME/repository/database/cds.db"
@@ -1466,8 +1432,8 @@ ${C_BOLD}=======================================================================
   Logs             $LOG_DIR/cds.log
                    $LOG_DIR/is.log
   Work dir         $WORK_DIR
-  Stop everything  scripts/local-setup/script.sh down$wd_opt
-  Start it again   scripts/local-setup/script.sh start$wd_opt   (no setup steps)
+  Stop             scripts/local-setup/script.sh down$wd_opt
+  Start again      scripts/local-setup/script.sh start$wd_opt
 
 SUMMARY
 }
@@ -1516,7 +1482,7 @@ cmd_up() {
     run_smoke_tests
   fi
 
-  # Recorded last, so `start` only inherits settings from a run that got here.
+  # Recorded last, so `start` only inherits settings from a completed run.
   save_run_settings
   print_summary
 
@@ -1526,10 +1492,8 @@ cmd_up() {
   [ "$TESTS_RUN" -eq 0 ] || ok "all $TESTS_RUN smoke tests passed"
 }
 
-# Quick start: everything is already provisioned, so this only starts the
-# processes. No build, no clone, no maven, no REST provisioning - the OAuth
-# applications and the generated configuration are still in the work directory
-# from the `up` that created it.
+# Starts an already-provisioned work directory: no build, clone, maven or REST
+# provisioning. The applications and configuration are the ones `up` left.
 cmd_start() {
   step "Quick start"
   require_bins curl jq python3
@@ -1544,10 +1508,10 @@ cmd_start() {
   CLIENT_ID="$(state_get CLIENT_ID)"
   CLIENT_SECRET="$(state_get CLIENT_SECRET)"
 
-  local hint="run 'scripts/local-setup/script.sh up --work-dir \"$WORK_DIR\"' once first"
+  local hint="run 'scripts/local-setup/script.sh up --work-dir \"$WORK_DIR\"' first"
   [ -f "$STATE_FILE" ] || die "$WORK_DIR has not been set up yet - $hint"
   [ -n "$(state_get DB)" ] \
-    || die "$WORK_DIR records no settings, so this work dir predates them - $hint"
+    || die "$WORK_DIR records no settings - $hint"
   if [ "$SKIP_IS" != "1" ]; then
     [ -n "$IS_HOME" ] && [ -x "$IS_HOME/bin/wso2server.sh" ] \
       || die "no Identity Server pack in $WORK_DIR - $hint"
@@ -1568,20 +1532,18 @@ cmd_start() {
     ensure_port_free "$IS_HTTP_PORT" "IS HTTP"
   fi
 
-  # Idempotent: brings the container back up and only applies the schema if the
-  # database turns out to be empty (a removed container comes back blank).
+  # Idempotent: restarts the container and applies the schema only if the
+  # database is empty, which it is when the container was removed.
   [ "$SKIP_CDS" = "1" ] || setup_database
 
   [ "$SKIP_IS" = "1" ] || start_is
   [ "$SKIP_CDS" = "1" ] || start_cds
 
-  # Cheap on a work directory that is already enabled - a single GET.
   if [ "$SKIP_CDS" != "1" ] && [ "$SKIP_IS" != "1" ]; then
     enable_cds_for_org
   fi
 
-  # Smoke tests are opt-in here: they create and delete an IS user, and the
-  # point of this command is to be quick.
+  # Opt-in: the tests create and delete an IS user.
   if [ "$WITH_TESTS" = "1" ] && [ "$SKIP_CDS" != "1" ] && [ "$SKIP_IS" != "1" ]; then
     run_smoke_tests
   fi
@@ -1603,8 +1565,7 @@ cmd_down() {
   step "Stopping"
   stop_cds
   [ "$SKIP_IS" = "1" ] || stop_is
-  # The state file remembers whether this work dir started a container, so
-  # `down` cleans up without having to repeat --db postgres and --pg-container.
+  # The state file records whether this work directory started the container.
   if [ "$(state_get CDS_PG_CONTAINER_OWNED)" = "1" ] && command -v docker >/dev/null 2>&1; then
     local container
     container="$(state_get CDS_PG_CONTAINER)"

@@ -3,9 +3,7 @@
 
     render.py TEMPLATE NAME=VALUE ...
 
-Every placeholder the template uses has to be given a value: a name nobody
-passed is an error rather than an empty string, so a half-filled configuration
-file can never reach a server.
+A placeholder with no value is an error rather than an empty string.
 """
 import re, sys
 

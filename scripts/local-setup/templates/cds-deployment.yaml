@@ -1,10 +1,9 @@
-# Overrides merged onto the repository's config/repository/conf/deployment.yaml
-# to produce the CDS configuration for a local run. Only the keys below are
-# touched; everything else in the shipped file (required_scopes, cache, queue
-# names, ...) is carried over untouched.
+# Merged onto config/repository/conf/deployment.yaml to produce the CDS
+# configuration for a local run. Only the keys below are changed; the rest of
+# the shipped file is carried over.
 #
-# ${NAME} is filled in by lib/render_cds_config.py. ${int:NAME} becomes a
-# number instead of a string, which is how the shipped file types these keys.
+# ${NAME} is filled in by lib/render_cds_config.py; ${int:NAME} produces a
+# number rather than a string.
 
 env: dev
 
@@ -19,9 +18,7 @@ server_url: ${CDS_BASE}
 
 auth:
   # The Console is served by the Identity Server and calls CDS cross-origin, so
-  # the IS origin has to be allowed here or every Console request is blocked.
-  # The rest are the identity-apps dev servers, handy when running the Console
-  # from source against this setup.
+  # the IS origin has to be allowed. The rest are the identity-apps dev servers.
   cors_allowed_origins:
     - ${IS_BASE}
     - ${CDS_BASE}
@@ -37,19 +34,18 @@ auth_server:
   cookieDomain: ${IS_HOST}
   client_id: ${SYS_CLIENT_ID}
   client_secret: ${SYS_CLIENT_SECRET}
-  # Introspection uses the same client credentials, which the Identity Server
-  # accepts thanks to the [[resource.access_control]] override that
-  # templates/is-deployment.toml puts on /oauth2/introspect.
+  # Introspection uses the same client credentials, which IS accepts because of
+  # the [[resource.access_control]] override in is-deployment.toml.
   introspection_client_id: ${SYS_CLIENT_ID}
   introspection_client_secret: ${SYS_CLIENT_SECRET}
-  # Shared secret for the IS -> CDS sync endpoints; must match
-  # [customer_data_service] admin_username/admin_password on the IS side.
+  # Must match [customer_data_service] admin_username/admin_password on the IS
+  # side.
   admin_username: ${CDS_SYNC_USER}
   admin_password: ${CDS_SYNC_PASS}
   isSystemAppGrantEnabled: false
 
 tls:
-  mtls_enabled: false          # the Identity Server does not present a client certificate
+  mtls_enabled: false          # IS does not present a client certificate
   cert_dir: ${CERT_DIR}
   server_cert: server.crt
   server_key: server.key
@@ -60,10 +56,10 @@ message_queue:
     password: ''
 
 # Must match [console.extensions] cds_application_identifier_type in
-# templates/is-deployment.toml.
+# is-deployment.toml.
 application_identifier_type: client_id
 
-# One of these replaces `datasource` outright, chosen by --db. A merge would
+# Selected by --db and used to replace `datasource` outright: merging would
 # leave the shipped PostgreSQL keys behind on an SQLite run.
 datasource_variants:
   sqlite:

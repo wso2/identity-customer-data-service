@@ -1,7 +1,6 @@
-# Certificate request for the CDS server certificate. CDS is HTTPS-only and
-# refuses to start without a key pair, so the setup script generates a
-# self-signed one from this file and imports it into the Identity Server's
-# client-truststore.p12.
+# Request for the CDS server certificate. CDS is HTTPS-only and does not start
+# without a key pair; the generated certificate is self-signed and is imported
+# into the Identity Server's client-truststore.p12.
 [req]
 distinguished_name = dn
 req_extensions     = v3_req

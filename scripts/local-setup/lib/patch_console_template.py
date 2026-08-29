@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Teach an older bundled Console about CDS.
+"""Add the CDS host and feature blocks to a Console configuration template.
 
     patch_console_template.py J2_TEMPLATE FEATURES_JSON CDS_HOST
 
-The Console resolves its CDS endpoints from `deploymentConfig.extensions.cdsHost`
-and gates the Customer Data section on four `customerData*` features. A current
-pack renders both from deployment.toml, so this runs only as a fallback, when
-the pack's deployment.config.json.j2 has no `cds_host` key at all: it inserts
-the cdsHost extension and the feature blocks straight into the template.
+The Console resolves its CDS endpoints from deploymentConfig.extensions.cdsHost
+and gates the Customer Data section on the customerData* features. Packs that
+render both from deployment.toml do not need this; it runs only when the pack's
+deployment.config.json.j2 has no cds_host key.
 
-Idempotent - a template that already carries cdsHost is left alone.
+Idempotent: a template that already has cdsHost is left alone.
 """
 import json, re, sys
 
@@ -29,7 +28,7 @@ def main(path, features_path, cds_host):
         sys.exit('could not find the "extensions" block in %s' % path)
     src = src[:m.end()] + '\n        "cdsHost": "%s",' % cds_host + src[m.end():]
 
-    # 2. The customerData feature blocks inside "features".
+    # 2. The feature blocks inside "features".
     def block(name, scopes):
         return json.dumps({
             "disabledFeatures": [],

@@ -5,12 +5,11 @@
 
 BASE is the configuration shipped in the repository, OVERLAY is
 templates/cds-deployment.yaml. The overlay is filled in from the NAME=VALUE
-pairs, merged onto the base and written to TARGET. DB (sqlite|postgres) picks
-one of the overlay's datasource variants.
+pairs, merged onto BASE and written to TARGET. DB (sqlite|postgres) selects one
+of the overlay's datasource variants.
 
-Placeholders are ${NAME}, or ${int:NAME} where the value has to be a number.
-A placeholder with no value is an error, so a half-filled file never reaches
-CDS.
+Placeholders are ${NAME}, or ${int:NAME} for a number. A placeholder with no
+value is an error.
 """
 import re, sys, yaml
 
@@ -55,8 +54,8 @@ def merge(base, overlay):
 def scrub(node):
     """Blank out ${...} left in the base config.
 
-    Those are environment-variable references CDS expands at load time; left
-    alone they would quietly become empty strings anyway, so make it explicit.
+    They are environment-variable references CDS expands at load time, and
+    would resolve to empty strings here.
     """
     if isinstance(node, dict):
         return {k: scrub(v) for k, v in node.items()}

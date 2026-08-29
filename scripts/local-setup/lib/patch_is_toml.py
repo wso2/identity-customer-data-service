@@ -5,9 +5,8 @@
     patch_is_toml.py offset TOML N
 
 `strip` removes a previously generated block, matching the markers by prefix so
-that a reworded marker still finds the block it wrote last time. `offset` sets
-`offset` inside the existing [server] table - appending a second [server] table
-would be a duplicate-key error.
+that a reworded marker still finds an older block. `offset` sets offset inside
+the existing [server] table; a second [server] table would be a duplicate key.
 """
 import re, sys
 

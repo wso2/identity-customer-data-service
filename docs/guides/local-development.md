@@ -1,196 +1,179 @@
-# Local Development Setup — CDS + Identity Server in One Command
+# Local Development Setup
 
-`scripts/local-setup/script.sh` brings up CDS **and** a fully wired WSO2 Identity
-Server with no manual steps.
+`scripts/local-setup/script.sh` sets up CDS with a WSO2 Identity Server for
+local development.
 
-A stock IS pack knows nothing about CDS, so the script does all of the wiring
-itself: it builds CDS and the IS extension bundles, generates and exchanges the
-TLS certificates, writes both servers' configuration, registers the OAuth
-applications CDS needs, enables CDS for the organization, starts both servers
-and smoke-tests the integration in both directions.
+A stock IS pack has no CDS configuration, so the script does the wiring: it
+builds CDS and the IS extension bundles, generates and exchanges the TLS
+certificates, writes both configurations, registers the OAuth applications CDS
+needs, enables CDS for the organization, starts both servers and runs smoke
+tests in both directions.
 
 ```bash
-# Inbuilt SQLite database — no external dependencies at all
+# Inbuilt SQLite database, no external dependencies
 ./scripts/local-setup/script.sh up
 
-# Or run CDS on PostgreSQL (started as a Docker container)
+# CDS on PostgreSQL, started as a Docker container
 ./scripts/local-setup/script.sh up --db postgres
 ```
 
-When it finishes it prints the Console URL, the CDS URL and the client
-credentials it created. Open the Console at `https://localhost:9443/console`
-(`admin` / `admin`) and the **Customer Data** section is there, reading live
-data from CDS.
+It prints the Console URL, the CDS URL and the client credentials it created.
+The **Customer Data** section in the Console at `https://localhost:9443/console`
+(`admin` / `admin`) reads live data from CDS.
 
 ```bash
 ./scripts/local-setup/script.sh status         # what is running
 ./scripts/local-setup/script.sh logs cds       # follow a log (cds | is)
-./scripts/local-setup/script.sh down           # stop everything
+./scripts/local-setup/script.sh down           # stop
 ```
 
-`--help` lists every option; the ones worth knowing about are below.
+`--help` lists all options.
 
 ---
 
-## Day to day: `start`
+## Starting an existing setup
 
-`up` is the setup command. Once it has succeeded for a work directory,
-everything it produced is still there, so bringing the same environment back up
-needs none of it:
+`up` provisions. Once it has succeeded for a work directory, the pack,
+applications, certificates and configuration are still there, and `start`
+reuses them:
 
 ```bash
-./scripts/local-setup/script.sh start          # ~20 seconds, no setup steps
-./scripts/local-setup/script.sh restart        # stop, then the same quick start
+./scripts/local-setup/script.sh start          # ~20 seconds
+./scripts/local-setup/script.sh restart        # stop, then start
 ```
 
 `start` builds nothing, clones nothing, runs no Maven and calls no management
 API. It starts the PostgreSQL container if the datasource needs one, starts both
-servers, confirms CDS is still enabled for the organization and prints the same
-summary — reusing the OAuth applications, certificates and configuration the
-`up` left behind.
+servers, checks that CDS is still enabled for the organization and prints the
+same summary.
 
-It also needs no options. `up` records what it ran with in the work directory,
-so `start`, `restart`, `down`, `status` and `logs` all pick the same datasource,
-ports, offset and tenant back up. Anything passed on the command line still
-wins.
+It needs no options either: `up` records the datasource, ports, offset and
+tenant it ran with, and `start`, `restart`, `down`, `status` and `logs` reuse
+them. Options on the command line still win.
 
-Two things `start` deliberately does not do:
-
-- **No smoke tests.** They create and delete an IS user, and the point of the
-  command is to be quick. `--tests` runs them anyway.
-- **No rebuild.** To pick up a CDS code change, re-run `up`: it rebuilds the
-  binary, restarts CDS and leaves the Identity Server alone. Re-running `up` is
-  always safe — every step finds-or-creates rather than duplicating.
+The smoke tests do not run, since they create and delete an IS user; `--tests`
+runs them. To pick up a CDS code change, re-run `up` — it rebuilds the binary,
+restarts CDS and leaves the Identity Server alone.
 
 ---
 
 ## Requirements
 
 `curl`, `jq`, `unzip`, `openssl`, `python3` (with PyYAML), `git`, `go`, `java`
-(11–21), `keytool` and `maven`. `docker` is only needed for `--db postgres`.
-Building the IS pack from source also wants a few GB of free disk.
+(11–21), `keytool` and `maven`. `docker` is needed for `--db postgres`. Building
+the IS pack from source needs a few GB of free disk.
 
-The Identity Server supports Java 11 to 21. The script prefers an installed JDK
-in that range over whatever the machine defaults to, and warns if it has to use
-something else — an already-exported `JAVA_HOME` always wins.
+The Identity Server supports Java 11 to 21. The script picks an installed JDK in
+that range over the machine default and warns if it cannot; an exported
+`JAVA_HOME` wins.
 
 ---
 
-## The work directory
+## Work directory
 
-Everything the script creates lives in one throwaway directory — `.local-dev/`
-next to the repository by default, `--work-dir PATH` to move it. The repository
-itself is never modified.
+Everything the script creates lives in one directory: `.local-dev/` next to the
+repository by default, `--work-dir PATH` to move it. The repository is not
+modified.
 
 ```
 <work-dir>/
   src/product-is/                 checkout the IS pack is built from
   src/identity-customer-data-service-extensions/
-  is/wso2is-<version>/            the extracted pack — this is IS_HOME
+  is/wso2is-<version>/            the extracted pack, used as IS_HOME
   bin/cds                         the CDS binary
   cds-home/
     repository/conf/deployment.yaml     generated CDS configuration
-    repository/database/cds.db           inbuilt database, if --db sqlite
-    etc/certs/                           CDS key pair and the IS certificate
+    repository/database/cds.db          inbuilt database, with --db sqlite
+    etc/certs/                          CDS key pair and the IS certificate
   logs/{cds,is,is-build}.log
   run/{cds,is}.pid
-  state.env                       client IDs, secrets, and the settings
-                                  the last successful `up` ran with
+  state.env                       client IDs, secrets and the settings of the
+                                  last successful `up`
 ```
 
-`state.env` is also what makes `start` need no options — see above. It and the
-generated `deployment.yaml` hold real client secrets, so
-both are written `0600`. They live outside the repository and nothing there is
-meant to be committed or shared.
+`state.env` and the generated `deployment.yaml` hold client secrets and are
+written `0600`. Both are outside the repository and are not meant to be
+committed.
 
-Use a separate `--work-dir` per configuration you want to keep side by side;
+Use a separate `--work-dir` per setup to keep several side by side;
 `down --purge` deletes one.
 
 ---
 
-## Where the Identity Server pack comes from
+## The Identity Server pack
 
-The Console only renders the **Customer Data** section if the IS build behind it
-knows the `cds_host` configuration key, so the script needs a recent pack. By
-default it builds one from [`wso2/product-is`](https://github.com/wso2/product-is):
-a shallow clone plus `mvn clean install -Dmaven.test.skip=true`, which produces
-`wso2is-<version>.zip`. Only `github.com` and the public WSO2 Maven repository
-are involved, so it works from any network.
+The Console renders the **Customer Data** section only if the IS build behind it
+knows the `cds_host` configuration key, so the pack has to be recent. By default
+the script builds one from
+[`wso2/product-is`](https://github.com/wso2/product-is): a shallow clone plus
+`mvn clean install -Dmaven.test.skip=true`, producing `wso2is-<version>.zip`.
+Only `github.com` and the public WSO2 Maven repository are used.
 
-Budget 10–30 minutes and a couple of GB of downloads for the first build — it is
-almost all Maven populating `~/.m2`. Measured on an M-series Mac: 8m39s with a
-partly warm cache, 69s to rebuild once warm.
-
-Later runs skip all of it: an already-extracted pack short-circuits the step, so
-nothing is cloned or built. To force a new pack, use `--is-rebuild` (rebuild) or
-`--clean` (re-extract).
+The first build takes 10–30 minutes and a few GB of downloads, mostly Maven
+populating `~/.m2`; a warm rebuild takes about a minute. Later runs reuse the
+extracted pack and build nothing. `--is-rebuild` builds again, `--clean`
+re-extracts.
 
 | Option | |
 |---|---|
-| `--is-zip PATH` | use a pack that is already on disk and skip the build entirely |
-| `--is-src PATH` | build a `product-is` checkout you already have |
+| `--is-zip PATH` | use an existing pack and skip the build |
+| `--is-src PATH` | build an existing `product-is` checkout |
 | `--is-ref REF` | branch or tag to build (default `master`) |
 | `--is-rebuild` | rebuild even when a pack was built earlier |
 
-`--is-zip` is the fastest way to set up a second work directory — the pack a
-previous run built is sitting in
-`<work-dir>/src/product-is/modules/distribution/target/`.
+For a second work directory, `--is-zip` is the fastest option: a previous run
+left its pack in `<work-dir>/src/product-is/modules/distribution/target/`.
 
 ---
 
 ## Ports
 
-| | Default | Change it with |
+| | Default | Option |
 |---|---|---|
 | CDS (HTTPS) | 8900 | `--cds-port` |
 | IS (HTTPS / HTTP) | 9443 / 9763 | `--is-offset N` |
 | PostgreSQL | 5432 | `--pg-port` |
 
-`up` fails if a port is already taken. `--force` kills whatever holds it;
-`--is-offset N` shifts both IS ports by `N` so the new server runs beside an
-existing one. To run a second full setup concurrently, give it its own
-`--work-dir`, `--is-offset`, `--cds-port` and `--pg-container`.
+`up` fails if a port is taken; `--force` kills whatever holds it. `--is-offset N`
+shifts both IS ports by `N`, so the server can run beside an existing one. A
+second concurrent setup needs its own `--work-dir`, `--is-offset`, `--cds-port`
+and `--pg-container`.
 
 ---
 
-## What it wires up
-
-Worth knowing, because these are the pieces that are easy to miss when setting
-this up by hand:
+## What the setup configures
 
 - **The extension bundles.** The four `org.wso2.identity.customer.data.service.*`
-  jars go into `repository/components/dropins`, together with the
-  `[[event_handler]]` subscriptions without which the handlers never receive an
-  event — `AbstractEventHandler.canHandle()` returns false with no module config,
-  so the bundles load and then sit silent.
+  jars in `repository/components/dropins`, with the `[[event_handler]]`
+  subscriptions they need: `AbstractEventHandler.canHandle()` returns false
+  without a module config, so a deployed bundle receives no events.
 - **The CDS API resources and their scopes**, seeded through `deployment.toml`.
   IS reserves the `internal_` prefix and rejects it over REST, so the
   `internal_cds_*` scopes cannot be created through the management API.
-- **`[console.extensions] cds_host`**, which is what makes the Console call CDS
-  directly instead of building CDS URLs off the IS origin. CDS answers those
-  cross-origin calls through its `auth.cors_allowed_origins`.
-- **Certificates in both directions.** The CDS certificate goes into the IS
-  `client-truststore.p12`, and the IS certificate into the CDS trust store —
-  CDS refuses to start with an unreadable `tls.trust_store`, and neither
-  self-signed certificate is in the system roots.
+- **`[console.extensions] cds_host`**, which makes the Console call CDS directly
+  instead of building CDS URLs off the IS origin. Those cross-origin calls are
+  allowed by the CDS `auth.cors_allowed_origins`.
+- **Certificates in both directions.** The CDS certificate into the IS
+  `client-truststore.p12`, the IS certificate into the CDS trust store. CDS does
+  not start with an unreadable `tls.trust_store`, and neither self-signed
+  certificate is in the system roots.
 - **The `http://wso2.org/claims/cdsProfile` local claim** and its SCIM2 mapping.
   Without it, user events carry no profile cookie.
-- **A relaxed policy on `/oauth2/introspect`**, so CDS can introspect the tokens
-  it receives using its own client credentials rather than admin-user Basic auth.
-- **Two OAuth applications** — a system app for the calls CDS makes into IS, and
-  a client app with `aud=iam-cds` for calling CDS yourself. CDS hardcodes that
-  audience, and the Console is handled separately because it issues opaque
-  tokens.
-- **`cds_enabled` for the organization.** Every profile, schema and rule endpoint
-  returns `400` until this is set. Setting it also runs the initial
+- **A relaxed policy on `/oauth2/introspect`**, so CDS introspects the tokens it
+  receives with its own client credentials instead of admin-user Basic auth.
+- **Two OAuth applications**: a system app for the calls CDS makes into IS, and
+  a client app with `aud=iam-cds`, the audience CDS requires, for calling the
+  CDS APIs. The Console is handled separately because it issues opaque tokens.
+- **`cds_enabled` for the organization.** Every profile, schema and rule
+  endpoint returns `400` until it is set. Setting it also runs the initial
   profile-schema sync and seeds the default consent category.
 
 ---
 
-## How the setup is organised
+## Directory layout
 
-The configuration is not buried in the script. `script.sh` handles arguments,
-ordering and process control; everything it writes lives beside it as a file:
+`script.sh` handles arguments, ordering and process control; the configuration
+it generates is kept in files next to it:
 
 ```
 scripts/local-setup/
@@ -200,60 +183,58 @@ scripts/local-setup/
     cds-deployment.yaml      merged onto config/repository/conf/deployment.yaml
     console-features.json    Console fallback, for packs predating `cds_host`
     openssl.cnf              the CDS certificate request
-  lib/                       the helpers that render and patch the above
+  lib/                       the scripts that render and patch them
 ```
 
-So changing what the setup configures means editing a template, not the script.
-Values arrive as `${NAME}` placeholders and rendering fails if one has no value,
-which keeps a half-filled configuration file from reaching a server.
-[`scripts/local-setup/README.md`](../../scripts/local-setup/README.md) covers the
-directory in detail.
+Change what the setup configures by editing a template, not the script. Values
+are `${NAME}` placeholders and a placeholder with no value is an error.
+[`scripts/local-setup/README.md`](../../scripts/local-setup/README.md) describes
+the directory in detail.
 
 ---
 
-## The smoke tests
+## Smoke tests
 
-`up` finishes by proving the integration works, in both directions. `--skip-tests`
-skips them.
+`up` ends by checking the integration in both directions. `--skip-tests` skips
+them.
 
 1. `GET /cds/api/v1/ready` returns 200 — CDS is up and its database is reachable
 2. a client-credentials token carries `aud=iam-cds`
 3. the same token carries the expected `org_handle`
 4. CDS reports the organization as enabled
 5. `GET /profiles` returns 200 — introspection and scope mapping work
-6. `GET /profile-schema` returns 200 — CDS successfully called the IS claim APIs
-7. a user created in IS appears as a profile in CDS — dropins, event handlers and
-   the IS→CDS sync path all work
+6. `GET /profile-schema` returns 200 — CDS reached the IS claim APIs
+7. a user created in IS appears as a profile in CDS — dropins, event handlers
+   and the IS to CDS sync path work
 
-Test 7 creates a user and deletes it again; `--keep-test-user` leaves it in place.
+Test 7 creates a user and deletes it again; `--keep-test-user` keeps it.
 
 ---
 
 ## Troubleshooting
 
-**No "Customer Data" section in the Console.** The pack predates `cds_host`. The
-script says which case it hit — `bundled Console supports [console.extensions]
-cds_host` means the pack is fine. Build a current pack (`--is-rebuild`) rather
-than patching the Console.
+**No Customer Data section in the Console.** The pack predates `cds_host`. The
+script reports which case it hit; `bundled Console supports
+[console.extensions] cds_host` means the pack is current. Build a newer pack
+with `--is-rebuild` rather than patching the Console.
 
-**Every CDS endpoint returns 400.** CDS is not enabled for the organization. Look
-for `CDS is not enabled for organization` in `logs/cds.log`; re-running `up`
+**Every CDS endpoint returns 400.** CDS is not enabled for the organization.
+`logs/cds.log` shows `CDS is not enabled for organization`; re-running `up`
 fixes it.
 
-**`GET /profile-schema` returns 400.** CDS could not reach the IS claim APIs —
-usually the trust store or the system application. `logs/cds.log` has the
-underlying error.
+**`GET /profile-schema` returns 400.** CDS could not reach the IS claim APIs,
+usually the trust store or the system application. `logs/cds.log` has the error.
 
 **A user in IS never appears in CDS.** Check that the four bundles are in
 `repository/components/dropins` and that `logs/is.log` shows the CDS handlers
-registering; a dropin that fails to resolve is silent otherwise.
+registering; an unresolved dropin is otherwise silent.
 
-**The build fails.** `logs/is-build.log` has the full Maven output. A JDK outside
+**The build fails.** `logs/is-build.log` has the Maven output. A JDK outside
 11–21 is the usual cause.
 
-**`down` says nothing is running but ports are still held.** Something outside
-the script owns them. `./scripts/local-setup/script.sh status` reports what the
-script knows about; `--force` on the next `up` clears the rest.
+**`down` reports nothing running but the ports are held.** Something outside the
+script owns them. `status` reports what the script knows about; `--force` on the
+next `up` clears the rest.
 
 ---
 
@@ -261,7 +242,7 @@ script knows about; `--force` on the next `up` clears the rest.
 
 This is a development setup, not a deployment reference.
 
-- Only CDS's datasource is configurable. The Identity Server keeps its default
+- Only the CDS datasource is configurable. The Identity Server keeps its default
   H2 databases.
 - CDS runs with the in-memory queue. See
   [Extending Queue Providers](extending-queue-providers.md) for ActiveMQ and
@@ -269,5 +250,5 @@ This is a development setup, not a deployment reference.
 - The certificates are self-signed and the credentials are the defaults, so
   clients talk to both servers with verification off.
 
-The [README](../../README.md) documents the same setup done by hand, which is
-the reference for anything the script does not cover.
+The [README](../../README.md) documents the same setup done by hand, and covers
+anything the script does not.
