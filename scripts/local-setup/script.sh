@@ -201,11 +201,10 @@ restore_run_settings() {
 # --------------------------------------------------------------------------- #
 # Argument parsing
 # --------------------------------------------------------------------------- #
-case "${1:-up}" in
+case "${1:-}" in
   up|start|restart|down|status|logs) CMD="$1"; shift ;;
   -h|--help) usage; exit 0 ;;
-  -*) ;;
-  "") ;;
+  ""|-*) ;;   # no command, or options only: CMD stays at its default
   *) die "unknown command: $1 (expected up, start, restart, down, status or logs)" ;;
 esac
 
@@ -303,6 +302,9 @@ MGMT_API="$IS_BASE/api/server/v1"
 # --------------------------------------------------------------------------- #
 # Generic helpers
 # --------------------------------------------------------------------------- #
+# toml_str VALUE - escape a value for a TOML basic string.
+toml_str() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+
 # render TEMPLATE NAME=VALUE ... -> the filled-in template on stdout
 render() {
   python3 "$LIB_DIR/render.py" "$@" || die "could not render $(basename "$1")"
@@ -445,7 +447,7 @@ resolve_is_home() {
 # --------------------------------------------------------------------------- #
 preflight() {
   step "Preflight"
-  require_bins curl jq unzip openssl python3 git
+  require_bins curl jq unzip openssl python3 git lsof
   [ "$SKIP_CDS" = "1" ] || require_bins go
   if [ "$SKIP_IS" != "1" ]; then
     require_bins java keytool
@@ -795,8 +797,9 @@ exchange_certificates() {
 cds_toml_block() {
   render "$TPL_DIR/is-deployment.toml" \
     "TOML_BEGIN=$TOML_BEGIN" "TOML_END=$TOML_END" \
-    "CDS_BASE=$CDS_BASE" "IS_BASE=$IS_BASE" \
-    "CDS_SYNC_USER=$CDS_SYNC_USER" "CDS_SYNC_PASS=$CDS_SYNC_PASS"
+    "CDS_BASE=$(toml_str "$CDS_BASE")" "IS_BASE=$(toml_str "$IS_BASE")" \
+    "CDS_SYNC_USER=$(toml_str "$CDS_SYNC_USER")" \
+    "CDS_SYNC_PASS=$(toml_str "$CDS_SYNC_PASS")"
 }
 
 patch_is_config() {
@@ -940,7 +943,7 @@ oidc_config() { isapi "$MGMT_API/applications/$1/inbound-protocols/oidc"; }
 
 # create_m2m_app NAME IS_MANAGEMENT_APP(true|false)
 create_m2m_app() {
-  local name="$1" mgmt="$2" body
+  local name="$1" mgmt="$2" body resp code
   body="$(jq -n --arg n "$name" --argjson mgmt "$mgmt" --argjson exp "$TOKEN_EXPIRY" '{
     name: $n,
     description: "Created by scripts/local-setup/script.sh for the Customer Data Service",
@@ -950,7 +953,13 @@ create_m2m_app() {
       accessToken: { type: "JWT", userAccessTokenExpiryInSeconds: $exp, applicationAccessTokenExpiryInSeconds: $exp }
     }}
   }')"
-  isapi -X POST "$MGMT_API/applications" -H 'Content-Type: application/json' -d "$body" -o /dev/null
+  resp="$(isapi -X POST "$MGMT_API/applications" -H 'Content-Type: application/json' \
+    -d "$body" -w '\n%{http_code}')"
+  code="$(echo "$resp" | tail -1)"
+  case "$code" in
+    200|201) ;;
+    *) warn "creating '$name' returned HTTP $code: $(echo "$resp" | sed '$d' | head -3)" ;;
+  esac
   app_id_by_name "$name"
 }
 
@@ -1399,6 +1408,13 @@ test_is_to_cds_sync() {
 print_summary() {
   local db_desc wd_opt=""
   [ "$WORK_DIR" = "$REPO_DIR/.local-dev" ] || wd_opt=" --work-dir '$WORK_DIR'"
+  # state.env is 0600; redirected output usually is not, so print the secrets
+  # only on a terminal.
+  local sys_secret="${SYS_CLIENT_SECRET:-?}" cli_secret="${CLIENT_SECRET:-?}"
+  if [ ! -t 1 ]; then
+    sys_secret="<see $STATE_FILE>"
+    cli_secret="<see $STATE_FILE>"
+  fi
   if [ "$DB" = "sqlite" ]; then
     db_desc="SQLite at $CDS_HOME/repository/database/cds.db"
   else
@@ -1417,12 +1433,12 @@ ${C_BOLD}=======================================================================
   CDS database     $db_desc
 
   CDS system app   client_id     ${SYS_CLIENT_ID:-?}
-                   client_secret ${SYS_CLIENT_SECRET:-?}
+                   client_secret $sys_secret
   CDS client app   client_id     ${CLIENT_ID:-?}
-                   client_secret ${CLIENT_SECRET:-?}
+                   client_secret $cli_secret
 
   Call a CDS API:
-    TOKEN=\$(curl -sk -u '${CLIENT_ID:-?}:${CLIENT_SECRET:-?}' \\
+    TOKEN=\$(curl -sk -u '${CLIENT_ID:-?}:$cli_secret' \\
       '$IS_BASE/t/$TENANT/oauth2/token' \\
       -d grant_type=client_credentials \\
       --data-urlencode 'scope=internal_cds_profile_view' | jq -r .access_token)

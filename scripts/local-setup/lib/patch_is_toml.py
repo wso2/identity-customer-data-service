@@ -27,11 +27,22 @@ def strip(path, begin, end):
 
 
 def offset(path, value):
-    src = open(path).read()
-    src = re.sub(r"(?m)^offset\s*=.*\n", "", src, count=1)
+    lines = open(path).read().split("\n")
+    start = next((i for i, l in enumerate(lines) if l.strip() == "[server]"), None)
+    if start is None:
+        if value:
+            lines[:0] = ["[server]", "offset = %d" % value, ""]
+            open(path, "w").write("\n".join(lines))
+        return
+
+    # Only the [server] table: another table may have an offset of its own.
+    end = next((i for i in range(start + 1, len(lines))
+                if lines[i].lstrip().startswith("[")), len(lines))
+    body = [l for l in lines[start + 1:end] if not re.match(r"\s*offset\s*=", l)]
     if value:
-        src = re.sub(r"(?m)^\[server\]\n", "[server]\noffset = %d\n" % value, src, count=1)
-    open(path, "w").write(src)
+        body.insert(0, "offset = %d" % value)
+    lines[start + 1:end] = body
+    open(path, "w").write("\n".join(lines))
 
 
 if __name__ == "__main__":

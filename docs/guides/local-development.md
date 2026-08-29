@@ -60,8 +60,8 @@ restarts CDS and leaves the Identity Server alone.
 ## Requirements
 
 `curl`, `jq`, `unzip`, `openssl`, `python3` (with PyYAML), `git`, `go`, `java`
-(11–21), `keytool` and `maven`. `docker` is needed for `--db postgres`. Building
-the IS pack from source needs a few GB of free disk.
+(11–21), `keytool`, `lsof` and `maven`. `docker` is needed for `--db postgres`.
+Building the IS pack from source needs a few GB of free disk.
 
 The Identity Server supports Java 11 to 21. The script picks an installed JDK in
 that range over the machine default and warns if it cannot; an exported
@@ -75,7 +75,7 @@ Everything the script creates lives in one directory: `.local-dev/` next to the
 repository by default, `--work-dir PATH` to move it. The repository is not
 modified.
 
-```
+```text
 <work-dir>/
   src/product-is/                 checkout the IS pack is built from
   src/identity-customer-data-service-extensions/
