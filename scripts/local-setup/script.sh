@@ -16,7 +16,7 @@
 # reuses the pack, applications and configuration it left behind.
 #
 # Templates for the generated configuration are in templates/, the scripts that
-# render them in lib/.
+# render them in lib/. See docs/guides/local-development.md.
 #
 set -euo pipefail
 

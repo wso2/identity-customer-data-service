@@ -172,24 +172,26 @@ and `--pg-container`.
 
 ## Directory layout
 
-`script.sh` handles arguments, ordering and process control; the configuration
-it generates is kept in files next to it:
+`script.sh` handles arguments, ordering and process control. The configuration
+it generates is kept in `templates/` next to it, one file per artifact:
 
-```
-scripts/local-setup/
-  script.sh
-  templates/
-    is-deployment.toml       the CDS section appended to the pack's deployment.toml
-    cds-deployment.yaml      merged onto config/repository/conf/deployment.yaml
-    console-features.json    Console fallback, for packs predating `cds_host`
-    openssl.cnf              the CDS certificate request
-  lib/                       the scripts that render and patch them
-```
+| Template | Written to |
+|---|---|
+| `is-deployment.toml` | appended to the pack's `repository/conf/deployment.toml`, between `# BEGIN/END cds-local-dev` markers so that a re-run replaces it |
+| `cds-deployment.yaml` | merged onto `config/repository/conf/deployment.yaml` to produce `<work-dir>/cds-home/repository/conf/deployment.yaml` |
+| `console-features.json` | the Console's `deployment.config.json.j2`, on packs whose bundled Console predates the `cds_host` key |
+| `openssl.cnf` | the request the CDS certificate is generated from |
+
+`lib/` holds the scripts that render and patch them: `render.py` fills in
+placeholders, `render_cds_config.py` merges the overlay onto the shipped CDS
+config, `patch_is_toml.py` replaces the generated `deployment.toml` block and
+sets the `[server]` offset, and `patch_console_template.py` adds `cdsHost` and
+the feature blocks to an older Console template. Each runs on its own, which is
+the quickest way to check a template change without a full `up`.
 
 Change what the setup configures by editing a template, not the script. Values
-are `${NAME}` placeholders and a placeholder with no value is an error.
-[`scripts/local-setup/README.md`](../../scripts/local-setup/README.md) describes
-the directory in detail.
+are `${NAME}` placeholders and a placeholder with no value is an error;
+`${int:NAME}` in `cds-deployment.yaml` produces a number rather than a string.
 
 ---
 
