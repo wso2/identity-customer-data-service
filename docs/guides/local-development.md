@@ -17,9 +17,10 @@ tests in both directions.
 ./scripts/local-setup/script.sh up --db postgres
 ```
 
-It prints the Console URL, the CDS URL and the client credentials it created.
-The **Customer Data** section in the Console at `https://localhost:9443/console`
-(`admin` / `admin`) reads live data from CDS.
+It prints the Console URL, the CDS URL and the log locations; the client IDs and
+secrets it created are in `<work-dir>/state.env`. The **Customer Data** section
+in the Console at `https://localhost:9443/console` (`admin` / `admin`) reads live
+data from CDS.
 
 ```bash
 ./scripts/local-setup/script.sh status         # what is running

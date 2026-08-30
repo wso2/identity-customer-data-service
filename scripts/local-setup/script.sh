@@ -1403,13 +1403,6 @@ test_is_to_cds_sync() {
 print_summary() {
   local db_desc wd_opt=""
   [ "$WORK_DIR" = "$REPO_DIR/.local-dev" ] || wd_opt=" --work-dir '$WORK_DIR'"
-  # state.env is 0600; redirected output usually is not, so print the secrets
-  # only on a terminal.
-  local sys_secret="${SYS_CLIENT_SECRET:-?}" cli_secret="${CLIENT_SECRET:-?}"
-  if [ ! -t 1 ]; then
-    sys_secret="<see $STATE_FILE>"
-    cli_secret="<see $STATE_FILE>"
-  fi
   if [ "$DB" = "sqlite" ]; then
     db_desc="SQLite at $CDS_HOME/repository/database/cds.db"
   else
@@ -1417,28 +1410,10 @@ print_summary() {
   fi
   cat <<SUMMARY
 
-${C_BOLD}============================================================================
- CDS + Identity Server are up
-============================================================================${C_RESET}
-
-  Console          $IS_BASE/console        ($IS_ADMIN_USER / $IS_ADMIN_PASS)
-                   -> "Customer Data" in the left navigation
+  Console          $IS_BASE/console
   My Account       $IS_BASE/myaccount
   CDS              $CDS_BASE   (listening on $CDS_URL_LOCAL)
   CDS database     $db_desc
-
-  CDS system app   client_id     ${SYS_CLIENT_ID:-?}
-                   client_secret $sys_secret
-  CDS client app   client_id     ${CLIENT_ID:-?}
-                   client_secret $cli_secret
-
-  Call a CDS API:
-    TOKEN=\$(curl -sk -u '${CLIENT_ID:-?}:$cli_secret' \\
-      '$IS_BASE/t/$TENANT/oauth2/token' \\
-      -d grant_type=client_credentials \\
-      --data-urlencode 'scope=internal_cds_profile_view' | jq -r .access_token)
-    curl -sk -H "Authorization: Bearer \$TOKEN" \\
-      '$CDS_BASE/t/$TENANT/cds/api/v1/profiles' | jq
 
   Logs             $LOG_DIR/cds.log
                    $LOG_DIR/is.log
