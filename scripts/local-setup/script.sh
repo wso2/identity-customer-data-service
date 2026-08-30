@@ -49,9 +49,10 @@ CDS_LISTEN_HOST="127.0.0.1"
 CDS_HOST="localhost"
 CDS_PORT="8900"
 CDS_LOG_LEVEL="DEBUG"
-# Basic-auth credentials for the IS -> CDS sync endpoints; both sides must match.
+# Basic-auth credentials for the IS -> CDS sync endpoints; both sides must
+# match. The password is generated per work directory - see resolve_secrets.
 CDS_SYNC_USER="admin"
-CDS_SYNC_PASS="admin"
+CDS_SYNC_PASS=""
 AUDIENCE="iam-cds"
 TOKEN_EXPIRY="3600"
 
@@ -60,7 +61,7 @@ PG_CONTAINER="cds-postgres"
 PG_HOST="localhost"
 PG_PORT="5432"
 PG_USER="cds"
-PG_PASS="cds"
+PG_PASS=""
 PG_DB="cds_db"
 PG_EXTERNAL="0"
 
@@ -126,11 +127,11 @@ Options:
   --cds-port PORT              CDS HTTPS port (default: 8900)
   --cds-log-level LEVEL        CDS log level (default: DEBUG)
   --sync-user USER             IS<->CDS sync Basic-auth user (default: admin)
-  --sync-pass PASS             IS<->CDS sync Basic-auth password (default: admin)
+  --sync-pass PASS             IS<->CDS sync Basic-auth password (default: generated)
   --pg-image IMAGE             Postgres docker image (default: postgres:16)
   --pg-container NAME          Postgres container name (default: cds-postgres)
   --pg-host/--pg-port/--pg-user/--pg-pass/--pg-db
-                               Postgres connection settings
+                               Postgres connection settings (password: generated)
   --pg-external                do not manage a container; use an existing server
   --clean                      re-extract the IS pack and re-create the CDS home
   --force                      kill processes already holding the ports
@@ -302,6 +303,9 @@ MGMT_API="$IS_BASE/api/server/v1"
 # --------------------------------------------------------------------------- #
 # Generic helpers
 # --------------------------------------------------------------------------- #
+# gen_secret - a random secret, safe to use unquoted in TOML, YAML and a DSN.
+gen_secret() { openssl rand -hex 16; }
+
 # toml_str VALUE - escape a value for a TOML basic string.
 toml_str() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 
@@ -496,6 +500,24 @@ preflight() {
 
   ok "work dir: $WORK_DIR"
   ok "CDS datasource: $DB"
+}
+
+# The credentials the script invents rather than reads from IS. Generated once
+# per work directory and reused afterwards: a new sync password would leave the
+# two sides of the credential out of step under --skip-is, and a new PostgreSQL
+# password would not match the container created with the old one. Recorded
+# immediately for the same reason - the container outlives a failed run.
+resolve_secrets() {
+  if ! arg_given --sync-pass; then
+    CDS_SYNC_PASS="$(state_get CDS_SYNC_PASS)"
+    [ -n "$CDS_SYNC_PASS" ] || CDS_SYNC_PASS="$(gen_secret)"
+  fi
+  if ! arg_given --pg-pass; then
+    PG_PASS="$(state_get PG_PASS)"
+    [ -n "$PG_PASS" ] || PG_PASS="$(gen_secret)"
+  fi
+  state_set CDS_SYNC_PASS "$CDS_SYNC_PASS"
+  state_set PG_PASS "$PG_PASS"
 }
 
 # --------------------------------------------------------------------------- #
@@ -1360,13 +1382,15 @@ run_smoke_tests() {
 # handler subscriptions and the shared Basic credentials.
 test_is_to_cds_sync() {
   local token="$1"
-  local uname="cds-smoke-$$"
+  local uname="cds-smoke-$$" upass
+  # Mixed case, digits and a symbol, for the default password policy.
+  upass="Smoke@$(openssl rand -hex 8)"
   local user_id
   user_id="$(isapi -X POST "$IS_BASE/scim2/Users" -H 'Content-Type: application/scim+json' \
-    -d "$(jq -n --arg u "$uname" '{
+    -d "$(jq -n --arg u "$uname" --arg p "$upass" '{
       schemas:["urn:ietf:params:scim:schemas:core:2.0:User"],
       userName:("PRIMARY/" + $u),
-      password:"Smoke@1234",
+      password:$p,
       name:{givenName:"CDS", familyName:"Smoke"},
       emails:[{value:($u + "@example.com"), primary:true}]
     }')" | jq -r '.id // empty')"
@@ -1429,6 +1453,7 @@ SUMMARY
 # --------------------------------------------------------------------------- #
 cmd_up() {
   preflight
+  resolve_secrets
 
   if [ "$SKIP_CDS" != "1" ]; then
     build_cds
