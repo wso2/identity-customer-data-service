@@ -179,15 +179,13 @@ it generates is kept in `templates/` next to it, one file per artifact:
 |---|---|
 | `is-deployment.toml` | appended to the pack's `repository/conf/deployment.toml`, between `# BEGIN/END cds-local-dev` markers so that a re-run replaces it |
 | `cds-deployment.yaml` | merged onto `config/repository/conf/deployment.yaml` to produce `<work-dir>/cds-home/repository/conf/deployment.yaml` |
-| `console-features.json` | the Console's `deployment.config.json.j2`, on packs whose bundled Console predates the `cds_host` key |
 | `openssl.cnf` | the request the CDS certificate is generated from |
 
 `lib/` holds the scripts that render and patch them: `render.py` fills in
 placeholders, `render_cds_config.py` merges the overlay onto the shipped CDS
-config, `patch_is_toml.py` replaces the generated `deployment.toml` block and
-sets the `[server]` offset, and `patch_console_template.py` adds `cdsHost` and
-the feature blocks to an older Console template. Each runs on its own, which is
-the quickest way to check a template change without a full `up`.
+config, and `patch_is_toml.py` replaces the generated `deployment.toml` block
+and sets the `[server]` offset. Each runs on its own, which is the quickest way
+to check a template change without a full `up`.
 
 Change what the setup configures by editing a template, not the script. Values
 are `${NAME}` placeholders and a placeholder with no value is an error;
@@ -215,10 +213,11 @@ Test 7 creates a user and deletes it again; `--keep-test-user` keeps it.
 
 ## Troubleshooting
 
-**No Customer Data section in the Console.** The pack predates `cds_host`. The
-script reports which case it hit; `bundled Console supports
-[console.extensions] cds_host` means the pack is current. Build a newer pack
-with `--is-rebuild` rather than patching the Console.
+**No Customer Data section in the Console.** The pack predates CDS support in
+the Console. Its configuration template and its web app ship together, so an
+older pack cannot be configured into working; build a current one with
+`--is-rebuild`. `up` reports `bundled Console supports [console.extensions]
+cds_host` when the pack is recent enough.
 
 **Every CDS endpoint returns 400.** CDS is not enabled for the organization.
 `logs/cds.log` shows `CDS is not enabled for organization`; re-running `up`

@@ -466,8 +466,7 @@ preflight() {
   # The templates and helpers next to this script are required.
   local asset missing=""
   for asset in templates/is-deployment.toml templates/cds-deployment.yaml \
-               templates/console-features.json templates/openssl.cnf \
-               lib/render.py lib/patch_is_toml.py lib/patch_console_template.py \
+               templates/openssl.cnf lib/render.py lib/patch_is_toml.py \
                lib/render_cds_config.py; do
     [ -f "$SELF_DIR/$asset" ] || missing="$missing $asset"
   done
@@ -822,30 +821,26 @@ patch_is_config() {
     || die "failed to set [server] offset in $toml"
   [ "$IS_OFFSET" = "0" ] || ok "set [server] offset = $IS_OFFSET (HTTPS $IS_PORT, HTTP $IS_HTTP_PORT)"
 
-  patch_console_template
+  check_console_support
 }
 
-# Current identity-apps releases ship the cdsHost key and the customerData
-# feature blocks, gated on the toml keys written above. Older bundled Consoles
-# do not, and need the template patched directly.
-patch_console_template() {
+# The Console renders the Customer Data section from the toml keys written
+# above. Its configuration template and its web app ship as one identity-apps
+# artifact, so a pack without the key has no CDS support to configure.
+check_console_support() {
   local j2
   j2="$IS_HOME/repository/resources/conf/templates/repository/deployment/server/webapps/console/deployment.config.json.j2"
   if [ ! -f "$j2" ]; then
     warn "Console config template not found - skipping the compatibility check"
     return 0
   fi
-  if grep -q 'cds_host' "$j2"; then
-    ok "bundled Console supports [console.extensions] cds_host"
-    if ! grep -q 'customer_data_profiles' "$j2"; then
-      warn "bundled Console has cds_host but no customerData feature blocks - the Customer Data section may not appear"
-    fi
+  if ! grep -q 'cds_host' "$j2"; then
+    warn "this pack's Console predates CDS support - the Customer Data section will not appear (build a current pack: drop --is-zip, or use --is-rebuild)"
     return 0
   fi
-
-  warn "bundled Console predates the cds_host key - patching the template directly"
-  python3 "$LIB_DIR/patch_console_template.py" "$j2" "$TPL_DIR/console-features.json" "$CDS_BASE" \
-    || die "failed to patch $j2"
+  ok "bundled Console supports [console.extensions] cds_host"
+  grep -q 'customer_data_profiles' "$j2" \
+    || warn "bundled Console has cds_host but no customerData feature blocks - the Customer Data section may not appear"
 }
 
 # --------------------------------------------------------------------------- #
