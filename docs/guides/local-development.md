@@ -61,12 +61,12 @@ restarts CDS and leaves the Identity Server alone.
 ## Requirements
 
 `curl`, `jq`, `unzip`, `openssl`, `python3` (with PyYAML), `git`, `go`, `java`
-(11–21), `keytool`, `lsof` and `maven`. `docker` is needed for `--db postgres`.
+21, `keytool`, `lsof` and `maven`. `docker` is needed for `--db postgres`.
 Building the IS pack from source needs a few GB of free disk.
 
-The Identity Server supports Java 11 to 21. The script picks an installed JDK in
-that range over the machine default and warns if it cannot; an exported
-`JAVA_HOME` wins.
+`product-is` builds with source and target 21, so an older JDK cannot compile
+it. The script prefers an installed JDK 21 over the machine default and stops
+if the one it resolves is older; an exported `JAVA_HOME` wins.
 
 ---
 
@@ -231,8 +231,7 @@ usually the trust store or the system application. `logs/cds.log` has the error.
 `repository/components/dropins` and that `logs/is.log` shows the CDS handlers
 registering; an unresolved dropin is otherwise silent.
 
-**The build fails.** `logs/is-build.log` has the Maven output. A JDK outside
-11–21 is the usual cause.
+**The build fails.** `logs/is-build.log` has the Maven output.
 
 **`down` reports nothing running but the ports are held.** Something outside the
 script owns them. `status` reports what the script knows about; `--force` on the

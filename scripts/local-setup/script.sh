@@ -323,30 +323,30 @@ require_bins() {
 }
 
 # resolve_java - export a JAVA_HOME the Identity Server supports. An exported
-# JAVA_HOME wins; otherwise pick a supported version over the machine default.
+# JAVA_HOME wins; otherwise prefer an installed JDK 21 over the machine default.
 JAVA_RESOLVED="0"
 resolve_java() {
   if [ "$JAVA_RESOLVED" = "1" ]; then return 0; fi
   if [ -z "${JAVA_HOME:-}" ] && [ -x /usr/libexec/java_home ]; then
-    local v
-    for v in 21 17 11; do
-      JAVA_HOME="$(/usr/libexec/java_home -v "$v" 2>/dev/null || :)"
-      if [ -n "$JAVA_HOME" ]; then break; fi
-    done
-    if [ -z "${JAVA_HOME:-}" ]; then
-      JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null || :)"
-    fi
+    JAVA_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null || :)"
+    [ -n "$JAVA_HOME" ] || JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null || :)"
   fi
   [ -n "${JAVA_HOME:-}" ] || die "JAVA_HOME is not set and could not be detected"
   export JAVA_HOME
   local major
-  major="$("$JAVA_HOME/bin/java" -version 2>&1 | sed -n '1s/.*version "\([0-9][0-9]*\).*/\1/p')"
+  # Java 8 and older report the feature number as 1.x.
+  major="$("$JAVA_HOME/bin/java" -version 2>&1 \
+    | sed -n '1s/.*version "\(1\.\)\{0,1\}\([0-9][0-9]*\).*/\2/p')"
   info "JAVA_HOME=$JAVA_HOME (Java ${major:-unknown})"
   case "$major" in
     ''|*[!0-9]*) ;;
     *)
-      if [ "$major" -lt 11 ] || [ "$major" -gt 21 ]; then
-        warn "the Identity Server supports Java 11-21; Java $major may fail to build or start it"
+      if [ "$major" -lt 21 ]; then
+        die "the Identity Server needs Java 21; $JAVA_HOME is Java $major.
+product-is builds with source and target 21, so an older JDK cannot compile it.
+Install a JDK 21, or point JAVA_HOME at one."
+      elif [ "$major" -gt 21 ]; then
+        warn "the Identity Server is built and tested on Java 21; Java $major may fail"
       fi
       ;;
   esac
@@ -455,6 +455,7 @@ preflight() {
   [ "$SKIP_CDS" = "1" ] || require_bins go
   if [ "$SKIP_IS" != "1" ]; then
     require_bins java keytool
+    resolve_java
     # Maven builds the extension bundles, and the IS pack unless one is supplied.
     if [ -z "$EXT_JARS" ] || [ -z "$IS_ZIP" ]; then
       require_bins mvn
