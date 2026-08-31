@@ -43,3 +43,6 @@ config/repository/database/
 *.swo
 *~
 *.tgz
+
+# Local development setup work directory
+.local-dev/
