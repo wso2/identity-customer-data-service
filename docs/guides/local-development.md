@@ -60,9 +60,10 @@ restarts CDS and leaves the Identity Server alone.
 
 ## Requirements
 
-`curl`, `jq`, `unzip`, `openssl`, `python3` (with PyYAML), `git`, `go`, `java`
-21, `keytool`, `lsof` and `maven`. `docker` is needed for `--db postgres`.
-Building the IS pack from source needs a few GB of free disk.
+`java` 21, `maven`, `go` and `jq`. `docker` is needed for `--db postgres`.
+`curl`, `git`, `unzip`, `openssl` and `lsof` are also used and ship with macOS
+and most Linux distributions; `keytool` comes with the JDK. Building the IS pack
+from source needs a few GB of free disk.
 
 `product-is` builds with source and target 21, so an older JDK cannot compile
 it. The script prefers an installed JDK 21 over the machine default and stops
@@ -92,9 +93,9 @@ modified.
                                   last successful `up`
 ```
 
-`state.env` and the generated `deployment.yaml` hold client secrets and are
-written `0600`. Both are outside the repository and are not meant to be
-committed.
+`state.env` holds the client secrets and is written `0600`. It is outside the
+repository and is not meant to be committed. The generated `deployment.yaml`
+carries no secrets - CDS reads those from the environment instead.
 
 Use a separate `--work-dir` per setup to keep several side by side;
 `down --purge` deletes one.
@@ -179,18 +180,22 @@ it generates is kept in `templates/` next to it, one file per artifact:
 | Template | Written to |
 |---|---|
 | `is-deployment.toml` | appended to the pack's `repository/conf/deployment.toml`, between `# BEGIN/END cds-local-dev` markers so that a re-run replaces it |
-| `cds-deployment.yaml` | merged onto `config/repository/conf/deployment.yaml` to produce `<work-dir>/cds-home/repository/conf/deployment.yaml` |
+| `cds-deployment.yaml` | copied to `<work-dir>/cds-home/repository/conf/deployment.yaml`, followed by the `required_scopes` block read out of `config/repository/conf/deployment.yaml` and one of the `datasource-*.yaml` fragments |
+| `datasource-sqlite.yaml`, `datasource-postgres.yaml` | the `datasource` section, selected by `--db` |
 | `openssl.cnf` | the request the CDS certificate is generated from |
 
-`lib/` holds the scripts that render and patch them: `render.py` fills in
-placeholders, `render_cds_config.py` merges the overlay onto the shipped CDS
-config, and `patch_is_toml.py` replaces the generated `deployment.toml` block
-and sets the `[server]` offset. Each runs on its own, which is the quickest way
-to check a template change without a full `up`.
+Change what the setup configures by editing a template, not the script.
 
-Change what the setup configures by editing a template, not the script. Values
-are `${NAME}` placeholders and a placeholder with no value is an error;
-`${int:NAME}` in `cds-deployment.yaml` produces a number rather than a string.
+`is-deployment.toml` and `openssl.cnf` use `${NAME}` placeholders that the
+script fills in; a placeholder with no value is an error. The CDS configuration
+is different: its `${NAME}` placeholders are left in place, and CDS expands them
+from the environment when it loads the file, so no client secret or password is
+ever written to disk there. `script.sh` exports those values when it starts the
+binary.
+
+Because the CDS template is a full configuration rather than an overlay, a
+section added to `config/repository/conf/deployment.yaml` upstream would be
+missed. `up` compares the two and warns when that happens.
 
 ---
 

@@ -15,8 +15,8 @@
 # `up` is idempotent. After it has succeeded once for a work directory, `start`
 # reuses the pack, applications and configuration it left behind.
 #
-# Templates for the generated configuration are in templates/, the scripts that
-# render them in lib/. See docs/guides/local-development.md.
+# Templates for the generated configuration are in templates/. See
+# docs/guides/local-development.md.
 #
 set -euo pipefail
 
@@ -26,7 +26,6 @@ set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SELF_DIR/../.." && pwd)"
 TPL_DIR="$SELF_DIR/templates"
-LIB_DIR="$SELF_DIR/lib"
 
 CMD="up"
 DB="sqlite"
@@ -309,9 +308,40 @@ gen_secret() { openssl rand -hex 16; }
 # toml_str VALUE - escape a value for a TOML basic string.
 toml_str() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 
-# render TEMPLATE NAME=VALUE ... -> the filled-in template on stdout
+# yaml_block FILE KEY - a two-space-indented block and everything under it.
+yaml_block() {
+  awk -v key="  $2:" '
+    $0 == key             { inside = 1; print; next }
+    inside && /^[^ ]/     { inside = 0 }
+    inside && /^  [^ ]/   { inside = 0 }
+    inside                { print }
+  ' "$1"
+}
+
+# render TEMPLATE NAME=VALUE ... -> the filled-in template on stdout.
+# ${NAME} becomes its value; a placeholder with no value is an error. Values are
+# passed through the environment, so none of them needs escaping.
 render() {
-  python3 "$LIB_DIR/render.py" "$@" || die "could not render $(basename "$1")"
+  local tpl="$1"; shift
+  (
+    local pair
+    for pair in "$@"; do export "TPL_${pair%%=*}=${pair#*=}"; done
+    awk '
+      {
+        out = ""
+        while (match($0, /\$\{[A-Za-z_][A-Za-z_0-9]*\}/)) {
+          name = substr($0, RSTART + 2, RLENGTH - 3)
+          if (!(("TPL_" name) in ENVIRON)) {
+            printf "no value for ${%s}\n", name > "/dev/stderr"
+            exit 1
+          }
+          out = out substr($0, 1, RSTART - 1) ENVIRON["TPL_" name]
+          $0 = substr($0, RSTART + RLENGTH)
+        }
+        print out $0
+      }
+    ' "$tpl"
+  ) || die "could not render $(basename "$tpl")"
 }
 
 require_bins() {
@@ -428,12 +458,11 @@ stop_pid() {
   return 0
 }
 
-urlencode() { python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+urlencode() { jq -rn --arg v "$1" '$v|@uri'; }
 
 # IS management API call as admin
 isapi() { curl -sk --max-time 60 -u "${IS_ADMIN_USER}:${IS_ADMIN_PASS}" "$@"; }
 
-json_get() { python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get(sys.argv[1],"") if isinstance(d,dict) else "")' "$1"; }
 
 # --------------------------------------------------------------------------- #
 # Path resolution for the IS pack
@@ -451,7 +480,7 @@ resolve_is_home() {
 # --------------------------------------------------------------------------- #
 preflight() {
   step "Preflight"
-  require_bins curl jq unzip openssl python3 git lsof
+  require_bins curl jq unzip openssl git lsof
   [ "$SKIP_CDS" = "1" ] || require_bins go
   if [ "$SKIP_IS" != "1" ]; then
     require_bins java keytool
@@ -464,15 +493,13 @@ preflight() {
   if [ "$DB" = "postgres" ]; then
     if [ "$PG_EXTERNAL" = "1" ]; then require_bins psql; else require_bins docker; fi
   fi
-  python3 -c 'import yaml' 2>/dev/null || die "python3 is missing PyYAML (pip3 install pyyaml)"
-
   [ -f "$REPO_DIR/go.mod" ] || die "$REPO_DIR does not look like the CDS repo (no go.mod)"
 
   # The templates and helpers next to this script are required.
   local asset missing=""
   for asset in templates/is-deployment.toml templates/cds-deployment.yaml \
-               templates/openssl.cnf lib/render.py lib/patch_is_toml.py \
-               lib/render_cds_config.py; do
+               templates/datasource-sqlite.yaml templates/datasource-postgres.yaml \
+               templates/openssl.cnf; do
     [ -f "$SELF_DIR/$asset" ] || missing="$missing $asset"
   done
   [ -z "$missing" ] || die "missing files under $SELF_DIR:$missing"
@@ -829,8 +856,11 @@ patch_is_config() {
   local toml="$IS_HOME/repository/conf/deployment.toml"
   [ -f "$toml" ] || die "deployment.toml not found at $toml"
 
+  # Markers are matched on their prefix, so the rest of the text can change
+  # without stranding a block written by an earlier version.
   if grep -qF "$TOML_BEGIN_MARK" "$toml"; then
-    python3 "$LIB_DIR/patch_is_toml.py" strip "$toml" "$TOML_BEGIN_MARK" "$TOML_END_MARK" \
+    sed "/^$TOML_BEGIN_MARK/,/^$TOML_END_MARK/d" "$toml" > "$toml.tmp" \
+      && mv "$toml.tmp" "$toml" \
       || die "failed to remove the previously generated section from $toml"
     info "replaced the previously generated section"
   fi
@@ -839,8 +869,15 @@ patch_is_config() {
   ok "wrote the CDS section into repository/conf/deployment.toml"
 
   # [server] already exists in the shipped file, so the offset goes inside it
-  # rather than into a second [server] table.
-  python3 "$LIB_DIR/patch_is_toml.py" offset "$toml" "$IS_OFFSET" \
+  # rather than into a second [server] table. Another table may carry an offset
+  # of its own, so only lines inside [server] are touched.
+  grep -q '^\[server\]' "$toml" || die "no [server] table in $toml"
+  awk -v off="$IS_OFFSET" '
+    /^\[/                                { in_server = ($0 == "[server]") }
+    in_server && /^[ \t]*offset[ \t]*=/  { next }
+    { print }
+    in_server && $0 == "[server]" && off + 0 > 0 { print "offset = " off }
+  ' "$toml" > "$toml.tmp" && mv "$toml.tmp" "$toml" \
     || die "failed to set [server] offset in $toml"
   [ "$IS_OFFSET" = "0" ] || ok "set [server] offset = $IS_OFFSET (HTTPS $IS_PORT, HTTP $IS_HTTP_PORT)"
 
@@ -1196,17 +1233,23 @@ render_cds_config() {
   [ -f "$base" ] || die "base config not found at $base"
   mkdir -p "$(dirname "$target")"
 
-  python3 "$LIB_DIR/render_cds_config.py" \
-    "$base" "$TPL_DIR/cds-deployment.yaml" "$target" "$DB" \
-    "CDS_LISTEN_HOST=$CDS_LISTEN_HOST" "CDS_PORT=$CDS_PORT" "CDS_BASE=$CDS_BASE" \
-    "CDS_LOG_LEVEL=$CDS_LOG_LEVEL" "CERT_DIR=$CERT_DIR" \
-    "IS_HOST=$IS_HOST" "IS_PORT=$IS_PORT" "IS_BASE=$IS_BASE" \
-    "SYS_CLIENT_ID=${SYS_CLIENT_ID:-}" "SYS_CLIENT_SECRET=${SYS_CLIENT_SECRET:-}" \
-    "CDS_SYNC_USER=$CDS_SYNC_USER" "CDS_SYNC_PASS=$CDS_SYNC_PASS" \
-    "PG_HOST=$PG_HOST" "PG_PORT=$PG_PORT" "PG_USER=$PG_USER" \
-    "PG_PASS=$PG_PASS" "PG_DB=$PG_DB" \
-    || die "failed to write $target"
-  chmod 600 "$target"
+  # The template is a full configuration rather than an overlay, so a section
+  # added to the shipped file upstream would be missed. Say so.
+  local missing
+  missing="$(comm -23 \
+    <(grep -oE '^[a-z_]+:' "$base" | sort -u) \
+    <(cat "$TPL_DIR/cds-deployment.yaml" "$TPL_DIR/datasource-$DB.yaml" \
+        | grep -oE '^[a-z_]+:' | sort -u) | tr -d ':')"
+  [ -z "$missing" ] || warn "templates/cds-deployment.yaml has no section for: $missing"
+
+  # required_scopes is taken from the shipped configuration so the
+  # operation-to-scope mapping cannot drift.
+  {
+    cat "$TPL_DIR/cds-deployment.yaml"
+    yaml_block "$base" required_scopes
+    cat "$TPL_DIR/datasource-$DB.yaml"
+  } > "$target" || die "failed to write $target"
+  grep -q 'required_scopes:' "$target" || die "no required_scopes block found in $base"
   ok "wrote $target"
 }
 
@@ -1223,7 +1266,21 @@ start_cds() {
   # Run from the work directory: CDS globs <cwd>/config/*.env for environment
   # files, and nothing in the repository should be picked up.
   cd "$WORK_DIR"
-  CDS_HOME="$CDS_HOME" nohup "$BIN_DIR/cds" >>"$LOG_DIR/cds.log" 2>&1 </dev/null &
+  # CDS expands ${...} in its configuration from the environment at load time,
+  # which is what keeps the secrets out of deployment.yaml.
+  CDS_HOME="$CDS_HOME" \
+  CDS_LOG_LEVEL="$CDS_LOG_LEVEL" \
+  CDS_LISTEN_HOST="$CDS_LISTEN_HOST" CDS_PORT="$CDS_PORT" CDS_BASE="$CDS_BASE" \
+  CDS_CERT_DIR="$CERT_DIR" \
+  IS_HOST="$IS_HOST" IS_PORT="$IS_PORT" IS_BASE="$IS_BASE" \
+  CDS_SYNC_USER="$CDS_SYNC_USER" \
+  CDS_SYS_CLIENT_ID="${SYS_CLIENT_ID:-}" \
+  AUTH_SERVER_CLIENT_SECRET="${SYS_CLIENT_SECRET:-}" \
+  INTROSPECTION_CLIENT_SECRET="${SYS_CLIENT_SECRET:-}" \
+  AUTH_SERVER_ADMIN_PASSWORD="$CDS_SYNC_PASS" \
+  PG_HOST="$PG_HOST" PG_PORT="$PG_PORT" PG_USER="$PG_USER" PG_DB="$PG_DB" \
+  DB_PASSWORD="$PG_PASS" \
+    nohup "$BIN_DIR/cds" >>"$LOG_DIR/cds.log" 2>&1 </dev/null &
   echo $! > "$RUN_DIR/cds.pid"
   cd "$REPO_DIR"
   sleep 1
@@ -1309,14 +1366,12 @@ cds_token() {
 }
 
 jwt_claim() {
-  python3 -c '
-import base64, json, sys
-tok = sys.argv[1].split(".")
-if len(tok) < 2: sys.exit(0)
-pad = "=" * (-len(tok[1]) % 4)
-claims = json.loads(base64.urlsafe_b64decode(tok[1] + pad))
-val = claims.get(sys.argv[2], "")
-print(" ".join(val) if isinstance(val, list) else val)' "$1" "$2" 2>/dev/null
+  local payload
+  payload="$(printf '%s' "$1" | cut -d. -f2 | tr '_-' '/+')"
+  while [ $(( ${#payload} % 4 )) -ne 0 ]; do payload="$payload="; done
+  printf '%s' "$payload" | base64 -d 2>/dev/null \
+    | jq -r --arg c "$2" '.[$c] // "" | if type == "array" then join(" ") else tostring end' 2>/dev/null \
+    || :   # a malformed token is a failed test, not a failed run
 }
 
 run_smoke_tests() {
@@ -1508,7 +1563,7 @@ cmd_up() {
 # provisioning. The applications and configuration are the ones `up` left.
 cmd_start() {
   step "Quick start"
-  require_bins curl jq python3
+  require_bins curl jq
   [ "$SKIP_IS" = "1" ] || require_bins java
   if [ "$SKIP_CDS" != "1" ] && [ "$DB" = "postgres" ] && [ "$PG_EXTERNAL" != "1" ]; then
     require_bins docker
