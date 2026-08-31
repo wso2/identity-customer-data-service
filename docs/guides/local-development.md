@@ -248,13 +248,14 @@ next `up` clears the rest.
 
 This is a development setup, not a deployment reference.
 
+- Only the super tenant, `carbon.super`, is supported.
 - Only the CDS datasource is configurable. The Identity Server keeps its default
   H2 databases.
 - CDS runs with the in-memory queue. See
   [Extending Queue Providers](extending-queue-providers.md) for ActiveMQ and
   other brokers.
-- The certificates are self-signed and the credentials are the defaults, so
-  clients talk to both servers with verification off.
+- The certificates are self-signed and the Identity Server keeps its default
+  administrator, so clients talk to both servers with verification off.
 
 The [README](../../README.md) documents the same setup done by hand, and covers
 anything the script does not.

@@ -121,7 +121,7 @@ Options:
   --is-offset N                IS port offset, to run beside another IS (default: 0)
   --is-admin-user USER         IS admin username (default: admin)
   --is-admin-pass PASS         IS admin password (default: admin)
-  --tenant TENANT              tenant / org handle (default: carbon.super)
+  --tenant TENANT              org handle (default and only supported: carbon.super)
   --cds-host HOST              hostname the Console uses for CDS (default: localhost)
   --cds-port PORT              CDS HTTPS port (default: 8900)
   --cds-log-level LEVEL        CDS log level (default: DEBUG)
