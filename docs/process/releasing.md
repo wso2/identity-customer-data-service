@@ -1,4 +1,4 @@
-# Releasing CDS — Cutting a Release and Versioning
+# Releasing CDS — Release Process and Versioning
 
 `version.txt` holds the **last released** version. Nothing moves it on a PR merge — the release builder owns it, and a release is the only thing that changes it. The version number therefore describes what was released, not how many PRs were merged.
 
@@ -22,7 +22,7 @@ dispatch release
   → create the GitHub release
 ```
 
-The tag is the release identity. A version that already has a tag is refused, so a release can never be cut twice under the same number.
+The tag is the release identity. A version that already has a tag is refused, so the same version can never be released twice.
 
 Between releases, every build off `main` reports the same version. That is expected — local dev zips share a filename until the next release.
 
@@ -37,7 +37,7 @@ Actions → **🚀 CDS Release Builder** → Run workflow.
 | `bump_type` | `minor` | Normal scheduled release. Bumps `version.txt`. `patch` for a maintenance release. |
 | `version` | — | You need an exact version — a GA off a prerelease, or a prerelease itself. Overrides `bump_type` and `use_existing_version`. A bare `0.4.0` is accepted. |
 | `use_existing_version` | `false` | Retrying a release whose version bump already landed. See [Retrying a failed release](#retrying-a-failed-release). |
-| `branch` | `main` | Cutting a maintenance release off a release branch. |
+| `branch` | `main` | Releasing a maintenance version from a release branch. |
 | `commit_version_bump` | `true` | Set `false` to release without moving the branch. |
 | `prerelease` | `false` | Marks the GitHub release as a pre-release. |
 
@@ -45,7 +45,7 @@ Actions → **🚀 CDS Release Builder** → Run workflow.
 
 ---
 
-## Cutting a release
+## Running a release
 
 ### Scheduled release
 
@@ -59,7 +59,7 @@ gh workflow run release.yml --repo wso2/identity-customer-data-service
 
 ### Maintenance release
 
-A third-digit release, cut off the relevant release branch:
+A third-digit release, run against the relevant release branch:
 
 ```bash
 gh workflow run release.yml --repo wso2/identity-customer-data-service \

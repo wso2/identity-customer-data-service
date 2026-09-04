@@ -23,7 +23,7 @@
 
 | Document | Description |
 |---|---|
-| [Releasing CDS](process/releasing.md) | Cutting a release, versioning, maintenance releases, verifying a release |
+| [Releasing CDS](process/releasing.md) | Running a release, versioning, maintenance releases, verifying a release |
 
 ## Issues / RFCs
 

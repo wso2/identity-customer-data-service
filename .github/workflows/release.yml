@@ -18,7 +18,7 @@
 #
 # --------------------------------------------------------------------------------------
 
-# version.txt holds the last released version and moves only when a release is cut,
+# version.txt holds the last released version and moves only when a release is created,
 # never on a PR merge. This workflow owns it: it resolves the version to release from
 # the dispatch inputs, commits it to the release branch, builds from it and tags that
 # commit. A scheduled release is a `minor` bump off main; a maintenance release is
