@@ -21,7 +21,8 @@
 # version.txt holds the last released version and moves only when a release is cut,
 # never on a PR merge. This workflow owns it: it resolves the version to release from
 # the dispatch inputs, commits it to the release branch, builds from it and tags that
-# commit. Maintenance releases are a `patch` bump off the relevant release branch.
+# commit. A scheduled release is a `minor` bump off main; a maintenance release is
+# a `patch` bump off the relevant release branch.
 
 name: 🚀 CDS Release Builder
 
@@ -43,10 +44,10 @@ on:
         required: false
         type: choice
         options:
-          - patch
           - minor
+          - patch
           - major
-        default: patch
+        default: minor
       use_existing_version:
         description: 'Release version.txt as-is (no bump). Ignored when version is given.'
         required: false
