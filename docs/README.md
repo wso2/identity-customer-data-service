@@ -19,6 +19,12 @@
 | [Schema Sync](guides/schema-sync.md) | Keeping CDS schema aligned with IS claim changes |
 | [Extending Queue Providers](guides/extending-queue-providers.md) | Adding a new message queue provider (Kafka, RabbitMQ, SQS, etc.) |
 
+## Process
+
+| Document | Description |
+|---|---|
+| [Releasing CDS](process/releasing.md) | Running a release, versioning, maintenance releases, verifying a release |
+
 ## Issues / RFCs
 
 | Document | Description |
