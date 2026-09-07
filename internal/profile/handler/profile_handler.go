@@ -827,6 +827,25 @@ func (ph *ProfileHandler) LinkProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if existingProfile.UserId != "" {
+		if existingProfile.UserId != userId {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.PROFILE_ALREADY_LINKED.Code,
+				Message:     errors2.PROFILE_ALREADY_LINKED.Message,
+				Description: errors2.PROFILE_ALREADY_LINKED.Description,
+			}, http.StatusConflict)
+			utils.HandleError(w, clientError)
+			return
+		}
+
+		linkResponse := model.ProfileLinkResponse{
+			ProfileId: profileId,
+			UserId:    userId,
+		}
+		utils.RespondJSON(w, http.StatusOK, linkResponse, constants.ProfileResource)
+		return
+	}
+
 	profileRequest := model.ProfileRequest{
 		UserId:             userId,
 		IdentityAttributes: existingProfile.IdentityAttributes,

@@ -137,6 +137,53 @@ func Test_ProfileLink(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, status, string(body))
 	})
 
+	t.Run("Relink_To_Different_User_Is_Rejected", func(t *testing.T) {
+		anonymous, err := profileSvc.CreateProfile(profileModel.ProfileRequest{
+			IdentityAttributes: map[string]interface{}{"email": []interface{}{"anon-4@wso2.com"}},
+		}, org)
+		require.NoError(t, err)
+
+		firstUser := "user-" + uuid.New().String()
+		status, body := doLink(t, router, org, anonymous.ProfileId,
+			fmt.Sprintf(`{"user_id":%q}`, firstUser))
+		require.Equal(t, http.StatusOK, status, string(body))
+
+		secondUser := "user-" + uuid.New().String()
+		status, body = doLink(t, router, org, anonymous.ProfileId,
+			fmt.Sprintf(`{"user_id":%q}`, secondUser))
+		require.Equal(t, http.StatusConflict, status, string(body))
+
+		unchanged, err := profileSvc.GetProfile(anonymous.ProfileId)
+		require.NoError(t, err)
+		require.Equal(t, firstUser, unchanged.UserId)
+	})
+
+	t.Run("Relink_To_Same_User_Is_Accepted", func(t *testing.T) {
+		anonymous, err := profileSvc.CreateProfile(profileModel.ProfileRequest{
+			IdentityAttributes: map[string]interface{}{"email": []interface{}{"anon-5@wso2.com"}},
+		}, org)
+		require.NoError(t, err)
+
+		userId := "user-" + uuid.New().String()
+		payload := fmt.Sprintf(`{"user_id":%q}`, userId)
+
+		status, body := doLink(t, router, org, anonymous.ProfileId, payload)
+		require.Equal(t, http.StatusOK, status, string(body))
+
+		// A retry after a lost response must not fail.
+		status, body = doLink(t, router, org, anonymous.ProfileId, payload)
+		require.Equal(t, http.StatusOK, status, string(body))
+
+		var linkResponse profileModel.ProfileLinkResponse
+		require.NoError(t, json.Unmarshal(body, &linkResponse))
+		require.Equal(t, anonymous.ProfileId, linkResponse.ProfileId)
+		require.Equal(t, userId, linkResponse.UserId)
+
+		linked, err := profileSvc.GetProfile(anonymous.ProfileId)
+		require.NoError(t, err)
+		require.Equal(t, userId, linked.UserId)
+	})
+
 	t.Run("Link_UserId_With_Existing_Profile_Unifies", func(t *testing.T) {
 		userId := "user-" + uuid.New().String()
 
