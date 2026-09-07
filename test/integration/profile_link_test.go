@@ -92,8 +92,7 @@ func Test_ProfileLink(t *testing.T) {
 		require.Empty(t, anonymous.UserId)
 
 		userId := "user-" + uuid.New().String()
-		status, body := doLink(t, router, org, anonymous.ProfileId,
-			fmt.Sprintf(`{"user_id":%q}`, userId))
+		status, body := doLink(t, router, org, linkBody(anonymous.ProfileId, userId))
 		require.Equal(t, http.StatusOK, status, string(body))
 
 		var linkResponse profileModel.ProfileLinkResponse
@@ -108,20 +107,22 @@ func Test_ProfileLink(t *testing.T) {
 		require.Nil(t, linked.MergedTo)
 	})
 
-	t.Run("Link_Without_UserId_Is_Rejected", func(t *testing.T) {
+	t.Run("Link_With_Missing_Identifier_Is_Rejected", func(t *testing.T) {
 		anonymous, err := profileSvc.CreateProfile(profileModel.ProfileRequest{
 			IdentityAttributes: map[string]interface{}{"email": []interface{}{"anon-2@wso2.com"}},
 		}, org)
 		require.NoError(t, err)
 
 		for name, payload := range map[string]string{
-			"Missing": `{}`,
-			"Empty":   `{"user_id":""}`,
-			"Blank":   `{"user_id":"   "}`,
-			"Garbage": `not-json`,
+			"MissingUserId":    fmt.Sprintf(`{"profile_id":%q}`, anonymous.ProfileId),
+			"EmptyUserId":      fmt.Sprintf(`{"profile_id":%q,"user_id":""}`, anonymous.ProfileId),
+			"BlankUserId":      fmt.Sprintf(`{"profile_id":%q,"user_id":"   "}`, anonymous.ProfileId),
+			"MissingProfileId": `{"user_id":"user-does-not-matter"}`,
+			"BlankProfileId":   `{"profile_id":"   ","user_id":"user-does-not-matter"}`,
+			"Garbage":          `not-json`,
 		} {
 			t.Run(name, func(t *testing.T) {
-				status, body := doLink(t, router, org, anonymous.ProfileId, payload)
+				status, body := doLink(t, router, org, payload)
 				require.Equal(t, http.StatusBadRequest, status, string(body))
 
 				unchanged, err := profileSvc.GetProfile(anonymous.ProfileId)
@@ -132,8 +133,8 @@ func Test_ProfileLink(t *testing.T) {
 	})
 
 	t.Run("Link_Unknown_Profile_Is_Not_Found", func(t *testing.T) {
-		status, body := doLink(t, router, org, uuid.New().String(),
-			`{"user_id":"user-does-not-matter"}`)
+		status, body := doLink(t, router, org,
+			linkBody(uuid.New().String(), "user-does-not-matter"))
 		require.Equal(t, http.StatusNotFound, status, string(body))
 	})
 
@@ -144,13 +145,11 @@ func Test_ProfileLink(t *testing.T) {
 		require.NoError(t, err)
 
 		firstUser := "user-" + uuid.New().String()
-		status, body := doLink(t, router, org, anonymous.ProfileId,
-			fmt.Sprintf(`{"user_id":%q}`, firstUser))
+		status, body := doLink(t, router, org, linkBody(anonymous.ProfileId, firstUser))
 		require.Equal(t, http.StatusOK, status, string(body))
 
 		secondUser := "user-" + uuid.New().String()
-		status, body = doLink(t, router, org, anonymous.ProfileId,
-			fmt.Sprintf(`{"user_id":%q}`, secondUser))
+		status, body = doLink(t, router, org, linkBody(anonymous.ProfileId, secondUser))
 		require.Equal(t, http.StatusConflict, status, string(body))
 
 		unchanged, err := profileSvc.GetProfile(anonymous.ProfileId)
@@ -165,13 +164,13 @@ func Test_ProfileLink(t *testing.T) {
 		require.NoError(t, err)
 
 		userId := "user-" + uuid.New().String()
-		payload := fmt.Sprintf(`{"user_id":%q}`, userId)
+		payload := linkBody(anonymous.ProfileId, userId)
 
-		status, body := doLink(t, router, org, anonymous.ProfileId, payload)
+		status, body := doLink(t, router, org, payload)
 		require.Equal(t, http.StatusOK, status, string(body))
 
 		// A retry after a lost response must not fail.
-		status, body = doLink(t, router, org, anonymous.ProfileId, payload)
+		status, body = doLink(t, router, org, payload)
 		require.Equal(t, http.StatusOK, status, string(body))
 
 		var linkResponse profileModel.ProfileLinkResponse
@@ -199,8 +198,7 @@ func Test_ProfileLink(t *testing.T) {
 		}, org)
 		require.NoError(t, err)
 
-		status, body := doLink(t, router, org, anonymous.ProfileId,
-			fmt.Sprintf(`{"user_id":%q}`, userId))
+		status, body := doLink(t, router, org, linkBody(anonymous.ProfileId, userId))
 		require.Equal(t, http.StatusOK, status, string(body))
 
 		time.Sleep(2 * time.Second)
@@ -232,11 +230,16 @@ func newLinkRouter() *http.ServeMux {
 	return root
 }
 
-func doLink(t *testing.T, router *http.ServeMux, org, profileId, body string) (int, []byte) {
+func linkBody(profileId, userId string) string {
+
+	return fmt.Sprintf(`{"profile_id":%q,"user_id":%q}`, profileId, userId)
+}
+
+func doLink(t *testing.T, router *http.ServeMux, org, body string) (int, []byte) {
 
 	t.Helper()
 
-	target := fmt.Sprintf("/t/%s%s/v1/profiles/%s/link", org, constants.ApiBasePath, profileId)
+	target := fmt.Sprintf("/t/%s%s/v1/profiles/link", org, constants.ApiBasePath)
 	request := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer "+linkTestToken)
 	request.Header.Set("Content-Type", "application/json")

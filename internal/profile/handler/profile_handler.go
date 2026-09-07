@@ -790,18 +790,23 @@ func (ph *ProfileHandler) LinkProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profileId := r.PathValue("profileId")
-	if profileId == "" {
-		http.Error(w, "Invalid path", http.StatusNotFound)
-		return
-	}
-
 	var linkRequest model.ProfileLinkRequest
 	if err := json.NewDecoder(r.Body).Decode(&linkRequest); err != nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_PROFILE.Code,
 			Message:     errors2.UPDATE_PROFILE.Message,
 			Description: utils.HandleDecodeError(err, "profile link"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
+	profileId := strings.TrimSpace(linkRequest.ProfileId)
+	if profileId == "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: "profile_id is required to link a profile",
 		}, http.StatusBadRequest)
 		utils.HandleError(w, clientError)
 		return

@@ -57,7 +57,8 @@ type ProfileRequest struct {
 }
 
 type ProfileLinkRequest struct {
-	UserId string `json:"user_id" bson:"user_id"`
+	ProfileId string `json:"profile_id" bson:"profile_id"`
+	UserId    string `json:"user_id" bson:"user_id"`
 }
 
 type ProfileLinkResponse struct {
