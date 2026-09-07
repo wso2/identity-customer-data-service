@@ -278,6 +278,12 @@ var (
 		Description: "Multiple user profiles record found for the given user_id",
 	}
 
+	PROFILE_ALREADY_LINKED = ErrorMessage{
+		Code:        errorPrefix + "11017",
+		Message:     "Profile already linked.",
+		Description: "The profile is already linked to a different user",
+	}
+
 	UNIFICATION_RULE_NOT_FOUND = ErrorMessage{
 		Code:    errorPrefix + "12001",
 		Message: "No unification rule found.",
