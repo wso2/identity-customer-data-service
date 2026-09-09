@@ -1,0 +1,52 @@
+This product is licensed by WSO2 LLC. under Apache License 2.0. The license
+can be downloaded from the following locations:
+	http://www.apache.org/licenses/LICENSE-2.0.html
+	http://www.apache.org/licenses/LICENSE-2.0.txt
+
+This product also contains software under different licenses. The table below
+lists all the contained libraries (Go modules, statically linked into the
+service binary) and the license under which they are provided to you.
+
+At the bottom of this file is a table that shows what each license indicated
+below is and where the actual text of the license can be found.
+
+
+Name                                                                                                 Type           License
+_________________________________________________________________________________________________________________________________________________
+Go standard library (go1.26.5)                                                                       runtime        golang
+github.com/dustin/go-humanize@v1.0.1                                                                 module         mit
+github.com/go-stomp/stomp/v3@v3.1.5                                                                  module         apache2
+github.com/golang-jwt/jwt/v5@v5.2.2                                                                  module         mit
+github.com/google/uuid@v1.6.0                                                                        module         bsd3
+github.com/joho/godotenv@v1.5.1                                                                      module         mit
+github.com/lib/pq@v1.10.9                                                                            module         mit
+github.com/mattn/go-isatty@v0.0.20                                                                   module         mit
+github.com/ncruces/go-strftime@v1.0.0                                                                module         mit
+github.com/pkg/errors@v0.9.1                                                                         module         bsd2
+github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec                                  module         bsd3
+go.mongodb.org/mongo-driver@v1.17.7                                                                  module         apache2
+golang.org/x/sys@v0.45.0                                                                             module         bsd3
+gopkg.in/yaml.v2@v2.4.0                                                                              module         apache2 + mit
+modernc.org/libc@v1.73.4                                                                             module         bsd3 + mit
+modernc.org/mathutil@v1.7.1                                                                          module         bsd3
+modernc.org/memory@v1.11.0                                                                           module         bsd3
+modernc.org/sqlite@v1.53.0                                                                           module         bsd3
+
+
+The license types used by the above libraries and their information is given below:
+
+apache2        Apache License Version 2.0
+               http://www.apache.org/licenses/LICENSE-2.0.html
+mit            MIT License
+               http://www.opensource.org/licenses/mit-license.php
+bsd2           Berkeley License - 2
+               https://opensource.org/licenses/BSD-2-Clause
+bsd3           Berkeley License - 3
+               http://opensource.org/licenses/BSD-3-Clause
+golang         Go Lang
+               https://golang.org/LICENSE
+
+
+When this product is distributed as a container image, the image also contains
+base operating system packages that are licensed separately by their respective
+distributors. Refer to the base image documentation for those licenses.
