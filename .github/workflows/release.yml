@@ -197,13 +197,13 @@ jobs:
           go-version: '1.26.5'
 
       - name: Build
-        run: make build
+        run: make dist
 
-      - name: Upload Package
+      - name: Upload Packages
         uses: actions/upload-artifact@v4
         with:
-          name: cds-package
-          path: target/cds-*.zip
+          name: cds-packages
+          path: target/dist/*.zip
           if-no-files-found: error
 
       # Tag HEAD explicitly so the tag lands on the version bump commit rather
@@ -224,6 +224,6 @@ jobs:
           name: "CDS ${{ steps.version.outputs.version }}"
           prerelease: ${{ github.event.inputs.prerelease }}
           generate_release_notes: true
-          files: target/cds-*.zip
+          files: target/dist/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
