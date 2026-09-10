@@ -4,11 +4,21 @@ BINARY_NAME=cds
 REPOSITORY_DIR=config/repository
 OUTPUT_DIR=target
 BUILD_DIR=$(OUTPUT_DIR)/.build
+DIST_DIR=$(OUTPUT_DIR)/dist
+DISTRIBUTION_SRC=distribution
+
+# Platform targets for the release distribution, as <os>/<arch> pairs. Every
+# dependency is pure Go, so these all cross-compile with CGO_ENABLED=0.
+PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+
+# Product name, as registered with the WSO2 update service. Used for the packed
+# binary (<PACK>/bin/$(PRODUCT_NAME)), the pack directory and its zip.
+PRODUCT_NAME ?= wso2cds
 
 # Variable constants.
 VERSION=$(shell cat $(VERSION_FILE))
-# ZIP_FILE_NAME=${BINARY_NAME_PREFIX}-$(VERSION)
-PRODUCT_FOLDER=$(BINARY_NAME)-$(VERSION)
+# Pack names carry no leading "v", so strip it.
+PACK_VERSION=$(VERSION:v%=%)
 
 # Tools
 PROJECT_DIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
@@ -27,8 +37,10 @@ all: clean lint build integration-test
 clean:
 	rm -rf $(OUTPUT_DIR)
 
-# Build project and package it.
-build: _build _package
+# Compile the binary for the host platform. Packaging is `dist`, which produces
+# the release packs; this target exists for a fast compile check and for the
+# container image build, which copies $(BUILD_DIR)/$(BINARY_NAME).
+build: _build
 
 lint: golangci-lint
 	cd . && $(GOLANGCI_LINT) run ./...
@@ -65,22 +77,52 @@ _build:
 	mkdir -p $(BUILD_DIR) && \
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 
-# Package the binary and repository directory into a zip file.
-_package:
-	mkdir -p $(OUTPUT_DIR)/$(PRODUCT_FOLDER) && \
-	cp $(BUILD_DIR)/$(BINARY_NAME) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
-	cp -r $(REPOSITORY_DIR) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
-	cp $(VERSION_FILE) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
-	cp -r dbscripts $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
-	cd $(OUTPUT_DIR) && zip -r $(PRODUCT_FOLDER).zip $(PRODUCT_FOLDER) && \
-	rm -rf $(PRODUCT_FOLDER) && \
-	rm -rf $(BUILD_DIR)
+# Build the platform-specific release distributions.
+dist: clean-dist
+	@for platform in $(PLATFORMS); do \
+		$(MAKE) --no-print-directory _dist_one DIST_OS=$${platform%/*} DIST_ARCH=$${platform#*/} || exit 1; \
+	done
+
+# Stage and zip a single platform pack. Not meant to be called directly.
+#
+# Pack layout:
+#   bin/$(PRODUCT_NAME)[.exe]      the server binary
+#   repository/conf/               deployment.yaml and friends
+#   repository/database/           where the inbuilt database is created, see DefaultSQLitePath
+#   repository/dbscripts/          DDL for operators running an external database
+#   logs/                          created empty so the server can write on first start
+#   LICENSE.txt, README.md
+_dist_one:
+	@set -e; \
+	os=$(DIST_OS); arch=$(DIST_ARCH); \
+	bin=$(PRODUCT_NAME); \
+	if [ "$$os" = "windows" ]; then bin=$(PRODUCT_NAME).exe; fi; \
+	pack=$(PRODUCT_NAME)-$$os-$$arch-$(PACK_VERSION); \
+	stage=$(DIST_DIR)/$$pack; \
+	echo "Building $$pack..."; \
+	rm -rf $$stage; \
+	mkdir -p $$stage/bin $$stage/logs $$stage/repository/database $$stage/repository/dbscripts; \
+	CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -o $$stage/bin/$$bin ./cmd/server; \
+	cp -r $(REPOSITORY_DIR)/. $$stage/repository/; \
+	cp dbscripts/*.sql $$stage/repository/dbscripts/; \
+	cp LICENSE.txt README.md $$stage/; \
+	find $$stage -name '.DS_Store' -delete; \
+	cd $(DIST_DIR) && COPYFILE_DISABLE=1 zip -rq $$pack.zip $$pack -x '**/.DS_Store' -x '**/__MACOSX/**' && rm -rf $$pack; \
+	shasum -a 256 $$pack.zip > $$pack.zip.sha256; \
+	if command -v md5sum >/dev/null 2>&1; then md5sum $$pack.zip > $$pack.zip.md5; else md5 -r $$pack.zip > $$pack.zip.md5; fi; \
+	echo "  -> $(DIST_DIR)/$$pack.zip"
+
+# Remove the staged distributions and their zips.
+clean-dist:
+	rm -rf $(DIST_DIR)
 
 help:
 	@echo "Makefile targets:"
 	@echo "  all                        - Clean, build, and test the project."
 	@echo "  clean                      - Remove build artifacts."
-	@echo "  build                      - Build the Go project."
+	@echo "  build                      - Compile the binary for the host platform."
+	@echo "  dist                       - Build the platform-specific release zips into $(DIST_DIR)."
+	@echo "  clean-dist                 - Remove the staged distributions and their zips."
 	@echo "  integration-test           - Run integration tests against PostgreSQL (use test=TestName to filter)."
 	@echo "  integration-test-sqlite    - Run integration tests against the inbuilt database (use test=TestName to filter)."
 	@echo "  mq-integration-test        - Run message queue integration tests (use test=TestName to filter)."
@@ -88,7 +130,7 @@ help:
 	@echo "  lint                       - Run golangci-lint."
 	@echo "  help                       - Show this help message."
 
-.PHONY: all clean build lint help integration-test integration-test-sqlite mq-integration-test unit-test
+.PHONY: all clean build dist clean-dist _dist_one lint help integration-test integration-test-sqlite mq-integration-test unit-test
 
 .PHONY: go_install_tool golangci-lint
 

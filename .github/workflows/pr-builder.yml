@@ -57,6 +57,11 @@ jobs:
       - name: Build
         run: make build
 
+      # Cross-compilation is only exercised here, so a dependency that stops
+      # building for one platform is caught on the PR rather than at release.
+      - name: Build distributions
+        run: make dist
+
   lint:
     runs-on: ubuntu-latest
 

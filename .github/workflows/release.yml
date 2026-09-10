@@ -27,6 +27,17 @@
 name: 🚀 CDS Release Builder
 
 on:
+  # A merged pull request releases only when it carries exactly one
+  # `release:major|minor|patch` label, so the intent is recorded on the PR and
+  # visible in review rather than applied afterwards from memory. An unlabelled
+  # merge does nothing, which keeps `version.txt` a record of what was released.
+  #
+  # pull_request_target runs the workflow from the base branch with access to
+  # secrets. Nothing from the pull request head is ever checked out: the release
+  # is built from the base branch, which is what makes this safe.
+  pull_request_target:
+    types: [closed]
+
   workflow_dispatch:
     inputs:
       branch:
@@ -66,15 +77,46 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 env:
-  RELEASE_BRANCH: ${{ inputs.branch || 'main' }}
+  RELEASE_BRANCH: ${{ github.event.pull_request.base.ref || inputs.branch || 'main' }}
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(join(github.event.pull_request.labels.*.name, ','), 'release:'))
 
     steps:
+      # Exactly one release label, so an ambiguous PR fails loudly instead of
+      # silently picking a bump.
+      - name: 🏷️ Resolve bump from pull request labels
+        id: label
+        if: github.event_name == 'pull_request_target'
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+        run: |
+          found=""
+          for label in $LABELS; do
+            case "$label" in
+              release:major|release:minor|release:patch)
+                found="$found ${label#release:}"
+                ;;
+            esac
+          done
+
+          set -- $found
+          if [ "$#" -ne 1 ]; then
+            echo "❌ Expected exactly one release:major|minor|patch label, found:$found"
+            exit 1
+          fi
+
+          echo "bump=$1" >> $GITHUB_OUTPUT
+          echo "✅ Releasing a $1 bump for #${{ github.event.pull_request.number }}"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -93,9 +135,9 @@ jobs:
         env:
           VERSION_INPUT: ${{ github.event.inputs.version }}
         run: |
-          BUMP_TYPE="${{ github.event.inputs.bump_type }}"
-          USE_EXISTING="${{ github.event.inputs.use_existing_version }}"
-          COMMIT_BUMP="${{ github.event.inputs.commit_version_bump }}"
+          BUMP_TYPE="${{ steps.label.outputs.bump || github.event.inputs.bump_type }}"
+          USE_EXISTING="${{ github.event.inputs.use_existing_version || 'false' }}"
+          COMMIT_BUMP="${{ github.event.inputs.commit_version_bump || 'true' }}"
 
           VERSION_INPUT=$(printf '%s' "$VERSION_INPUT" | tr -d '[:space:]')
 
@@ -197,13 +239,13 @@ jobs:
           go-version: '1.26.5'
 
       - name: Build
-        run: make build
+        run: make dist
 
-      - name: Upload Package
+      - name: Upload Packages
         uses: actions/upload-artifact@v4
         with:
-          name: cds-package
-          path: target/cds-*.zip
+          name: cds-packages
+          path: target/dist/*.zip
           if-no-files-found: error
 
       # Tag HEAD explicitly so the tag lands on the version bump commit rather
@@ -222,8 +264,8 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: "CDS ${{ steps.version.outputs.version }}"
-          prerelease: ${{ github.event.inputs.prerelease }}
+          prerelease: ${{ github.event.inputs.prerelease || false }}
           generate_release_notes: true
-          files: target/cds-*.zip
+          files: target/dist/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
