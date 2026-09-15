@@ -421,10 +421,14 @@ var AllowedEvidenceStrengths = map[string]bool{
 // of difference. Folding both directions into one number is what makes a mismatching
 // attribute dilute a match instead of contradicting it.
 var DefaultMatchStrength = map[string]string{
-	AttributeTypeUniqueID:       EvidenceStrengthHigh,
-	AttributeTypeEmail:          EvidenceStrengthHigh,
-	AttributeTypePhone:          EvidenceStrengthHigh,
-	AttributeTypePrimitiveExact: EvidenceStrengthMedium,
+	AttributeTypeUniqueID: EvidenceStrengthHigh,
+	AttributeTypeEmail:    EvidenceStrengthHigh,
+	AttributeTypePhone:    EvidenceStrengthHigh,
+	// PRIMITIVE_EXACT is what every rule written before typed matching resolves to, and
+	// back then any rule matching exactly merged the two profiles outright. Treating it as
+	// strong keeps that true on upgrade. An operator who wants a weaker reading gives the
+	// attribute its real type instead.
+	AttributeTypePrimitiveExact: EvidenceStrengthHigh,
 	AttributeTypeFuzzyString:    EvidenceStrengthMedium,
 	AttributeTypeName:           EvidenceStrengthLow,
 	AttributeTypeLocation:       EvidenceStrengthLow,

@@ -58,52 +58,7 @@ func GetAdminConfig(orgHandle string) (*model.AdminConfig, error) {
 		}, err)
 	}
 
-	config := &model.AdminConfig{
-		OrgHandle:             orgHandle,
-		CDSEnabled:            false,
-		InitialSchemaSyncDone: false,
-		SystemApplications:    []string{},
-	}
-
-	if len(results) == 0 {
-		logger.Warn(fmt.Sprintf("No configurations found for organization: %s", orgHandle))
-		return config, nil
-	}
-
-	for _, row := range results {
-		configKey, ok := row["config"].(string)
-		if !ok {
-			continue
-		}
-		value, ok := row["value"].(string)
-		if !ok {
-			continue
-		}
-
-		switch configKey {
-		case constants.ConfigCDSEnabled:
-			config.CDSEnabled = value == "true"
-		case constants.ConfigInitialSchemaSyncDone:
-			config.InitialSchemaSyncDone = value == "true"
-		case constants.ConfigSystemApplications:
-			var apps []string
-			if err := json.Unmarshal([]byte(value), &apps); err == nil {
-				config.SystemApplications = apps
-			}
-		case constants.ConfigAutoMergeEnabled:
-			config.AutoMergeEnabled = value == "true"
-		case constants.ConfigAutoMergeThreshold:
-			if v, err := strconv.ParseFloat(value, 64); err == nil && v > 0 && v <= 1 {
-				config.AutoMergeThreshold = v
-			}
-		case constants.ConfigManualReviewThreshold:
-			if v, err := strconv.ParseFloat(value, 64); err == nil && v > 0 && v <= 1 {
-				config.ManualReviewThreshold = v
-			}
-		}
-	}
-
-	return config, nil
+	return scanAdminConfigRows(orgHandle, results), nil
 }
 
 // UpdateAdminConfig updates organization-level admin configuration (e.g., CDS enablement, schema sync flags).
@@ -279,4 +234,63 @@ func UpdateInitialSchemaSyncConfig(state bool, orgHandle string) error {
 		}, err)
 	}
 	return tx.Commit()
+}
+
+// scanAdminConfigRows turns the key/value rows held for an org into an AdminConfig.
+//
+// Settings live as individual rows, so a key an org has never set is simply absent. Each
+// default below is therefore the behaviour an org gets by saying nothing, which matters
+// most on upgrade: a key introduced by a new feature must default to what the org was
+// already doing, not to the zero value.
+func scanAdminConfigRows(orgHandle string, results []map[string]interface{}) *model.AdminConfig {
+
+	config := &model.AdminConfig{
+		OrgHandle:             orgHandle,
+		CDSEnabled:            false,
+		InitialSchemaSyncDone: false,
+		SystemApplications:    []string{},
+		// Enabled unless the org has explicitly turned it off. An org configured before
+		// this key existed has no row for it, and reading that absence as "disabled" would
+		// silently stop every merge the tenant relied on and route it to review instead.
+		AutoMergeEnabled: true,
+	}
+
+	if len(results) == 0 {
+		return config
+	}
+
+	for _, row := range results {
+		configKey, ok := row["config"].(string)
+		if !ok {
+			continue
+		}
+		value, ok := row["value"].(string)
+		if !ok {
+			continue
+		}
+
+		switch configKey {
+		case constants.ConfigCDSEnabled:
+			config.CDSEnabled = value == "true"
+		case constants.ConfigInitialSchemaSyncDone:
+			config.InitialSchemaSyncDone = value == "true"
+		case constants.ConfigSystemApplications:
+			var apps []string
+			if err := json.Unmarshal([]byte(value), &apps); err == nil {
+				config.SystemApplications = apps
+			}
+		case constants.ConfigAutoMergeEnabled:
+			config.AutoMergeEnabled = value == "true"
+		case constants.ConfigAutoMergeThreshold:
+			if v, err := strconv.ParseFloat(value, 64); err == nil && v > 0 && v <= 1 {
+				config.AutoMergeThreshold = v
+			}
+		case constants.ConfigManualReviewThreshold:
+			if v, err := strconv.ParseFloat(value, 64); err == nil && v > 0 && v <= 1 {
+				config.ManualReviewThreshold = v
+			}
+		}
+	}
+
+	return config
 }

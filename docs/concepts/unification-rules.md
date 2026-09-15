@@ -48,6 +48,11 @@ rejected rather than quietly ignored — a caller that believes it set a strengt
 overruled would misread every merge decision that followed. Turn it on only where someone
 can judge the effect on existing profiles.
 
+`PRIMITIVE_EXACT` is what a rule written before typed matching resolves to, and it is
+treated as strong in both directions on purpose: previously any rule matching exactly merged
+the two profiles outright, and an upgrade must not quietly change that. An operator who
+wants a weaker reading gives the attribute its real type.
+
 | Attribute type | `match_strength` | `mismatch_strength` |
 |---|---|---|
 | `UNIQUE_ID` | HIGH | HIGH |
@@ -57,7 +62,7 @@ can judge the effect on existing profiles.
 | `NAME` | LOW | MEDIUM |
 | `LOCATION` | LOW | LOW |
 | `FUZZY_STRING` | MEDIUM | LOW |
-| `PRIMITIVE_EXACT` | MEDIUM | MEDIUM |
+| `PRIMITIVE_EXACT` | HIGH | MEDIUM |
 
 The strengths are returned on the rule so a client can display what the engine is applying,
 even where they cannot be edited.
