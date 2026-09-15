@@ -39,8 +39,14 @@ disagreement on the same attribute rarely carry equal weight:
 | `MEDIUM` | Real evidence, but another attribute must also agree | Counts against the match without blocking it |
 | `LOW` | Close to coincidence on its own | Says little; people legitimately have several |
 
-Both fields are optional. Left unset, each is seeded from `attribute_type` with the defaults
-below, so a rule created without thinking about strengths still behaves sensibly.
+Both are derived from `attribute_type` using the table below, so a rule created without
+thinking about strengths still behaves sensibly.
+
+Setting them per rule is gated on `identity_resolution.allow_evidence_strength_override` in
+`deployment.yaml`, which is **off by default**. While it is off, sending either field is
+rejected rather than quietly ignored — a caller that believes it set a strength and is
+overruled would misread every merge decision that followed. Turn it on only where someone
+can judge the effect on existing profiles.
 
 | Attribute type | `match_strength` | `mismatch_strength` |
 |---|---|---|
@@ -53,9 +59,8 @@ below, so a rule created without thinking about strengths still behaves sensibly
 | `FUZZY_STRING` | MEDIUM | LOW |
 | `PRIMITIVE_EXACT` | MEDIUM | MEDIUM |
 
-`GET /unification-rules/options` returns these defaults per attribute type along with the
-available choices and the wording for each, so a client can pre-select the default and let
-the operator override it rather than presenting an empty field.
+The strengths are returned on the rule so a client can display what the engine is applying,
+even where they cannot be edited.
 
 ---
 

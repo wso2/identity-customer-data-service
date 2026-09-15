@@ -27,6 +27,7 @@ import (
 
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/worker"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -371,18 +372,22 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 
 	if ruleUpdateRequest.MatchStrength != nil {
-		if !constants.AllowedEvidenceStrengths[*ruleUpdateRequest.MatchStrength] {
-			utils.WriteErrorResponse(w, invalidEvidenceStrength("match_strength", *ruleUpdateRequest.MatchStrength))
+		strength, strengthErr := resolveEvidenceStrength(*ruleUpdateRequest.MatchStrength,
+			constants.DefaultMatchStrength, updatedRule.AttributeType, "match_strength")
+		if strengthErr != nil {
+			utils.WriteErrorResponse(w, strengthErr)
 			return
 		}
-		updatedRule.MatchStrength = *ruleUpdateRequest.MatchStrength
+		updatedRule.MatchStrength = strength
 	}
 	if ruleUpdateRequest.MismatchStrength != nil {
-		if !constants.AllowedEvidenceStrengths[*ruleUpdateRequest.MismatchStrength] {
-			utils.WriteErrorResponse(w, invalidEvidenceStrength("mismatch_strength", *ruleUpdateRequest.MismatchStrength))
+		strength, strengthErr := resolveEvidenceStrength(*ruleUpdateRequest.MismatchStrength,
+			constants.DefaultMismatchStrength, updatedRule.AttributeType, "mismatch_strength")
+		if strengthErr != nil {
+			utils.WriteErrorResponse(w, strengthErr)
 			return
 		}
-		updatedRule.MismatchStrength = *ruleUpdateRequest.MismatchStrength
+		updatedRule.MismatchStrength = strength
 	}
 	// An attribute-type change re-seeds any strength the operator never set explicitly.
 	if updatedRule.MatchStrength == "" {
@@ -501,9 +506,22 @@ func isCDSEnabled(orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
 }
 
-// resolveEvidenceStrength validates an operator-supplied strength, falling back to the
-// default for the attribute type when the field is omitted.
+// resolveEvidenceStrength decides a rule's evidence strength for one direction.
+//
+// Unless the server allows overrides, the value is derived from the attribute type and a
+// supplied value is refused rather than silently dropped — a caller that believes it set
+// the strength and is ignored would misread every merge decision that follows.
 func resolveEvidenceStrength(supplied string, defaults map[string]string, attrType, field string) (string, *errors2.ClientError) {
+	if supplied != "" && !evidenceStrengthOverrideAllowed() {
+		return "", errors2.NewClientError(errors2.ErrorMessage{
+			Code:    errors2.BAD_REQUEST.Code,
+			Message: errors2.BAD_REQUEST.Message,
+			Description: fmt.Sprintf(
+				"%s cannot be set on this server. It is derived from attribute_type; enable "+
+					"identity_resolution.allow_evidence_strength_override to set it per rule.", field),
+		}, http.StatusBadRequest)
+	}
+
 	if supplied == "" {
 		if def, ok := defaults[attrType]; ok {
 			return def, nil
@@ -514,6 +532,12 @@ func resolveEvidenceStrength(supplied string, defaults map[string]string, attrTy
 		return "", invalidEvidenceStrength(field, supplied)
 	}
 	return supplied, nil
+}
+
+// evidenceStrengthOverrideAllowed reports whether this deployment lets a rule carry its own
+// evidence strengths.
+func evidenceStrengthOverrideAllowed() bool {
+	return config.GetCDSRuntime().Config.IdentityResolution.AllowEvidenceStrengthOverride
 }
 
 func invalidEvidenceStrength(field, value string) *errors2.ClientError {

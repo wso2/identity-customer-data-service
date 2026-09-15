@@ -135,3 +135,9 @@ tls:
   server_key: "server.key" #filename
   client_cert: "client.crt"   #filename
   trust_store: "trust_store.pem"      #filename
+
+identity_resolution:
+  # Allow a unification rule to carry its own match_strength and mismatch_strength rather
+  # than taking the values derived from its attribute_type. Off until operators have a way
+  # to preview what a change would do to existing profiles.
+  allow_evidence_strength_override: false

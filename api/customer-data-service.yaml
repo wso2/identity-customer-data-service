@@ -176,25 +176,6 @@ paths:
                 items:
                   $ref: '#/components/schemas/UnificationRule'
 
-  /unification-rules/options:
-    get:
-      tags: [Profile Unification]
-      summary: Get the choices available when defining a unification rule
-      description: |
-        Everything a client needs to build the rule form: the supported attribute types,
-        the matching methods each one allows, the evidence-strength choices, and the
-        strengths an attribute type takes when the operator does not pick any. The
-        defaults are read from the same tables the matching engine uses, so the form
-        cannot offer something the engine would not apply.
-      operationId: getUnificationOptions
-      responses:
-        '200':
-          description: Available options retrieved
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UnificationOptions'
-
   /unification-rules/{rule_id}:
     get:
       tags: [Profile Unification]
@@ -690,21 +671,30 @@ components:
           example: "deterministic"
         match_strength:
           type: string
+          readOnly: true
           description: |
             How much an agreement on this attribute supports a merge. HIGH means the
             attribute identifies a person well enough to merge on it alone; MEDIUM and LOW
-            require a second agreeing rule. Defaults from `attribute_type` when omitted.
+            require a second agreeing rule.
+
+            Derived from `attribute_type` and returned for information. Sending it is
+            rejected unless the server sets
+            `identity_resolution.allow_evidence_strength_override`.
           enum: [HIGH, MEDIUM, LOW]
           example: "HIGH"
         mismatch_strength:
           type: string
+          readOnly: true
           description: |
             How much a disagreement on this attribute opposes a merge. HIGH makes the
             attribute discriminating: two present, differing values veto an automatic merge
             whatever else agrees. Independent of `match_strength`, because the two
             directions rarely carry equal weight — matching emails strongly imply the same
             person while differing emails imply little, and a date of birth is the reverse.
-            Defaults from `attribute_type` when omitted.
+
+            Derived from `attribute_type` and returned for information. Sending it is
+            rejected unless the server sets
+            `identity_resolution.allow_evidence_strength_override`.
           enum: [HIGH, MEDIUM, LOW]
           example: "LOW"
         created_at:
@@ -717,70 +707,6 @@ components:
           format: int64
           description: UNIX timestamp of last update
           example: 1744176544
-
-    UnificationOptions:
-      type: object
-      properties:
-        attribute_types:
-          type: array
-          items:
-            type: object
-            properties:
-              value:
-                type: string
-                example: "EMAIL"
-              label:
-                type: string
-                example: "Email Address"
-              allowed_methods:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    value:
-                      type: string
-                      example: "fuzzy"
-                    label:
-                      type: string
-                      example: "Fuzzy (Typo tolerant)"
-              default_match_strength:
-                type: string
-                enum: [HIGH, MEDIUM, LOW]
-                description: Pre-select this; the operator may override it.
-                example: "HIGH"
-              default_mismatch_strength:
-                type: string
-                enum: [HIGH, MEDIUM, LOW]
-                example: "LOW"
-        match_strengths:
-          type: array
-          description: |
-            How much an agreement on the attribute supports a merge.
-          items:
-            $ref: '#/components/schemas/StrengthOption'
-        mismatch_strengths:
-          type: array
-          description: |
-            How much a disagreement opposes one. Offered separately from `match_strengths`
-            because the same value means something different in each direction — HIGH on a
-            match says the attribute can merge two profiles alone, HIGH on a mismatch says
-            two differing values mean two different people.
-          items:
-            $ref: '#/components/schemas/StrengthOption'
-
-    StrengthOption:
-      type: object
-      properties:
-        value:
-          type: string
-          enum: [HIGH, MEDIUM, LOW]
-          example: "HIGH"
-        label:
-          type: string
-          example: "Strong — can merge on its own"
-        description:
-          type: string
-          example: "Two profiles sharing this value are almost certainly the same person, so a match here can merge them unattended."
 
     UnificationRulePatch:
       type: object
@@ -814,21 +740,30 @@ components:
           example: "deterministic"
         match_strength:
           type: string
+          readOnly: true
           description: |
             How much an agreement on this attribute supports a merge. HIGH means the
             attribute identifies a person well enough to merge on it alone; MEDIUM and LOW
-            require a second agreeing rule. Defaults from `attribute_type` when omitted.
+            require a second agreeing rule.
+
+            Derived from `attribute_type` and returned for information. Sending it is
+            rejected unless the server sets
+            `identity_resolution.allow_evidence_strength_override`.
           enum: [HIGH, MEDIUM, LOW]
           example: "HIGH"
         mismatch_strength:
           type: string
+          readOnly: true
           description: |
             How much a disagreement on this attribute opposes a merge. HIGH makes the
             attribute discriminating: two present, differing values veto an automatic merge
             whatever else agrees. Independent of `match_strength`, because the two
             directions rarely carry equal weight — matching emails strongly imply the same
             person while differing emails imply little, and a date of birth is the reverse.
-            Defaults from `attribute_type` when omitted.
+
+            Derived from `attribute_type` and returned for information. Sending it is
+            rejected unless the server sets
+            `identity_resolution.allow_evidence_strength_override`.
           enum: [HIGH, MEDIUM, LOW]
           example: "LOW"
 

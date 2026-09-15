@@ -247,44 +247,8 @@ var attributeTypeOptions = []model.AttributeTypeOption{
 	},
 }
 
-// matchStrengthOptions and mismatchStrengthOptions are the evidence-strength choices,
-// ordered strongest first.
-var matchStrengthOptions = []model.StrengthOption{
-	{Value: constants.EvidenceStrengthHigh, Label: constants.MatchStrengthLabelHigh,
-		Description: constants.MatchStrengthDescriptionHigh},
-	{Value: constants.EvidenceStrengthMedium, Label: constants.MatchStrengthLabelMedium,
-		Description: constants.MatchStrengthDescriptionMedium},
-	{Value: constants.EvidenceStrengthLow, Label: constants.MatchStrengthLabelLow,
-		Description: constants.MatchStrengthDescriptionLow},
-}
-
-var mismatchStrengthOptions = []model.StrengthOption{
-	{Value: constants.EvidenceStrengthHigh, Label: constants.MismatchStrengthLabelHigh,
-		Description: constants.MismatchStrengthDescriptionHigh},
-	{Value: constants.EvidenceStrengthMedium, Label: constants.MismatchStrengthLabelMedium,
-		Description: constants.MismatchStrengthDescriptionMedium},
-	{Value: constants.EvidenceStrengthLow, Label: constants.MismatchStrengthLabelLow,
-		Description: constants.MismatchStrengthDescriptionLow},
-}
-
-// GetUnificationOptions returns everything a client needs to build the rule form: the
-// supported attribute types, the matching methods each one allows, the evidence-strength
-// choices, and the strengths an attribute type takes when the operator does not pick any.
-//
-// The per-type defaults are read from the same tables the scorer uses, so what the form
-// offers cannot drift from what the engine applies.
+// GetUnificationOptions returns the supported attribute types and their allowed matching
+// methods.
 func (urs *UnificationRuleService) GetUnificationOptions() model.UnificationOptionsResponse {
-
-	types := make([]model.AttributeTypeOption, 0, len(attributeTypeOptions))
-	for _, option := range attributeTypeOptions {
-		option.DefaultMatchStrength = constants.DefaultMatchStrength[option.Value]
-		option.DefaultMismatchStrength = constants.DefaultMismatchStrength[option.Value]
-		types = append(types, option)
-	}
-
-	return model.UnificationOptionsResponse{
-		AttributeTypes:    types,
-		MatchStrengths:    matchStrengthOptions,
-		MismatchStrengths: mismatchStrengthOptions,
-	}
+	return model.UnificationOptionsResponse{AttributeTypes: attributeTypeOptions}
 }
