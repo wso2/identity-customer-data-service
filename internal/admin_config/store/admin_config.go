@@ -46,7 +46,7 @@ func GetAdminConfig(orgHandle string) (*model.AdminConfig, error) {
 	}
 	defer dbClient.Close()
 
-	query := scripts.GetOrgConfigurations[provider.NewDBProvider().GetDBType()]
+	query := scripts.GetOrgConfigurations
 	results, err := dbClient.ExecuteQuery(query, orgHandle)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to execute query for fetching configurations for organization: %s", orgHandle)
@@ -133,7 +133,7 @@ func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 		}, err)
 	}
 
-	query := scripts.UpdateOrgConfiguration[provider.NewDBProvider().GetDBType()]
+	query := scripts.UpdateOrgConfiguration
 
 	cdsEnabledValue := "false"
 	if config.CDSEnabled {
@@ -266,7 +266,7 @@ func UpdateInitialSchemaSyncConfig(state bool, orgHandle string) error {
 		stateValue = "true"
 	}
 
-	query := scripts.UpdateInitialSchemaSyncDoneConfig[provider.NewDBProvider().GetDBType()]
+	query := scripts.UpdateInitialSchemaSyncDoneConfig
 	_, err = tx.Exec(query, orgHandle, stateValue)
 	if err != nil {
 		_ = tx.Rollback()

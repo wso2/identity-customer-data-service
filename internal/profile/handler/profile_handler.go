@@ -28,6 +28,7 @@ import (
 
 	adminConfigPkg "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	appProvider "github.com/wso2/identity-customer-data-service/internal/application/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
@@ -95,12 +96,23 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filterParams := parseApplicationDataParams(r)
-	callerAppID := getCallerAppIDFromRequest(r)
-	isSystemApp := isCallerSystemApplication(orgHandle, callerAppID)
+	// In app_id mode the caller's clientId is resolved to its app ID; the system-app check runs on that identifier.
+	callerClientID := getCallerClientIDFromRequest(r)
+	callerAppIdentifier := callerClientID
+	if config.GetCDSRuntime().Config.UsesAppIDIdentifier() && callerClientID != "" {
+		resolved, resolveErr := appProvider.NewApplicationProvider().GetApplicationService().
+			ResolveAppIdentifierByClientID(orgHandle, callerClientID)
+		if resolveErr != nil {
+			utils.HandleError(w, resolveErr)
+			return
+		}
+		callerAppIdentifier = resolved
+	}
+	isSystemApp := isCallerSystemApplication(orgHandle, callerAppIdentifier)
 
 	profile.ApplicationData = profileService.FilterApplicationData(
 		profile.ApplicationData,
-		callerAppID,
+		callerAppIdentifier,
 		isSystemApp,
 		filterParams,
 	)
@@ -615,6 +627,8 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	profileResponse.AnonymousProfileTracker = cookie.CookieId
+
 	// Construct Location header for created resource
 	serverURL := config.GetCDSRuntime().Config.ServerURL
 	pathPrefix := utils.ExtractPathPrefixFromContext(r)
@@ -650,6 +664,7 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 	}
 
 	_ = setProfileCookie(w, cookieObj.CookieId, r)
+	profileResponse.AnonymousProfileTracker = cookieObj.CookieId
 	utils.RespondJSON(w, http.StatusOK, profileResponse, constants.ProfileResource)
 	return true
 }
@@ -788,6 +803,110 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, serverError)
 	}
 	utils.RespondJSON(w, http.StatusOK, profileResponse, constants.ProfileResource)
+}
+
+// LinkProfile links an anonymous profile to a user
+func (ph *ProfileHandler) LinkProfile(w http.ResponseWriter, r *http.Request) {
+
+	err := security.AuthnAndAuthz(r, "profile:link")
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
+	if !isCDSEnabled(orgHandle) {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: errors2.CDS_NOT_ENABLED.Description,
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
+	var linkRequest model.ProfileLinkRequest
+	if err := json.NewDecoder(r.Body).Decode(&linkRequest); err != nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: utils.HandleDecodeError(err, "profile link"),
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
+	profileId := strings.TrimSpace(linkRequest.ProfileId)
+	if profileId == "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: "profile_id is required to link a profile",
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
+	userId := strings.TrimSpace(linkRequest.UserId)
+	if userId == "" {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_PROFILE.Code,
+			Message:     errors2.UPDATE_PROFILE.Message,
+			Description: "user_id is required to link a profile",
+		}, http.StatusBadRequest)
+		utils.HandleError(w, clientError)
+		return
+	}
+
+	profilesProvider := provider.NewProfilesProvider()
+	profilesService := profilesProvider.GetProfilesService()
+
+	existingProfile, err := profilesService.GetProfile(profileId)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	if existingProfile.UserId != "" {
+		if existingProfile.UserId != userId {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.PROFILE_ALREADY_LINKED.Code,
+				Message:     errors2.PROFILE_ALREADY_LINKED.Message,
+				Description: errors2.PROFILE_ALREADY_LINKED.Description,
+			}, http.StatusConflict)
+			utils.HandleError(w, clientError)
+			return
+		}
+
+		linkResponse := model.ProfileLinkResponse{
+			ProfileId: profileId,
+			UserId:    userId,
+		}
+		utils.RespondJSON(w, http.StatusOK, linkResponse, constants.ProfileResource)
+		return
+	}
+
+	profileRequest := model.ProfileRequest{
+		UserId:             userId,
+		IdentityAttributes: existingProfile.IdentityAttributes,
+		Traits:             existingProfile.Traits,
+		ApplicationData:    profileService.WideAppDataMap(existingProfile.ApplicationData),
+	}
+
+	_, err = profilesService.UpdateProfile(profileId, orgHandle, profileRequest)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	log.GetLogger().Info(fmt.Sprintf("Linked profile: %s to user: %s in organization: %s", profileId, userId,
+		orgHandle))
+
+	linkResponse := model.ProfileLinkResponse{
+		ProfileId: profileId,
+		UserId:    userId,
+	}
+	utils.RespondJSON(w, http.StatusOK, linkResponse, constants.ProfileResource)
 }
 
 // PatchCurrentUserProfile handles partial updates to the current user's profile
@@ -1407,7 +1526,7 @@ func extractClaimKeyFromLocalURI(localURI string) string {
 	return parts[len(parts)-1]
 }
 
-func getCallerAppIDFromRequest(r *http.Request) string {
+func getCallerClientIDFromRequest(r *http.Request) string {
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
 		return ""

@@ -27,6 +27,7 @@ import (
 type ProfileResponse struct {
 	ProfileId          string                            `json:"profile_id" bson:"profile_id"`
 	UserId             string                            `json:"user_id,omitempty" bson:"user_id,omitempty"`
+	AnonymousProfileTracker string                         `json:"anonymous_profile_tracker,omitempty" bson:"anonymous_profile_tracker,omitempty"`
 	Meta               Meta                              `json:"meta" bson:"meta"`
 	IdentityAttributes map[string]interface{}            `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
 	Traits             map[string]interface{}            `json:"traits,omitempty" bson:"traits,omitempty"`
@@ -58,6 +59,16 @@ type ProfileRequest struct {
 	IdentityAttributes map[string]interface{} `json:"identity_attributes,omitempty" bson:"identity_attributes,omitempty"`
 	Traits             map[string]interface{} `json:"traits,omitempty" bson:"traits,omitempty"`
 	ApplicationData    map[string]interface{} `json:"application_data"`
+}
+
+type ProfileLinkRequest struct {
+	ProfileId string `json:"profile_id" bson:"profile_id"`
+	UserId    string `json:"user_id" bson:"user_id"`
+}
+
+type ProfileLinkResponse struct {
+	ProfileId string `json:"profile_id" bson:"profile_id"`
+	UserId    string `json:"user_id" bson:"user_id"`
 }
 
 type ProfileSync struct {

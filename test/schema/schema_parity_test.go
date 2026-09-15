@@ -18,10 +18,11 @@
 
 // Package schema guards the two copies of the database schema against drift.
 //
-// Integration tests build their database from test/setup/schema.sql, while real
-// installations run dbscripts/postgres.sql. Nothing connects the two, so a change applied
-// to one and not the other passes CI and breaks on install — which is how a file with
-// unresolved merge-conflict markers reached the branch with every test green.
+// Integration tests build their database from test/setup/schema.sql, an external install
+// runs dbscripts/postgres.sql, and the inbuilt datasource runs dbscripts/sqlite.sql.
+// Nothing connects the three, so a change applied to one and not the others passes CI and
+// breaks on install — which is how a file with unresolved merge-conflict markers reached
+// the branch with every test green.
 package schema
 
 import (
@@ -35,6 +36,7 @@ import (
 
 const (
 	installSchema = "../../dbscripts/postgres.sql"
+	sqliteSchema  = "../../dbscripts/sqlite.sql"
 	testSchema    = "../setup/schema.sql"
 )
 
@@ -70,7 +72,7 @@ func tables(sql string) []string {
 // install. A marker makes the file unexecutable, and because integration tests read the
 // other copy, nothing else in the suite notices.
 func TestSchemasHaveNoConflictMarkers(t *testing.T) {
-	for _, path := range []string{installSchema, testSchema} {
+	for _, path := range []string{installSchema, sqliteSchema, testSchema} {
 		content := read(t, path)
 		for _, line := range conflictMarker.FindAllString(content, -1) {
 			t.Errorf("%s contains an unresolved conflict marker: %q", path, line)
@@ -103,7 +105,7 @@ func TestInstallSchemaDefinesEveryTestedTable(t *testing.T) {
 func TestIdentityResolutionTablesArePresent(t *testing.T) {
 	required := []string{"blocking_keys", "review_tasks", "rejection_pairs", "merge_audit_log"}
 
-	for _, path := range []string{installSchema, testSchema} {
+	for _, path := range []string{installSchema, sqliteSchema, testSchema} {
 		present := make(map[string]bool)
 		for _, name := range tables(read(t, path)) {
 			present[name] = true
@@ -121,7 +123,7 @@ func TestIdentityResolutionTablesArePresent(t *testing.T) {
 func TestUnificationRuleMatchingColumnsExist(t *testing.T) {
 	required := []string{"attribute_type", "unification_method", "match_strength", "mismatch_strength"}
 
-	for _, path := range []string{installSchema, testSchema} {
+	for _, path := range []string{installSchema, sqliteSchema, testSchema} {
 		content := read(t, path)
 		start := strings.Index(strings.ToLower(content), "create table if not exists unification_rules")
 		if start < 0 {

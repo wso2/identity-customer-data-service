@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
@@ -52,7 +53,7 @@ func (h HealthCheckService) CheckReadiness() error {
 	defer dbClient.Close()
 
 	// Perform a lightweight query to ensure DB connectivity.
-	_, err = dbClient.ExecuteQuery("SELECT 1;")
+	_, err = dbClient.ExecuteQuery(scripts.HealthCheckPing)
 	if err != nil {
 		return fmt.Errorf("database connectivity check failed: %v", err)
 	}

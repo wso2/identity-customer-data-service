@@ -52,8 +52,24 @@ type AuthServerConfig struct {
 	IsSystemAppGrantEnabled   bool                `yaml:"isSystemAppGrantEnabled"`
 }
 
+// SQLiteConfig holds the settings for the inbuilt datasource. Every field is
+// optional and falls back to a default.
+type SQLiteConfig struct {
+	// Path is the database file location, relative to CDS_HOME unless
+	// absolute.
+	Path string `yaml:"path"`
+	// Options is the DSN query string appended to Path. Setting it replaces
+	// the defaults, so include every option that is needed.
+	Options string `yaml:"options"`
+	// MaxOpenConns bounds the connection pool.
+	MaxOpenConns int `yaml:"max_open_conns"`
+}
+
+// DataSourceConfig selects and configures the database.
 type DataSourceConfig struct {
-	Type     string `yaml:"type"` // e.g., "postgres", "mysql"
+	Type string `yaml:"type"` // "sqlite" (inbuilt, the default) or "postgres"
+
+	// PostgreSQL settings. Read only when Type is "postgres".
 	Hostname string `yaml:"hostname"`
 	Port     int    `yaml:"port"`
 	Name     string `yaml:"name"`
@@ -66,6 +82,9 @@ type DataSourceConfig struct {
 	MaxOpenConns    int `yaml:"max_open_conns"`
 	MaxIdleConns    int `yaml:"max_idle_conns"`
 	ConnMaxLifetime int `yaml:"conn_max_lifetime_seconds"`
+
+	// SQLite settings. Read only when Type is "sqlite".
+	SQLite SQLiteConfig `yaml:"sqlite"`
 }
 
 // ExternalBrokerConfig holds the connection settings that are common to
@@ -99,6 +118,12 @@ type MessageQueueConfig struct {
 	Broker ExternalBrokerConfig `yaml:"broker"`
 }
 
+// Application identifier types.
+const (
+	ApplicationIdentifierTypeClientID = "client_id"
+	ApplicationIdentifierTypeAppID    = "app_id"
+)
+
 type Config struct {
 	Addr         AddrConfig         `yaml:"addr"`
 	ServerURL    string             `yaml:"server_url"`
@@ -109,6 +134,13 @@ type Config struct {
 	TLS          TLSConfig          `yaml:"tls"`
 	Cleanup      CleanupConfig      `yaml:"cleanup"`
 	MessageQueue MessageQueueConfig `yaml:"message_queue"`
+	// ApplicationIdentifierType selects how applications are identified: "client_id" (default) or "app_id".
+	ApplicationIdentifierType string `yaml:"application_identifier_type"`
+}
+
+// UsesAppIDIdentifier reports whether applications are identified by the app ID.
+func (c Config) UsesAppIDIdentifier() bool {
+	return c.ApplicationIdentifierType == ApplicationIdentifierTypeAppID
 }
 
 type TLSConfig struct {

@@ -98,6 +98,16 @@ var (
 		Message: "Error while fetching applications.",
 	}
 
+	UPSERT_APPLICATION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15112",
+		Message: "Error while persisting application information.",
+	}
+
+	GET_APPLICATION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15113",
+		Message: "Error while resolving application information.",
+	}
+
 	ADD_UNIFICATION_RULE = ErrorMessage{
 		Code:    errorPrefix + "15201",
 		Message: "Error while adding unification rules.",
@@ -266,6 +276,12 @@ var (
 		Code:        errorPrefix + "11016",
 		Message:     "Multiple Profiles found.",
 		Description: "Multiple user profiles record found for the given user_id",
+	}
+
+	PROFILE_ALREADY_LINKED = ErrorMessage{
+		Code:        errorPrefix + "11017",
+		Message:     "Profile already linked.",
+		Description: "The profile is already linked to a different user",
 	}
 
 	UNIFICATION_RULE_NOT_FOUND = ErrorMessage{

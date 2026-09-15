@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"strings"
 
+	appProvider "github.com/wso2/identity-customer-data-service/internal/application/provider"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	psstr "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/client"
@@ -299,11 +300,19 @@ func (s *ProfileSchemaService) validateSchemaAttribute(attr model.ProfileSchemaA
 
 var validateApplicationIdentifierFn = defaultValidateApplicationIdentifier
 
-func defaultValidateApplicationIdentifier(appID, orgHandle string) (error, bool) {
-	cfg := config.GetCDSRuntime().Config
-	identityClient := client.NewIdentityClient(cfg)
+// defaultValidateApplicationIdentifier validates the application identifier against the identity server.
+func defaultValidateApplicationIdentifier(appIdentifier, orgHandle string) (error, bool) {
+	if config.GetCDSRuntime().Config.UsesAppIDIdentifier() {
+		ok, err := appProvider.NewApplicationProvider().GetApplicationService().
+			ResolveAndRegisterApplication(appIdentifier, orgHandle)
+		if err != nil {
+			return err, false
+		}
+		return nil, ok
+	}
 
-	res, err := identityClient.FetchApplicationIdentifier(appID, orgHandle)
+	identityClient := client.NewIdentityClient(config.GetCDSRuntime().Config)
+	res, err := identityClient.FetchApplicationIdentifier(appIdentifier, orgHandle)
 	if err != nil {
 		return err, false
 	}

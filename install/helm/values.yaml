@@ -51,6 +51,8 @@ cloud:
 
         serverUrl : "http://localhost:8900"
 
+        applicationIdentifierType: "client_id" # Application identifier mode: "client_id" (default) or "app_id"
+
         identityServer:
           host: localhost
           port: ""
