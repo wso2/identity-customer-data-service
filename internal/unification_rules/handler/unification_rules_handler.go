@@ -117,6 +117,20 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		return
 	}
 
+	// Validate evidence strengths, defaulting each from the attribute type when omitted.
+	matchStrength, strengthErr := resolveEvidenceStrength(ruleInRequest.MatchStrength,
+		constants.DefaultMatchStrength, ruleInRequest.AttributeType, "match_strength")
+	if strengthErr != nil {
+		utils.WriteErrorResponse(w, strengthErr)
+		return
+	}
+	mismatchStrength, strengthErr := resolveEvidenceStrength(ruleInRequest.MismatchStrength,
+		constants.DefaultMismatchStrength, ruleInRequest.AttributeType, "mismatch_strength")
+	if strengthErr != nil {
+		utils.WriteErrorResponse(w, strengthErr)
+		return
+	}
+
 	// Set timestamps
 	now := time.Now().UTC()
 	rule := model.UnificationRule{
@@ -128,6 +142,8 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		IsActive:          ruleInRequest.IsActive,
 		AttributeType:     ruleInRequest.AttributeType,
 		UnificationMethod: ruleInRequest.UnificationMethod,
+		MatchStrength:     matchStrength,
+		MismatchStrength:  mismatchStrength,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
@@ -152,11 +168,13 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		IsActive:          addedRule.IsActive,
 		AttributeType:     addedRule.AttributeType,
 		UnificationMethod: addedRule.UnificationMethod,
+		MatchStrength:     addedRule.MatchStrength,
+		MismatchStrength:  addedRule.MismatchStrength,
 	}
 
 	// Trigger reindex if rule is active.
 	if addedRule.IsActive {
-		go worker.IndexNewAttribute(orgHandle, *addedRule)
+		utils.SafeGo("unification rule index backfill", func() { worker.IndexNewAttribute(orgHandle, *addedRule) })
 	}
 
 	utils.RespondJSON(w, http.StatusCreated, addedRuleResponse, constants.UnificationRuleResource)
@@ -198,6 +216,8 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 			IsActive:          rule.IsActive,
 			AttributeType:     rule.AttributeType,
 			UnificationMethod: rule.UnificationMethod,
+			MatchStrength:     rule.MatchStrength,
+			MismatchStrength:  rule.MismatchStrength,
 		}
 		rulesResponse = append(rulesResponse, tempRule)
 	}
@@ -247,6 +267,8 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		IsActive:          rule.IsActive,
 		AttributeType:     rule.AttributeType,
 		UnificationMethod: rule.UnificationMethod,
+		MatchStrength:     rule.MatchStrength,
+		MismatchStrength:  rule.MismatchStrength,
 	}
 	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
 }
@@ -348,6 +370,28 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		return
 	}
 
+	if ruleUpdateRequest.MatchStrength != nil {
+		if !constants.AllowedEvidenceStrengths[*ruleUpdateRequest.MatchStrength] {
+			utils.WriteErrorResponse(w, invalidEvidenceStrength("match_strength", *ruleUpdateRequest.MatchStrength))
+			return
+		}
+		updatedRule.MatchStrength = *ruleUpdateRequest.MatchStrength
+	}
+	if ruleUpdateRequest.MismatchStrength != nil {
+		if !constants.AllowedEvidenceStrengths[*ruleUpdateRequest.MismatchStrength] {
+			utils.WriteErrorResponse(w, invalidEvidenceStrength("mismatch_strength", *ruleUpdateRequest.MismatchStrength))
+			return
+		}
+		updatedRule.MismatchStrength = *ruleUpdateRequest.MismatchStrength
+	}
+	// An attribute-type change re-seeds any strength the operator never set explicitly.
+	if updatedRule.MatchStrength == "" {
+		updatedRule.MatchStrength = constants.DefaultMatchStrength[updatedRule.AttributeType]
+	}
+	if updatedRule.MismatchStrength == "" {
+		updatedRule.MismatchStrength = constants.DefaultMismatchStrength[updatedRule.AttributeType]
+	}
+
 	err = ruleService.PatchUnificationRule(ruleId, orgHandle, updatedRule)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -363,18 +407,18 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	// Detect activation / deactivation and trigger reindex.
 	nowActive := newRule.IsActive
 	if !wasActive && nowActive {
-		go worker.IndexNewAttribute(orgHandle, *newRule)
+		utils.SafeGo("unification rule index backfill", func() { worker.IndexNewAttribute(orgHandle, *newRule) })
 	}
 	if wasActive && !nowActive {
-		go worker.RemoveAttributeIndex(orgHandle, newRule.PropertyName)
+		utils.SafeGo("unification rule index removal", func() { worker.RemoveAttributeIndex(orgHandle, newRule.PropertyName) })
 	}
 
 	// AttributeType change on an already-active rule invalidates the blocking-key shape.
 	if wasActive && nowActive && oldRule.AttributeType != newRule.AttributeType {
-		go func() {
+		utils.SafeGo("unification rule index rebuild", func() {
 			worker.RemoveAttributeIndex(orgHandle, newRule.PropertyName)
 			worker.IndexNewAttribute(orgHandle, *newRule)
-		}()
+		})
 	}
 
 	ruleResponse := model.UnificationRuleAPIResponse{
@@ -385,6 +429,8 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		IsActive:          newRule.IsActive,
 		AttributeType:     newRule.AttributeType,
 		UnificationMethod: newRule.UnificationMethod,
+		MatchStrength:     newRule.MatchStrength,
+		MismatchStrength:  newRule.MismatchStrength,
 	}
 	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
 }
@@ -430,7 +476,7 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 
 	// If the deleted rule was active, trigger cleanup of its blocking keys.
 	if rule != nil && rule.IsActive {
-		go worker.RemoveAttributeIndex(orgHandle, rule.PropertyName)
+		utils.SafeGo("unification rule index removal", func() { worker.RemoveAttributeIndex(orgHandle, rule.PropertyName) })
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -453,4 +499,28 @@ func (urh *UnificationRulesHandler) GetUnificationOptions(w http.ResponseWriter,
 // isCDSEnabled checks if CDS is enabled for the given tenant
 func isCDSEnabled(orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
+}
+
+// resolveEvidenceStrength validates an operator-supplied strength, falling back to the
+// default for the attribute type when the field is omitted.
+func resolveEvidenceStrength(supplied string, defaults map[string]string, attrType, field string) (string, *errors2.ClientError) {
+	if supplied == "" {
+		if def, ok := defaults[attrType]; ok {
+			return def, nil
+		}
+		return constants.EvidenceStrengthMedium, nil
+	}
+	if !constants.AllowedEvidenceStrengths[supplied] {
+		return "", invalidEvidenceStrength(field, supplied)
+	}
+	return supplied, nil
+}
+
+func invalidEvidenceStrength(field, value string) *errors2.ClientError {
+	return errors2.NewClientError(errors2.ErrorMessage{
+		Code:    errors2.BAD_REQUEST.Code,
+		Message: errors2.BAD_REQUEST.Message,
+		Description: fmt.Sprintf("Invalid %s: '%s'. Allowed values: %s, %s, %s.", field, value,
+			constants.EvidenceStrengthHigh, constants.EvidenceStrengthMedium, constants.EvidenceStrengthLow),
+	}, http.StatusBadRequest)
 }

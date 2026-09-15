@@ -25,6 +25,8 @@ type UnificationRuleAPIRequest struct {
 	IsActive          bool   `json:"is_active" bson:"is_active" binding:"required"`
 	AttributeType     string `json:"attribute_type" bson:"attribute_type" binding:"required"`
 	UnificationMethod string `json:"unification_method" bson:"unification_method" binding:"required"`
+	MatchStrength     string `json:"match_strength" bson:"match_strength"`
+	MismatchStrength  string `json:"mismatch_strength" bson:"mismatch_strength"`
 }
 
 type UnificationRuleAPIResponse struct {
@@ -35,6 +37,8 @@ type UnificationRuleAPIResponse struct {
 	IsActive          bool   `json:"is_active" bson:"is_active" binding:"required"`
 	AttributeType     string `json:"attribute_type" bson:"attribute_type"`
 	UnificationMethod string `json:"unification_method" bson:"unification_method"`
+	MatchStrength     string `json:"match_strength" bson:"match_strength"`
+	MismatchStrength  string `json:"mismatch_strength" bson:"mismatch_strength"`
 }
 
 type UnificationRuleUpdateRequest struct {
@@ -43,4 +47,6 @@ type UnificationRuleUpdateRequest struct {
 	IsActive          *bool   `json:"is_active" bson:"is_active"`
 	AttributeType     *string `json:"attribute_type" bson:"attribute_type"`
 	UnificationMethod *string `json:"unification_method" bson:"unification_method"`
+	MatchStrength     *string `json:"match_strength" bson:"match_strength"`
+	MismatchStrength  *string `json:"mismatch_strength" bson:"mismatch_strength"`
 }

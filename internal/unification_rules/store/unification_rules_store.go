@@ -50,7 +50,7 @@ func AddUnificationRule(rule model.UnificationRule, orgId string) error {
 	query := scripts.InsertUnificationRule[provider.NewDBProvider().GetDBType()]
 
 	_, err = dbClient.ExecuteQuery(query, rule.RuleId, orgId, rule.RuleName, rule.PropertyName, rule.PropertyId, rule.Priority, rule.IsActive,
-		rule.AttributeType, rule.UnificationMethod, rule.CreatedAt, rule.UpdatedAt)
+		rule.AttributeType, rule.UnificationMethod, rule.MatchStrength, rule.MismatchStrength, rule.CreatedAt, rule.UpdatedAt)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while adding unification rule: %s", rule.RuleName)
 		logger.Debug(errorMsg, log.Error(err))
@@ -98,23 +98,7 @@ func GetUnificationRules(orgHandle string) ([]model.UnificationRule, error) {
 
 	var rules []model.UnificationRule
 	for _, row := range results {
-		var rule model.UnificationRule
-		rule.RuleId = row["rule_id"].(string)
-		rule.RuleName = row["rule_name"].(string)
-		rule.PropertyName = row["property_name"].(string)
-		rule.PropertyId = row["property_id"].(string)
-		rule.Priority = int(row["priority"].(int64))
-		rule.IsActive = row["is_active"].(bool)
-		if val, ok := row["attribute_type"].(string); ok {
-			rule.AttributeType = val
-		}
-		if val, ok := row["unification_method"].(string); ok {
-			rule.UnificationMethod = val
-		}
-		rule.CreatedAt = row["created_at"].(time.Time)
-		rule.UpdatedAt = row["updated_at"].(time.Time)
-
-		rules = append(rules, rule)
+		rules = append(rules, scanUnificationRule(row))
 	}
 
 	logger.Info(fmt.Sprintf("Successfully fetched all unification rules for organization: %s", orgHandle))
@@ -160,22 +144,7 @@ func GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
 		return nil, nil
 	}
 
-	row := results[0]
-	var rule model.UnificationRule
-	rule.RuleId = row["rule_id"].(string)
-	rule.RuleName = row["rule_name"].(string)
-	rule.PropertyName = row["property_name"].(string)
-	rule.PropertyId = row["property_id"].(string)
-	rule.Priority = int(row["priority"].(int64))
-	rule.IsActive = row["is_active"].(bool)
-	if val, ok := row["attribute_type"].(string); ok {
-		rule.AttributeType = val
-	}
-	if val, ok := row["unification_method"].(string); ok {
-		rule.UnificationMethod = val
-	}
-	rule.CreatedAt = row["created_at"].(time.Time)
-	rule.UpdatedAt = row["updated_at"].(time.Time)
+	rule := scanUnificationRule(results[0])
 
 	logger.Info("Successfully fetched unification rule for rule_id: " + ruleId)
 	return &rule, nil
@@ -199,7 +168,8 @@ func PatchUnificationRule(ruleId string, updatedRule model.UnificationRule) erro
 	defer dbClient.Close()
 
 	query := scripts.UpdateUnificationRule[provider.NewDBProvider().GetDBType()]
-	_, err = dbClient.ExecuteQuery(query, updatedRule.RuleName, updatedRule.Priority, updatedRule.IsActive, updatedRule.AttributeType, updatedRule.UnificationMethod, time.Now().UTC(), ruleId)
+	_, err = dbClient.ExecuteQuery(query, updatedRule.RuleName, updatedRule.Priority, updatedRule.IsActive, updatedRule.AttributeType,
+		updatedRule.UnificationMethod, updatedRule.MatchStrength, updatedRule.MismatchStrength, time.Now().UTC(), ruleId)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while updating unification rule for rule_id: %s", ruleId)
@@ -247,4 +217,61 @@ func DeleteUnificationRule(ruleId string) error {
 	}
 	logger.Info("Successfully deleted unification rule with rule_id: " + ruleId)
 	return nil
+}
+
+// scanUnificationRule reads one row without asserting column types outright.
+//
+// A bare assertion panics on an unexpected NULL, and this runs on the unification worker's
+// goroutine where a panic would take the process down rather than fail one request.
+// property_id in particular is a nullable foreign key, so the value really can be nil.
+func scanUnificationRule(row map[string]interface{}) model.UnificationRule {
+	var rule model.UnificationRule
+
+	rule.RuleId = stringColumn(row, "rule_id")
+	rule.RuleName = stringColumn(row, "rule_name")
+	rule.PropertyName = stringColumn(row, "property_name")
+	rule.PropertyId = stringColumn(row, "property_id")
+	rule.AttributeType = stringColumn(row, "attribute_type")
+	rule.UnificationMethod = stringColumn(row, "unification_method")
+	rule.MatchStrength = stringColumn(row, "match_strength")
+	rule.MismatchStrength = stringColumn(row, "mismatch_strength")
+	rule.Priority = intColumn(row, "priority")
+
+	if value, ok := row["is_active"].(bool); ok {
+		rule.IsActive = value
+	}
+	if value, ok := row["created_at"].(time.Time); ok {
+		rule.CreatedAt = value
+	}
+	if value, ok := row["updated_at"].(time.Time); ok {
+		rule.UpdatedAt = value
+	}
+
+	return rule
+}
+
+func stringColumn(row map[string]interface{}, column string) string {
+	switch value := row[column].(type) {
+	case string:
+		return value
+	case []byte:
+		return string(value)
+	default:
+		return ""
+	}
+}
+
+func intColumn(row map[string]interface{}, column string) int {
+	switch value := row[column].(type) {
+	case int64:
+		return int(value)
+	case int32:
+		return int(value)
+	case int:
+		return value
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
 }

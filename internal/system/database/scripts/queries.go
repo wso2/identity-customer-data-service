@@ -109,25 +109,26 @@ var DeleteProfileSchemaAttributeById = map[string]string{
 }
 
 var GetUnificationRules = map[string]string{
-	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at
+	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, match_strength, mismatch_strength, created_at, updated_at
 FROM unification_rules WHERE org_handle = $1`,
 }
 
 var GetUnificationRule = map[string]string{
-	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at FROM unification_rules WHERE rule_id = $1`,
+	"postgres": `SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, match_strength, mismatch_strength, created_at, updated_at FROM unification_rules WHERE rule_id = $1`,
 }
 
 var DeleteUnificationRule = map[string]string{
 	"postgres": `DELETE FROM unification_rules WHERE rule_id = $1`,
 }
 var InsertUnificationRule = map[string]string{
-	"postgres": `INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+	"postgres": `INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method, match_strength, mismatch_strength, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 }
 
 var UpdateUnificationRule = map[string]string{
-	"postgres": `UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3, attribute_type = $4, unification_method = $5, updated_at = $6
-		 WHERE rule_id = $7;`,
+	"postgres": `UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3, attribute_type = $4, unification_method = $5,
+		 match_strength = $6, mismatch_strength = $7, updated_at = $8
+		 WHERE rule_id = $9;`,
 }
 
 var InsertProfile = map[string]string{
@@ -439,12 +440,16 @@ var DeleteBlockingKeysByAttributeSQL = map[string]string{
 	"postgres": `DELETE FROM blocking_keys WHERE org_handle = $1 AND attribute_name = $2`,
 }
 
-var IRGetProfilesForOrgPaginated = map[string]string{
+// IRGetProfilesForOrgAfter walks an org's profiles by key rather than by offset. OFFSET
+// pagination re-runs the query for each page, so a profile inserted with a lower id while
+// the scan is in flight shifts every later row back one place and one row is never read —
+// leaving a silent hole in the index. Seeking past the last id already seen cannot skip.
+var IRGetProfilesForOrgAfter = map[string]string{
 	"postgres": `SELECT profile_id, user_id, org_handle, traits, identity_attributes
 				 FROM profiles
-				 WHERE org_handle = $1 AND delete_profile = FALSE
+				 WHERE org_handle = $1 AND delete_profile = FALSE AND profile_id > $2
 				 ORDER BY profile_id
-				 LIMIT $2 OFFSET $3`,
+				 LIMIT $3`,
 }
 
 var IRGetProfilesByIDs = map[string]string{
@@ -466,12 +471,20 @@ var IRFindCandidateIDsByKeys = map[string]string{
 				   AND profile_id != $%d LIMIT $%d`,
 }
 
+// IRCountProfilesByBlockingKey reports how many profiles in an org share one exact key
+// value, which is how common that value is within the tenant.
+var IRCountProfilesByBlockingKey = map[string]string{
+	"postgres": `SELECT COUNT(DISTINCT profile_id) AS profile_count FROM blocking_keys
+				 WHERE org_handle = $1 AND attribute_name = $2 AND key_value = $3`,
+}
+
 var IRInsertReviewTask = map[string]string{
 	"postgres": `INSERT INTO review_tasks (id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status, score_breakdown)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7)
 				 ON CONFLICT (incoming_profile_id, candidate_profile_id)
-				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6
-				 WHERE review_tasks.status = 'PENDING'`,
+				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6,
+				               resolved_at = NULL, resolved_by = NULL, resolution_notes = NULL
+				 WHERE review_tasks.status IN ('PENDING', 'CANCELLED')`,
 }
 
 // IRMirrorReviewTaskExists checks whether a PENDING task exists for the reverse pair (candidate→incoming).
@@ -557,6 +570,16 @@ var IRGetRejectedProfileIDs = map[string]string{
 
 var IRDeleteRejectionPairsForProfile = map[string]string{
 	"postgres": `DELETE FROM rejection_pairs WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`,
+}
+
+// IRRepointRejectionPairs moves a rejection from a profile that has become a child onto
+// the master that now represents it, so the decision survives the merge.
+var IRRepointRejectionPairs = map[string]string{
+	"postgres": `UPDATE rejection_pairs
+				 SET profile_id_1 = CASE WHEN profile_id_1 = $2 THEN $3 ELSE profile_id_1 END,
+				     profile_id_2 = CASE WHEN profile_id_2 = $2 THEN $3 ELSE profile_id_2 END
+				 WHERE org_handle = $1 AND ($2 IN (profile_id_1, profile_id_2))
+				   AND profile_id_1 != $3 AND profile_id_2 != $3`,
 }
 
 var IRInsertMergeAuditLog = map[string]string{

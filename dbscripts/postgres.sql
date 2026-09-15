@@ -70,6 +70,12 @@ CREATE TABLE unification_rules
     is_active     BOOLEAN      NOT NULL,
     attribute_type     VARCHAR(255) NOT NULL DEFAULT 'PRIMITIVE_EXACT',
     unification_method VARCHAR(255) NOT NULL DEFAULT 'deterministic',
+    -- How much an agreement on this attribute supports a merge, and how much a
+    -- disagreement opposes one. Independent because the two directions rarely carry equal
+    -- weight: matching emails strongly imply the same person while differing emails imply
+    -- little, and a date of birth is the reverse.
+    match_strength     VARCHAR(20)  NOT NULL DEFAULT 'MEDIUM',
+    mismatch_strength  VARCHAR(20)  NOT NULL DEFAULT 'MEDIUM',
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
@@ -134,7 +140,6 @@ CREATE TABLE cds_config (
     PRIMARY KEY (org_handle, config)
 );
 
-<<<<<<< pr-fuzzy-mapping
 CREATE TABLE IF NOT EXISTS blocking_keys (
     key_id          VARCHAR(255) PRIMARY KEY,
     profile_id      VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
@@ -199,7 +204,8 @@ CREATE TABLE IF NOT EXISTS merge_audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_merge_audit_org ON merge_audit_log(org_handle, merge_timestamp DESC);
-=======
+
+
 -- ================================
 -- PROFILES (Hot path: tenant + cursor pagination + ordering)
 -- ================================
@@ -276,4 +282,3 @@ CREATE INDEX IF NOT EXISTS idx_unification_rules_org_active_priority
 
 CREATE INDEX IF NOT EXISTS idx_unification_rules_property_id
     ON unification_rules (property_id);
->>>>>>> main

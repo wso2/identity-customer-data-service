@@ -70,6 +70,12 @@ CREATE TABLE unification_rules
     is_active     BOOLEAN      NOT NULL,
     attribute_type     VARCHAR(255) NOT NULL DEFAULT 'PRIMITIVE_EXACT',
     unification_method VARCHAR(255) NOT NULL DEFAULT 'deterministic',
+    -- How much an agreement on this attribute supports a merge, and how much a
+    -- disagreement opposes one. Independent because the two directions rarely carry equal
+    -- weight: matching emails strongly imply the same person while differing emails imply
+    -- little, and a date of birth is the reverse.
+    match_strength     VARCHAR(20)  NOT NULL DEFAULT 'MEDIUM',
+    mismatch_strength  VARCHAR(20)  NOT NULL DEFAULT 'MEDIUM',
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
