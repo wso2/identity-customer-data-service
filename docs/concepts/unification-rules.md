@@ -15,7 +15,47 @@
 | `property_id` | The `attribute_id` of the schema attribute being matched |
 | `priority` | Lower number = evaluated first. Rules are sorted ascending by priority. |
 | `is_active` | Only active rules are evaluated during unification |
+| `attribute_type` | What kind of value the attribute holds, which decides how it is compared and indexed |
+| `unification_method` | `deterministic` (exact) or `fuzzy` (tolerates variation). Rules of both kinds are evaluated side by side. |
+| `match_strength` | How much an agreement on this attribute supports a merge |
+| `mismatch_strength` | How much a disagreement opposes one |
 | `created_at` / `updated_at` | Timestamps |
+
+---
+
+## Choosing the evidence strengths
+
+`match_strength` and `mismatch_strength` are asked for separately because agreement and
+disagreement on the same attribute rarely carry equal weight:
+
+- Two profiles sharing an **email address** are almost certainly the same person, but two
+  *different* addresses say very little — most people have several.
+- Two profiles sharing a **date of birth** says little, since birthdays collide constantly,
+  yet two *different* dates is close to proof they are different people.
+
+| Value | On a match | On a mismatch |
+|---|---|---|
+| `HIGH` | Can merge two profiles on its own | Two differing values block an automatic merge outright |
+| `MEDIUM` | Real evidence, but another attribute must also agree | Counts against the match without blocking it |
+| `LOW` | Close to coincidence on its own | Says little; people legitimately have several |
+
+Both fields are optional. Left unset, each is seeded from `attribute_type` with the defaults
+below, so a rule created without thinking about strengths still behaves sensibly.
+
+| Attribute type | `match_strength` | `mismatch_strength` |
+|---|---|---|
+| `UNIQUE_ID` | HIGH | HIGH |
+| `EMAIL` | HIGH | LOW |
+| `PHONE` | HIGH | LOW |
+| `DATE` | LOW | HIGH |
+| `NAME` | LOW | MEDIUM |
+| `LOCATION` | LOW | LOW |
+| `FUZZY_STRING` | MEDIUM | LOW |
+| `PRIMITIVE_EXACT` | MEDIUM | MEDIUM |
+
+`GET /unification-rules/options` returns these defaults per attribute type along with the
+available choices and the wording for each, so a client can pre-select the default and let
+the operator override it rather than presenting an empty field.
 
 ---
 
