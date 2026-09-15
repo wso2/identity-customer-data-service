@@ -24,6 +24,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/cache"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -321,7 +323,13 @@ func FindCandidateIDsByKeys(
 		}, err)
 	}
 
+	// The bucket is too crowded to be evidence of anything — a value this common says
+	// nothing about identity, so no candidate from it is worth scoring. Skipping is
+	// deliberate, but it costs recall, so make it visible rather than silent.
 	if len(results) > maxResults {
+		logger.Warn(fmt.Sprintf(
+			"BlockingStore: attribute '%s' matched more than %d profiles in org '%s' — skipping this key group",
+			attributeName, maxResults, orgHandle))
 		return nil, nil
 	}
 
@@ -385,4 +393,55 @@ func GetProfilesByIDs(profileIDs []string) ([]model.ProfileData, error) {
 	}
 
 	return profiles, nil
+}
+
+// rarityCache memoises value frequencies. Frequencies move slowly and are only used to
+// pick a band, so a short TTL keeps the scoring path off the database for hot values
+// without letting a genuinely spreading value stay classified as rare.
+var rarityCache = cache.NewCache(constants.RarityLookupCacheTTL)
+
+// CountProfilesByBlockingKey reports how many profiles in the org already carry the given
+// exact blocking key — that is, how common the value is within the tenant.
+func CountProfilesByBlockingKey(orgHandle, attributeName, keyValue string) (int, error) {
+	logger := log.GetLogger()
+
+	cacheKey := orgHandle + "|" + attributeName + "|" + keyValue
+	if cached, found := rarityCache.Get(cacheKey); found {
+		if count, ok := cached.(int); ok {
+			return count, nil
+		}
+	}
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return 0, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_BLOCKING_KEYS_FAILED.Code,
+			Message:     errors2.IR_BLOCKING_KEYS_FAILED.Message,
+			Description: "Failed to connect to database for value frequency lookup.",
+		}, err)
+	}
+	defer dbClient.Close()
+
+	query := scripts.IRCountProfilesByBlockingKey[provider.NewDBProvider().GetDBType()]
+	results, err := dbClient.ExecuteQuery(query, orgHandle, attributeName, keyValue)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("BlockingStore: frequency lookup failed for attribute '%s'", attributeName),
+			log.Error(err))
+		return 0, err
+	}
+
+	count := 0
+	if len(results) > 0 {
+		switch v := results[0]["profile_count"].(type) {
+		case int64:
+			count = int(v)
+		case int:
+			count = v
+		case float64:
+			count = int(v)
+		}
+	}
+
+	rarityCache.Set(cacheKey, count)
+	return count, nil
 }

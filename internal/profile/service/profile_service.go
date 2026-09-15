@@ -194,17 +194,10 @@ func (ps *ProfilesService) CreateProfile(profileRequest profileModel.ProfileRequ
 			profile.OrgHandle = orgHandle
 			queue.Enqueue(profile)
 		} else {
-			hasMatchingRule := false
-			for _, rule := range activeRules {
-				if !rule.IsActive {
-					continue
-				}
-				if _, ok := flattenProfileAttrs(profile)[rule.PropertyName]; ok {
-					hasMatchingRule = true
-					break
-				}
-			}
-			if hasMatchingRule {
+			// A profile carrying a userId must always be evaluated: merging profiles that
+			// share a userId is a system invariant that holds with no rules configured, so
+			// gating on rule attributes alone would silently disable it.
+			if profile.UserId != "" || hasAttributeMatchingAnyRule(flattenProfileAttrs(profile), activeRules) {
 				profile.OrgHandle = orgHandle
 				queue.Enqueue(profile)
 			}
@@ -874,20 +867,15 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 			profileToUpDate.OrgHandle = orgHandle
 			queue.Enqueue(profileToUpDate)
 		} else {
-			hasMatchingRule := false
-			for _, rule := range activeRules {
-				if !rule.IsActive {
-					continue
-				}
-				if _, ok := flattenProfileAttrs(profileToUpDate)[rule.PropertyName]; ok {
-					hasMatchingRule = true
-					break
-				}
-			}
-			if hasMatchingRule {
-				// Clear rejection pairs so the re-evaluation can re-match previously rejected candidates.
-				if err := irStore.DeleteRejectionPairsForProfile(orgHandle, profileToUpDate.ProfileId); err != nil {
-					logger.Warn(fmt.Sprintf("UpdateProfile: failed to clear rejection pairs for profile '%s'", profileToUpDate.ProfileId), log.Error(err))
+			if profileToUpDate.UserId != "" || hasAttributeMatchingAnyRule(flattenProfileAttrs(profileToUpDate), activeRules) {
+				// A rejection records a human deciding two profiles are different people.
+				// Discard it only when the data that decision was made about has actually
+				// changed — clearing on every update meant an unrelated edit resurrected
+				// every pair the admin had already dismissed.
+				if ruleValuesChanged(flattenProfileAttrs(*profile), flattenProfileAttrs(profileToUpDate), activeRules) {
+					if err := irStore.DeleteRejectionPairsForProfile(orgHandle, profileToUpDate.ProfileId); err != nil {
+						logger.Warn(fmt.Sprintf("UpdateProfile: failed to clear rejection pairs for profile '%s'", profileToUpDate.ProfileId), log.Error(err))
+					}
 				}
 				profileToUpDate.OrgHandle = orgHandle
 				queue.Enqueue(profileToUpDate)
@@ -1078,6 +1066,17 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 		logger.Warn(fmt.Sprintf("Profile with profile_id: %s that is requested for deletion is not found",
 			ProfileId))
 		return nil
+	}
+
+	// Drop the resolution index entries first. They are not reached by any cascade, so a
+	// profile left indexed keeps surfacing as a merge candidate after deletion.
+	if err := irStore.DeleteBlockingKeys(ProfileId); err != nil {
+		logger.Warn(fmt.Sprintf("DeleteProfile: failed to remove blocking keys for '%s'", ProfileId),
+			log.Error(err))
+	}
+	if err := irStore.DeleteRejectionPairsForProfile(profile.OrgHandle, ProfileId); err != nil {
+		logger.Warn(fmt.Sprintf("DeleteProfile: failed to remove rejection pairs for '%s'", ProfileId),
+			log.Error(err))
 	}
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error deleting profile with profile_id: %s", ProfileId)
@@ -1975,6 +1974,11 @@ func scoreAndBuildFuzzyResults(
 	logger := log.GetLogger()
 
 	thresholds := irModel.LoadThresholds(orgHandle)
+	scoringCtx := engine.ScoringContext{
+		OrgHandle:      orgHandle,
+		Thresholds:     thresholds,
+		ValueFrequency: irStore.CountProfilesByBlockingKey,
+	}
 	if threshold <= 0 {
 		threshold = thresholds.ManualReview
 	}
@@ -1994,7 +1998,7 @@ func scoreAndBuildFuzzyResults(
 		if !exists {
 			continue
 		}
-		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, thresholds.AutoMerge)
+		finalScore, breakdown := engine.ScoreCandidate(flatAttrs, candidate, rules, scoringCtx)
 		if finalScore >= threshold {
 			scoredMatches = append(scoredMatches, scoredMatch{
 				candidateID:    candidateID,
@@ -2013,8 +2017,11 @@ func scoreAndBuildFuzzyResults(
 
 	results := make([]profileModel.FuzzyMatchResult, 0, len(scoredMatches))
 	for _, sm := range scoredMatches {
+		// GetProfile reports "no such profile" as (nil, nil), so the nil profile has to be
+		// checked separately from the error — a candidate can disappear between the
+		// blocking lookup and this read.
 		profile, err := profileStore.GetProfile(sm.candidateID)
-		if err != nil {
+		if err != nil || profile == nil {
 			logger.Warn(fmt.Sprintf("scoreAndBuildFuzzyResults: could not load profile '%s', skipping", sm.candidateID))
 			continue
 		}
@@ -2068,18 +2075,81 @@ func flattenProfileAttrs(p profileModel.Profile) map[string]interface{} {
 func filterActiveRules(rules []UnificationModel.UnificationRule) []UnificationModel.UnificationRule {
 	active := make([]UnificationModel.UnificationRule, 0, len(rules))
 	for _, r := range rules {
-		if r.IsActive {
-			if r.AttributeType == "" {
-				r.AttributeType = constants.AttributeTypePrimitiveExact
-			}
-			if r.UnificationMethod == "" {
-				r.UnificationMethod = constants.UnificationMethodDeterministic
-			}
-			active = append(active, r)
+		if !r.IsActive {
+			continue
 		}
+		active = append(active, UnificationModel.ApplyDefaults(r, constants.AttributeTypePrimitiveExact,
+			constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
+			constants.DefaultMismatchStrength))
 	}
 	sort.Slice(active, func(i, j int) bool {
 		return active[i].Priority < active[j].Priority
 	})
 	return active
+}
+
+// hasAttributeMatchingAnyRule reports whether the profile carries a value for any active
+// unification rule. Used to skip enqueuing profiles that no rule could ever match.
+func hasAttributeMatchingAnyRule(flatAttrs map[string]interface{}, rules []UnificationModel.UnificationRule) bool {
+	for _, rule := range rules {
+		if !rule.IsActive {
+			continue
+		}
+		if value, ok := flatAttrs[rule.PropertyName]; ok && value != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// ruleValuesChanged reports whether any value a unification rule matches on differs
+// between two versions of a profile. Values are compared after flattening so nested
+// attributes are handled, and order within a multi-valued attribute is ignored.
+func ruleValuesChanged(before, after map[string]interface{}, rules []UnificationModel.UnificationRule) bool {
+	for _, rule := range rules {
+		if !rule.IsActive {
+			continue
+		}
+		if !sameAttributeValues(before[rule.PropertyName], after[rule.PropertyName]) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameAttributeValues(before, after interface{}) bool {
+	beforeValues := toComparableStrings(before)
+	afterValues := toComparableStrings(after)
+	if len(beforeValues) != len(afterValues) {
+		return false
+	}
+
+	sort.Strings(beforeValues)
+	sort.Strings(afterValues)
+	for i := range beforeValues {
+		if beforeValues[i] != afterValues[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func toComparableStrings(value interface{}) []string {
+	if value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case string:
+		return []string{typed}
+	case []string:
+		return typed
+	case []interface{}:
+		values := make([]string, 0, len(typed))
+		for _, element := range typed {
+			values = append(values, fmt.Sprintf("%v", element))
+		}
+		return values
+	default:
+		return []string{fmt.Sprintf("%v", value)}
+	}
 }

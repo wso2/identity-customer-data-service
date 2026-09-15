@@ -33,7 +33,10 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
-func GetProfilesForOrgPaginated(orgHandle string, limit, offset int) ([]model.ProfileData, error) {
+// GetProfilesForOrgAfter returns up to limit profiles whose id sorts after afterProfileID.
+// Pass an empty afterProfileID to start. See IRGetProfilesForOrgAfter for why this is keyed
+// rather than offset-based.
+func GetProfilesForOrgAfter(orgHandle string, afterProfileID string, limit int) ([]model.ProfileData, error) {
 	logger := log.GetLogger()
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -46,13 +49,13 @@ func GetProfilesForOrgPaginated(orgHandle string, limit, offset int) ([]model.Pr
 	}
 	defer dbClient.Close()
 
-	query := scripts.IRGetProfilesForOrgPaginated[provider.NewDBProvider().GetDBType()]
-	results, err := dbClient.ExecuteQuery(query, orgHandle, limit, offset)
+	query := scripts.IRGetProfilesForOrgAfter[provider.NewDBProvider().GetDBType()]
+	results, err := dbClient.ExecuteQuery(query, orgHandle, afterProfileID, limit)
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.IR_SEARCH_FAILED.Code,
 			Message:     errors2.IR_SEARCH_FAILED.Message,
-			Description: fmt.Sprintf("Failed to load profiles (offset=%d) for org: %s", offset, orgHandle),
+			Description: fmt.Sprintf("Failed to load profiles after '%s' for org: %s", afterProfileID, orgHandle),
 		}, err)
 	}
 
@@ -557,4 +560,38 @@ func GetRejectedProfileIDs(orgHandle, profileID string) (map[string]struct{}, er
 	}
 
 	return rejected, nil
+}
+
+// RepointRejectionPairs moves every rejection involving fromProfileID onto toProfileID.
+//
+// A rejection is keyed by profile ID, but a profile stops being the addressable entity once
+// it is merged into a master. Without this the admin's "these are different people"
+// decision is silently orphaned and the same pair is proposed again through the master.
+// Rows that would name the master on both sides are left alone rather than made
+// self-referential.
+func RepointRejectionPairs(orgHandle, fromProfileID, toProfileID string) error {
+	logger := log.GetLogger()
+
+	if fromProfileID == "" || toProfileID == "" || fromProfileID == toProfileID {
+		return nil
+	}
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_REVIEW_TASK_FAILED.Code,
+			Message:     errors2.IR_REVIEW_TASK_FAILED.Message,
+			Description: "Failed to connect to database for rejection pair repointing.",
+		}, err)
+	}
+	defer dbClient.Close()
+
+	query := scripts.IRRepointRejectionPairs[provider.NewDBProvider().GetDBType()]
+	if _, err := dbClient.ExecuteQuery(query, orgHandle, fromProfileID, toProfileID); err != nil {
+		logger.Warn(fmt.Sprintf("Store: failed to repoint rejection pairs from '%s' to '%s'",
+			fromProfileID, toProfileID), log.Error(err))
+		return err
+	}
+
+	return nil
 }

@@ -97,6 +97,19 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 			Description: fmt.Sprintf("No review task found with ID %s", taskID),
 		}, http.StatusNotFound)
 	}
+	// The task is fetched by ID alone, so ownership has to be checked here. Reported as
+	// not-found rather than forbidden: confirming that someone else's task ID exists is
+	// itself a leak.
+	if task.OrgHandle != orgHandle {
+		logger.Warn(fmt.Sprintf("Service: org '%s' attempted to resolve task '%s' owned by org '%s'",
+			orgHandle, taskID, task.OrgHandle))
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.IR_REVIEW_TASK_NOT_FOUND.Code,
+			Message:     errors2.IR_REVIEW_TASK_NOT_FOUND.Message,
+			Description: fmt.Sprintf("No review task found with ID %s", taskID),
+		}, http.StatusNotFound)
+	}
+
 	if task.Status != constants.ReviewStatusPending {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.IR_REVIEW_TASK_RESOLVED.Code,
@@ -115,34 +128,6 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 			return err
 		}
 		return nil
-	}
-
-	// Cascade cancel: cancel all other PENDING tasks that reference either profile.
-	// Only on APPROVED — rejection doesn't change profile data, so other tasks remain valid.
-	cancelledIncomingIDs, cancelErr := irStore.CancelRelatedReviewTasks(taskID, task.IncomingProfileID, task.CandidateProfileID, constants.CanceledBySystem)
-	if cancelErr != nil {
-		logger.Warn(fmt.Sprintf("Service: cascade cancel failed for task %s", taskID), log.Error(cancelErr))
-		// merge itself will still proceed.
-	}
-
-	// Re-enqueue cancelled incoming profiles for re-evaluation.
-	for _, incomingID := range cancelledIncomingIDs {
-		p, loadErr := profileStore.GetProfile(incomingID)
-		if loadErr != nil || p == nil {
-			logger.Warn(fmt.Sprintf("Service: skipping re-evaluation for '%s' — profile not found or error", incomingID))
-			continue
-		}
-
-		if p.ProfileStatus != nil && p.ProfileStatus.ReferenceProfileId != "" {
-			masterID := p.ProfileStatus.ReferenceProfileId
-			master, err := profileStore.GetProfile(masterID)
-			if err == nil && master != nil {
-				workers.EnqueueProfileForProcessing(*master)
-			}
-			continue
-		}
-
-		workers.EnqueueProfileForProcessing(*p)
 	}
 
 	incomingProfile, err := profileStore.GetProfile(task.IncomingProfileID)
@@ -204,7 +189,8 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 
 	// Run the merge BEFORE updating task status. If MergeMatchedProfiles surfaces
 	// an error, the task must stay PENDING so the caller can retry.
-	if mergeErr := workers.MergeMatchedProfiles(*candidate, *incomingProfile, constants.MergeReasonReviewMerge); mergeErr != nil {
+	survivingMaster, mergeErr := workers.MergeMatchedProfiles(*candidate, *incomingProfile, constants.MergeReasonReviewMerge)
+	if mergeErr != nil {
 		logger.Error(fmt.Sprintf("Service: review merge failed for task %s — '%s' and '%s'",
 			taskID, incomingProfile.ProfileId, candidate.ProfileId), log.Error(mergeErr))
 		return errors2.NewServerError(errors2.ErrorMessage{
@@ -214,17 +200,54 @@ func (s *IdentityResolutionService) ResolveReviewTask(orgHandle string, taskID s
 				incomingProfile.ProfileId, candidate.ProfileId, taskID),
 		}, mergeErr)
 	}
+	if survivingMaster == nil {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.IR_CANNOT_MERGE.Code,
+			Message:     errors2.IR_CANNOT_MERGE.Message,
+			Description: "The two profiles in this review task cannot be merged.",
+		}, http.StatusConflict)
+	}
 
+	// The merge promotes one of the two profiles (or a brand-new neutral master) — record
+	// the profile that actually survived, not the candidate we happened to pass in first.
 	if auditErr := irStore.InsertMergeAuditLog(model.MergeAuditEntry{
 		OrgHandle:          task.OrgHandle,
-		PrimaryProfileID:   candidate.ProfileId,
+		PrimaryProfileID:   survivingMaster.ProfileId,
 		SecondaryProfileID: incomingProfile.ProfileId,
 		MergeType:          constants.DecisionManualReview,
 		MatchScore:         task.MatchScore,
 		MergedBy:           resolvedBy,
 	}); auditErr != nil {
 		logger.Error(fmt.Sprintf("Service: failed to insert merge audit log for review task %s — '%s' → '%s'",
-			taskID, incomingProfile.ProfileId, candidate.ProfileId), log.Error(auditErr))
+			taskID, incomingProfile.ProfileId, survivingMaster.ProfileId), log.Error(auditErr))
+	}
+
+	// Cascade cancel only after the merge has actually happened. Cancelling first meant a
+	// failed merge left the sibling tasks cancelled while this one stayed pending, and a
+	// cancelled pair cannot be re-proposed while a row for it already exists.
+	cancelledIncomingIDs, cancelErr := irStore.CancelRelatedReviewTasks(taskID,
+		task.IncomingProfileID, task.CandidateProfileID, constants.CanceledBySystem)
+	if cancelErr != nil {
+		logger.Warn(fmt.Sprintf("Service: cascade cancel failed for task %s", taskID), log.Error(cancelErr))
+	}
+
+	// Re-enqueue the affected profiles so they are re-evaluated against the new master.
+	for _, incomingID := range cancelledIncomingIDs {
+		affected, loadErr := profileStore.GetProfile(incomingID)
+		if loadErr != nil || affected == nil {
+			logger.Warn(fmt.Sprintf("Service: skipping re-evaluation for '%s' — profile not found or error", incomingID))
+			continue
+		}
+
+		if affected.ProfileStatus != nil && affected.ProfileStatus.ReferenceProfileId != "" {
+			master, masterErr := profileStore.GetProfile(affected.ProfileStatus.ReferenceProfileId)
+			if masterErr == nil && master != nil {
+				workers.EnqueueProfileForProcessing(*master)
+			}
+			continue
+		}
+
+		workers.EnqueueProfileForProcessing(*affected)
 	}
 
 	// Merge succeeded — commit task status.
