@@ -4,6 +4,37 @@
 
 ---
 
+## Upgrading from exact-only matching
+
+Before typed matching, unification walked the active rules in priority order and merged two
+profiles on the **first exact match**, whatever the other rules held. Organisations that
+have only ever used that behaviour keep it after upgrading, with no configuration change:
+
+- A rule stored without `attribute_type`, `unification_method` or strengths is read as
+  `PRIMITIVE_EXACT` + `deterministic`, matched on exact equality exactly as before.
+- `PRIMITIVE_EXACT` carries `match_strength: HIGH`, so a single rule matching exactly still
+  merges on its own, at any priority, however many other rules are configured.
+- Automatic merging is on unless an organisation has explicitly turned it off. The
+  `auto_merge_enabled` setting is stored as a row in the admin config, so an organisation
+  configured before the key existed simply has no row for it; that absence reads as
+  **enabled**, because reading it as disabled would silently route every merge the tenant
+  relied on into the review queue instead.
+
+Two behaviours are genuinely new for an existing organisation, and both only ever make the
+engine *more* cautious:
+
+- If several rules apply to a pair and most of them actively disagree, an automatic merge is
+  downgraded to a review task rather than performed.
+- If a rule is typed as `DATE` or `UNIQUE_ID` and the two values differ, that disagreement
+  vetoes an automatic merge.
+
+Neither can fire while every rule is an untyped legacy rule, because nothing is typed as
+`DATE` or `UNIQUE_ID` and a lone exact match has nothing to disagree with it. They begin to
+apply as an operator gives attributes their real types, which is the point at which they
+want the extra caution.
+
+---
+
 ## Rule structure
 
 | Field | Description |
@@ -47,6 +78,14 @@ Setting them per rule is gated on `identity_resolution.allow_evidence_strength_o
 rejected rather than quietly ignored — a caller that believes it set a strength and is
 overruled would misread every merge decision that followed. Turn it on only where someone
 can judge the effect on existing profiles.
+
+> **Disclaimer — this setting's scope is provisional.** It currently sits at deployment
+> level because it gates an API surface rather than matching behaviour: whether a field is
+> writable is a property of the build being run. Every other setting that shapes who gets
+> merged — `auto_merge_enabled` and both thresholds — is per organisation in the admin
+> config, so this may move there once there is a way for an operator to preview what a
+> strength change would do to their existing profiles. Treat its location as unsettled and
+> avoid building tooling that assumes it is server-wide.
 
 `PRIMITIVE_EXACT` is what a rule written before typed matching resolves to, and it is
 treated as strong in both directions on purpose: previously any rule matching exactly merged
