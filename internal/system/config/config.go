@@ -58,6 +58,12 @@ type DataSourceConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	SSLMode  string `yaml:"sslmode"`
+
+	// Connection pool sizing. Zero means "use the built-in default" so existing
+	// deployment.yaml files keep working untouched.
+	MaxOpenConns    int `yaml:"max_open_conns"`
+	MaxIdleConns    int `yaml:"max_idle_conns"`
+	ConnMaxLifetime int `yaml:"conn_max_lifetime_seconds"`
 }
 
 // ExternalBrokerConfig holds the connection settings that are common to

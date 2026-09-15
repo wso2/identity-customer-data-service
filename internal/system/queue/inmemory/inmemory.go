@@ -24,6 +24,7 @@ package inmemory
 
 import (
 	"fmt"
+	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"sync"
 
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
@@ -70,8 +71,13 @@ func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
 // closed. Always returns nil.
 func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
 	go func() {
+		defer utils.RecoverPanic("in-memory profile unification consumer")
 		for profile := range q.ch {
-			handler(profile)
+			// Recover per message so one bad profile cannot stop the queue being drained.
+			func() {
+				defer utils.RecoverPanic("in-memory profile unification handler")
+				handler(profile)
+			}()
 		}
 	}()
 	return nil
@@ -128,6 +134,7 @@ func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
 // closed. Always returns nil.
 func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) error {
 	go func() {
+		defer utils.RecoverPanic("in-memory schema sync consumer")
 		for sync := range q.ch {
 			handler(sync)
 		}

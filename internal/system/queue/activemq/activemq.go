@@ -348,6 +348,7 @@ func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
 	}
 
 	go func() {
+		defer utils.RecoverPanic("activemq consumer loop")
 		for {
 			msg, ok := <-sub.C
 			if !ok {
@@ -412,7 +413,10 @@ func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
 				continue
 			}
 
-			handler(profile)
+			func() {
+				defer utils.RecoverPanic("activemq profile unification handler")
+				handler(profile)
+			}()
 		}
 	}()
 
@@ -477,6 +481,7 @@ func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) err
 	}
 
 	go func() {
+		defer utils.RecoverPanic("activemq consumer loop")
 		for {
 			msg, ok := <-sub.C
 			if !ok {
@@ -535,7 +540,10 @@ func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) err
 					"activemq: failed to unmarshal schema sync message: %v", err))
 				continue
 			}
-			handler(sync)
+			func() {
+				defer utils.RecoverPanic("activemq schema sync handler")
+				handler(sync)
+			}()
 		}
 	}()
 	return nil

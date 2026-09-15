@@ -33,6 +33,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
@@ -194,6 +195,11 @@ func main() {
 	}
 
 	workers.StopCookieCleanupWorker()
+
+	// Close the shared connection pool last, once nothing is still issuing queries.
+	if err := provider.ClosePool(); err != nil {
+		logger.Error("Failed to close the database connection pool.", log.Error(err))
+	}
 
 	logger.Info("Shutdown complete")
 }

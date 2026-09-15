@@ -20,7 +20,6 @@ package client
 
 import (
 	"database/sql"
-	"os"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -89,10 +88,13 @@ func (client *DBClient) BeginTx() (*sql.Tx, error) {
 	return client.db.Begin()
 }
 
-// Close closes the database connection.
+// Close releases the client.
+//
+// It deliberately does not close the underlying *sql.DB: that value is the shared
+// connection pool, and closing it would tear down every other in-flight caller's
+// connections. Callers keep their `defer dbClient.Close()` — it is now the no-op it always
+// should have been, since database/sql returns connections to the pool by itself once rows
+// are closed. Use provider.ClosePool at process shutdown.
 func (c *DBClient) Close() error {
-	if os.Getenv("TEST_MODE") == "true" {
-		return nil
-	}
-	return c.db.Close()
+	return nil
 }
