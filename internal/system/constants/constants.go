@@ -18,6 +18,8 @@
 
 package constants
 
+import "time"
+
 import "regexp"
 
 const ApiBasePath = "/cds/api"
@@ -349,44 +351,97 @@ const (
 // Scoring engine
 
 const (
-	// ScoreAnchorFraction is heuristic ensures that if profiles
-	// only share weak data (like "City" and "Gender"), they cannot auto-merge.
-	// They must match on at least one high-weight identifier which has weight greater
-	// than ScoreAnchorFraction*maximum applicable weight (like Email or SSN).
-	// NOTE: There is no universal "perfect" threshold for this. This value serves
-	// as a conservative initial placeholder to prevent weak rules (like City/Gender)
-	// from triggering auto-merges on their own.
-	// To find the optimal value for a specific tenant, this fraction should be
-	// tuned by running a Precision/Recall test against their actual, real-world data.
-	ScoreAnchorFraction = 2.0 / 3.0
+	// ScoreContradictionThreshold is the score at or below which two present values are
+	// treated as actively disagreeing rather than merely scoring poorly. Above it and
+	// below the org's manual-review threshold a rule is inconclusive: it neither supports
+	// nor opposes the match, and is excluded from both the agreement count and the
+	// contradiction count.
+	// NOTE: there is no universal value for this. Tune per tenant against real data.
+	ScoreContradictionThreshold = 0.3
 
-	// ScoreCoverageDenominator is baseline ensures we do not auto-merge highly sparse profiles.
-	// NOTE: There is no mathematically perfect universal constant for this value.
-	// It acts as a defensive starting point to prevent highly sparse profiles
-	// (e.g., profiles that only have 2 out of 10 configured fields filled in)
-	// from triggering unsupervised auto-merges. The true optimal value must be
-	// tuned via testing against real customer datasets.
-	ScoreCoverageDenominator = 3
+	// MinAgreeingRulesForAutoMerge is how many rules must independently agree before a
+	// match may auto-merge. The exception is the org's highest-priority rule: when the
+	// operator's strongest configured signal is the one agreeing, it may carry an
+	// auto-merge alone. Any other single agreement is capped to manual review, so a match
+	// on one weak attribute (a shared city, a common given name) can never merge unattended.
+	MinAgreeingRulesForAutoMerge = 2
 
-	// ScoreMajorityNumerator and ScoreMajorityDenominator define the non-match majority threshold.
-	// NOTE: There is no mathematically perfect universal constant for this value.If non-matching
-	// rules are >= ScoreMajorityNumerator/ScoreMajorityDenominator of all applicable rules,
-	// the score is capped below the auto-merge threshold. This must be tuned per-tenant via
-	// testing against real-world datasets.
-	ScoreMajorityNumerator   = 2
-	ScoreMajorityDenominator = 3
-
-	// ScorePenaltyOffset is subtracted from autoMergeThreshold when capping a penalized
+	// ScorePenaltyOffset is subtracted from the auto-merge threshold when capping a
 	// score just below it. The small gap keeps the score detectable as sub-threshold
 	// while remaining high enough to route to manual review.
 	ScorePenaltyOffset = 0.01
+)
 
-	// AnchorMatchMinScore is the minimum score for a match that satisfies at least one anchor rule.
-	// This prevents very weak matches from being considered valid anchor rule. The value of 0.7 is
-	// chosen to allow some flexibility while ensuring a reasonable level of confidence in the match.
-	// NOTE: There is no mathematically perfect universal constant for this AnchorMatchMinScore.
-	// The optimal fuzzy threshold must be tuned via testing against real customer datasets.
-	AnchorMatchMinScore = 0.7
+// Evidence strength
+
+const (
+	// EvidenceStrengthHigh on a match means the attribute identifies a person well enough
+	// to merge on its own (a national ID, an email address). On a mismatch it means two
+	// present, differing values are close to proof of difference.
+	EvidenceStrengthHigh = "HIGH"
+	// EvidenceStrengthMedium means the attribute is real evidence but needs corroboration.
+	EvidenceStrengthMedium = "MEDIUM"
+	// EvidenceStrengthLow means the attribute barely moves the decision on its own.
+	EvidenceStrengthLow = "LOW"
+)
+
+var AllowedEvidenceStrengths = map[string]bool{
+	EvidenceStrengthHigh:   true,
+	EvidenceStrengthMedium: true,
+	EvidenceStrengthLow:    true,
+}
+
+// DefaultMatchStrength and DefaultMismatchStrength seed a rule's evidence weights from its
+// attribute type when the operator does not set them explicitly.
+//
+// The two are deliberately independent, because agreement and disagreement on the same
+// attribute rarely carry equal weight. Two people sharing an email address is strong
+// evidence they are the same person, but holding different email addresses says almost
+// nothing — most people have several. A shared date of birth is weak evidence of sameness,
+// since birthdays collide constantly, yet two different dates of birth are close to proof
+// of difference. Folding both directions into one number is what makes a mismatching
+// attribute dilute a match instead of contradicting it.
+var DefaultMatchStrength = map[string]string{
+	AttributeTypeUniqueID:       EvidenceStrengthHigh,
+	AttributeTypeEmail:          EvidenceStrengthHigh,
+	AttributeTypePhone:          EvidenceStrengthHigh,
+	AttributeTypePrimitiveExact: EvidenceStrengthMedium,
+	AttributeTypeFuzzyString:    EvidenceStrengthMedium,
+	AttributeTypeName:           EvidenceStrengthLow,
+	AttributeTypeLocation:       EvidenceStrengthLow,
+	AttributeTypeDate:           EvidenceStrengthLow,
+}
+
+var DefaultMismatchStrength = map[string]string{
+	AttributeTypeUniqueID:       EvidenceStrengthHigh,
+	AttributeTypeDate:           EvidenceStrengthHigh,
+	AttributeTypeName:           EvidenceStrengthMedium,
+	AttributeTypePrimitiveExact: EvidenceStrengthMedium,
+	AttributeTypeEmail:          EvidenceStrengthLow,
+	AttributeTypePhone:          EvidenceStrengthLow,
+	AttributeTypeLocation:       EvidenceStrengthLow,
+	AttributeTypeFuzzyString:    EvidenceStrengthLow,
+}
+
+// Value rarity
+
+const (
+	// RarityCommonMinProfiles is how many profiles in the org must already share a value
+	// before a match on it stops counting as identifying. A shared corporate address,
+	// a support mailbox or a placeholder that slipped past the uninformative-value check
+	// will each land on many profiles; agreement on such a value is coincidence, not
+	// evidence, so it is not allowed to carry an auto-merge on its own.
+	//
+	// Rarity may only ever weaken evidence, never strengthen it: an uncommon value being
+	// wrong is just as wrong as a common one, so rarity lowers the chance of coincidence
+	// without adding corroboration.
+	// NOTE: an absolute count rather than a share of the tenant, so it costs one indexed
+	// lookup and no second query. Tune per tenant.
+	RarityCommonMinProfiles = 50
+
+	// RarityLookupCacheTTL bounds how long a value's frequency is reused. Frequencies
+	// move slowly, and the count is only used to pick a band.
+	RarityLookupCacheTTL = 10 * time.Minute
 )
 
 // Name matching
@@ -436,23 +491,6 @@ const (
 
 	// JaroWinklerPFactor is the standard scaling constant (0.1) defined by Winkler.
 	JaroWinklerPFactor = 0.1
-)
-
-// LSH MinHash hash mixing
-
-const (
-	// LSHHashKnuthMult is the multiplier in the row-a hash transform for MinHash
-	// signature generation. Derived from Knuth's multiplicative hashing constant
-	// (2654435761 ≈ 2^32 / φ), which produces a near-uniform hash distribution.
-	LSHHashKnuthMult uint64 = 2654435761
-
-	// LSHHashLCGMult is the multiplier in the row-b hash transform, taken from the
-	// glibc rand() linear congruential generator (multiplier = 1103515245).
-	LSHHashLCGMult uint64 = 1103515245
-
-	// LSHHashLCGAdd is the addend in the row-b hash transform. Standard glibc LCG
-	// addend (12345) paired with LSHHashLCGMult to form a full-period LCG sequence.
-	LSHHashLCGAdd uint64 = 12345
 )
 
 const (

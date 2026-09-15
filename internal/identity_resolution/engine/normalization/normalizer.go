@@ -30,17 +30,27 @@ import (
 
 var multiSpace = regexp.MustCompile(`\s+`)
 
+// nameSeparators join two name parts rather than sit inside one. They become spaces so
+// that "Mary-Jane" tokenizes the same way as "Mary Jane"; deleting them instead fuses the
+// parts into one token and the two spellings stop matching.
+var nameSeparators = map[rune]bool{'-': true, '–': true, '—': true, '/': true, '\\': true, '_': true, ',': true}
+
 func NormalizeName(name string) string {
 	name = strings.TrimSpace(strings.ToLower(name))
-	name = multiSpace.ReplaceAllString(name, " ")
-	// Remove non-letter, non-space characters
+
+	// Other punctuation — apostrophes, periods — is dropped outright, because it sits
+	// inside a name part: "O'Brien" and "OBrien" are one token either way.
 	var cleaned []rune
 	for _, r := range name {
-		if unicode.IsLetter(r) || unicode.IsSpace(r) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsSpace(r):
 			cleaned = append(cleaned, r)
+		case nameSeparators[r]:
+			cleaned = append(cleaned, ' ')
 		}
 	}
-	return strings.TrimSpace(string(cleaned))
+
+	return strings.TrimSpace(multiSpace.ReplaceAllString(string(cleaned), " "))
 }
 
 func TokenSortName(name string) string {
@@ -114,4 +124,84 @@ func NormalizeForType(value string, attrType string) string {
 	default:
 		return strings.TrimSpace(strings.ToLower(value))
 	}
+}
+
+// uninformativeValues are values that are syntactically fine but carry no identity.
+// They arrive constantly from import jobs, default form values and optional fields that
+// a UI filled in rather than left blank. Two profiles agreeing on one of these agree on
+// nothing, so a rule that lands on one must report Unknown rather than a match — otherwise
+// every profile carrying the placeholder collapses into every other one.
+var uninformativeValues = map[string]bool{
+	"n/a": true, "na": true, "none": true, "null": true, "nil": true, "-": true,
+	"--": true, "unknown": true, "undefined": true, "not provided": true,
+	"notprovided": true, "not set": true, "empty": true, "blank": true,
+	"anonymous": true, "test": true, "string": true,
+}
+
+// uninformativeEmailLocalParts are role addresses — shared mailboxes rather than people.
+var uninformativeEmailLocalParts = map[string]bool{
+	"noreply": true, "no-reply": true, "donotreply": true, "do-not-reply": true,
+	"info": true, "admin": true, "administrator": true, "support": true,
+	"contact": true, "sales": true, "help": true, "test": true, "postmaster": true,
+	"webmaster": true, "mailer-daemon": true,
+}
+
+// uninformativeEmailDomains are reserved or placeholder domains.
+var uninformativeEmailDomains = map[string]bool{
+	"example.com": true, "example.org": true, "example.net": true,
+	"test.com": true, "localhost": true, "invalid": true, "email.com": true,
+}
+
+// uninformativeDates are sentinel dates that stand in for "no date".
+var uninformativeDates = map[string]bool{
+	"0001.01.01": true, "1900.01.01": true, "1901.01.01": true, "1970.01.01": true,
+}
+
+// IsUninformative reports whether a value is present but says nothing about who the person
+// is. Callers must treat a true result as missing data, not as a value that failed to match.
+func IsUninformative(value string, attrType string) bool {
+	trimmed := strings.TrimSpace(strings.ToLower(value))
+	if trimmed == "" {
+		return true
+	}
+	if uninformativeValues[trimmed] {
+		return true
+	}
+
+	switch attrType {
+	case constants.AttributeTypeEmail:
+		local, domain, ok := strings.Cut(trimmed, "@")
+		if !ok {
+			return false
+		}
+		// Strip any +tag before judging the mailbox.
+		if plus := strings.Index(local, "+"); plus > 0 {
+			local = local[:plus]
+		}
+		return uninformativeEmailLocalParts[local] || uninformativeEmailDomains[domain]
+
+	case constants.AttributeTypePhone:
+		digits := NormalizePhone(trimmed)
+		// Too short to identify anyone, or a single repeated digit such as 0000000000.
+		if len(digits) < constants.PhoneSuffixBlockingLength {
+			return true
+		}
+		allSame := true
+		for i := 1; i < len(digits); i++ {
+			if digits[i] != digits[0] {
+				allSame = false
+				break
+			}
+		}
+		return allSame
+
+	case constants.AttributeTypeName:
+		// A single character cannot distinguish anyone.
+		return len([]rune(NormalizeName(trimmed))) < 2
+
+	case constants.AttributeTypeDate:
+		return uninformativeDates[NormalizeDate(trimmed)]
+	}
+
+	return false
 }

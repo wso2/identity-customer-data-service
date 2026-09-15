@@ -22,9 +22,16 @@ import (
 	"fmt"
 )
 
+// BlockingKey is one index entry for a profile attribute value.
+//
+// IsFuzzy distinguishes the exact-normalized key from the recall-widening keys
+// (LSH bands, phonetic codes, phone suffixes) derived from the same value. It is
+// an in-memory hint used to query the two groups separately during candidate
+// search; it is not persisted.
 type BlockingKey struct {
 	AttributeName string
 	KeyValue      string
+	IsFuzzy       bool
 }
 
 type ProfileData struct {

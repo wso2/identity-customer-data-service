@@ -23,13 +23,29 @@ import (
 
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/algorithms"
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/normalization"
+	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
-func MatchAttribute(val1, val2 string, attrType string, mode string) float64 {
+// MatchAttribute compares two values of one attribute and reports both how similar they
+// are and whether the comparison meant anything.
+//
+// The second return value exists because a score alone cannot distinguish "these are
+// different people" from "there was nothing to compare". Both used to surface as 0.0, so a
+// missing attribute was indistinguishable from a contradicting one — which let sparse
+// profiles outscore well-populated ones. Unknown is returned when either side is empty or
+// holds a value that identifies nobody (a placeholder, a role mailbox, a sentinel date);
+// callers must treat it as absent evidence and exclude it from scoring entirely.
+//
+// Only the org's thresholds can separate agreement from contradiction, so a comparable
+// pair comes back as Inconclusive here and is classified by the scorer.
+func MatchAttribute(val1, val2 string, attrType string, mode string) (float64, model.Verdict) {
 
 	if val1 == "" || val2 == "" {
-		return 0.0
+		return 0.0, model.VerdictUnknown
+	}
+	if normalization.IsUninformative(val1, attrType) || normalization.IsUninformative(val2, attrType) {
+		return 0.0, model.VerdictUnknown
 	}
 
 	var score float64
@@ -55,7 +71,7 @@ func MatchAttribute(val1, val2 string, attrType string, mode string) float64 {
 		score = matchExact(val1, val2)
 	}
 
-	return score
+	return score, model.VerdictInconclusive
 }
 
 func matchName(val1, val2 string, mode string) float64 {

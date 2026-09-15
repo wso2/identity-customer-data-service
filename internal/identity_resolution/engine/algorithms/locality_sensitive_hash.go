@@ -91,8 +91,7 @@ func MinHashSignature(bigrams []string) []uint64 {
 		baseHash := h.Sum64()
 
 		for i := 0; i < constants.LSHSignatureSize; i++ {
-			a := constants.LSHHashKnuthMult*uint64(i) + 1
-			b := constants.LSHHashLCGMult*uint64(i) + constants.LSHHashLCGAdd
+			a, b := minHashCoefficients(i)
 			hVal := a*baseHash + b
 
 			if hVal < sig[i] {
@@ -102,4 +101,32 @@ func MinHashSignature(bigrams []string) []uint64 {
 	}
 
 	return sig
+}
+
+// minHashCoefficients returns the multiplier and addend for one signature position.
+//
+// The band probability that LSHBands and LSHRows are chosen against — that two values with
+// Jaccard similarity s share at least one band with probability 1-(1-s^rows)^bands —
+// assumes the signature positions are independent. Deriving a and b directly from i (a =
+// K*i+1, b = L*i+C) does not give that: every position is the same linear function of i, so
+// the positions move together and near-duplicates collide far less often than the maths
+// predicts. Running i through SplitMix64 first decorrelates them.
+//
+// The multiplier is forced odd because h(x) = a*x + b mod 2^64 only permutes the space when
+// a is odd; an even multiplier cannot let the top bit of x influence the result, which
+// costs that position its resolution.
+func minHashCoefficients(i int) (uint64, uint64) {
+	a := splitMix64(uint64(i)*2+1) | 1
+	b := splitMix64(uint64(i)*2 + 2)
+	return a, b
+}
+
+// splitMix64 is Steele et al.'s finalizing mixer: a bijection on uint64 that spreads
+// sequential inputs across the whole range, so consecutive positions get unrelated
+// coefficients.
+func splitMix64(x uint64) uint64 {
+	x += 0x9E3779B97F4A7C15
+	x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9
+	x = (x ^ (x >> 27)) * 0x94D049BB133111EB
+	return x ^ (x >> 31)
 }
