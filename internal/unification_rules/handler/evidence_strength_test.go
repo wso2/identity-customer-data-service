@@ -33,21 +33,45 @@ func withOverrideAllowed(t *testing.T, allowed bool) {
 	config.OverrideCDSRuntime(conf)
 }
 
-// TestEvidenceStrengthDefaultsWhenNotSupplied covers the ordinary path: a rule that says
-// nothing about strengths takes the values derived from its attribute type, whether or not
-// overrides are permitted.
-func TestEvidenceStrengthDefaultsWhenNotSupplied(t *testing.T) {
+// TestEvidenceStrengthStoresNothingWhenNotSupplied covers the ordinary path: a rule that
+// says nothing about strengths stores nothing, so the value is derived from its attribute
+// type on every read rather than frozen at creation time.
+func TestEvidenceStrengthStoresNothingWhenNotSupplied(t *testing.T) {
 	for _, allowed := range []bool{false, true} {
 		withOverrideAllowed(t, allowed)
 
-		strength, err := resolveEvidenceStrength("", constants.DefaultMatchStrength,
-			constants.AttributeTypeEmail, "match_strength")
+		strength, err := resolveEvidenceStrength("", "match_strength")
 		if err != nil {
 			t.Fatalf("override allowed=%v: unexpected error: %v", allowed, err)
 		}
-		if strength != constants.EvidenceStrengthHigh {
-			t.Errorf("override allowed=%v: EMAIL match_strength = %q, want %q",
-				allowed, strength, constants.EvidenceStrengthHigh)
+		if strength != "" {
+			t.Errorf("override allowed=%v: stored %q, want nothing stored", allowed, strength)
+		}
+	}
+}
+
+// TestEffectiveStrengthDerivesFromAttributeType is what a client sees, and what the engine
+// applies, for a rule with no stored override.
+func TestEffectiveStrengthDerivesFromAttributeType(t *testing.T) {
+	tests := []struct {
+		attrType string
+		stored   string
+		want     string
+	}{
+		{constants.AttributeTypeEmail, "", constants.EvidenceStrengthHigh},
+		{constants.AttributeTypeName, "", constants.EvidenceStrengthLow},
+		// A rule predating typed matching resolves to PRIMITIVE_EXACT, which must stay
+		// strong enough to merge on its own.
+		{constants.AttributeTypePrimitiveExact, "", constants.EvidenceStrengthHigh},
+		// An explicit override wins over the derived value.
+		{constants.AttributeTypeEmail, constants.EvidenceStrengthLow, constants.EvidenceStrengthLow},
+		// An unrecognised type still yields a usable strength.
+		{"NOT_A_REAL_TYPE", "", constants.EvidenceStrengthMedium},
+	}
+
+	for _, tt := range tests {
+		if got := effectiveStrength(tt.stored, constants.DefaultMatchStrength, tt.attrType); got != tt.want {
+			t.Errorf("effectiveStrength(%q, %s) = %q, want %q", tt.stored, tt.attrType, got, tt.want)
 		}
 	}
 }
@@ -58,8 +82,7 @@ func TestEvidenceStrengthDefaultsWhenNotSupplied(t *testing.T) {
 func TestEvidenceStrengthRefusedWhenOverrideDisabled(t *testing.T) {
 	withOverrideAllowed(t, false)
 
-	_, err := resolveEvidenceStrength(constants.EvidenceStrengthLow, constants.DefaultMatchStrength,
-		constants.AttributeTypeEmail, "match_strength")
+	_, err := resolveEvidenceStrength(constants.EvidenceStrengthLow, "match_strength")
 	if err == nil {
 		t.Fatal("expected a supplied strength to be refused while overrides are disabled")
 	}
@@ -68,8 +91,7 @@ func TestEvidenceStrengthRefusedWhenOverrideDisabled(t *testing.T) {
 func TestEvidenceStrengthAcceptedWhenOverrideEnabled(t *testing.T) {
 	withOverrideAllowed(t, true)
 
-	strength, err := resolveEvidenceStrength(constants.EvidenceStrengthLow, constants.DefaultMatchStrength,
-		constants.AttributeTypeEmail, "match_strength")
+	strength, err := resolveEvidenceStrength(constants.EvidenceStrengthLow, "match_strength")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,23 +103,7 @@ func TestEvidenceStrengthAcceptedWhenOverrideEnabled(t *testing.T) {
 func TestEvidenceStrengthRejectsUnknownValue(t *testing.T) {
 	withOverrideAllowed(t, true)
 
-	if _, err := resolveEvidenceStrength("VERY_HIGH", constants.DefaultMatchStrength,
-		constants.AttributeTypeEmail, "match_strength"); err == nil {
+	if _, err := resolveEvidenceStrength("VERY_HIGH", "match_strength"); err == nil {
 		t.Error("expected an unknown strength to be rejected")
-	}
-}
-
-// TestEvidenceStrengthFallsBackForUnknownAttributeType guards the defaulting path against a
-// missing table entry, which would otherwise store an empty strength.
-func TestEvidenceStrengthFallsBackForUnknownAttributeType(t *testing.T) {
-	withOverrideAllowed(t, false)
-
-	strength, err := resolveEvidenceStrength("", constants.DefaultMatchStrength,
-		"NOT_A_REAL_TYPE", "match_strength")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !constants.AllowedEvidenceStrengths[strength] {
-		t.Errorf("fallback produced %q, which is not a valid strength", strength)
 	}
 }

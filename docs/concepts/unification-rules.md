@@ -14,6 +14,11 @@ have only ever used that behaviour keep it after upgrading, with no configuratio
   `PRIMITIVE_EXACT` + `deterministic`, matched on exact equality exactly as before.
 - `PRIMITIVE_EXACT` carries `match_strength: HIGH`, so a single rule matching exactly still
   merges on its own, at any priority, however many other rules are configured.
+- The strength columns are nullable with **no column default**. A default would stamp a
+  concrete value onto every pre-existing row when the column is added, which is
+  indistinguishable from an operator having chosen it and would override what the attribute
+  type implies. An unset strength is derived on every read instead, so changing a rule's
+  `attribute_type` later re-derives it rather than leaving the old type's value behind.
 - Automatic merging is on unless an organisation has explicitly turned it off. The
   `auto_merge_enabled` setting is stored as a row in the admin config, so an organisation
   configured before the key existed simply has no row for it; that absence reads as

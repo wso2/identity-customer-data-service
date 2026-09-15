@@ -74,8 +74,13 @@ CREATE TABLE IF NOT EXISTS unification_rules
     -- disagreement opposes one. Independent because the two directions rarely carry equal
     -- weight: matching emails strongly imply the same person while differing emails imply
     -- little, and a date of birth is the reverse.
-    match_strength     VARCHAR(20)  NOT NULL DEFAULT 'MEDIUM',
-    mismatch_strength  VARCHAR(20)  NOT NULL DEFAULT 'MEDIUM',
+    --
+    -- Left NULL, each is derived from attribute_type at load time. A value here is an
+    -- explicit operator override. They must not carry a column default: a default would
+    -- stamp a concrete strength onto every pre-existing row when the column is added,
+    -- which reads as a deliberate choice and overrides what the attribute type implies.
+    match_strength     VARCHAR(20),
+    mismatch_strength  VARCHAR(20),
     created_at    TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00'),
     updated_at    TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00')
 );
