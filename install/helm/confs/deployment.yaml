@@ -30,6 +30,8 @@ auth_server:
   claimsEndpoint: {{ .Values.cloud.deployment.cds.config.identityServer.claimsEndpoint }}
   client_id: "${AUTH_SERVER_CLIENT_ID}"
   client_secret: "${AUTH_SERVER_CLIENT_SECRET}"
+  sub_org_client_id: "${SUB_ORG_CLIENT_ID}"
+  sub_org_client_secret: "${SUB_ORG_CLIENT_SECRET}"
   admin_username: "${AUTH_SERVER_ADMIN_USERNAME}"
   admin_password: "${AUTH_SERVER_ADMIN_PASSWORD}"
   introspection_client_id: "${INTROSPECTION_CLIENT_ID}"

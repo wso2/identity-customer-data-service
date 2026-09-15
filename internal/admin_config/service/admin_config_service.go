@@ -19,10 +19,13 @@
 package service
 
 import (
+	"fmt"
+
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/store"
 	consentService "github.com/wso2/identity-customer-data-service/internal/consent/service"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
 // AdminConfigServiceInterface defines the service interface.
@@ -94,16 +97,20 @@ func (a AdminConfigService) UpdateAdminConfig(updatedConfig model.AdminConfig, o
 
 	schemaService := service.GetProfileSchemaService()
 	if !isCDSEnabledInitialState && !isInitialSchemaSyncDoneInitialState && updatedConfig.CDSEnabled {
-		// CDS is being enabled for the first time. Trigger initial schema sync.
+		logger := log.GetLogger()
+		logger.Debug(fmt.Sprintf("UpdateAdminConfig: triggering initial schema sync for org=%s", orgHandle))
 		err := schemaService.SyncProfileSchema(orgHandle)
 		if err != nil {
+			logger.Error(fmt.Sprintf("UpdateAdminConfig: schema sync failed for org=%s", orgHandle), log.Error(err))
 			return err
 		}
-		// Seed the mandatory "Identity Data" consent category after schema is ready.
+		logger.Debug(fmt.Sprintf("UpdateAdminConfig: schema sync complete for org=%s, seeding consent categories", orgHandle))
 		if err := consentService.GetConsentCategoryService().SeedDefaultConsentCategory(orgHandle); err != nil {
+			logger.Error(fmt.Sprintf("UpdateAdminConfig: consent category seeding failed for org=%s", orgHandle), log.Error(err))
 			return err
 		}
 		updatedConfig.InitialSchemaSyncDone = true
+		logger.Debug(fmt.Sprintf("UpdateAdminConfig: CDS enabled for org=%s", orgHandle))
 	}
 
 	return store.UpdateAdminConfig(updatedConfig, orgHandle)

@@ -42,6 +42,8 @@ type AuthServerConfig struct {
 	ClaimEndpoint             string              `yaml:"claim_endpoint"`
 	ClientID                  string              `yaml:"client_id"`
 	ClientSecret              string              `yaml:"client_secret"`
+	SubOrgClientID            string              `yaml:"sub_org_client_id"`
+	SubOrgClientSecret        string              `yaml:"sub_org_client_secret"`
 	IntrospectionClientId     string              `yaml:"introspection_client_id"`
 	IntrospectionClientSecret string              `yaml:"introspection_client_secret"`
 	AdminUsername             string              `yaml:"admin_username"`

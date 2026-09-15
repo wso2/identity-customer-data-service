@@ -55,6 +55,7 @@ var DisplayNameRegex = regexp.MustCompile(`[^a-zA-Z0-9.\-_+ ]`)
 type contextKey string
 
 const TenantContextKey contextKey = "org_handle"
+const PathPrefixContextKey contextKey = "path_prefix"
 
 const (
 	ProfileResource            = "profile"

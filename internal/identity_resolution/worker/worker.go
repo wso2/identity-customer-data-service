@@ -257,10 +257,20 @@ func ResolveProfileAsync(profile profileModel.Profile) {
 				continue
 			}
 
+			// Attribute the merge to the rule that actually drove it, so the child
+			// reference records why rather than a generic "auto_merge".
+			mergeReason := constants.MergeReasonAutoMerge
+			for _, rule := range rules {
+				if score, ok := sc.breakdown[rule.PropertyName]; ok && score == sc.score {
+					mergeReason = rule.RuleName
+					break
+				}
+			}
+
 			// The surviving master is whichever profile the merge promoted — it is not
 			// necessarily matchedProfile. A permanent profile wins over a temporary one,
 			// and two temporary profiles are both demoted under a brand-new master.
-			survivingMaster, mergeErr := workers.MergeMatchedProfiles(*matchedProfile, *freshProfile, constants.MergeReasonAutoMerge)
+			survivingMaster, mergeErr := workers.MergeMatchedProfiles(*matchedProfile, *freshProfile, mergeReason)
 			if mergeErr != nil {
 				// Merge failed so not mark merged=true, not write audit log, not
 				// cascade-cancel related tasks.

@@ -105,16 +105,6 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		filterParams,
 	)
 
-	if !isSystemApp {
-		consentIds := parseCommaSeparatedOrRepeated(r.URL.Query()["consentCategoryId"])
-		filtered, filterErr := profileService.FilterProfileByConsent(*profile, profileId, orgHandle, consentIds)
-		if filterErr != nil {
-			utils.HandleError(w, filterErr)
-			return
-		}
-		profile = &filtered
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(profile)
@@ -627,8 +617,10 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Construct Location header for created resource
 	serverURL := config.GetCDSRuntime().Config.ServerURL
-	location := fmt.Sprintf("%s/t/%s%s/profiles/%s",
+	pathPrefix := utils.ExtractPathPrefixFromContext(r)
+	location := fmt.Sprintf("%s%s%s%s/profiles/%s",
 		serverURL,
+		pathPrefix,
 		orgHandle,
 		constants.ApiBasePath+"/v1",
 		profileResponse.ProfileId,
