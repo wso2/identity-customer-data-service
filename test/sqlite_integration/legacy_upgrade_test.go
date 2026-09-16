@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package integration
+package sqlite_integration
 
 import (
 	"fmt"
@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	irModel "github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	irStore "github.com/wso2/identity-customer-data-service/internal/identity_resolution/store"
+	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	dbmodel "github.com/wso2/identity-customer-data-service/internal/system/database/model"
@@ -209,4 +210,29 @@ func waitForBlockingKeys(t *testing.T, org, attribute, profileID string) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Logf("profile %s was not indexed under %s within the deadline", profileID, attribute)
+}
+
+func newOrg(prefix string) string {
+	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
+}
+
+// insertBareProfile writes a profile directly, bypassing the service so the test controls
+// exactly what exists without waiting on the async unification queue.
+func insertBareProfile(t *testing.T, org, userID string, traits map[string]interface{}) profileModel.Profile {
+	t.Helper()
+
+	profile := profileModel.Profile{
+		ProfileId:          uuid.New().String(),
+		UserId:             userID,
+		OrgHandle:          org,
+		Traits:             traits,
+		IdentityAttributes: map[string]interface{}{},
+		CreatedAt:          time.Now().UTC(),
+		UpdatedAt:          time.Now().UTC(),
+		ProfileStatus:      &profileModel.ProfileStatus{},
+	}
+	if err := profileStore.InsertProfile(profile); err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+	return profile
 }

@@ -55,6 +55,15 @@ func CompleteStatement(name, statement string) string {
 		return fmt.Sprintf(statement, "$2")
 	case "GetAppDataByProfileIds", "GetConsentCategoryAttributesByCategoryIds":
 		return fmt.Sprintf(statement, "$1")
+	case "IRGetProfilesByIDs":
+		return fmt.Sprintf(statement, "$1")
+	case "IRFindCandidateIDsByKeys":
+		// An IN list plus the positions of the exclude and limit arguments.
+		return fmt.Sprintf(statement, "$1", 2, 3)
+	case "IRInsertBlockingKeys":
+		return fmt.Sprintf(statement, "($1, $2, $3, $4, $5)")
+	case "GetProfileIDsWithFiltersBase":
+		return statement + " WHERE p.org_handle = $1"
 	default:
 		return statement
 	}

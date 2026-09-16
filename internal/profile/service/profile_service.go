@@ -1145,8 +1145,13 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 		return nil
 	}
 
-	// If it is a child profile, delete it
-	if !(profile.ProfileStatus.IsReferenceProfile) {
+	// If it is a child profile, delete it.
+	//
+	// A standalone profile also reports IsReferenceProfile false, but has no parent to
+	// look up. Reading its empty ReferenceProfileId as an id returns no profile, and
+	// GetProfile signals that as (nil, nil) — so without this guard the nil parent is
+	// dereferenced and deleting any never-merged profile panics.
+	if !profile.ProfileStatus.IsReferenceProfile && profile.ProfileStatus.ReferenceProfileId != "" {
 
 		logger.Info(fmt.Sprintf("Deleting child profile: %s with parent: %s", ProfileId,
 			profile.ProfileStatus.ReferenceProfileId))
@@ -1160,6 +1165,11 @@ func (ps *ProfilesService) DeleteProfile(ProfileId string) error {
 				Description: errorMsg,
 			}, err)
 			return serverError
+		}
+		if parentProfile == nil {
+			logger.Warn(fmt.Sprintf("Parent profile %s of %s no longer exists; deleting the child alone",
+				profile.ProfileStatus.ReferenceProfileId, ProfileId))
+			return profileStore.DeleteProfile(ProfileId)
 		}
 		parentProfile.ProfileStatus.References, _ = profileStore.FetchReferencedProfiles(parentProfile.ProfileId)
 

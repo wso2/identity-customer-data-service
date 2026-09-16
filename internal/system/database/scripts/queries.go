@@ -571,6 +571,10 @@ var IRCancelRelatedReviewTasks = newQuery("CDS-IDR-11",
 	`UPDATE review_tasks
 				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
 				 WHERE id != $4 AND status = $5
+				   AND (incoming_profile_id IN ($6, $7) OR candidate_profile_id IN ($6, $7))`,
+	`UPDATE review_tasks
+				 SET status = $1, resolved_at = strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00', resolved_by = $2, resolution_notes = $3
+				 WHERE id != $4 AND status = $5
 				   AND (incoming_profile_id IN ($6, $7) OR candidate_profile_id IN ($6, $7))`)
 
 // IRFindRelatedPendingReviewTasks finds incoming profile IDs of PENDING tasks affected by a cascade cancel.
@@ -613,6 +617,10 @@ var IRCountPendingReviewTasksByProfile = newQuery("CDS-IDR-17",
 var IRUpdateReviewTaskStatus = newQuery("CDS-IDR-18",
 	`UPDATE review_tasks
 				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
+				 WHERE id = $4`,
+	// SQLite has no now(); strftime matches the format the schema defaults use.
+	`UPDATE review_tasks
+				 SET status = $1, resolved_at = strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00', resolved_by = $2, resolution_notes = $3
 				 WHERE id = $4`)
 
 var IRInsertRejectionPair = newQuery("CDS-IDR-19",
