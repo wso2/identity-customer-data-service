@@ -24,10 +24,18 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
+)
+
+// Default pool sizing, used when deployment.yaml does not specify any.
+const (
+	defaultMaxOpenConns    = 25
+	defaultMaxIdleConns    = 5
+	defaultConnMaxLifetime = 5 * time.Minute
 )
 
 // DBConfig represents the local database configuration.
@@ -57,6 +65,20 @@ var (
 	sqliteErr    error
 )
 
+// postgresHandle is the same arrangement for an external PostgreSQL datasource.
+//
+// database/sql is already a connection pool, so the handle is meant to be opened once and
+// shared. Every call used to sql.Open a fresh pool, Ping it, and Close it again, making
+// each individual query a TCP, TLS and authentication round trip. One profile write issues
+// dozens of queries and identity resolution issues dozens more per candidate, so a single
+// update could open hundreds of connections in series — and any configured pool limit was
+// meaningless, because no pool outlived one statement.
+var (
+	postgresHandle *sql.DB
+	postgresOnce   sync.Once
+	postgresErr    error
+)
+
 // DBProviderInterface defines the interface for getting database clients.
 type DBProviderInterface interface {
 	GetDBClient() (client.DBClientInterface, error)
@@ -80,7 +102,6 @@ func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 		return client.NewSharedDBClient(testDBOverride, database.ResolveType(testDBTypeOverride)), nil
 	}
 
-	// Production DB setup
 	runtimeConfig := config.GetCDSRuntime().Config
 	dbType := database.ResolveType(runtimeConfig.DataSource.Type)
 
@@ -92,22 +113,84 @@ func (d *DBProvider) GetDBClient() (client.DBClientInterface, error) {
 		return client.NewSharedDBClient(db, dbType), nil
 	}
 
-	dbConfig, err := getDBConfig(runtimeConfig)
+	db, err := getPostgresDB()
 	if err != nil {
 		return nil, err
 	}
+	return client.NewSharedDBClient(db, dbType), nil
+}
 
-	db, err := sql.Open(dbConfig.driverName, dbConfig.dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %v", err)
+// getPostgresDB opens the external database once and applies the configured pool sizing.
+func getPostgresDB() (*sql.DB, error) {
+
+	postgresOnce.Do(func() {
+		runtimeConfig := config.GetCDSRuntime().Config
+
+		dbConfig, err := getDBConfig(runtimeConfig)
+		if err != nil {
+			postgresErr = err
+			return
+		}
+
+		db, err := sql.Open(dbConfig.driverName, dbConfig.dsn)
+		if err != nil {
+			postgresErr = fmt.Errorf("failed to connect to database: %v", err)
+			return
+		}
+
+		db.SetMaxOpenConns(orDefault(runtimeConfig.DataSource.MaxOpenConns, defaultMaxOpenConns))
+		db.SetMaxIdleConns(orDefault(runtimeConfig.DataSource.MaxIdleConns, defaultMaxIdleConns))
+		if seconds := runtimeConfig.DataSource.ConnMaxLifetime; seconds > 0 {
+			db.SetConnMaxLifetime(time.Duration(seconds) * time.Second)
+		} else {
+			db.SetConnMaxLifetime(defaultConnMaxLifetime)
+		}
+
+		// Ping once, when the pool is established, rather than before every statement.
+		if err := db.Ping(); err != nil {
+			_ = db.Close()
+			postgresErr = fmt.Errorf("failed to ping database: %v", err)
+			return
+		}
+
+		postgresHandle = db
+	})
+
+	if postgresErr != nil {
+		// A failed first attempt must not poison the process for its lifetime.
+		postgresOnce = sync.Once{}
+		err := postgresErr
+		postgresErr = nil
+		return nil, err
 	}
 
-	// Test the database connection.
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %v", err)
+	return postgresHandle, nil
+}
+
+func orDefault(value, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	return fallback
+}
+
+// ClosePool shuts any open datasource handle down. Intended for process shutdown only.
+func ClosePool() error {
+
+	var firstErr error
+	for handle := range map[**sql.DB]struct{}{&postgresHandle: {}, &sqliteHandle: {}} {
+		if *handle == nil {
+			continue
+		}
+		if err := (*handle).Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		*handle = nil
 	}
 
-	return client.NewDBClient(db, dbType), nil
+	postgresOnce = sync.Once{}
+	sqliteOnce = sync.Once{}
+	return firstErr
 }
 
 // getSQLiteDB opens the inbuilt database once and initializes its schema.

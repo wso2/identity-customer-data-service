@@ -4,6 +4,42 @@
 
 ---
 
+## Upgrading from exact-only matching
+
+Before typed matching, unification walked the active rules in priority order and merged two
+profiles on the **first exact match**, whatever the other rules held. Organisations that
+have only ever used that behaviour keep it after upgrading, with no configuration change:
+
+- A rule stored without `attribute_type`, `unification_method` or strengths is read as
+  `PRIMITIVE_EXACT` + `deterministic`, matched on exact equality exactly as before.
+- `PRIMITIVE_EXACT` carries `match_strength: HIGH`, so a single rule matching exactly still
+  merges on its own, at any priority, however many other rules are configured.
+- The strength columns are nullable with **no column default**. A default would stamp a
+  concrete value onto every pre-existing row when the column is added, which is
+  indistinguishable from an operator having chosen it and would override what the attribute
+  type implies. An unset strength is derived on every read instead, so changing a rule's
+  `attribute_type` later re-derives it rather than leaving the old type's value behind.
+- Automatic merging is on unless an organisation has explicitly turned it off. The
+  `auto_merge_enabled` setting is stored as a row in the admin config, so an organisation
+  configured before the key existed simply has no row for it; that absence reads as
+  **enabled**, because reading it as disabled would silently route every merge the tenant
+  relied on into the review queue instead.
+
+Two behaviours are genuinely new for an existing organisation, and both only ever make the
+engine *more* cautious:
+
+- If several rules apply to a pair and most of them actively disagree, an automatic merge is
+  downgraded to a review task rather than performed.
+- If a rule is typed as `DATE` or `UNIQUE_ID` and the two values differ, that disagreement
+  vetoes an automatic merge.
+
+Neither can fire while every rule is an untyped legacy rule, because nothing is typed as
+`DATE` or `UNIQUE_ID` and a lone exact match has nothing to disagree with it. They begin to
+apply as an operator gives attributes their real types, which is the point at which they
+want the extra caution.
+
+---
+
 ## Rule structure
 
 | Field | Description |
@@ -15,7 +51,65 @@
 | `property_id` | The `attribute_id` of the schema attribute being matched |
 | `priority` | Lower number = evaluated first. Rules are sorted ascending by priority. |
 | `is_active` | Only active rules are evaluated during unification |
+| `attribute_type` | What kind of value the attribute holds, which decides how it is compared and indexed |
+| `unification_method` | `deterministic` (exact) or `fuzzy` (tolerates variation). Rules of both kinds are evaluated side by side. |
+| `match_strength` | How much an agreement on this attribute supports a merge |
+| `mismatch_strength` | How much a disagreement opposes one |
 | `created_at` / `updated_at` | Timestamps |
+
+---
+
+## Choosing the evidence strengths
+
+`match_strength` and `mismatch_strength` are asked for separately because agreement and
+disagreement on the same attribute rarely carry equal weight:
+
+- Two profiles sharing an **email address** are almost certainly the same person, but two
+  *different* addresses say very little — most people have several.
+- Two profiles sharing a **date of birth** says little, since birthdays collide constantly,
+  yet two *different* dates is close to proof they are different people.
+
+| Value | On a match | On a mismatch |
+|---|---|---|
+| `HIGH` | Can merge two profiles on its own | Two differing values block an automatic merge outright |
+| `MEDIUM` | Real evidence, but another attribute must also agree | Counts against the match without blocking it |
+| `LOW` | Close to coincidence on its own | Says little; people legitimately have several |
+
+Both are derived from `attribute_type` using the table below, so a rule created without
+thinking about strengths still behaves sensibly.
+
+Setting them per rule is gated on `identity_resolution.allow_evidence_strength_override` in
+`deployment.yaml`, which is **off by default**. While it is off, sending either field is
+rejected rather than quietly ignored — a caller that believes it set a strength and is
+overruled would misread every merge decision that followed. Turn it on only where someone
+can judge the effect on existing profiles.
+
+> **Disclaimer — this setting's scope is provisional.** It currently sits at deployment
+> level because it gates an API surface rather than matching behaviour: whether a field is
+> writable is a property of the build being run. Every other setting that shapes who gets
+> merged — `auto_merge_enabled` and both thresholds — is per organisation in the admin
+> config, so this may move there once there is a way for an operator to preview what a
+> strength change would do to their existing profiles. Treat its location as unsettled and
+> avoid building tooling that assumes it is server-wide.
+
+`PRIMITIVE_EXACT` is what a rule written before typed matching resolves to, and it is
+treated as strong in both directions on purpose: previously any rule matching exactly merged
+the two profiles outright, and an upgrade must not quietly change that. An operator who
+wants a weaker reading gives the attribute its real type.
+
+| Attribute type | `match_strength` | `mismatch_strength` |
+|---|---|---|
+| `UNIQUE_ID` | HIGH | HIGH |
+| `EMAIL` | HIGH | LOW |
+| `PHONE` | HIGH | LOW |
+| `DATE` | LOW | HIGH |
+| `NAME` | LOW | MEDIUM |
+| `LOCATION` | LOW | LOW |
+| `FUZZY_STRING` | MEDIUM | LOW |
+| `PRIMITIVE_EXACT` | HIGH | MEDIUM |
+
+The strengths are returned on the rule so a client can display what the engine is applying,
+even where they cannot be edited.
 
 ---
 

@@ -40,6 +40,8 @@ import (
 	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
+
+	irWorker "github.com/wso2/identity-customer-data-service/internal/identity_resolution/worker"
 )
 
 func initDatabaseFromConfig(cdsConfig *config.Config) error {
@@ -103,6 +105,8 @@ func main() {
 		fmt.Println("Failed to start profile worker.", err)
 		os.Exit(1)
 	}
+	workers.RegisterFuzzyResolveFunc(irWorker.ResolveProfileAsync)
+	workers.RegisterReindexAfterMergeFunc(irWorker.ReindexAfterMerge)
 
 	// Initialize Schema Sync worker
 	if err := workers.StartSchemaSyncWorker(); err != nil {
@@ -197,6 +201,11 @@ func main() {
 	}
 
 	workers.StopCookieCleanupWorker()
+
+	// Close the shared connection pool last, once nothing is still issuing queries.
+	if err := provider.ClosePool(); err != nil {
+		logger.Error("Failed to close the database connection pool.", log.Error(err))
+	}
 
 	logger.Info("Shutdown complete")
 }

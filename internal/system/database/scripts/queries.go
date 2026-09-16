@@ -143,21 +143,26 @@ var UpdateProfileSchemaAttributeFields = newQuery("CDS-SCH-15",
 	`UPDATE profile_schema SET `)
 
 var GetUnificationRules = newQuery("CDS-UNR-01",
-	`SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at 
+	`SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method,
+	 match_strength, mismatch_strength, created_at, updated_at
 FROM unification_rules WHERE org_handle = $1`)
 
 var GetUnificationRule = newQuery("CDS-UNR-02",
-	`SELECT rule_id, rule_name, property_name, property_id, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`)
+	`SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method,
+	 match_strength, mismatch_strength, created_at, updated_at
+	 FROM unification_rules WHERE rule_id = $1`)
 
 var DeleteUnificationRule = newQuery("CDS-UNR-03",
 	`DELETE FROM unification_rules WHERE rule_id = $1`)
 var InsertUnificationRule = newQuery("CDS-UNR-04",
-	`INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, created_at, updated_at) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`)
+	`INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active,
+			attribute_type, unification_method, match_strength, mismatch_strength, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`)
 
 var UpdateUnificationRule = newQuery("CDS-UNR-05",
-	`UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3,updated_at = $4
-		 WHERE rule_id = $5;`)
+	`UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3, attribute_type = $4,
+		 unification_method = $5, match_strength = $6, mismatch_strength = $7, updated_at = $8
+		 WHERE rule_id = $9;`)
 
 var InsertProfile = newQuery("CDS-PRF-01",
 	`
@@ -315,6 +320,11 @@ var InsertApplicationData = newQuery("CDS-PRF-12",
 
 var DeleteProfileReference = newQuery("CDS-PRF-13",
 	`DELETE FROM profile_reference WHERE reference_profile_id = $1 AND profile_id = $2;`)
+
+// GetProfileIDsWithFiltersBase is the prefix of the hybrid-search id lookup. The caller
+// appends the WHERE clause it builds from the request filters.
+var GetProfileIDsWithFiltersBase = newQuery("CDS-PRF-19",
+	`SELECT DISTINCT p.profile_id FROM profiles p LEFT JOIN profile_reference r ON p.profile_id = r.profile_id`)
 
 var GetAllProfilesWithFilterBase = newQuery("CDS-PRF-14",
 	`SELECT DISTINCT p.profile_id,
@@ -496,3 +506,144 @@ var UpdateInitialSchemaSyncDoneConfig = newQuery("CDS-CFG-04",
 
 // HealthCheckPing checks that the datasource answers.
 var HealthCheckPing = newQuery("CDS-SYS-01", `SELECT 1;`)
+
+// Identity resolution: blocking index, review tasks, rejection pairs and merge audit.
+var DeleteBlockingKeysSQL = newQuery("CDS-IDR-01",
+	`DELETE FROM blocking_keys WHERE profile_id = $1`)
+
+var DeleteBlockingKeysByAttributeSQL = newQuery("CDS-IDR-02",
+	`DELETE FROM blocking_keys WHERE org_handle = $1 AND attribute_name = $2`)
+
+// IRGetProfilesForOrgAfter walks an org's profiles by key rather than by offset. OFFSET
+// pagination re-runs the query for each page, so a profile inserted with a lower id while
+// the scan is in flight shifts every later row back one place and one row is never read —
+// leaving a silent hole in the index. Seeking past the last id already seen cannot skip.
+var IRGetProfilesForOrgAfter = newQuery("CDS-IDR-03",
+	`SELECT profile_id, user_id, org_handle, traits, identity_attributes
+				 FROM profiles
+				 WHERE org_handle = $1 AND delete_profile = FALSE AND profile_id > $2
+				 ORDER BY profile_id
+				 LIMIT $3`)
+
+var IRGetProfilesByIDs = newQuery("CDS-IDR-04",
+	`SELECT p.profile_id, p.user_id, p.org_handle, p.traits, p.identity_attributes,
+				        pr.reference_profile_id
+				 FROM profiles p
+				 LEFT JOIN profile_reference pr ON p.profile_id = pr.profile_id
+				 WHERE p.profile_id IN (%s) AND p.delete_profile = FALSE`)
+
+var IRInsertBlockingKeys = newQuery("CDS-IDR-05",
+	`INSERT INTO blocking_keys (key_id, profile_id, org_handle, attribute_name, key_value)
+				 VALUES %s ON CONFLICT DO NOTHING`)
+
+var IRFindCandidateIDsByKeys = newQuery("CDS-IDR-06",
+	`SELECT DISTINCT profile_id FROM blocking_keys
+				 WHERE org_handle = $1 AND attribute_name = $2 AND key_value IN (%s)
+				   AND profile_id != $%d LIMIT $%d`)
+
+// IRCountProfilesByBlockingKey reports how many profiles in an org share one exact key
+// value, which is how common that value is within the tenant.
+var IRCountProfilesByBlockingKey = newQuery("CDS-IDR-07",
+	`SELECT COUNT(DISTINCT profile_id) AS profile_count FROM blocking_keys
+				 WHERE org_handle = $1 AND attribute_name = $2 AND key_value = $3`)
+
+var IRInsertReviewTask = newQuery("CDS-IDR-08",
+	`INSERT INTO review_tasks (id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status, score_breakdown)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)
+				 ON CONFLICT (incoming_profile_id, candidate_profile_id)
+				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6,
+				               resolved_at = NULL, resolved_by = NULL, resolution_notes = NULL
+				 WHERE review_tasks.status IN ('PENDING', 'CANCELLED')`)
+
+// IRMirrorReviewTaskExists checks whether a PENDING task exists for the reverse pair (candidate→incoming).
+var IRMirrorReviewTaskExists = newQuery("CDS-IDR-09",
+	`SELECT COUNT(*) FROM review_tasks
+				 WHERE incoming_profile_id = $1 AND candidate_profile_id = $2 AND status = $3`)
+
+// IRUpdateMirrorReviewTask flips the direction of a mirror task and refreshes its score.
+var IRUpdateMirrorReviewTask = newQuery("CDS-IDR-10",
+	`UPDATE review_tasks
+				 SET incoming_profile_id = $1, candidate_profile_id = $2, match_score = $3, score_breakdown = $4
+				 WHERE incoming_profile_id = $5 AND candidate_profile_id = $6 AND status = $7`)
+
+// IRCancelRelatedReviewTasks cancels all PENDING tasks that reference either profile.
+var IRCancelRelatedReviewTasks = newQuery("CDS-IDR-11",
+	`UPDATE review_tasks
+				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
+				 WHERE id != $4 AND status = $5
+				   AND (incoming_profile_id IN ($6, $7) OR candidate_profile_id IN ($6, $7))`,
+	`UPDATE review_tasks
+				 SET status = $1, resolved_at = strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00', resolved_by = $2, resolution_notes = $3
+				 WHERE id != $4 AND status = $5
+				   AND (incoming_profile_id IN ($6, $7) OR candidate_profile_id IN ($6, $7))`)
+
+// IRFindRelatedPendingReviewTasks finds incoming profile IDs of PENDING tasks affected by a cascade cancel.
+var IRFindRelatedPendingReviewTasks = newQuery("CDS-IDR-12",
+	`SELECT DISTINCT incoming_profile_id
+				 FROM review_tasks
+				 WHERE id != $1 AND status = $2
+				   AND (incoming_profile_id IN ($3, $4) OR candidate_profile_id IN ($3, $4))`)
+
+var IRGetReviewTaskByID = newQuery("CDS-IDR-13",
+	`SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
+				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
+				 FROM review_tasks
+				 WHERE id = $1`)
+
+var IRGetPendingReviewTasks = newQuery("CDS-IDR-14",
+	`SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
+				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
+				 FROM review_tasks
+				 WHERE org_handle = $1 AND status = $2
+				 ORDER BY created_at DESC
+				 LIMIT $3`)
+
+var IRCountPendingReviewTasks = newQuery("CDS-IDR-15",
+	`SELECT COUNT(*) FROM review_tasks WHERE org_handle = $1 AND status = $2`)
+
+var IRGetPendingReviewTasksByProfile = newQuery("CDS-IDR-16",
+	`SELECT id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status,
+				        score_breakdown, created_at, resolved_at, resolved_by, resolution_notes
+				 FROM review_tasks
+				 WHERE org_handle = $1 AND status = $2
+				   AND (incoming_profile_id = $3)
+				 ORDER BY match_score DESC
+				 LIMIT $4`)
+
+var IRCountPendingReviewTasksByProfile = newQuery("CDS-IDR-17",
+	`SELECT COUNT(*) FROM review_tasks WHERE org_handle = $1 AND status = $2
+				   AND (incoming_profile_id = $3 OR candidate_profile_id = $3)`)
+
+var IRUpdateReviewTaskStatus = newQuery("CDS-IDR-18",
+	`UPDATE review_tasks
+				 SET status = $1, resolved_at = now(), resolved_by = $2, resolution_notes = $3
+				 WHERE id = $4`,
+	// SQLite has no now(); strftime matches the format the schema defaults use.
+	`UPDATE review_tasks
+				 SET status = $1, resolved_at = strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00', resolved_by = $2, resolution_notes = $3
+				 WHERE id = $4`)
+
+var IRInsertRejectionPair = newQuery("CDS-IDR-19",
+	`INSERT INTO rejection_pairs (id, org_handle, profile_id_1, profile_id_2, rejected_by)
+				 VALUES ($1, $2, $3, $4, $5)
+				 ON CONFLICT (profile_id_1, profile_id_2) DO NOTHING`)
+
+var IRGetRejectedProfileIDs = newQuery("CDS-IDR-20",
+	`SELECT profile_id_1, profile_id_2 FROM rejection_pairs
+				 WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`)
+
+var IRDeleteRejectionPairsForProfile = newQuery("CDS-IDR-21",
+	`DELETE FROM rejection_pairs WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`)
+
+// IRRepointRejectionPairs moves a rejection from a profile that has become a child onto
+// the master that now represents it, so the decision survives the merge.
+var IRRepointRejectionPairs = newQuery("CDS-IDR-22",
+	`UPDATE rejection_pairs
+				 SET profile_id_1 = CASE WHEN profile_id_1 = $2 THEN $3 ELSE profile_id_1 END,
+				     profile_id_2 = CASE WHEN profile_id_2 = $2 THEN $3 ELSE profile_id_2 END
+				 WHERE org_handle = $1 AND ($2 IN (profile_id_1, profile_id_2))
+				   AND profile_id_1 != $3 AND profile_id_2 != $3`)
+
+var IRInsertMergeAuditLog = newQuery("CDS-IDR-23",
+	`INSERT INTO merge_audit_log (id, org_handle, primary_profile_id, secondary_profile_id, merge_type, match_score, merged_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)`)

@@ -20,13 +20,17 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
+	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/worker"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
@@ -80,17 +84,67 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		utils.HandleError(w, clientError)
 		return
 	}
+
+	// Validate AttributeType.
+	if !constants.AllowedAttributeTypes[ruleInRequest.AttributeType] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.BAD_REQUEST.Code,
+			Message:     errors2.BAD_REQUEST.Message,
+			Description: fmt.Sprintf("Invalid attribute_type: '%s'. Allowed values: PRIMITIVE_EXACT, FUZZY_STRING, NAME, EMAIL, PHONE, LOCATION, DATE, UNIQUE_ID.", ruleInRequest.AttributeType),
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
+
+	// Validate UnificationMethod.
+	if ruleInRequest.UnificationMethod != constants.UnificationMethodFuzzy && ruleInRequest.UnificationMethod != constants.UnificationMethodDeterministic {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.BAD_REQUEST.Code,
+			Message:     errors2.BAD_REQUEST.Message,
+			Description: fmt.Sprintf("Invalid unification_method: '%s'. Allowed values: fuzzy, deterministic.", ruleInRequest.UnificationMethod),
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
+
+	// Reject fuzzy for attribute types that only support exact matching.
+	if ruleInRequest.UnificationMethod == constants.UnificationMethodFuzzy && !constants.FuzzyCapableAttributeTypes[ruleInRequest.AttributeType] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.BAD_REQUEST.Code,
+			Message:     errors2.BAD_REQUEST.Message,
+			Description: fmt.Sprintf("Attribute type '%s' does not support fuzzy matching. Use 'deterministic' instead.", ruleInRequest.AttributeType),
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
+
+	// Validate evidence strengths, defaulting each from the attribute type when omitted.
+	matchStrength, strengthErr := resolveEvidenceStrength(ruleInRequest.MatchStrength, "match_strength")
+	if strengthErr != nil {
+		utils.WriteErrorResponse(w, strengthErr)
+		return
+	}
+	mismatchStrength, strengthErr := resolveEvidenceStrength(ruleInRequest.MismatchStrength, "mismatch_strength")
+	if strengthErr != nil {
+		utils.WriteErrorResponse(w, strengthErr)
+		return
+	}
+
 	// Set timestamps
 	now := time.Now().UTC()
 	rule := model.UnificationRule{
-		RuleId:       uuid.New().String(),
-		OrgHandle:    orgHandle,
-		RuleName:     ruleInRequest.RuleName,
-		PropertyName: ruleInRequest.PropertyName,
-		Priority:     ruleInRequest.Priority,
-		IsActive:     ruleInRequest.IsActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		RuleId:            uuid.New().String(),
+		OrgHandle:         orgHandle,
+		RuleName:          ruleInRequest.RuleName,
+		PropertyName:      ruleInRequest.PropertyName,
+		Priority:          ruleInRequest.Priority,
+		IsActive:          ruleInRequest.IsActive,
+		AttributeType:     ruleInRequest.AttributeType,
+		UnificationMethod: ruleInRequest.UnificationMethod,
+		MatchStrength:     matchStrength,
+		MismatchStrength:  mismatchStrength,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}
 
 	ruleProvider := provider.NewUnificationRuleProvider()
@@ -101,17 +155,27 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		return
 	}
 	addedRule, err := ruleService.GetUnificationRule(rule.RuleId)
-	addedRuleResponse := model.UnificationRuleAPIResponse{
-		RuleId:       addedRule.RuleId,
-		RuleName:     addedRule.RuleName,
-		PropertyName: addedRule.PropertyName,
-		Priority:     addedRule.Priority,
-		IsActive:     addedRule.IsActive,
-	}
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+	addedRuleResponse := model.UnificationRuleAPIResponse{
+		RuleId:            addedRule.RuleId,
+		RuleName:          addedRule.RuleName,
+		PropertyName:      addedRule.PropertyName,
+		Priority:          addedRule.Priority,
+		IsActive:          addedRule.IsActive,
+		AttributeType:     addedRule.AttributeType,
+		UnificationMethod: addedRule.UnificationMethod,
+		MatchStrength:     effectiveStrength(addedRule.MatchStrength, constants.DefaultMatchStrength, addedRule.AttributeType),
+		MismatchStrength:  effectiveStrength(addedRule.MismatchStrength, constants.DefaultMismatchStrength, addedRule.AttributeType),
+	}
+
+	// Trigger reindex if rule is active.
+	if addedRule.IsActive {
+		utils.SafeGo("unification rule index backfill", func() { worker.IndexNewAttribute(orgHandle, *addedRule) })
+	}
+
 	utils.RespondJSON(w, http.StatusCreated, addedRuleResponse, constants.UnificationRuleResource)
 }
 
@@ -144,11 +208,15 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	rulesResponse := make([]model.UnificationRuleAPIResponse, 0, len(rules))
 	for _, rule := range rules {
 		tempRule := model.UnificationRuleAPIResponse{
-			RuleId:       rule.RuleId,
-			RuleName:     rule.RuleName,
-			PropertyName: rule.PropertyName,
-			Priority:     rule.Priority,
-			IsActive:     rule.IsActive,
+			RuleId:            rule.RuleId,
+			RuleName:          rule.RuleName,
+			PropertyName:      rule.PropertyName,
+			Priority:          rule.Priority,
+			IsActive:          rule.IsActive,
+			AttributeType:     rule.AttributeType,
+			UnificationMethod: rule.UnificationMethod,
+			MatchStrength:     rule.MatchStrength,
+			MismatchStrength:  rule.MismatchStrength,
 		}
 		rulesResponse = append(rulesResponse, tempRule)
 	}
@@ -191,11 +259,15 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		return
 	}
 	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:       rule.RuleId,
-		RuleName:     rule.RuleName,
-		PropertyName: rule.PropertyName,
-		Priority:     rule.Priority,
-		IsActive:     rule.IsActive,
+		RuleId:            rule.RuleId,
+		RuleName:          rule.RuleName,
+		PropertyName:      rule.PropertyName,
+		Priority:          rule.Priority,
+		IsActive:          rule.IsActive,
+		AttributeType:     rule.AttributeType,
+		UnificationMethod: rule.UnificationMethod,
+		MatchStrength:     effectiveStrength(rule.MatchStrength, constants.DefaultMatchStrength, rule.AttributeType),
+		MismatchStrength:  effectiveStrength(rule.MismatchStrength, constants.DefaultMismatchStrength, rule.AttributeType),
 	}
 	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
 }
@@ -237,11 +309,16 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	updatedRule, err := ruleService.GetUnificationRule(ruleId)
+
+	// Fetch old rule to detect is_active changes.
+	oldRule, err := ruleService.GetUnificationRule(ruleId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+	wasActive := oldRule.IsActive
+
+	updatedRule := *oldRule
 
 	if ruleUpdateRequest.RuleName != nil {
 		updatedRule.RuleName = *ruleUpdateRequest.RuleName
@@ -255,23 +332,98 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		updatedRule.IsActive = *ruleUpdateRequest.IsActive
 	}
 
-	err = ruleService.PatchUnificationRule(ruleId, orgHandle, *updatedRule)
+	if ruleUpdateRequest.AttributeType != nil {
+		if !constants.AllowedAttributeTypes[*ruleUpdateRequest.AttributeType] {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.BAD_REQUEST.Code,
+				Message:     errors2.BAD_REQUEST.Message,
+				Description: fmt.Sprintf("Invalid attribute_type: '%s'. Allowed values: PRIMITIVE_EXACT, FUZZY_STRING, NAME, EMAIL, PHONE, LOCATION, DATE, UNIQUE_ID.", *ruleUpdateRequest.AttributeType),
+			}, http.StatusBadRequest)
+			utils.WriteErrorResponse(w, clientError)
+			return
+		}
+		updatedRule.AttributeType = *ruleUpdateRequest.AttributeType
+	}
+
+	if ruleUpdateRequest.UnificationMethod != nil {
+		if *ruleUpdateRequest.UnificationMethod != constants.UnificationMethodFuzzy && *ruleUpdateRequest.UnificationMethod != constants.UnificationMethodDeterministic {
+			clientError := errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.BAD_REQUEST.Code,
+				Message:     errors2.BAD_REQUEST.Message,
+				Description: fmt.Sprintf("Invalid unification_method: '%s'. Allowed values: fuzzy, deterministic.", *ruleUpdateRequest.UnificationMethod),
+			}, http.StatusBadRequest)
+			utils.WriteErrorResponse(w, clientError)
+			return
+		}
+		updatedRule.UnificationMethod = *ruleUpdateRequest.UnificationMethod
+	}
+
+	// Cross-validate: reject fuzzy for attribute types that only support exact matching.
+	if updatedRule.UnificationMethod == constants.UnificationMethodFuzzy && !constants.FuzzyCapableAttributeTypes[updatedRule.AttributeType] {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.BAD_REQUEST.Code,
+			Message:     errors2.BAD_REQUEST.Message,
+			Description: fmt.Sprintf("Attribute type '%s' does not support fuzzy matching. Use 'deterministic' instead.", updatedRule.AttributeType),
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
+		return
+	}
+
+	if ruleUpdateRequest.MatchStrength != nil {
+		strength, strengthErr := resolveEvidenceStrength(*ruleUpdateRequest.MatchStrength, "match_strength")
+		if strengthErr != nil {
+			utils.WriteErrorResponse(w, strengthErr)
+			return
+		}
+		updatedRule.MatchStrength = strength
+	}
+	if ruleUpdateRequest.MismatchStrength != nil {
+		strength, strengthErr := resolveEvidenceStrength(*ruleUpdateRequest.MismatchStrength, "mismatch_strength")
+		if strengthErr != nil {
+			utils.WriteErrorResponse(w, strengthErr)
+			return
+		}
+		updatedRule.MismatchStrength = strength
+	}
+	err = ruleService.PatchUnificationRule(ruleId, orgHandle, updatedRule)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
 
-	rule, err := ruleService.GetUnificationRule(ruleId)
+	newRule, err := ruleService.GetUnificationRule(ruleId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+
+	// Detect activation / deactivation and trigger reindex.
+	nowActive := newRule.IsActive
+	if !wasActive && nowActive {
+		utils.SafeGo("unification rule index backfill", func() { worker.IndexNewAttribute(orgHandle, *newRule) })
+	}
+	if wasActive && !nowActive {
+		utils.SafeGo("unification rule index removal", func() { worker.RemoveAttributeIndex(orgHandle, newRule.PropertyName) })
+	}
+
+	// AttributeType change on an already-active rule invalidates the blocking-key shape.
+	if wasActive && nowActive && oldRule.AttributeType != newRule.AttributeType {
+		utils.SafeGo("unification rule index rebuild", func() {
+			worker.RemoveAttributeIndex(orgHandle, newRule.PropertyName)
+			worker.IndexNewAttribute(orgHandle, *newRule)
+		})
+	}
+
 	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:       rule.RuleId,
-		RuleName:     rule.RuleName,
-		PropertyName: rule.PropertyName,
-		Priority:     rule.Priority,
-		IsActive:     rule.IsActive,
+		RuleId:            newRule.RuleId,
+		RuleName:          newRule.RuleName,
+		PropertyName:      newRule.PropertyName,
+		Priority:          newRule.Priority,
+		IsActive:          newRule.IsActive,
+		AttributeType:     newRule.AttributeType,
+		UnificationMethod: newRule.UnificationMethod,
+		MatchStrength:     effectiveStrength(newRule.MatchStrength, constants.DefaultMatchStrength, newRule.AttributeType),
+		MismatchStrength:  effectiveStrength(newRule.MismatchStrength, constants.DefaultMismatchStrength, newRule.AttributeType),
 	}
 	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
 }
@@ -301,16 +453,102 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
+
+	// Fetch the rule before deleting so we can trigger reindex cleanup.
+	rule, fetchErr := ruleService.GetUnificationRule(ruleId)
+	if fetchErr != nil {
+		logger := log.GetLogger()
+		logger.Warn(fmt.Sprintf("DeleteUnificationRule: could not fetch rule %s before deletion", ruleId))
+	}
+
 	err = ruleService.DeleteUnificationRule(ruleId)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
+
+	// If the deleted rule was active, trigger cleanup of its blocking keys.
+	if rule != nil && rule.IsActive {
+		utils.SafeGo("unification rule index removal", func() { worker.RemoveAttributeIndex(orgHandle, rule.PropertyName) })
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetUnificationOptions handles GET /unification-rules/options.
+// Returns the supported attribute types and the matching methods available for each.
+func (urh *UnificationRulesHandler) GetUnificationOptions(w http.ResponseWriter, r *http.Request) {
+	if err := security.AuthnAndAuthz(r, "unification_rules:view"); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+
+	ruleService := provider.NewUnificationRuleProvider().GetUnificationRuleService()
+	resp := ruleService.GetUnificationOptions()
+	utils.RespondJSON(w, http.StatusOK, resp, constants.UnificationOptionsResource)
 }
 
 // isCDSEnabled checks if CDS is enabled for the given tenant
 func isCDSEnabled(orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
+}
+
+// resolveEvidenceStrength decides what to store for a rule's evidence strength.
+//
+// It returns an empty string when the operator supplied nothing, which is stored as NULL and
+// derived from the attribute type every time the rule is read. Persisting the derived value
+// instead would freeze it at creation time, so a later change of attribute_type would leave
+// the rule scoring as the old type — and, worse, would be indistinguishable from an operator
+// having chosen that strength deliberately.
+//
+// Unless the server allows overrides, a supplied value is refused rather than silently
+// dropped: a caller that believes it set the strength and is ignored would misread every
+// merge decision that follows.
+func resolveEvidenceStrength(supplied string, field string) (string, *errors2.ClientError) {
+	if supplied == "" {
+		return "", nil
+	}
+	if !evidenceStrengthOverrideAllowed() {
+		return "", errors2.NewClientError(errors2.ErrorMessage{
+			Code:    errors2.BAD_REQUEST.Code,
+			Message: errors2.BAD_REQUEST.Message,
+			Description: fmt.Sprintf(
+				"%s cannot be set on this server. It is derived from attribute_type; enable "+
+					"identity_resolution.allow_evidence_strength_override to set it per rule.", field),
+		}, http.StatusBadRequest)
+	}
+	if !constants.AllowedEvidenceStrengths[supplied] {
+		return "", invalidEvidenceStrength(field, supplied)
+	}
+	return supplied, nil
+}
+
+// evidenceStrengthOverrideAllowed reports whether this deployment lets a rule carry its own
+// evidence strengths.
+func evidenceStrengthOverrideAllowed() bool {
+	return config.GetCDSRuntime().Config.IdentityResolution.AllowEvidenceStrengthOverride
+}
+
+func invalidEvidenceStrength(field, value string) *errors2.ClientError {
+	return errors2.NewClientError(errors2.ErrorMessage{
+		Code:    errors2.BAD_REQUEST.Code,
+		Message: errors2.BAD_REQUEST.Message,
+		Description: fmt.Sprintf("Invalid %s: '%s'. Allowed values: %s, %s, %s.", field, value,
+			constants.EvidenceStrengthHigh, constants.EvidenceStrengthMedium, constants.EvidenceStrengthLow),
+	}, http.StatusBadRequest)
+}
+
+// effectiveStrength reports the strength the matching engine will apply to a rule: the
+// operator's override where one was set, otherwise the value derived from the attribute
+// type. Responses carry this rather than the stored NULL, so a client can always show what
+// is in force even where the field cannot be edited.
+func effectiveStrength(stored string, defaults map[string]string, attrType string) string {
+	if stored != "" {
+		return stored
+	}
+	if derived, ok := defaults[attrType]; ok {
+		return derived
+	}
+	return constants.EvidenceStrengthMedium
 }

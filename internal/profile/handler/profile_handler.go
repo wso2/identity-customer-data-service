@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -115,16 +116,6 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		isSystemApp,
 		filterParams,
 	)
-
-	if !isSystemApp {
-		consentIds := parseCommaSeparatedOrRepeated(r.URL.Query()["consentCategoryId"])
-		filtered, filterErr := profileService.FilterProfileByConsent(*profile, profileId, orgHandle, consentIds)
-		if filterErr != nil {
-			utils.HandleError(w, filterErr)
-			return
-		}
-		profile = &filtered
-	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -315,23 +306,65 @@ func (ph *ProfileHandler) GetAllProfiles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Parse filters
-	queryFilters := r.URL.Query()[constants.Filter]
-	filters := make([]string, 0)
-	for _, f := range queryFilters {
-		splitFilters := strings.Split(f, " and ")
-		for _, sf := range splitFilters {
-			sf = strings.TrimSpace(sf)
-			if sf != "" {
-				filters = append(filters, sf)
-			}
-		}
-	}
+	// Parse deterministic filters (filter=...).
+	filters := parseFilterStrings(r.URL.Query()[constants.Filter])
+
+	// Parse fuzzy filters (fuzzyFilter=...). These always use eq and go through the IR engine.
+	fuzzyFilters := parseFilterStrings(r.URL.Query()[constants.FuzzyFilter])
 
 	requestedAttrs := parseRequestedAttributes(r)
 
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
+
+	hasFuzzy := len(fuzzyFilters) > 0
+	hasDeterministic := len(filters) > 0
+
+	if hasFuzzy {
+		// Parse optional threshold query param (applies to both fuzzy-only and hybrid paths).
+		var threshold float64
+		thresholdStr := strings.TrimSpace(r.URL.Query().Get("threshold"))
+		if thresholdStr != "" {
+			parsedThreshold, parseErr := strconv.ParseFloat(thresholdStr, 64)
+			if parseErr != nil {
+				clientError := errors2.NewClientError(errors2.ErrorMessage{
+					Code:        errors2.GET_PROFILE.Code,
+					Message:     errors2.GET_PROFILE.Message,
+					Description: fmt.Sprintf("Invalid threshold value: %s", thresholdStr),
+				}, http.StatusBadRequest)
+				utils.HandleError(w, clientError)
+				return
+			}
+			threshold = parsedThreshold
+		}
+
+		var fuzzyResults []model.FuzzyMatchResult
+		var fuzzyErr error
+
+		if hasDeterministic {
+			fuzzyResults, fuzzyErr = profilesService.GetProfilesHybrid(orgHandle, fuzzyFilters, filters, threshold, limit)
+		} else {
+			fuzzyResults, fuzzyErr = profilesService.GetProfilesWithFuzzyResolution(orgHandle, fuzzyFilters, threshold, limit)
+		}
+
+		if fuzzyErr != nil {
+			utils.HandleError(w, fuzzyErr)
+			return
+		}
+
+		items := buildFuzzyResponseItems(fuzzyResults, requestedAttrs)
+
+		resp := model.ProfileListAPIResponse{
+			Pagination: pagination.Pagination{
+				Count:    len(items),
+				PageSize: limit,
+			},
+			Items: items,
+		}
+
+		utils.RespondJSON(w, http.StatusOK, resp, constants.ProfileResource)
+		return
+	}
 
 	var (
 		profiles []model.ProfileResponse
@@ -598,8 +631,10 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Construct Location header for created resource
 	serverURL := config.GetCDSRuntime().Config.ServerURL
-	location := fmt.Sprintf("%s/t/%s%s/profiles/%s",
+	pathPrefix := utils.ExtractPathPrefixFromContext(r)
+	location := fmt.Sprintf("%s%s%s%s/profiles/%s",
 		serverURL,
+		pathPrefix,
 		orgHandle,
 		constants.ApiBasePath+"/v1",
 		profileResponse.ProfileId,
@@ -1551,4 +1586,101 @@ func isCallerSystemApplication(orgHandle, appId string) bool {
 // isCDSEnabled checks if CDS is enabled for the given organization
 func isCDSEnabled(orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(orgHandle)
+}
+
+// parseFilterStrings splits raw query-param filter values on " and " and returns
+// a flat slice of individual filter strings, trimming whitespace.
+func parseFilterStrings(raw []string) []string {
+	result := make([]string, 0)
+	for _, f := range raw {
+		for _, sf := range strings.Split(f, " and ") {
+			sf = strings.TrimSpace(sf)
+			if sf != "" {
+				result = append(result, sf)
+			}
+		}
+	}
+	return result
+}
+
+// buildFuzzyResponseItems converts a slice of FuzzyMatchResult into ProfileListResponse
+// items, applying requestedAttrs field filtering if specified.
+func buildFuzzyResponseItems(fuzzyResults []model.FuzzyMatchResult, requestedAttrs map[string][]string) []model.ProfileListResponse {
+	items := make([]model.ProfileListResponse, 0, len(fuzzyResults))
+	for _, fr := range fuzzyResults {
+		score := fr.MatchScore
+		profileRes := model.ProfileListResponse{
+			ProfileId:      fr.Profile.ProfileId,
+			Meta:           fr.Profile.Meta,
+			UserId:         fr.Profile.UserId,
+			MatchScore:     &score,
+			ScoreBreakdown: fr.ScoreBreakdown,
+		}
+
+		if requestedAttrs == nil {
+			profileRes.MergedFrom = fr.Profile.MergedFrom
+			items = append(items, profileRes)
+			continue
+		}
+
+		if fields, ok := requestedAttrs["identity_attributes"]; ok {
+			filtered := make(map[string]interface{})
+			for _, f := range fields {
+				if f == "*" {
+					filtered = fr.Profile.IdentityAttributes
+					break
+				}
+				if val, exists := fr.Profile.IdentityAttributes[f]; exists {
+					filtered[f] = val
+				}
+			}
+			profileRes.IdentityAttributes = filtered
+		}
+
+		if fields, ok := requestedAttrs["traits"]; ok {
+			filtered := make(map[string]interface{})
+			for _, f := range fields {
+				if f == "*" {
+					filtered = fr.Profile.Traits
+					break
+				}
+				if val, exists := fr.Profile.Traits[f]; exists {
+					filtered[f] = val
+				}
+			}
+			profileRes.Traits = filtered
+		}
+
+		appData := fr.Profile.ApplicationData
+		if len(appData) > 0 {
+			filteredAppData := make(map[string]map[string]interface{})
+			if len(requestedAttrs["application_data"]) == 0 {
+				filteredAppData = appData
+			} else {
+				fields := requestedAttrs["application_data"]
+				for appKey, appFields := range appData {
+					temp := make(map[string]interface{})
+					for _, f := range fields {
+						if f == "*" {
+							temp = appFields
+							break
+						}
+						if val, ok := appFields[f]; ok {
+							temp[f] = val
+						}
+					}
+					if len(temp) > 0 {
+						filteredAppData[appKey] = temp
+					}
+				}
+			}
+			if len(filteredAppData) > 0 {
+				profileRes.ApplicationData = filteredAppData
+			}
+		}
+
+		profileRes.MergedFrom = fr.Profile.MergedFrom
+		items = append(items, profileRes)
+	}
+	return items
 }
