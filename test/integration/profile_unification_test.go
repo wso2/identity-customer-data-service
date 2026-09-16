@@ -38,6 +38,20 @@ import (
 )
 
 // Helper for unmarshalling JSON into ProfileRequest
+// requireRuleDrivenMergeReason asserts the child reference records which rule caused the
+// merge rather than a generic reason.
+//
+// Attribution is what makes a merge explainable after the fact: "merged because the phone
+// numbers matched" is something support can act on, where "auto_merge" is not. Which rule
+// wins can change as masters are re-parented across a multi-step scenario, so the assertion
+// is that the reason names one of the organisation's rules — a generic reason means
+// attribution has regressed.
+func requireRuleDrivenMergeReason(t *testing.T, reason string, ruleNames ...string) {
+	t.Helper()
+	require.Contains(t, ruleNames, reason,
+		"merge reason should name the rule that matched, not a generic reason")
+}
+
 func mustUnmarshalProfile(jsonStr string) profileModel.ProfileRequest {
 	var p profileModel.ProfileRequest
 	if err := json.Unmarshal([]byte(jsonStr), &p); err != nil {
@@ -153,9 +167,9 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(prof3.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, constants.MergeReasonAutoMerge, merged1.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, merged1.MergedTo.Reason, RuleNameEmailBased, RuleNamePhoneBased)
 		require.Equal(t, merged2.MergedTo.ProfileId, merged3.MergedTo.ProfileId)
-		require.Equal(t, constants.MergeReasonAutoMerge, merged3.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, merged3.MergedTo.Reason, RuleNameEmailBased, RuleNamePhoneBased)
 
 		require.Contains(t, merged3.IdentityAttributes["email"].([]interface{}), "a@wso2.com")
 		require.Contains(t, merged1.IdentityAttributes["phone_number"].([]interface{}), "0771234567")
@@ -176,7 +190,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged2, _ := profileSvc.GetProfile(p2.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.ProfileId)
-		require.Equal(t, constants.MergeReasonAutoMerge, merged1.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, merged1.MergedTo.Reason, RuleNameEmailBased, RuleNamePhoneBased)
 
 		require.Contains(t, merged1.IdentityAttributes["email"].([]interface{}), "b2@wso2.com")
 		require.ElementsMatch(t, []interface{}{"music", "sports"}, merged2.Traits["interests"].([]interface{}))
@@ -202,10 +216,10 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(p3.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, constants.MergeReasonAutoMerge, merged1.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, merged1.MergedTo.Reason, RuleNameEmailBased, RuleNamePhoneBased)
 
 		require.Equal(t, merged2.MergedTo.ProfileId, merged3.ProfileId)
-		require.Equal(t, constants.MergeReasonAutoMerge, merged2.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, merged2.MergedTo.Reason, RuleNameEmailBased, RuleNamePhoneBased)
 
 		require.Equal(t, "perm-789", merged1.IdentityAttributes["user_id"])
 		require.ElementsMatch(t, []interface{}{"music", "art", "sports"}, merged3.Traits["interests"].([]interface{}))
@@ -231,9 +245,9 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged3, _ := profileSvc.GetProfile(p3.ProfileId)
 
 		require.Equal(t, merged1.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, constants.MergeReasonAutoMerge, merged2.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, merged2.MergedTo.Reason, RuleNameEmailBased, RuleNamePhoneBased)
 		require.Equal(t, merged1.ProfileId, merged3.MergedTo.ProfileId)
-		require.Equal(t, constants.MergeReasonAutoMerge, merged3.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, merged3.MergedTo.Reason, RuleNameEmailBased, RuleNamePhoneBased)
 
 		require.ElementsMatch(t, []interface{}{"music", "art", "sports"}, merged3.Traits["interests"].([]interface{}))
 		require.Contains(t, merged1.IdentityAttributes["phone_number"].([]interface{}), "0775554444")
@@ -271,7 +285,7 @@ func Test_Profile_Unification_Scenarios(t *testing.T) {
 		merged2, _ := profileSvc.GetProfile(p2.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId)
-		require.Equal(t, constants.MergeReasonAutoMerge, merged2.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, merged2.MergedTo.Reason, RuleNameEmailBased, RuleNamePhoneBased)
 
 		cleanProfiles(profileSvc, SuperTenantOrg)
 	})

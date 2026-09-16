@@ -319,8 +319,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 		merged2, _ := profileSvc.GetProfile(prof2.ProfileId)
 
 		require.Equal(t, merged1.MergedTo.ProfileId, merged2.MergedTo.ProfileId, "Profiles should merge")
-		// The fuzzy pipeline records the merge reason as "auto_merge"
-		require.Equal(t, constants.MergeReasonAutoMerge, merged1.MergedTo.Reason, "Should auto-merge")
+		requireRuleDrivenMergeReason(t, merged1.MergedTo.Reason, EmailBased, PhoneBased, UserIdBased)
 
 		cleanProfiles(profileSvc, SuperTenantOrg)
 	})
@@ -400,7 +399,7 @@ func Test_Complex_Unification_Scenarios(t *testing.T) {
 
 		// T1 should merge to permanent via email
 		require.Equal(t, profPerm.ProfileId, mergedT1.MergedTo.ProfileId, "T1 should merge to permanent")
-		require.Equal(t, constants.MergeReasonAutoMerge, mergedT1.MergedTo.Reason)
+		requireRuleDrivenMergeReason(t, mergedT1.MergedTo.Reason, EmailBased, PhoneBased, UserIdBased)
 
 		// T2 and T3 should merge to permanent via phone (transitive through T1)
 		require.Equal(t, profPerm.ProfileId, mergedT2.MergedTo.ProfileId, "T2 should merge to permanent")
