@@ -62,6 +62,23 @@ Always `defer dbClient.Close()` in a store. It is a no-op on the inbuilt datasou
 is shared, but PostgreSQL opens a real pool per `GetDBClient()` call and leaks it otherwise.
 Never open your own `sql.DB`.
 
+## Unification
+
+Runs on a background worker, not the request path. The mechanism is in
+[docs/architecture.md §6](docs/architecture.md); the rule semantics are in
+`docs/concepts/how-unification-works.md`. Four things to know before touching
+`internal/system/workers/profile_worker.go`:
+
+- **The queued message is a hint.** The worker re-reads the profile from the store by id and
+  ignores the payload it was handed — that is what makes redelivery and an external broker safe.
+  Do not widen the message to carry profile data.
+- **Evaluation stops at the first match**, and candidates come back in row order, so
+  `GetAllReferenceProfileExceptCurrent` ordering is behaviour. Its two dialect bodies must agree —
+  that is why the SQLite one orders by `rowid`.
+- **Matching happens in Go over profile JSON**, never in SQL.
+- **Failures are logged and dropped** — no retry, no dead-letter — and `persistMergedProfileData`
+  is not transactional. Do not assume a merge either fully happened or fully did not.
+
 ## Security
 
 Every handler starts with `security.AuthnAndAuthz(r, "<operation>")`, then checks
@@ -113,5 +130,6 @@ fields in `config.Config` and do nothing. Check the struct.
 | What config keys exist? | `internal/system/config/config.go` |
 | What error codes exist? | `internal/system/errors/error_codes.go` |
 | How does merging decide? | `docs/concepts/how-unification-works.md` |
+| How does merging actually run? | `docs/architecture.md` §6 |
 | How do IS events reach CDS? | `docs/guides/is-sync.md` |
 | How is any of this wired? | `docs/architecture.md` |

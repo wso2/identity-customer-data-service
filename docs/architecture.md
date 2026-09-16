@@ -160,7 +160,7 @@ test/                  integration and scenario suites
 | `workers` | Consumers: profile unification, schema sync, cookie cleanup |
 | `errors` | `ClientError` / `ServerError` and the `CDS-nnnnn` code catalogue |
 | `log` | `slog` wrapper with typed fields |
-| `cache` | Small TTL cache — currently unused (see §11) |
+| `cache` | Small TTL cache — currently unused (see §12) |
 | `pagination` | Cursor paging helpers |
 | `constants`, `utils` | Shared values; the tenant dispatcher, `ExtractOrgHandleFromPath`, `HandleError`, `RespondJSON` |
 
@@ -257,7 +257,7 @@ no-op on SQLite. Write it either way — omitting it leaks a pool on PostgreSQL.
 `database/sql` is itself a pool, so opening one per call means a profile write — dozens of
 statements — pays a TCP, TLS and authentication round trip for each, and `datasource.max_open_conns`
 has nothing to size. Sharing the PostgreSQL handle the way SQLite's is shared is the obvious
-improvement; see §11.
+improvement; see §12.
 
 ### The three copies of the schema
 
@@ -329,7 +329,169 @@ the domain and be called from the worker.
 
 ---
 
-## 6. Security
+## 6. Unification: how it actually runs
+
+[How Unification Works](concepts/how-unification-works.md) covers the *semantics* — what a match
+means, which profile becomes master, how attribute values combine. This section covers the
+*mechanism*: what runs where, what is atomic, and what happens when a step fails.
+
+All of it lives in `internal/system/workers/profile_worker.go`.
+
+### The pipeline
+
+```
+  PATCH /profiles/{id}                  POST /profiles
+          │                                    │
+          └────────────┬───────────────────────┘
+                       ▼
+        profile/service — persist, re-read, then enqueue
+                       │   ProfileWorkerQueue.Enqueue(profile)
+                       ▼
+        ┌──────────────────────────────┐
+        │  ProfileUnificationQueue     │  memory channel, or ActiveMQ
+        └──────────────┬───────────────┘
+                       ▼
+        worker callback — profileStore.GetProfile(id)      ← re-read, not the message
+                       ▼
+                 unifyProfiles
+                       │
+     ┌─────────────────┼─────────────────────────────┐
+     ▼                 ▼                             ▼
+  fetch rules   fetch ALL master profiles      userId match?
+  (org)          for the org (candidates)       │
+                       │                        yes ──► mergeMatchedProfiles
+                       ▼                                 (system:user_id_match)
+            for each rule by priority asc:
+              for each candidate:
+                doesProfileMatch ──yes──► mergeMatchedProfiles(rule.RuleName)
+                                            └─► return, first match wins
+                       ▼
+                 mergeMatchedProfiles
+                       │
+                 MergeProfiles(existing, new, schemaRules)   ← pure, in memory
+                       │
+        ┌──────────────┴──────────────┐
+        ▼                             ▼
+  perm + temp                  same kind (both perm / both temp)
+  mergePermanentAndTemporary   mergeSameKindProfiles
+        └──────────────┬──────────────┘
+                       ▼
+            UpdateProfileReferences        ← transactional
+                       ▼
+            persistMergedProfileData       ← three separate writes, NOT transactional
+              ├─ InsertMergedMasterProfileAppData   (per application)
+              ├─ InsertMergedMasterProfileTraitData
+              └─ MergeIdentityDataOfProfiles
+```
+
+### Enqueue points
+
+Exactly two, both in `profile/service/profile_service.go`: after a profile is created and after
+one is updated. Each persists first, re-reads to confirm the write landed, then enqueues.
+
+The enqueue is gated on `UnificationModel.DefaultConfig().ProfileUnificationTrigger.TriggerType ==
+SYNC_ON_UPDATE`. `DefaultConfig()` is a hardcoded literal, so the condition is always true today —
+the `profile_unification_modes` and `profile_unification_triggers` tables exist but nothing reads
+them (see §12).
+
+### The queued message is a hint, not a payload
+
+The worker callback ignores the profile it was handed and re-reads it from the store by id:
+
+```go
+q.Start(func(profile profileModel.Profile) {
+    p, err := profileStore.GetProfile(profile.ProfileId)
+    if err == nil && p != nil {
+        unifyProfiles(*p)
+    }
+})
+```
+
+This is what makes an external broker safe. A message can sit in ActiveMQ across a restart, be
+redelivered, or arrive after three further updates — unification always runs against current
+state, not against a stale snapshot. **Keep it that way:** widening the message to carry profile
+data would reintroduce exactly that staleness.
+
+A deleted profile re-reads as nil and the callback silently does nothing, which is the intended
+outcome.
+
+### Candidate selection is a full scan
+
+`GetAllReferenceProfilesExceptForCurrent` (`CDS-PRF-15`) returns **every master profile in the
+org** — a join of `profiles` and `profile_reference` filtered only on
+`profile_status = 'REFERENCE_PROFILE'` and `org_handle`. There is no index on the matched values
+and no candidate narrowing; the comparison itself happens in Go.
+
+Matching walks `doesProfileMatch` → `extractFieldFromJSON` → `checkForMatch`, pulling
+`rule.property_name` out of the profile's JSON in memory. **No rule value is ever compared in
+SQL.** That is why a rule can name a nested attribute path without any schema support in the
+query layer — and why the cost is O(profiles × rules) per unification.
+
+Row order is load-bearing, because evaluation stops at the first match: which candidate a profile
+merges into depends on which row comes back first. The statement carries a SQLite override for
+exactly this reason — PostgreSQL returns these rows in insertion order in practice, SQLite is
+free not to, so the override orders by `rowid` to reproduce it. A statement whose *ordering*
+differs between dialects changes behaviour, not just performance.
+
+### Master/child resolution
+
+`mergeMatchedProfiles` merges the data first (`MergeProfiles`, a pure in-memory function driven
+by each attribute's `merge_strategy` from the profile schema), then decides the hierarchy:
+
+| Case | Outcome |
+|---|---|
+| Both permanent, different `userId` | **Abort.** Logged and returned — no merge; the data merged in memory is discarded |
+| Permanent + temporary | Permanent becomes master; the temporary one's children are re-parented |
+| Same kind, existing master already has children | New profile is added as another child |
+| Both permanent, same `userId`, no children | Existing becomes master, new becomes its child |
+| Both temporary, no children | **A brand-new neutral master is created** with a fresh UUID, `list_profile = false`, and both profiles as children |
+
+That last case is the one that surprises people: merging two anonymous profiles produces a third
+profile row that no caller asked for and that does not appear in listings.
+
+### Atomicity and failure
+
+Only part of a merge is atomic.
+
+- `UpdateProfileReferences` runs in a transaction (`BeginTx`).
+- `persistMergedProfileData` issues **three independent writes** — application data (one per
+  application), traits, identity attributes — each its own statement, none in a shared
+  transaction. Each returns early on error, so a failure part-way leaves the master with its
+  references updated and only some of its merged data written.
+- The both-temporary path does `InsertProfile` then `UpdateProfileReferences` as two operations,
+  with a manual `DeleteProfile` as compensation if the insert fails.
+
+Failures are **logged and dropped**. `unifyProfiles` and everything it calls return `error` to
+nobody; there is no retry, no backoff, and no dead-letter queue. A merge lost to a transient
+database error stays lost until the profile is next written.
+
+Two degradations are quieter still: if fetching unification rules fails, the worker logs and
+continues with an empty rule set, so nothing matches and the profile silently stays unmerged; if
+fetching the profile schema fails, the merge proceeds with no schema rules and every attribute
+falls back to default strategy handling.
+
+### Where to change what
+
+| Change | File |
+|---|---|
+| When unification is triggered | `profile/service/profile_service.go` (the two enqueue sites) |
+| Which candidates are considered | `scripts.GetAllReferenceProfileExceptCurrent` — **both dialect bodies** |
+| Whether two values match | `doesProfileMatch` / `checkForMatch` |
+| Who becomes master | `mergeMatchedProfiles` and the two `merge*` helpers |
+| How attribute values combine | `MergeProfiles` / `MergeAttributeValue` |
+| What gets written | `persistMergedProfileData` |
+
+The merge logic sits in `system/workers` rather than in the `profile` domain — see the coupling
+note in §5. New behaviour belongs in the domain, called from the worker.
+
+Integration coverage is in `test/integration/profile_unification_test.go` and
+`complex_unification_test.go`; scenarios are catalogued in `test/Unification_Scenarios.MD`. The
+suites start the real worker, so they exercise this whole path rather than calling
+`unifyProfiles` directly.
+
+---
+
+## 7. Security
 
 ### Inbound
 
@@ -375,7 +537,7 @@ non-matching origin simply receives no CORS headers.
 
 ---
 
-## 7. Errors and logging
+## 8. Errors and logging
 
 Two error types in `system/errors`, and the distinction is load-bearing:
 
@@ -394,7 +556,7 @@ secret, or a full profile.
 
 ---
 
-## 8. Configuration
+## 9. Configuration
 
 `deployment.yaml` under `<CDS_HOME>/repository/conf/` is the single configuration file. CDS home
 is resolved from `--cdsHome`, then `CDS_HOME`, then the working directory. `config.LoadConfig`
@@ -417,7 +579,7 @@ file is a setting nobody will find.
 
 ---
 
-## 9. Build, test, run
+## 10. Build, test, run
 
 ```
 make build                      # compile and package target/cds-<version>.zip
@@ -443,7 +605,7 @@ For a local IS + CDS environment, see [Local Development Setup](guides/local-dev
 
 ---
 
-## 10. Deployment
+## 11. Deployment
 
 The build produces a zip containing the `cds` binary, `repository/` (config and certs), and
 `dbscripts/`. Unzip and run `./cds`.
@@ -457,10 +619,20 @@ external broker.
 
 ---
 
-## 11. Known gaps
+## 12. Known gaps
 
 Kept honest on purpose; if you close one, delete the entry.
 
+- **A failed merge is lost** (§6). Nothing in the unification path retries, backs off, or
+  dead-letters; errors are logged and the worker moves on. The profile stays unmerged until it is
+  next written.
+- **`persistMergedProfileData` is not transactional** (§6). Its three writes can partially apply,
+  leaving a master whose references are updated but whose merged data is incomplete.
+- **Candidate selection is a full org scan with matching done in Go** (§6), so unification costs
+  O(profiles × rules) per write and cannot use an index on the matched values.
+- **`profile_unification_modes` and `profile_unification_triggers` are never read.** The trigger
+  check uses a hardcoded `DefaultConfig()`, so the two tables are dead weight and the per-org
+  settings they imply do not exist.
 - **PostgreSQL opens a connection pool per `GetDBClient()` call** (§4), so pool settings are
   effectively inert on it and every statement pays a fresh connection. The inbuilt datasource
   already shares one handle; PostgreSQL should do the same.
