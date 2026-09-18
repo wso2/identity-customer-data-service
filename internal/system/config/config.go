@@ -64,6 +64,25 @@ type SQLiteConfig struct {
 	MaxOpenConns int `yaml:"max_open_conns"`
 }
 
+// PostgresConfig holds the connection pool settings for PostgreSQL. The values
+// are per instance, because one instance holds one pool. A field of zero,
+// which is also what an omitted field gives, means "use the application
+// default". A negative value is refused at start.
+type PostgresConfig struct {
+	// MaxOpenConns bounds the connections the pool holds, in use and idle
+	// together.
+	MaxOpenConns int `yaml:"max_open_conns"`
+	// MaxIdleConns is how many unused connections stay open. It may not be
+	// above MaxOpenConns, and the server refuses to start when it is.
+	MaxIdleConns int `yaml:"max_idle_conns"`
+	// ConnMaxLifetimeSeconds retires a connection at this age, even a healthy
+	// one, so that a failover or a DNS change takes effect.
+	ConnMaxLifetimeSeconds int `yaml:"conn_max_lifetime_seconds"`
+	// ConnMaxIdleTimeSeconds closes a connection that stays unused for this
+	// long.
+	ConnMaxIdleTimeSeconds int `yaml:"conn_max_idle_time_seconds"`
+}
+
 // DataSourceConfig selects and configures the database.
 type DataSourceConfig struct {
 	Type string `yaml:"type"` // "sqlite" (inbuilt, the default) or "postgres"
@@ -75,6 +94,9 @@ type DataSourceConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	SSLMode  string `yaml:"sslmode"`
+
+	// PostgreSQL connection pool settings. Read only when Type is "postgres".
+	Postgres PostgresConfig `yaml:"postgres"`
 
 	// SQLite settings. Read only when Type is "sqlite".
 	SQLite SQLiteConfig `yaml:"sqlite"`

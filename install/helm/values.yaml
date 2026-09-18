@@ -48,6 +48,12 @@ cloud:
           port: 5432
           name: "cds_db"
           sslmode: require
+          # Connection pool bounds for one pod.
+          postgres:
+            maxOpenConns: 100
+            maxIdleConns: 25
+            connMaxLifetimeSeconds: 1800
+            connMaxIdleTimeSeconds: 300
 
         serverUrl : "http://localhost:8900"
 

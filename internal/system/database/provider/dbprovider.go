@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
@@ -137,6 +138,13 @@ func getPostgresDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
 
+	settings, err := resolvePostgresPoolSettings(runtimeConfig.DataSource.Postgres)
+	if err != nil {
+		return nil, err
+	}
+
+	applyPostgresPoolSettings(db, settings)
+
 	// Verify before the handle is published, so a pool no caller can reach is
 	// not cached.
 	if err := db.Ping(); err != nil {
@@ -148,6 +156,117 @@ func getPostgresDB() (*sql.DB, error) {
 
 	postgresHandle = db
 	return postgresHandle, nil
+}
+
+// poolResolution turns configured numbers into the numbers a pool uses, and
+// collects every setting CDS cannot use on the way.
+type poolResolution struct {
+	problems []string
+}
+
+// count returns the configured value, or def when the value is zero, which is
+// what an omitted setting gives and how an operator asks for the default. A
+// negative value is a mistake, so it is recorded instead of replaced.
+func (r *poolResolution) count(key string, value, def int) int {
+
+	if value < 0 {
+		r.problems = append(r.problems, fmt.Sprintf("%s is %d, which is below zero", key, value))
+		return def
+	}
+	if value == 0 {
+		return def
+	}
+	return value
+}
+
+// seconds is count for a setting an operator gives in seconds.
+func (r *poolResolution) seconds(key string, value int, def time.Duration) time.Duration {
+
+	if value < 0 {
+		r.problems = append(r.problems, fmt.Sprintf("%s is %d, which is below zero", key, value))
+		return def
+	}
+	if value == 0 {
+		return def
+	}
+	return time.Duration(value) * time.Second
+}
+
+// err returns one error that names every problem, so that an operator can fix
+// a configuration in one pass rather than one mistake per restart.
+func (r *poolResolution) err() error {
+
+	if len(r.problems) == 0 {
+		return nil
+	}
+	return fmt.Errorf("invalid datasource settings: %s", strings.Join(r.problems, "; "))
+}
+
+// resolveSQLiteMaxOpenConns returns the open limit of the inbuilt pool.
+func resolveSQLiteMaxOpenConns(cfg config.SQLiteConfig) (int, error) {
+
+	var resolution poolResolution
+	maxOpenConns := resolution.count("datasource.sqlite.max_open_conns",
+		cfg.MaxOpenConns, database.DefaultSQLiteMaxOpenConns)
+
+	return maxOpenConns, resolution.err()
+}
+
+// postgresPoolSettings holds the resolved bounds of the PostgreSQL pool.
+type postgresPoolSettings struct {
+	maxOpenConns    int
+	maxIdleConns    int
+	connMaxLifetime time.Duration
+	connMaxIdleTime time.Duration
+}
+
+// resolvePostgresPoolSettings returns every number the PostgreSQL pool uses.
+//
+// It is the only place that reads these settings, so the rule cannot differ
+// between the check at start and the pool itself. Zero takes the default, a
+// negative value is refused, and so is an idle limit above the open limit.
+func resolvePostgresPoolSettings(cfg config.PostgresConfig) (postgresPoolSettings, error) {
+
+	var resolution poolResolution
+
+	settings := postgresPoolSettings{
+		maxOpenConns: resolution.count("datasource.postgres.max_open_conns",
+			cfg.MaxOpenConns, database.DefaultPostgresMaxOpenConns),
+		maxIdleConns: resolution.count("datasource.postgres.max_idle_conns",
+			cfg.MaxIdleConns, database.DefaultPostgresMaxIdleConns),
+		connMaxLifetime: resolution.seconds("datasource.postgres.conn_max_lifetime_seconds",
+			cfg.ConnMaxLifetimeSeconds, database.DefaultPostgresConnMaxLifetime),
+		connMaxIdleTime: resolution.seconds("datasource.postgres.conn_max_idle_time_seconds",
+			cfg.ConnMaxIdleTimeSeconds, database.DefaultPostgresConnMaxIdleTime),
+	}
+
+	// An idle limit above the open limit reserves connections the pool can
+	// never hold, so the two settings contradict each other. The comparison is
+	// against the limit the pool really uses: an open limit of zero is the
+	// default, not no limit.
+	if cfg.MaxIdleConns > settings.maxOpenConns {
+		openSource := "the default datasource.postgres.max_open_conns"
+		if cfg.MaxOpenConns > 0 {
+			openSource = "datasource.postgres.max_open_conns"
+		}
+		resolution.problems = append(resolution.problems, fmt.Sprintf(
+			"datasource.postgres.max_idle_conns is %d, which is above %s of %d",
+			cfg.MaxIdleConns, openSource, settings.maxOpenConns))
+	}
+
+	if err := resolution.err(); err != nil {
+		return postgresPoolSettings{}, err
+	}
+
+	return settings, nil
+}
+
+func applyPostgresPoolSettings(db *sql.DB, settings postgresPoolSettings) {
+
+	db.SetMaxOpenConns(settings.maxOpenConns)
+	db.SetMaxIdleConns(settings.maxIdleConns)
+	db.SetConnMaxLifetime(settings.connMaxLifetime)
+	db.SetConnMaxIdleTime(settings.connMaxIdleTime)
 }
 
 // CloseDB closes the pools the process holds. Call it at shutdown, after the
@@ -174,47 +293,6 @@ func CloseDB() error {
 	}
 
 	return firstErr
-}
-
-// poolResolution turns configured numbers into the numbers a pool uses, and
-// collects every setting CDS cannot use on the way.
-type poolResolution struct {
-	problems []string
-}
-
-// count returns the configured value, or def when the value is zero, which is
-// what an omitted setting gives and how an operator asks for the default. A
-// negative value is a mistake, so it is recorded instead of replaced.
-func (r *poolResolution) count(key string, value, def int) int {
-
-	if value < 0 {
-		r.problems = append(r.problems, fmt.Sprintf("%s is %d, which is below zero", key, value))
-		return def
-	}
-	if value == 0 {
-		return def
-	}
-	return value
-}
-
-// err returns one error that names every problem, so that an operator can fix
-// a configuration in one pass rather than one mistake per restart.
-func (r *poolResolution) err() error {
-
-	if len(r.problems) == 0 {
-		return nil
-	}
-	return fmt.Errorf("invalid datasource settings: %s", strings.Join(r.problems, "; "))
-}
-
-// resolveSQLiteMaxOpenConns returns the open limit of the inbuilt pool.
-func resolveSQLiteMaxOpenConns(cfg config.SQLiteConfig) (int, error) {
-
-	var resolution poolResolution
-	maxOpenConns := resolution.count("datasource.sqlite.max_open_conns",
-		cfg.MaxOpenConns, database.DefaultSQLiteMaxOpenConns)
-
-	return maxOpenConns, resolution.err()
 }
 
 // getSQLiteDB opens the inbuilt database once and initializes its schema. The
