@@ -50,8 +50,9 @@ type AuthServerConfig struct {
 	IsSystemAppGrantEnabled   bool                `yaml:"isSystemAppGrantEnabled"`
 }
 
-// SQLiteConfig holds the settings for the inbuilt datasource. Every field is
-// optional and falls back to a default.
+// SQLiteConfig holds the settings for the inbuilt datasource. A numeric field
+// of zero, which is also what an omitted field gives, means "use the
+// application default". A negative value is refused at start.
 type SQLiteConfig struct {
 	// Path is the database file location, relative to CDS_HOME unless
 	// absolute.

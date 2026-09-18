@@ -120,7 +120,7 @@ datasource:
   password: "${DB_PASSWORD}"
   name: "cds_db"
   sslmode: disable
-  # Applies only when type is "sqlite". Leave a value empty to use its default.
+  # Applies only when type is "sqlite". Zero means the application default.
   # sqlite:
   #   path: "repository/database/cds.db" # Relative to the CDS home directory
   #   options: ""                        # DSN options
