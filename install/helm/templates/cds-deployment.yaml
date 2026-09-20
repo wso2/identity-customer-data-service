@@ -85,6 +85,7 @@ spec:
               scheme: HTTPS
             initialDelaySeconds: {{ .Values.cloud.deployment.cds.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.cloud.deployment.cds.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.cloud.deployment.cds.readinessProbe.timeoutSeconds }}
           imagePullPolicy: {{ .Values.cloud.deployment.cds.imagePullPolicy }}
           resources:
             requests:
