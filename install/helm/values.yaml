@@ -54,6 +54,9 @@ cloud:
             maxIdleConns: 25
             connMaxLifetimeSeconds: 1800
             connMaxIdleTimeSeconds: 300
+            # Bounds one connection attempt, the startup handshake included,
+            # and the check that runs when the pool opens.
+            connectTimeoutSeconds: 10
 
         serverUrl : "http://localhost:8900"
 

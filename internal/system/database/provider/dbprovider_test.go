@@ -49,7 +49,8 @@ func postgresDataSource(dbType string) config.Config {
 // must not change.
 func Test_getDBConfig_postgres(t *testing.T) {
 
-	expectedDSN := "host=localhost port=5432 user=cdsuser password=cdspwd dbname=cdsdb sslmode=disable"
+	expectedDSN := "host=localhost port=5432 user=cdsuser password=cdspwd dbname=cdsdb sslmode=disable" +
+		" connect_timeout=10"
 
 	t.Run("configured as postgres", func(t *testing.T) {
 		dbConfig, err := getDBConfig(postgresDataSource("postgres"))
@@ -368,6 +369,7 @@ func Test_resolvePostgresPoolSettings(t *testing.T) {
 				maxIdleConns:    database.DefaultPostgresMaxIdleConns,
 				connMaxLifetime: database.DefaultPostgresConnMaxLifetime,
 				connMaxIdleTime: database.DefaultPostgresConnMaxIdleTime,
+				connectTimeout:  database.DefaultPostgresConnectTimeout,
 			},
 		},
 		{
@@ -377,12 +379,14 @@ func Test_resolvePostgresPoolSettings(t *testing.T) {
 				MaxIdleConns:           4,
 				ConnMaxLifetimeSeconds: 60,
 				ConnMaxIdleTimeSeconds: 30,
+				ConnectTimeoutSeconds:  5,
 			},
 			expected: postgresPoolSettings{
 				maxOpenConns:    10,
 				maxIdleConns:    4,
 				connMaxLifetime: 60 * time.Second,
 				connMaxIdleTime: 30 * time.Second,
+				connectTimeout:  5 * time.Second,
 			},
 		},
 	}

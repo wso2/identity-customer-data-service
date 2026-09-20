@@ -19,6 +19,7 @@
 package provider
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
@@ -133,9 +135,9 @@ func getPostgresDB() (*sql.DB, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open(dbConfig.driverName, dbConfig.dsn)
+	connector, err := pq.NewConnector(dbConfig.dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %v", err)
+		return nil, fmt.Errorf("failed to read the datasource settings: %w", err)
 	}
 
 	settings, err := resolvePostgresPoolSettings(runtimeConfig.DataSource.Postgres)
@@ -143,15 +145,20 @@ func getPostgresDB() (*sql.DB, error) {
 		return nil, err
 	}
 
+	db := sql.OpenDB(connector)
 	applyPostgresPoolSettings(db, settings)
 
 	// Verify before the handle is published, so a pool no caller can reach is
 	// not cached.
-	if err := db.Ping(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), settings.connectTimeout)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
 		if closeErr := db.Close(); closeErr != nil {
-			return nil, fmt.Errorf("failed to ping database: %v (close error: %v)", err, closeErr)
+			return nil, fmt.Errorf("failed to reach the database within %s: %w (close error: %v)",
+				settings.connectTimeout, err, closeErr)
 		}
-		return nil, fmt.Errorf("failed to ping database: %v", err)
+		return nil, fmt.Errorf("failed to reach the database within %s: %w", settings.connectTimeout, err)
 	}
 
 	postgresHandle = db
@@ -212,12 +219,17 @@ func resolveSQLiteMaxOpenConns(cfg config.SQLiteConfig) (int, error) {
 	return maxOpenConns, resolution.err()
 }
 
-// postgresPoolSettings holds the resolved bounds of the PostgreSQL pool.
+// postgresPoolSettings holds every PostgreSQL number the provider uses, with a
+// default already applied to each one, so that one function decides them and
+// the rest of the code reads them.
 type postgresPoolSettings struct {
 	maxOpenConns    int
 	maxIdleConns    int
 	connMaxLifetime time.Duration
 	connMaxIdleTime time.Duration
+	// connectTimeout bounds one connection attempt, so it also bounds how long
+	// the pool may spend opening a connection.
+	connectTimeout time.Duration
 }
 
 // resolvePostgresPoolSettings returns every number the PostgreSQL pool uses.
@@ -238,6 +250,8 @@ func resolvePostgresPoolSettings(cfg config.PostgresConfig) (postgresPoolSetting
 			cfg.ConnMaxLifetimeSeconds, database.DefaultPostgresConnMaxLifetime),
 		connMaxIdleTime: resolution.seconds("datasource.postgres.conn_max_idle_time_seconds",
 			cfg.ConnMaxIdleTimeSeconds, database.DefaultPostgresConnMaxIdleTime),
+		connectTimeout: resolution.seconds("datasource.postgres.connect_timeout_seconds",
+			cfg.ConnectTimeoutSeconds, database.DefaultPostgresConnectTimeout),
 	}
 
 	// An idle limit above the open limit reserves connections the pool can
@@ -381,10 +395,17 @@ func getDBConfig(dataSource config.Config) (DBConfig, error) {
 		}, nil
 
 	default:
+		// PostgreSQL. connect_timeout bounds the startup handshake that follows
+		// the dial, which no context can reach.
+		settings, err := resolvePostgresPoolSettings(ds.Postgres)
+		if err != nil {
+			return DBConfig{}, err
+		}
+		connectTimeout := int(settings.connectTimeout.Seconds())
 		return DBConfig{
 			driverName: ds.Type,
-			dsn: fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-				ds.Hostname, ds.Port, ds.Username, ds.Password, ds.Name, ds.SSLMode),
+			dsn: fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s connect_timeout=%d",
+				ds.Hostname, ds.Port, ds.Username, ds.Password, ds.Name, ds.SSLMode, connectTimeout),
 		}, nil
 	}
 }
