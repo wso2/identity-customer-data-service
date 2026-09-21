@@ -48,6 +48,15 @@ cloud:
           port: 5432
           name: "cds_db"
           sslmode: require
+          # Connection pool bounds for one pod.
+          postgres:
+            maxOpenConns: 100
+            maxIdleConns: 25
+            connMaxLifetimeSeconds: 1800
+            connMaxIdleTimeSeconds: 300
+            # Bounds one connection attempt, the startup handshake included,
+            # and the check that runs when the pool opens.
+            connectTimeoutSeconds: 10
 
         serverUrl : "http://localhost:8900"
 
@@ -107,6 +116,9 @@ cloud:
       readinessProbe:
         initialDelaySeconds: 20
         periodSeconds: 10
+        # The readiness query runs under the context of the probe request, so
+        # this is its only bound. Kubernetes defaults it to one second.
+        timeoutSeconds: 5
       imagePullPolicy: Always
       resources:
         requests:

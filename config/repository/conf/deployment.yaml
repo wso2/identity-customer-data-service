@@ -120,7 +120,16 @@ datasource:
   password: "${DB_PASSWORD}"
   name: "cds_db"
   sslmode: disable
-  # Applies only when type is "sqlite". Leave a value empty to use its default.
+  # Applies only when type is "postgres". The values are per instance, because
+  # one instance holds one pool. Omit a setting, or set it to zero, to use the
+  # application default. A negative value is refused at start.
+  # postgres:
+  #   max_open_conns: 100             # connections held, in use and idle together
+  #   max_idle_conns: 25              # unused connections kept open
+  #   conn_max_lifetime_seconds: 1800 # retire a connection at this age
+  #   conn_max_idle_time_seconds: 300 # close a connection unused this long
+  #   connect_timeout_seconds: 10     # bound one connection attempt, handshake included
+  # Applies only when type is "sqlite". Zero means the application default.
   # sqlite:
   #   path: "repository/database/cds.db" # Relative to the CDS home directory
   #   options: ""                        # DSN options

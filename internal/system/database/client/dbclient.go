@@ -19,6 +19,7 @@
 package client
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -35,6 +36,11 @@ import (
 // selects a dialect and the stores stay datasource-agnostic.
 type DBClientInterface interface {
 	ExecuteQuery(query model.DBQuery, args ...interface{}) ([]map[string]interface{}, error)
+	// ExecuteQueryContext runs a query under the caller's context, and under no
+	// deadline of its own. The caller ends the wait for a free connection, and
+	// the query itself, by ending that context.
+	ExecuteQueryContext(ctx context.Context, query model.DBQuery, args ...interface{}) (
+		[]map[string]interface{}, error)
 	BeginTx() (*model.Tx, error)
 	// DBType is for the few statements a store builds at runtime, whose bind
 	// arguments differ per datasource. It is not for selecting a statement.
@@ -47,33 +53,30 @@ type DBClient struct {
 	db *sql.DB
 	// dbType is the datasource type this client is connected to.
 	dbType string
-	// shared marks a connection pool owned by the caller, which Close must
-	// leave open.
-	shared bool
 }
 
-// NewDBClient creates a new instance of DBClient with the provided database connection.
-func NewDBClient(db *sql.DB, dbType string) DBClientInterface {
-
-	return &DBClient{
-		db:     db,
-		dbType: dbType,
-	}
-}
-
-// NewSharedDBClient creates a client over a connection pool owned by the
-// caller. Close is a no-op, so the pool outlives the client.
+// NewSharedDBClient creates a client over the connection pool the process
+// owns. Close is a no-op, so the pool outlives the client.
 func NewSharedDBClient(db *sql.DB, dbType string) DBClientInterface {
 
 	return &DBClient{
 		db:     db,
 		dbType: dbType,
-		shared: true,
 	}
 }
 
-// ExecuteQuery executes a query and returns the result as a slice of maps.
+// ExecuteQuery executes a query under context.Background and returns the result
+// as a slice of maps. A caller that needs a deadline uses ExecuteQueryContext.
 func (client *DBClient) ExecuteQuery(query model.DBQuery, args ...interface{}) (
+	[]map[string]interface{}, error) {
+
+	return client.ExecuteQueryContext(context.Background(), query, args...)
+}
+
+// ExecuteQueryContext executes a query under the caller's context and returns
+// the result as a slice of maps. Every row is read before it returns, so the
+// context covers the whole call.
+func (client *DBClient) ExecuteQueryContext(ctx context.Context, query model.DBQuery, args ...interface{}) (
 	[]map[string]interface{}, error) {
 
 	isSQLite := client.dbType == database.TypeSQLite
@@ -83,7 +86,7 @@ func (client *DBClient) ExecuteQuery(query model.DBQuery, args ...interface{}) (
 
 	sqlText := query.GetQuery(client.dbType)
 
-	rows, err := client.db.Query(sqlText, args...)
+	rows, err := client.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query %s failed: %w", query.ID, err)
 	}
@@ -153,11 +156,9 @@ func (client *DBClient) DBType() string {
 	return client.dbType
 }
 
-// Close closes the database connection, unless the pool is owned by the caller.
+// Close is a no-op. The pool belongs to the process, which closes it at
+// shutdown through provider.CloseDB.
 func (client *DBClient) Close() error {
 
-	if client.shared {
-		return nil
-	}
-	return client.db.Close()
+	return nil
 }

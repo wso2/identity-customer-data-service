@@ -48,13 +48,15 @@ func initDatabaseFromConfig(cdsConfig *config.Config) error {
 		return err
 	}
 
-	ds := cdsConfig.DataSource
-	if database.ResolveType(ds.Type) == database.TypeSQLite {
-		return provider.EnsureDatabase()
+	if err := provider.EnsureDatabase(); err != nil {
+		return err
 	}
 
-	log.GetLogger().Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, "+
-		"db host:%s, db port:%d", ds.Name, ds.Hostname, ds.Port))
+	ds := cdsConfig.DataSource
+	if database.ResolveType(ds.Type) != database.TypeSQLite {
+		log.GetLogger().Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, "+
+			"db host:%s, db port:%d", ds.Name, ds.Hostname, ds.Port))
+	}
 
 	return nil
 }
@@ -197,6 +199,10 @@ func main() {
 	}
 
 	workers.StopCookieCleanupWorker()
+
+	// TODO: call provider.CloseDB() here once the workers drain. The stops
+	// above end each worker's intake but do not wait for a running job, so
+	// closing the pool now would take the database away from a half-done job.
 
 	logger.Info("Shutdown complete")
 }

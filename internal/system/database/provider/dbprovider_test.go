@@ -19,8 +19,10 @@
 package provider
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
@@ -47,7 +49,8 @@ func postgresDataSource(dbType string) config.Config {
 // must not change.
 func Test_getDBConfig_postgres(t *testing.T) {
 
-	expectedDSN := "host=localhost port=5432 user=cdsuser password=cdspwd dbname=cdsdb sslmode=disable"
+	expectedDSN := "host=localhost port=5432 user=cdsuser password=cdspwd dbname=cdsdb sslmode=disable" +
+		" connect_timeout=10"
 
 	t.Run("configured as postgres", func(t *testing.T) {
 		dbConfig, err := getDBConfig(postgresDataSource("postgres"))
@@ -213,6 +216,203 @@ func Test_ValidateDataSource(t *testing.T) {
 			if err := ValidateDataSource(ds); err == nil {
 				t.Errorf("expected %s to be rejected", name)
 			}
+		}
+	})
+}
+
+// resetPools closes whatever the process holds and clears the shutdown state.
+//
+// CloseDB marks the process as shut down, so that a late caller cannot open a
+// pool nothing would close. A test opens a pool after it closes one, so it
+// clears that mark at both ends of the test.
+func resetPools(t *testing.T) {
+
+	t.Helper()
+
+	if err := CloseDB(); err != nil {
+		t.Error(err)
+	}
+
+	dbMu.Lock()
+	closed = false
+	dbMu.Unlock()
+}
+
+// isolatePools gives the test a process that holds no pool, and leaves one
+// behind for the next test.
+func isolatePools(t *testing.T) {
+
+	t.Helper()
+
+	resetPools(t)
+	t.Cleanup(func() { resetPools(t) })
+}
+
+// seedPostgresHandle publishes a pool as the process-wide PostgreSQL handle.
+//
+// getPostgresDB verifies a pool before it publishes one, so it needs a server.
+// A test that checks what happens to an already published handle supplies that
+// handle instead. Only the pointer matters here, so the pool is an inbuilt one.
+func seedPostgresHandle(t *testing.T) *sql.DB {
+
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "cds.db")
+	db, err := sql.Open(database.DriverSQLite, path+"?"+database.DefaultSQLiteOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	isolatePools(t)
+
+	dbMu.Lock()
+	postgresHandle = db
+	dbMu.Unlock()
+
+	return db
+}
+
+// Test_getPostgresDB_reusesOnePool checks that the process opens one PostgreSQL
+// pool and hands it to every caller.
+func Test_getPostgresDB_reusesOnePool(t *testing.T) {
+
+	config.OverrideCDSRuntime(postgresDataSource("postgres"))
+	seeded := seedPostgresHandle(t)
+
+	first, err := getPostgresDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := getPostgresDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if first != seeded || first != second {
+		t.Error("expected every call to return the same pool")
+	}
+
+	// A client must not close the shared pool, so that the stores can keep
+	// their `defer dbClient.Close()`.
+	dbClient, err := NewDBProvider().GetDBClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dbClient.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	third, err := getPostgresDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third != first {
+		t.Error("expected closing a client to leave the shared pool in place")
+	}
+}
+
+// Test_applyPostgresPoolSettings_boundsThePool checks that the resolved limits
+// reach the pool.
+func Test_applyPostgresPoolSettings_boundsThePool(t *testing.T) {
+
+	path := filepath.Join(t.TempDir(), "cds.db")
+	db, err := sql.Open(database.DriverSQLite, path+"?"+database.DefaultSQLiteOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	settings, err := resolvePostgresPoolSettings(config.PostgresConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	applyPostgresPoolSettings(db, settings)
+
+	if got := db.Stats().MaxOpenConnections; got != database.DefaultPostgresMaxOpenConns {
+		t.Errorf("expected the pool to be bounded at %d, got %d",
+			database.DefaultPostgresMaxOpenConns, got)
+	}
+}
+
+// Test_CloseDB_releasesThePool checks that shutdown drops the handle, so a
+// later call builds a new pool rather than one that is closed.
+func Test_CloseDB_releasesThePool(t *testing.T) {
+
+	config.OverrideCDSRuntime(postgresDataSource("postgres"))
+	seedPostgresHandle(t)
+
+	if err := CloseDB(); err != nil {
+		t.Fatal(err)
+	}
+
+	dbMu.Lock()
+	published := postgresHandle
+	dbMu.Unlock()
+
+	if published != nil {
+		t.Error("expected CloseDB to drop the handle")
+	}
+}
+
+func Test_resolvePostgresPoolSettings(t *testing.T) {
+
+	testCases := []struct {
+		name     string
+		cfg      config.PostgresConfig
+		expected postgresPoolSettings
+	}{
+		{
+			name: "zero, which an omitted setting gives, takes every default",
+			cfg:  config.PostgresConfig{},
+			expected: postgresPoolSettings{
+				maxOpenConns:    database.DefaultPostgresMaxOpenConns,
+				maxIdleConns:    database.DefaultPostgresMaxIdleConns,
+				connMaxLifetime: database.DefaultPostgresConnMaxLifetime,
+				connMaxIdleTime: database.DefaultPostgresConnMaxIdleTime,
+				connectTimeout:  database.DefaultPostgresConnectTimeout,
+			},
+		},
+		{
+			name: "configured values replace the defaults",
+			cfg: config.PostgresConfig{
+				MaxOpenConns:           10,
+				MaxIdleConns:           4,
+				ConnMaxLifetimeSeconds: 60,
+				ConnMaxIdleTimeSeconds: 30,
+				ConnectTimeoutSeconds:  5,
+			},
+			expected: postgresPoolSettings{
+				maxOpenConns:    10,
+				maxIdleConns:    4,
+				connMaxLifetime: 60 * time.Second,
+				connMaxIdleTime: 30 * time.Second,
+				connectTimeout:  5 * time.Second,
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := resolvePostgresPoolSettings(testCase.cfg)
+			if err != nil {
+				t.Fatalf("expected the configuration to resolve: %v", err)
+			}
+			if got != testCase.expected {
+				t.Errorf("expected %+v, got %+v", testCase.expected, got)
+			}
+		})
+	}
+
+	t.Run("a negative value is refused rather than replaced", func(t *testing.T) {
+		if _, err := resolvePostgresPoolSettings(config.PostgresConfig{MaxOpenConns: -1}); err == nil {
+			t.Fatal("expected a negative open limit to be refused")
+		}
+	})
+
+	t.Run("an idle limit above the open limit is refused", func(t *testing.T) {
+		_, err := resolvePostgresPoolSettings(config.PostgresConfig{MaxOpenConns: 5, MaxIdleConns: 50})
+		if err == nil {
+			t.Fatal("expected the contradictory pair to be refused")
 		}
 	})
 }

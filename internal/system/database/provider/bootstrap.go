@@ -31,6 +31,23 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
+// validateNumericSettings reports every numeric datasource setting CDS cannot
+// use. It resolves the settings with the same functions the pool uses, so the
+// rule cannot differ between this check and the pool.
+//
+// Only the settings that apply to the configured type are read, because the
+// Helm chart renders the PostgreSQL block whatever the type is.
+func validateNumericSettings(ds config.DataSourceConfig) error {
+
+	if database.ResolveType(ds.Type) == database.TypeSQLite {
+		_, err := resolveSQLiteMaxOpenConns(ds.SQLite)
+		return err
+	}
+
+	_, err := resolvePostgresPoolSettings(ds.Postgres)
+	return err
+}
+
 // ValidateDataSource reports whether the datasource configuration is one CDS
 // can run on. The server refuses to start when it is not.
 func ValidateDataSource(ds config.DataSourceConfig) error {
@@ -39,6 +56,10 @@ func ValidateDataSource(ds config.DataSourceConfig) error {
 	if !database.IsSupportedType(dbType) {
 		return fmt.Errorf("unsupported datasource.type %q: supported types are %s",
 			ds.Type, strings.Join(database.SupportedTypes, ", "))
+	}
+
+	if err := validateNumericSettings(ds); err != nil {
+		return err
 	}
 
 	// The inbuilt database needs no connection settings.
@@ -71,12 +92,18 @@ func ValidateDataSource(ds config.DataSourceConfig) error {
 // EnsureDatabase prepares the configured datasource for use.
 //
 // For the inbuilt datasource it creates the database file and applies the
-// schema. For every other type it is a no-op, since the schema is applied by
-// the operator. It is safe to call more than once.
+// schema. For PostgreSQL it opens the shared connection pool, which verifies
+// that the server answers within the connect timeout. The PostgreSQL schema
+// itself is applied by the operator. It is safe to call more than once.
 func EnsureDatabase() error {
 
 	runtimeConfig := config.GetCDSRuntime().Config
 	if database.ResolveType(runtimeConfig.DataSource.Type) != database.TypeSQLite {
+		// Opening the pool verifies that the server answers, so a wrong setting
+		// or an unreachable host fails the start.
+		if _, err := getPostgresDB(); err != nil {
+			return err
+		}
 		return nil
 	}
 
