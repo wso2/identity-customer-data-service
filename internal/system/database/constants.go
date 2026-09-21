@@ -124,12 +124,3 @@ const (
 	// itself ends at connect_timeout.
 	DefaultPostgresConnectTimeout = 10 * time.Second
 )
-
-// DefaultReadinessTimeout bounds the database query the readiness check runs.
-//
-// The connection pool is bounded, so the query waits when every connection is
-// in use. The readiness check is the one caller that must not wait: a probe
-// that cannot answer quickly has already answered, because the instance is not
-// ready. The value is therefore short, and it is shorter than the probe timeout
-// the chart sets, so the instance reports the state itself.
-const DefaultReadinessTimeout = 2 * time.Second

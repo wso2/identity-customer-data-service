@@ -92,8 +92,17 @@ func Test_getPostgresDB_failsWithinTheConnectTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error from a server that never answers")
 	}
-	if elapsed > 10*time.Second {
-		t.Fatalf("the attempt took %v, so the connect timeout did not end it", elapsed)
+	// The configured value is 1 second. A generous allowance would pass even
+	// when the driver ignored the setting and some other limit ended the
+	// attempt.
+	if elapsed > 3*time.Second {
+		t.Fatalf("the attempt took %v with connect_timeout=1s, so the setting did not end it", elapsed)
+	}
+	// The server accepts the connection and then says nothing, so the attempt
+	// has to reach the handshake. Returning at once would mean it failed for
+	// another reason.
+	if elapsed < 500*time.Millisecond {
+		t.Fatalf("the attempt returned after %v, so it did not reach the handshake", elapsed)
 	}
 }
 

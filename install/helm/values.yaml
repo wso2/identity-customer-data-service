@@ -116,9 +116,8 @@ cloud:
       readinessProbe:
         initialDelaySeconds: 20
         periodSeconds: 10
-        # Longer than the two seconds the readiness check allows its own
-        # database query, so the instance answers "not ready" itself instead
-        # of the probe timing out.
+        # The readiness query runs under the context of the probe request, so
+        # this is its only bound. Kubernetes defaults it to one second.
         timeoutSeconds: 5
       imagePullPolicy: Always
       resources:

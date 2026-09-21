@@ -60,8 +60,8 @@ func openSaturatedPool(t *testing.T) DBClientInterface {
 
 // Test_ExecuteQueryContext_endsTheWaitOnTheDeadline is the case the bounded
 // pool creates: every connection is in use, so the query waits for one. The
-// readiness check depends on this, because it gives its query a short deadline
-// and must report "not ready" rather than wait.
+// readiness check depends on this, because it runs its query under the context
+// of the probe request and must end when that request does.
 func Test_ExecuteQueryContext_endsTheWaitOnTheDeadline(t *testing.T) {
 
 	dbClient := openSaturatedPool(t)

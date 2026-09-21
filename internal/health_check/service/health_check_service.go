@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -55,9 +54,6 @@ func (h HealthCheckService) CheckReadiness(ctx context.Context) error {
 		return fmt.Errorf("failed to create database client: %v", err)
 	}
 	defer dbClient.Close()
-
-	ctx, cancel := context.WithTimeout(ctx, database.DefaultReadinessTimeout)
-	defer cancel()
 
 	// Perform a lightweight query to ensure DB connectivity.
 	_, err = dbClient.ExecuteQueryContext(ctx, scripts.HealthCheckPing)
