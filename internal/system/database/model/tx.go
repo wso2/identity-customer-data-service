@@ -19,6 +19,7 @@
 package model
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -52,6 +53,37 @@ func (t *Tx) Commit() error {
 func (t *Tx) Rollback() error {
 
 	return t.internal.Rollback()
+}
+
+// ExecContext runs a statement that returns no rows, under the caller's
+// context. The transaction carries no context of its own, so each statement
+// takes the one its caller is working under.
+func (t *Tx) ExecContext(ctx context.Context, query DBQuery, args ...interface{}) (sql.Result, error) {
+
+	if t.dbType == database.TypeSQLite {
+		args = database.NormalizeSQLiteArgs(args)
+	}
+
+	result, err := t.internal.ExecContext(ctx, query.GetQuery(t.dbType), args...)
+	if err != nil {
+		return nil, fmt.Errorf("query %s failed: %w", query.ID, err)
+	}
+	return result, nil
+}
+
+// QueryContext runs a statement that returns rows, under the caller's context.
+// The caller must close the rows.
+func (t *Tx) QueryContext(ctx context.Context, query DBQuery, args ...interface{}) (*sql.Rows, error) {
+
+	if t.dbType == database.TypeSQLite {
+		args = database.NormalizeSQLiteArgs(args)
+	}
+
+	rows, err := t.internal.QueryContext(ctx, query.GetQuery(t.dbType), args...)
+	if err != nil {
+		return nil, fmt.Errorf("query %s failed: %w", query.ID, err)
+	}
+	return rows, nil
 }
 
 // Exec runs a statement that returns no rows.
