@@ -308,9 +308,8 @@ func Test_Close_endsAReconnectThatIsWaiting(t *testing.T) {
 	}
 }
 
-// Test_dial_doesNotInstallAConnectionAfterTheClose covers the narrow window
-// where the close happens while a dial is already in flight. The connection the
-// dial opened is closed instead of installed.
+// Test_dial_doesNotInstallAConnectionAfterTheClose checks that closing the
+// queue cancels subsequent network dials before they open a new socket.
 func Test_dial_doesNotInstallAConnectionAfterTheClose(t *testing.T) {
 
 	broker := startFakeBroker(t, true)
@@ -336,13 +335,12 @@ func Test_dial_doesNotInstallAConnectionAfterTheClose(t *testing.T) {
 		t.Error("the connection was replaced after the close")
 	}
 
-	// The socket the dial opened must be closed, not left open. The broker sees
-	// two reads end: the one the close ended, and the one the dial opened.
-	for i := 0; i < 2; i++ {
-		select {
-		case <-broker.readEnded:
-		case <-time.After(5 * time.Second):
-			t.Fatalf("connection %d to the broker was left open", i+1)
-		}
+	select {
+	case <-broker.readEnded:
+	case <-time.After(5 * time.Second):
+		t.Fatal("original connection was left open")
+	}
+	if broker.connections() != 1 {
+		t.Fatal("dial opened a new socket after shutdown")
 	}
 }

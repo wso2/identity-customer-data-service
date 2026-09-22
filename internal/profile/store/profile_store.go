@@ -263,7 +263,10 @@ func GetProfile(ctx context.Context, profileId string) (*model.Profile, error) {
 		}, err)
 		return nil, serverError
 	}
-	profile.ApplicationData, _ = FetchApplicationData(ctx, profileId)
+	profile.ApplicationData, err = FetchApplicationData(ctx, profileId)
+	if err != nil {
+		return nil, err
+	}
 	return &profile, nil
 }
 
@@ -1415,7 +1418,10 @@ func GetAllReferenceProfilesExceptForCurrent(ctx context.Context,
 			return nil, serverError
 		}
 
-		profile.ApplicationData, _ = FetchApplicationData(ctx, profile.ProfileId)
+		profile.ApplicationData, err = FetchApplicationData(ctx, profile.ProfileId)
+		if err != nil {
+			return nil, err
+		}
 
 		profiles = append(profiles, profile)
 	}

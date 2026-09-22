@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
+
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 )
@@ -69,10 +71,12 @@ func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
 // Start launches a goroutine that reads profiles from the channel and
 // forwards each one to handler. The goroutine runs until the channel is
 // closed. Always returns nil.
-func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
+func (q *ProfileQueue) Start(handler func(profileModel.Profile) error) error {
 	go func() {
 		for profile := range q.ch {
-			handler(profile)
+			if err := handler(profile); err != nil {
+				log.GetLogger().Error("inmemory: profile processing failed; message is not persisted for retry")
+			}
 		}
 	}()
 	return nil
@@ -129,10 +133,12 @@ func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
 // Start launches a goroutine that reads schema sync jobs from the channel and
 // forwards each one to handler. The goroutine runs until the channel is
 // closed. Always returns nil.
-func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) error {
+func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync) error) error {
 	go func() {
 		for sync := range q.ch {
-			handler(sync)
+			if err := handler(sync); err != nil {
+				log.GetLogger().Error("inmemory: schema sync processing failed; message is not persisted for retry")
+			}
 		}
 	}()
 	return nil

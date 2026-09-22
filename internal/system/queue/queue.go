@@ -39,15 +39,17 @@ type ProfileUnificationQueue interface {
 	// (e.g. queue full, serialization failure, broker unreachable).
 	Enqueue(profile profileModel.Profile) error
 
-	// Start begins consuming queue items and invokes handler for each one.
+	// Start begins consuming queue items. A nil handler result means successful
+	// processing; an error must not be acknowledged as success. Retryable marks
+	// failures safe to repeat; ErrDeferred leaves delivery pending during shutdown.
 	// Implementations must start the consumer loop in a separate goroutine
 	// so that Start returns immediately. An error is returned when the queue
 	// cannot be started (e.g. broker subscription failure).
-	Start(handler func(profileModel.Profile)) error
+	Start(handler func(profileModel.Profile) error) error
 
-	// Close performs a graceful shutdown of the queue, flushing any
-	// in-flight items and releasing underlying resources (connections,
-	// channels, goroutines). It is safe to call Close more than once.
+	// Close releases queue resources after the worker has drained active jobs.
+	// It does not guarantee processing of buffered items. Unacknowledged broker
+	// messages remain eligible for redelivery. It is safe to call more than once.
 	//
 	// Close must return inside ctx. A provider whose graceful close has not
 	// finished by then ends its connection by force, so that shutdown keeps
@@ -63,15 +65,17 @@ type SchemaSyncQueue interface {
 	// (e.g. queue full, serialization failure, broker unreachable).
 	Enqueue(sync schemaModel.ProfileSchemaSync) error
 
-	// Start begins consuming queue items and invokes handler for each one.
+	// Start begins consuming queue items. A nil handler result means successful
+	// processing; an error must not be acknowledged as success. Retryable marks
+	// failures safe to repeat; ErrDeferred leaves delivery pending during shutdown.
 	// Implementations must start the consumer loop in a separate goroutine
 	// so that Start returns immediately. An error is returned when the queue
 	// cannot be started (e.g. broker subscription failure).
-	Start(handler func(schemaModel.ProfileSchemaSync)) error
+	Start(handler func(schemaModel.ProfileSchemaSync) error) error
 
-	// Close performs a graceful shutdown of the queue, flushing any
-	// in-flight items and releasing underlying resources (connections,
-	// channels, goroutines). It is safe to call Close more than once.
+	// Close releases queue resources after the worker has drained active jobs.
+	// It does not guarantee processing of buffered items. Unacknowledged broker
+	// messages remain eligible for redelivery. It is safe to call more than once.
 	//
 	// Close must return inside ctx. A provider whose graceful close has not
 	// finished by then ends its connection by force, so that shutdown keeps

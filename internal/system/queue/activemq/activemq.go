@@ -45,6 +45,7 @@ const (
 	initialBackoff    = 2 * time.Second
 	maxBackoff        = 60 * time.Second
 	backoffMultiplier = 2
+	brokerIOTimeout   = 10 * time.Second
 )
 
 func init() {
@@ -76,13 +77,16 @@ type managedConn struct {
 	password string
 	tlsCfg   config.TLSConfig
 
-	mu          sync.RWMutex
-	conn        *stomp.Conn
-	netConn     net.Conn
-	generation  uint64
-	reconnectMu sync.Mutex
-	done        chan struct{}
-	doneOnce    sync.Once
+	mu            sync.RWMutex
+	conn          *stomp.Conn
+	netConn       net.Conn
+	generation    uint64
+	reconnectGate chan struct{}
+	pendingConn   net.Conn
+	done          chan struct{}
+	doneOnce      sync.Once
+	dialContext   context.Context
+	cancelDial    context.CancelFunc
 	// closed guards the install in dial against a concurrent shutdown. It is
 	// read and written under mu, which is also the lock that installs a
 	// connection, so a connection is never installed after shutdown.
@@ -95,14 +99,19 @@ type managedConn struct {
 }
 
 func newManagedConn(addr, username, password string, tlsCfg config.TLSConfig) (*managedConn, error) {
+	dialContext, cancelDial := context.WithCancel(context.Background())
 	mc := &managedConn{
-		addr:     addr,
-		username: username,
-		password: password,
-		tlsCfg:   tlsCfg,
-		done:     make(chan struct{}),
+		addr:          addr,
+		username:      username,
+		password:      password,
+		tlsCfg:        tlsCfg,
+		done:          make(chan struct{}),
+		reconnectGate: make(chan struct{}, 1),
+		dialContext:   dialContext,
+		cancelDial:    cancelDial,
 	}
 	if err := mc.dial(); err != nil {
+		cancelDial()
 		return nil, err
 	}
 	return mc, nil
@@ -126,14 +135,22 @@ func parseAddr(addr string) (hostPort string, useTLS bool) {
 }
 
 func (mc *managedConn) dial() error {
+	dialContext := mc.dialContext
+	if dialContext == nil {
+		dialContext = context.Background()
+	}
 	hostPort, useTLS := parseAddr(mc.addr)
 
 	opts := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mc.username, mc.password),
+		stomp.ConnOpt.AcceptVersion(stomp.V12),
+		stomp.ConnOpt.MsgSendTimeout(brokerIOTimeout),
+		stomp.ConnOpt.RcvReceiptTimeout(brokerIOTimeout),
 		// Disable STOMP-level heartbeats to avoid spurious read-timeout
 		// disconnects when the broker sends heartbeats less frequently than
 		// the negotiated interval. TCP keepalive (set below) provides
-		// equivalent liveness detection for half-open connections.
+		// transport-level detection for half-open connections; it does not
+		// detect a broker that accepts TCP but stops processing frames.
 		stomp.ConnOpt.HeartBeat(0, 0),
 	}
 
@@ -175,37 +192,66 @@ func (mc *managedConn) dial() error {
 				return fmt.Errorf("activemq: failed to append certs from trust_store")
 			}
 		}
-		netConn, err = tls.DialWithDialer(dialer, "tcp", hostPort, &tls.Config{
+		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			RootCAs:    rootCAs,
-		})
+		}}
+		netConn, err = tlsDialer.DialContext(dialContext, "tcp", hostPort)
 	} else {
-		netConn, err = dialer.Dial("tcp", hostPort)
+		netConn, err = dialer.DialContext(dialContext, "tcp", hostPort)
 	}
 	if err != nil {
 		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
 	}
 
-	stompConn, err := stomp.Connect(netConn, opts...)
+	// Bound CONNECT as well as TCP/TLS establishment. Close interrupts an
+	// in-flight STOMP handshake even though it is not installed yet.
+	if err := netConn.SetDeadline(time.Now().Add(brokerIOTimeout)); err != nil {
+		_ = netConn.Close()
+		return err
+	}
+	mc.mu.Lock()
+	mc.pendingConn = netConn
+	closed := mc.closed
+	mc.mu.Unlock()
+	if closed {
+		_ = netConn.Close()
+	}
+	defer func() {
+		mc.mu.Lock()
+		if mc.pendingConn == netConn {
+			mc.pendingConn = nil
+		}
+		mc.mu.Unlock()
+	}()
+	stompConn, err := stomp.Connect(&boundedWriteConn{Conn: netConn}, opts...)
 	if err != nil {
 		_ = netConn.Close() // prevent fd leak if STOMP handshake fails
 		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
 	}
+	if stompConn.Version() != stomp.V12 {
+		_ = netConn.Close()
+		return fmt.Errorf("activemq: STOMP 1.2 is required for individual transactional acknowledgements")
+	}
 
+	if err := netConn.SetDeadline(time.Time{}); err != nil {
+		_ = netConn.Close()
+		return err
+	}
 	mc.mu.Lock()
 	if mc.closed {
 		mc.mu.Unlock()
 		_ = netConn.Close()
 		return fmt.Errorf("activemq: the connection to %s was not installed because the queue is closed", mc.addr)
 	}
-	oldConn := mc.conn
+	oldConn := mc.netConn
 	mc.conn = stompConn
 	mc.netConn = netConn
 	mc.generation++
 	mc.mu.Unlock()
 
 	if oldConn != nil {
-		_ = oldConn.Disconnect()
+		_ = oldConn.Close()
 	}
 	return nil
 }
@@ -229,9 +275,16 @@ func (mc *managedConn) getConnAndGeneration() (*stomp.Conn, uint64) {
 // shutdown signals all consumer goroutines to stop. Safe to call more than
 // once.
 func (mc *managedConn) shutdown() {
+	if mc.cancelDial != nil {
+		mc.cancelDial()
+	}
 	mc.mu.Lock()
 	mc.closed = true
+	pending := mc.pendingConn
 	mc.mu.Unlock()
+	if pending != nil {
+		_ = pending.Close()
+	}
 
 	mc.doneOnce.Do(func() { close(mc.done) })
 }
@@ -294,8 +347,6 @@ func (mc *managedConn) disconnectWithin(ctx context.Context) error {
 // for unlimited retries (used by long-lived consumers). Returns an error if
 // all attempts are exhausted or if shutdown is signalled.
 func (mc *managedConn) reconnectWithBackoff(context string, maxAttempts int) error {
-	mc.reconnectMu.Lock()
-	defer mc.reconnectMu.Unlock()
 
 	logger := log.GetLogger()
 	backoff := initialBackoff
@@ -328,7 +379,19 @@ func (mc *managedConn) reconnectWithBackoff(context string, maxAttempts int) err
 			return fmt.Errorf("activemq: reconnect aborted, shutting down (%s)", context)
 		}
 
-		if err := mc.dial(); err != nil {
+		gateTimer := time.NewTimer(brokerIOTimeout)
+		select {
+		case mc.reconnectGate <- struct{}{}:
+			gateTimer.Stop()
+		case <-mc.done:
+			gateTimer.Stop()
+			return fmt.Errorf("activemq: reconnect aborted during shutdown")
+		case <-gateTimer.C:
+			return fmt.Errorf("activemq: timed out waiting for another reconnect")
+		}
+		err := mc.dial()
+		<-mc.reconnectGate
+		if err != nil {
 			logger.Error(fmt.Sprintf("activemq: reconnect failed: %v", err))
 			backoff *= backoffMultiplier
 			if backoff > maxBackoff {
@@ -342,6 +405,16 @@ func (mc *managedConn) reconnectWithBackoff(context string, maxAttempts int) err
 	}
 }
 
+// send requests persistent storage and waits for broker acceptance on every
+// attempt, including the retry after reconnection.
+func (mc *managedConn) send(destination string, data []byte) error {
+	if mc.isShuttingDown() {
+		return queue.ErrDeferred
+	}
+	return mc.getConn().Send(destination, contentTypeJSON, data,
+		stomp.SendOpt.Header("persistent", "true"), stomp.SendOpt.Receipt)
+}
+
 // subscribeCurrent subscribes on the current live connection and returns the
 // subscription together with the generation the subscription belongs to.
 func (mc *managedConn) subscribeCurrent(destination string) (*stomp.Subscription, uint64, error) {
@@ -350,7 +423,8 @@ func (mc *managedConn) subscribeCurrent(destination string) (*stomp.Subscription
 		return nil, generation, fmt.Errorf("activemq: no active connection available for subscription")
 	}
 
-	sub, err := conn.Subscribe(destination, stomp.AckAuto)
+	sub, err := conn.Subscribe(destination, stomp.AckClientIndividual,
+		stomp.SubscribeOpt.Header("activemq.prefetchSize", "1"))
 	if err != nil {
 		return nil, generation, err
 	}
@@ -390,7 +464,7 @@ func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
 		return fmt.Errorf("activemq: failed to marshal profile %s: %w", profile.ProfileId, err)
 	}
 
-	if err := q.mc.getConn().Send(q.destination, contentTypeJSON, data); err != nil {
+	if err := q.mc.send(q.destination, data); err != nil {
 		log.GetLogger().Error(fmt.Sprintf(
 			"activemq: send failed for profile %s, will reconnect and retry: %v",
 			profile.ProfileId, err))
@@ -400,99 +474,25 @@ func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
 		}
 
 		// Single retry after reconnect.
-		if retryErr := q.mc.getConn().Send(q.destination, contentTypeJSON, data); retryErr != nil {
+		if retryErr := q.mc.send(q.destination, data); retryErr != nil {
 			return fmt.Errorf("activemq: retry send failed for profile %s: %w", profile.ProfileId, retryErr)
 		}
 	}
 	return nil
 }
 
-// Start subscribes to the destination and launches a consumer goroutine.
-//
-// Retry policy: the consumer loop retries forever (maxAttempts=0) with
-// exponential backoff when the subscription is lost, because the consumer is
-// a long-lived background goroutine that must stay alive for the lifetime of
-// the process. The loop exits cleanly when Close is called, which signals
-// shutdown via the done channel. If a subscription closes because its
-// underlying connection was intentionally retired during a managed reconnect,
-// the consumer simply re-subscribes on the current connection instead of
-// reconnecting again.
-func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
-	sub, subGen, err := q.mc.subscribeCurrent(q.destination)
-	if err != nil {
-		return fmt.Errorf("activemq: failed to subscribe to profile queue %s: %w", q.destination, err)
-	}
-
-	go func() {
-		for {
-			msg, ok := <-sub.C
-			if !ok {
-				if q.mc.isShuttingDown() {
-					log.GetLogger().Info("activemq: profile queue consumer stopped (shutdown)")
-					return
-				}
-
-				_, currentGen := q.mc.getConnAndGeneration()
-
-				// The subscription belongs to an older connection generation that
-				// was intentionally retired. Re-subscribe on the current live
-				// connection instead of reconnecting again.
-				if subGen != currentGen {
-					log.GetLogger().Info(
-						"activemq: profile queue subscription closed on retired connection, re-subscribing on current connection",
-					)
-					newSub, newGen, err := q.mc.subscribeCurrent(q.destination)
-					if err != nil {
-						log.GetLogger().Error(fmt.Sprintf(
-							"activemq: failed to re-subscribe to profile queue on current connection: %v", err,
-						))
-						continue
-					}
-					sub = newSub
-					subGen = newGen
-					continue
-				}
-
-				log.GetLogger().Error("activemq: profile queue subscription channel closed, reconnecting…")
-				if err := q.mc.reconnectWithBackoff("profile consumer", 0); err != nil {
-					log.GetLogger().Info(fmt.Sprintf(
-						"activemq: profile queue consumer exiting: %v", err,
-					))
-					return
-				}
-
-				newSub, newGen, err := q.mc.subscribeCurrent(q.destination)
-				if err != nil {
-					log.GetLogger().Error(fmt.Sprintf(
-						"activemq: failed to re-subscribe to profile queue: %v", err,
-					))
-					continue
-				}
-				sub = newSub
-				subGen = newGen
-				continue
-			}
-
-			if msg.Err != nil {
-				log.GetLogger().Error(fmt.Sprintf(
-					"activemq: error receiving profile message: %v", msg.Err,
-				))
-				continue
-			}
-
-			var profile profileModel.Profile
-			if err := json.Unmarshal(msg.Body, &profile); err != nil {
-				log.GetLogger().Error(fmt.Sprintf(
-					"activemq: failed to unmarshal profile message: %v", err,
-				))
-				continue
-			}
-
-			handler(profile)
+// Start consumes profiles and acknowledges only successful processing.
+func (q *ProfileQueue) Start(handler func(profileModel.Profile) error) error {
+	return startConsumer(q.mc, q.destination, func(body []byte) error {
+		var profile profileModel.Profile
+		if err := json.Unmarshal(body, &profile); err != nil {
+			return err
 		}
-	}()
-
-	return nil
+		if profile.ProfileId == "" {
+			return fmt.Errorf("profile ID is required")
+		}
+		return handler(profile)
+	})
 }
 
 // Close signals the consumer goroutine to stop and disconnects from ActiveMQ
@@ -527,7 +527,7 @@ func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
 		return fmt.Errorf("activemq: failed to marshal schema sync for tenant %s: %w", sync.OrgId, err)
 	}
 
-	if err := q.mc.getConn().Send(q.destination, contentTypeJSON, data); err != nil {
+	if err := q.mc.send(q.destination, data); err != nil {
 		log.GetLogger().Error(fmt.Sprintf(
 			"activemq: send failed for schema sync tenant %s, will reconnect and retry: %v",
 			sync.OrgId, err))
@@ -536,84 +536,25 @@ func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
 			return fmt.Errorf("activemq: send failed for schema sync tenant %s: %w", sync.OrgId, reconnErr)
 		}
 
-		if retryErr := q.mc.getConn().Send(q.destination, contentTypeJSON, data); retryErr != nil {
+		if retryErr := q.mc.send(q.destination, data); retryErr != nil {
 			return fmt.Errorf("activemq: retry send failed for schema sync tenant %s: %w", sync.OrgId, retryErr)
 		}
 	}
 	return nil
 }
 
-// Start subscribes to the destination and launches a consumer goroutine.
-// See ProfileQueue.Start for retry-policy rationale.
-func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) error {
-	sub, subGen, err := q.mc.subscribeCurrent(q.destination)
-	if err != nil {
-		return fmt.Errorf("activemq: failed to subscribe to schema sync queue %s: %w", q.destination, err)
-	}
-
-	go func() {
-		for {
-			msg, ok := <-sub.C
-			if !ok {
-				if q.mc.isShuttingDown() {
-					log.GetLogger().Info("activemq: schema sync consumer stopped (shutdown)")
-					return
-				}
-
-				_, currentGen := q.mc.getConnAndGeneration()
-
-				if subGen != currentGen {
-					log.GetLogger().Info(
-						"activemq: schema sync subscription closed on retired connection, re-subscribing on current connection",
-					)
-					newSub, newGen, err := q.mc.subscribeCurrent(q.destination)
-					if err != nil {
-						log.GetLogger().Error(fmt.Sprintf(
-							"activemq: failed to re-subscribe to schema sync queue on current connection: %v", err,
-						))
-						continue
-					}
-					sub = newSub
-					subGen = newGen
-					continue
-				}
-
-				log.GetLogger().Error("activemq: schema sync subscription channel closed, reconnecting…")
-				if err := q.mc.reconnectWithBackoff("schema sync consumer", 0); err != nil {
-					log.GetLogger().Info(fmt.Sprintf(
-						"activemq: schema sync consumer exiting: %v", err,
-					))
-					return
-				}
-
-				newSub, newGen, err := q.mc.subscribeCurrent(q.destination)
-				if err != nil {
-					log.GetLogger().Error(fmt.Sprintf(
-						"activemq: failed to re-subscribe to schema sync queue: %v", err,
-					))
-					continue
-				}
-				sub = newSub
-				subGen = newGen
-				continue
-			}
-
-			if msg.Err != nil {
-				log.GetLogger().Error(fmt.Sprintf(
-					"activemq: error receiving schema sync message: %v", msg.Err))
-				continue
-			}
-
-			var sync schemaModel.ProfileSchemaSync
-			if err := json.Unmarshal(msg.Body, &sync); err != nil {
-				log.GetLogger().Error(fmt.Sprintf(
-					"activemq: failed to unmarshal schema sync message: %v", err))
-				continue
-			}
-			handler(sync)
+// Start consumes schema jobs and acknowledges only successful processing.
+func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync) error) error {
+	return startConsumer(q.mc, q.destination, func(body []byte) error {
+		var job schemaModel.ProfileSchemaSync
+		if err := json.Unmarshal(body, &job); err != nil {
+			return err
 		}
-	}()
-	return nil
+		if job.OrgId == "" {
+			return fmt.Errorf("organization ID is required")
+		}
+		return handler(job)
+	})
 }
 
 // Close signals the consumer goroutine to stop and disconnects from ActiveMQ

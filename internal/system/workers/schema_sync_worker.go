@@ -56,15 +56,16 @@ func StartSchemaSyncWorker() error {
 	// the work one message causes.
 	lifecycle := newJobLifecycle()
 
-	if err := q.Start(func(schemaSync model.ProfileSchemaSync) {
+	if err := q.Start(func(schemaSync model.ProfileSchemaSync) error {
+		var processingErr error
 		err := lifecycle.run(func(ctx context.Context) {
-			processSchemaSyncJob(ctx, schemaSync)
+			processingErr = processSchemaSyncJob(ctx, schemaSync)
 		})
-		if err != nil {
-			log.GetLogger().Info(fmt.Sprintf(
-				"workers: the schema sync worker is stopping, so the job for tenant %s did not run: %v",
-				schemaSync.OrgId, err))
+		if err != nil || lifecycle.ctx.Err() != nil {
+			return queue.ErrDeferred
 		}
+		// Schema sync reads the current schema and upserts it transactionally.
+		return queue.Retryable(processingErr)
 	}); err != nil {
 		_ = q.Close(context.Background())
 		return fmt.Errorf("workers: failed to start schema sync queue: %w", err)
@@ -116,7 +117,7 @@ func StopSchemaSyncWorker(ctx context.Context) error {
 }
 
 // processSchemaSyncJob processes a schema sync job
-func processSchemaSyncJob(ctx context.Context, schemaSync model.ProfileSchemaSync) {
+func processSchemaSyncJob(ctx context.Context, schemaSync model.ProfileSchemaSync) error {
 
 	logger := log.GetLogger()
 	logger.Info(fmt.Sprintf("Processing schema sync job for tenant: %s, event: %s", schemaSync.OrgId, schemaSync.Event))
@@ -127,8 +128,9 @@ func processSchemaSyncJob(ctx context.Context, schemaSync model.ProfileSchemaSyn
 	err := schemaService.SyncProfileSchema(ctx, schemaSync.OrgId)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to sync profile schema for tenant: %s", schemaSync.OrgId), log.Error(err))
-		return
+		return err
 	}
 
 	logger.Info(fmt.Sprintf("Profile schema sync completed successfully for tenant: %s", schemaSync.OrgId))
+	return nil
 }
