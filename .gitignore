@@ -25,7 +25,8 @@ replay_pid*
 
 # Project build directory
 target/
-bin/
+# Anchored, so it does not swallow distribution/bin/ as well.
+/bin/
 
 # Inbuilt database files
 config/repository/database/
@@ -46,3 +47,7 @@ config/repository/database/
 
 # Local development setup work directory
 .local-dev/
+
+# Docker Compose local state: secrets and generated development certificates
+distribution/docker-compose/.env
+distribution/docker-compose/certs/

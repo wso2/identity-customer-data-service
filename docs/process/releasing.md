@@ -1,26 +1,49 @@
 # Releasing CDS — Release Process and Versioning
 
-`version.txt` holds the **last released** version. Nothing moves it on a PR merge — the release builder owns it, and a release is the only thing that changes it. The version number therefore describes what was released, not how many PRs were merged.
+`version.txt` holds the **last released** version. Only the release builder moves it, and a release is the only thing that changes it. The version number therefore describes what was released, not how many PRs were merged.
+
+An ordinary merge changes nothing. A merge releases only when the pull request carries a release label, so the intent to release is recorded on the PR and reviewed with it, rather than applied afterwards from memory.
 
 ---
 
 ## The model
 
-A release run resolves the version to release from its dispatch inputs, commits it to the release branch, builds from it, and tags that commit.
+A release run resolves the version, commits it to the release branch, builds from it, and tags that commit. It starts either from a labelled pull request being merged, or from a manual dispatch.
 
 ```
-merge PR  → nothing happens to version.txt
-merge PR  → nothing happens to version.txt
-
-dispatch release
-  → resolve version (bump_type / version / use_existing_version)
+merge PR                      → nothing happens to version.txt
+merge PR                      → nothing happens to version.txt
+merge PR labelled release:minor
+  ↓
+  → resolve version (from the label, or from dispatch inputs)
   → refuse if that tag already exists
   → write version.txt
   → commit + push it to the release branch
-  → make build
+  → make dist
   → tag the bump commit, push the tag
-  → create the GitHub release
+  → create the GitHub release with the platform packs
 ```
+
+### Releasing from a pull request
+
+Add exactly one of these labels before merging:
+
+| Label | Effect |
+|---|---|
+| `release:patch` | patch bump, for a maintenance release |
+| `release:minor` | minor bump, the normal case |
+| `release:major` | major bump |
+
+Other labels are ignored. Two release labels, or a label that is not one of the
+three, fails the run rather than guessing a bump. An unlabelled merge does
+nothing at all.
+
+The release is built from the pull request's **base branch**, never from its
+head, so merging a labelled PR into `0.3.x` releases `0.3.x`.
+
+Dispatching by hand is still available and is the way to release an exact
+version, a prerelease, or to retry — see [Inputs](#inputs). A merged PR always
+releases a bump, never a prerelease.
 
 The tag is the release identity. A version that already has a tag is refused, so the same version can never be released twice.
 
