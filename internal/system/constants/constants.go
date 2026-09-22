@@ -18,7 +18,10 @@
 
 package constants
 
-import "regexp"
+import (
+	"regexp"
+	"time"
+)
 
 const ApiBasePath = "/cds/api"
 const ProfileApiPath = "profiles"
@@ -211,3 +214,8 @@ const (
 const (
 	DefaultCookieCleanupTime = 24 * 60 * 60 // 24 hours in seconds
 )
+
+// DefaultShutdownGracePeriod bounds the whole shutdown sequence when
+// shutdown.grace_period_seconds is omitted. The HTTP server, every worker and
+// every broker connection share it.
+const DefaultShutdownGracePeriod = 25 * time.Second

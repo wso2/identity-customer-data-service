@@ -23,13 +23,16 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/client"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 )
 
 // backendPID asks PostgreSQL which server process answered. Two queries that
@@ -258,6 +261,53 @@ func Test_ProductionProvider(t *testing.T) {
 		if after := queryBackendPID(t, dbClient); after != before {
 			t.Errorf("the query after EnsureDatabase used server process %s, not %s, "+
 				"so the pool was replaced", after, before)
+		}
+	})
+
+	t.Run("the pool serves a worker until it has stopped", func(t *testing.T) {
+		// CloseDB marks the process as shut down for good, so one test owns the
+		// production lifecycle. The suite does not start the cookie cleanup
+		// worker, so this subtest may start and stop it.
+		dbClient, err := provider.NewDBProvider().GetDBClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		workers.StartCookieCleanupWorker(config.CookieCleanupConfig{Interval: 3600, BatchSize: 100})
+
+		var queries atomic.Int64
+		stopQuerying := make(chan struct{})
+		querying := make(chan struct{})
+
+		go func() {
+			defer close(querying)
+			for {
+				select {
+				case <-stopQuerying:
+					return
+				default:
+				}
+				if _, err := dbClient.ExecuteQueryContext(context.Background(), backendPID); err != nil {
+					t.Errorf("a query failed while a worker was still stopping: %v", err)
+					return
+				}
+				queries.Add(1)
+			}
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), constants.DefaultShutdownGracePeriod)
+		defer cancel()
+
+		if err := workers.StopCookieCleanupWorker(ctx); err != nil {
+			t.Fatalf("expected the cookie cleanup worker to stop cleanly, got %v", err)
+		}
+
+		close(stopQuerying)
+		<-querying
+
+		// Without this the check would pass on a pool that served nothing.
+		if queries.Load() == 0 {
+			t.Error("no query ran while the worker was stopping")
 		}
 	})
 

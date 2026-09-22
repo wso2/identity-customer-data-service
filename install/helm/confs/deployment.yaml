@@ -72,6 +72,9 @@ auth_server:
     admin_config:update:
       - "internal_cds_admin_config_update"
 
+shutdown:
+  grace_period_seconds: {{ .Values.cloud.deployment.cds.config.shutdown.gracePeriodSeconds }}
+
 datasource:
   type: {{ .Values.cloud.deployment.cds.config.datasource.type }}
   hostname: {{ .Values.cloud.deployment.cds.config.datasource.hostname }}

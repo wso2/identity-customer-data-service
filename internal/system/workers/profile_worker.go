@@ -49,6 +49,9 @@ import (
 var (
 	profileQueueMu     sync.RWMutex
 	activeProfileQueue queue.ProfileUnificationQueue
+	// profileLifecycle counts the jobs that are at work, so that shutdown
+	// waits for them before the database pool closes.
+	profileLifecycle *jobLifecycle
 )
 
 // StartProfileWorker initialises the profile unification queue (using the
@@ -63,19 +66,27 @@ func StartProfileWorker() error {
 	}
 	// A queue message has no caller, so the worker is the context boundary for
 	// the work one message causes.
-	workerCtx := context.Background()
+	lifecycle := newJobLifecycle()
 
 	if err := q.Start(func(profile profileModel.Profile) {
-		p, err := profileStore.GetProfile(workerCtx, profile.ProfileId)
-		if err == nil && p != nil {
-			unifyProfiles(workerCtx, *p)
+		err := lifecycle.run(func(ctx context.Context) {
+			p, err := profileStore.GetProfile(ctx, profile.ProfileId)
+			if err == nil && p != nil {
+				unifyProfiles(ctx, *p)
+			}
+		})
+		if err != nil {
+			log.GetLogger().Info(fmt.Sprintf(
+				"workers: the profile worker is stopping, so profile %s was not unified: %v",
+				profile.ProfileId, err))
 		}
 	}); err != nil {
-		_ = q.Close()
+		_ = q.Close(context.Background())
 		return fmt.Errorf("workers: failed to start profile unification queue: %w", err)
 	}
 	profileQueueMu.Lock()
 	activeProfileQueue = q
+	profileLifecycle = lifecycle
 	profileQueueMu.Unlock()
 	return nil
 }
@@ -105,19 +116,29 @@ func (q *ProfileWorkerQueue) Enqueue(profile profileModel.Profile) {
 	EnqueueProfileForProcessing(profile)
 }
 
-// StopProfileWorker gracefully shuts down the profile unification queue.
-// It nils out the global reference under a write lock before calling Close,
-// ensuring no concurrent Enqueue can send on a closed queue. It should be
-// called during application shutdown.
-func StopProfileWorker() error {
+// StopProfileWorker shuts the profile unification queue down inside ctx. It
+// nils out the global reference under a write lock first, so no concurrent
+// Enqueue can send on a closed queue.
+//
+// It returns nil when every unification job that was at work returned on its
+// own, and ErrShutdownIncomplete when the deadline passed with a job still
+// running.
+//
+// It is safe to call more than once.
+func StopProfileWorker(ctx context.Context) error {
 	profileQueueMu.Lock()
 	q := activeProfileQueue
-	activeProfileQueue = nil
+	lifecycle := profileLifecycle
+	activeProfileQueue, profileLifecycle = nil, nil
 	profileQueueMu.Unlock()
-	if q != nil {
-		return q.Close()
+
+	if q == nil {
+		return nil
 	}
-	return nil
+	if lifecycle == nil {
+		return q.Close(ctx)
+	}
+	return lifecycle.stop(ctx, q.Close)
 }
 
 // unifyProfiles unifies profiles based on unification rules

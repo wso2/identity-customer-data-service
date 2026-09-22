@@ -38,6 +38,10 @@ cloud:
             enabled: true
             interval: 86400    # in seconds (24 hours)
             batch_size: 500
+        shutdown:
+          # Bounds the whole graceful shutdown of the application. Keep it below
+          # terminationGracePeriodSeconds.
+          gracePeriodSeconds: 25
         sync:
           schema:
             enabled: true
@@ -103,6 +107,10 @@ cloud:
       replicas: 2
       progressDeadlineSeconds: 300
       minReadySeconds: 30
+      # The outer limit Kubernetes allows a pod to stop in. Keep it above
+      # config.shutdown.gracePeriodSeconds, so the application has time to
+      # finish and exit before SIGKILL.
+      terminationGracePeriodSeconds: 30
       strategy:
         rollingUpdate:
           maxSurge: 1
