@@ -58,9 +58,9 @@ unit-test:
 
 mq-integration-test:
 ifdef test
-	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/activemq_integration/... -run $(test)
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/activemq_integration/... ./test/queue_integration/... -run $(test)
 else
-	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/activemq_integration/...
+	TESTCONTAINERS_RYUK_DISABLED=true go test -v ./test/activemq_integration/... ./test/queue_integration/...
 endif
 
 # Build the Go project.
