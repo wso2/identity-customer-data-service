@@ -19,6 +19,7 @@
 package activemq
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -66,7 +67,9 @@ func init() {
 // installed so consumers can detect whether a closed subscription belongs to
 // an intentionally retired connection or to the current live connection.
 // The done channel is used to signal consumer goroutines to exit during
-// graceful shutdown.
+// graceful shutdown. The netConn field holds the socket of the current
+// connection, so that a close which does not finish inside its deadline can be
+// ended by force.
 type managedConn struct {
 	addr     string
 	username string
@@ -75,10 +78,20 @@ type managedConn struct {
 
 	mu          sync.RWMutex
 	conn        *stomp.Conn
+	netConn     net.Conn
 	generation  uint64
 	reconnectMu sync.Mutex
 	done        chan struct{}
 	doneOnce    sync.Once
+	// closed guards the install in dial against a concurrent shutdown. It is
+	// read and written under mu, which is also the lock that installs a
+	// connection, so a connection is never installed after shutdown.
+	closed bool
+
+	// closeOnce disconnects once and keeps the result, so a repeated Close
+	// returns the same answer.
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func newManagedConn(addr, username, password string, tlsCfg config.TLSConfig) (*managedConn, error) {
@@ -180,8 +193,14 @@ func (mc *managedConn) dial() error {
 	}
 
 	mc.mu.Lock()
+	if mc.closed {
+		mc.mu.Unlock()
+		_ = netConn.Close()
+		return fmt.Errorf("activemq: the connection to %s was not installed because the queue is closed", mc.addr)
+	}
 	oldConn := mc.conn
 	mc.conn = stompConn
+	mc.netConn = netConn
 	mc.generation++
 	mc.mu.Unlock()
 
@@ -210,6 +229,10 @@ func (mc *managedConn) getConnAndGeneration() (*stomp.Conn, uint64) {
 // shutdown signals all consumer goroutines to stop. Safe to call more than
 // once.
 func (mc *managedConn) shutdown() {
+	mc.mu.Lock()
+	mc.closed = true
+	mc.mu.Unlock()
+
 	mc.doneOnce.Do(func() { close(mc.done) })
 }
 
@@ -221,6 +244,49 @@ func (mc *managedConn) isShuttingDown() bool {
 	default:
 		return false
 	}
+}
+
+// closeWithin stops the consumer goroutines and disconnects from the broker
+// inside ctx. It is safe to call more than once.
+func (mc *managedConn) closeWithin(ctx context.Context) error {
+
+	mc.closeOnce.Do(func() { mc.closeErr = mc.disconnectWithin(ctx) })
+	return mc.closeErr
+}
+
+// disconnectWithin ends the current connection inside ctx. go-stomp waits
+// longer for a disconnect receipt than the whole shutdown deadline, so the
+// socket is closed by force when ctx expires first.
+//
+// The connection itself is kept, so a late Enqueue reports a send error.
+func (mc *managedConn) disconnectWithin(ctx context.Context) error {
+
+	mc.shutdown()
+
+	mc.mu.RLock()
+	conn, netConn := mc.conn, mc.netConn
+	mc.mu.RUnlock()
+
+	if conn == nil {
+		return nil
+	}
+
+	result := make(chan error, 1)
+	go func() { result <- conn.Disconnect() }()
+
+	select {
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+	}
+
+	if netConn != nil {
+		_ = netConn.Close()
+	}
+	<-result
+
+	return fmt.Errorf("activemq: the shutdown deadline passed, so the connection to %s was closed by force: %w",
+		mc.addr, ctx.Err())
 }
 
 // reconnectWithBackoff attempts to re-establish the connection, retrying up
@@ -250,7 +316,17 @@ func (mc *managedConn) reconnectWithBackoff(context string, maxAttempts int) err
 			context, backoff, attempt,
 		))
 
-		time.Sleep(backoff)
+		timer := time.NewTimer(backoff)
+		select {
+		case <-mc.done:
+			timer.Stop()
+			return fmt.Errorf("activemq: reconnect aborted, shutting down (%s)", context)
+		case <-timer.C:
+		}
+
+		if mc.isShuttingDown() {
+			return fmt.Errorf("activemq: reconnect aborted, shutting down (%s)", context)
+		}
 
 		if err := mc.dial(); err != nil {
 			logger.Error(fmt.Sprintf("activemq: reconnect failed: %v", err))
@@ -419,11 +495,10 @@ func (q *ProfileQueue) Start(handler func(profileModel.Profile)) error {
 	return nil
 }
 
-// Close signals the consumer goroutine to stop and gracefully disconnects
-// from ActiveMQ. Safe to call more than once.
-func (q *ProfileQueue) Close() error {
-	q.mc.shutdown()
-	return q.mc.getConn().Disconnect()
+// Close signals the consumer goroutine to stop and disconnects from ActiveMQ
+// inside ctx. Safe to call more than once.
+func (q *ProfileQueue) Close(ctx context.Context) error {
+	return q.mc.closeWithin(ctx)
 }
 
 // -----------------------------------------------------------------------
@@ -541,9 +616,8 @@ func (q *SchemaSyncQueue) Start(handler func(schemaModel.ProfileSchemaSync)) err
 	return nil
 }
 
-// Close signals the consumer goroutine to stop and gracefully disconnects
-// from ActiveMQ. Safe to call more than once.
-func (q *SchemaSyncQueue) Close() error {
-	q.mc.shutdown()
-	return q.mc.getConn().Disconnect()
+// Close signals the consumer goroutine to stop and disconnects from ActiveMQ
+// inside ctx. Safe to call more than once.
+func (q *SchemaSyncQueue) Close(ctx context.Context) error {
+	return q.mc.closeWithin(ctx)
 }

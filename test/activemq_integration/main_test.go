@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -97,8 +98,10 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// ── Teardown ──────────────────────────────────────────────────────────────
-	_ = workers.StopProfileWorker()
-	_ = workers.StopSchemaSyncWorker()
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), constants.DefaultShutdownGracePeriod)
+	_ = workers.StopProfileWorker(shutdownCtx)
+	_ = workers.StopSchemaSyncWorker(shutdownCtx)
+	cancelShutdown()
 	_ = pg.Container.Terminate(ctx)
 	_ = amq.Container.Terminate(ctx)
 

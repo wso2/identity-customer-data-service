@@ -37,6 +37,9 @@ import (
 var (
 	schemaSyncQueueMu     sync.RWMutex
 	activeSchemaSyncQueue queue.SchemaSyncQueue
+	// schemaSyncLifecycle counts the jobs that are at work, so that shutdown
+	// waits for them before the database pool closes.
+	schemaSyncLifecycle *jobLifecycle
 )
 
 // StartSchemaSyncWorker initialises the schema sync queue (using the provider
@@ -51,16 +54,24 @@ func StartSchemaSyncWorker() error {
 	}
 	// A queue message has no caller, so the worker is the context boundary for
 	// the work one message causes.
-	workerCtx := context.Background()
+	lifecycle := newJobLifecycle()
 
 	if err := q.Start(func(schemaSync model.ProfileSchemaSync) {
-		processSchemaSyncJob(workerCtx, schemaSync)
+		err := lifecycle.run(func(ctx context.Context) {
+			processSchemaSyncJob(ctx, schemaSync)
+		})
+		if err != nil {
+			log.GetLogger().Info(fmt.Sprintf(
+				"workers: the schema sync worker is stopping, so the job for tenant %s did not run: %v",
+				schemaSync.OrgId, err))
+		}
 	}); err != nil {
-		_ = q.Close()
+		_ = q.Close(context.Background())
 		return fmt.Errorf("workers: failed to start schema sync queue: %w", err)
 	}
 	schemaSyncQueueMu.Lock()
 	activeSchemaSyncQueue = q
+	schemaSyncLifecycle = lifecycle
 	schemaSyncQueueMu.Unlock()
 	return nil
 }
@@ -79,19 +90,29 @@ func EnqueueSchemaSyncJob(schemaSync model.ProfileSchemaSync) error {
 	return q.Enqueue(schemaSync)
 }
 
-// StopSchemaSyncWorker gracefully shuts down the schema sync queue. It nils
-// out the global reference under a write lock before calling Close, ensuring
-// no concurrent Enqueue can send on a closed queue. It should be called
-// during application shutdown.
-func StopSchemaSyncWorker() error {
+// StopSchemaSyncWorker shuts the schema sync queue down inside ctx. It nils
+// out the global reference under a write lock first, so no concurrent Enqueue
+// can send on a closed queue.
+//
+// It returns nil when every schema sync job that was at work returned on its
+// own, and ErrShutdownIncomplete when the deadline passed with a job still
+// running.
+//
+// It is safe to call more than once.
+func StopSchemaSyncWorker(ctx context.Context) error {
 	schemaSyncQueueMu.Lock()
 	q := activeSchemaSyncQueue
-	activeSchemaSyncQueue = nil
+	lifecycle := schemaSyncLifecycle
+	activeSchemaSyncQueue, schemaSyncLifecycle = nil, nil
 	schemaSyncQueueMu.Unlock()
-	if q != nil {
-		return q.Close()
+
+	if q == nil {
+		return nil
 	}
-	return nil
+	if lifecycle == nil {
+		return q.Close(ctx)
+	}
+	return lifecycle.stop(ctx, q.Close)
 }
 
 // processSchemaSyncJob processes a schema sync job

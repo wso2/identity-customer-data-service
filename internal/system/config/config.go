@@ -154,8 +154,16 @@ type Config struct {
 	TLS          TLSConfig          `yaml:"tls"`
 	Cleanup      CleanupConfig      `yaml:"cleanup"`
 	MessageQueue MessageQueueConfig `yaml:"message_queue"`
+	Shutdown     ShutdownConfig     `yaml:"shutdown"`
 	// ApplicationIdentifierType selects how applications are identified: "client_id" (default) or "app_id".
 	ApplicationIdentifierType string `yaml:"application_identifier_type"`
+}
+
+// ShutdownConfig bounds the graceful shutdown of the whole process. Zero, which
+// is also what an omitted field gives, means "use the application default". A
+// negative value is refused at start.
+type ShutdownConfig struct {
+	GracePeriodSeconds int `yaml:"grace_period_seconds"`
 }
 
 // UsesAppIDIdentifier reports whether applications are identified by the app ID.

@@ -21,6 +21,7 @@ package workers
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile/store"
@@ -29,9 +30,15 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
-// cookieCleanupCancel stops the worker and cancels the database work that a
-// sweep has in flight.
-var cookieCleanupCancel context.CancelFunc
+var (
+	cookieCleanupMu sync.Mutex
+	// cookieCleanupCancel stops the worker and cancels the database work that
+	// a sweep has in flight.
+	cookieCleanupCancel context.CancelFunc
+	// cookieCleanupDone is closed when the worker goroutine returns. Shutdown
+	// waits on it before the database pool closes.
+	cookieCleanupDone chan struct{}
+)
 
 func StartCookieCleanupWorker(cfg config.CookieCleanupConfig) {
 
@@ -49,7 +56,12 @@ func StartCookieCleanupWorker(cfg config.CookieCleanupConfig) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	cookieCleanupMu.Lock()
 	cookieCleanupCancel = cancel
+	cookieCleanupDone = done
+	cookieCleanupMu.Unlock()
 
 	logger.Info(fmt.Sprintf("Cookie cleanup worker started. Interval: %s, Batch size: %d",
 		interval, batchSize))
@@ -57,6 +69,7 @@ func StartCookieCleanupWorker(cfg config.CookieCleanupConfig) {
 	ticker := time.NewTicker(interval)
 
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 		for {
 			select {
@@ -70,9 +83,35 @@ func StartCookieCleanupWorker(cfg config.CookieCleanupConfig) {
 	}()
 }
 
-func StopCookieCleanupWorker() {
-	if cookieCleanupCancel != nil {
-		cookieCleanupCancel()
+// StopCookieCleanupWorker stops the worker and returns when its goroutine has
+// gone, so that the caller can close the database pool.
+//
+// The sweep is cancelled at once, because it deletes in batches and the next
+// start continues where it stopped.
+//
+// It returns ErrShutdownIncomplete when ctx expires first, and it is safe to
+// call more than once.
+func StopCookieCleanupWorker(ctx context.Context) error {
+
+	cookieCleanupMu.Lock()
+	cancel, done := cookieCleanupCancel, cookieCleanupDone
+	cookieCleanupCancel, cookieCleanupDone = nil, nil
+	cookieCleanupMu.Unlock()
+
+	if cancel == nil {
+		return nil
+	}
+	cancel()
+
+	if done == nil {
+		return nil
+	}
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ErrShutdownIncomplete
 	}
 }
 
