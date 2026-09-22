@@ -27,6 +27,7 @@ import (
 
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaStore "github.com/wso2/identity-customer-data-service/internal/profile_schema/store"
+	cdserrors "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
 // Test_StoreStopsOnACancelledContext checks that the context a handler passes
@@ -40,7 +41,7 @@ func Test_StoreStopsOnACancelledContext(t *testing.T) {
 	start := time.Now()
 	_, err := profileStore.GetProfile(ctx, "any-profile-id")
 	require.Error(t, err)
-	require.ErrorIs(t, err, context.Canceled)
+	requireCauseIs(t, err, context.Canceled)
 	require.Less(t, time.Since(start), 5*time.Second)
 }
 
@@ -54,7 +55,7 @@ func Test_StoreStopsOnAnExpiredContext(t *testing.T) {
 
 	_, err := schemaStore.GetProfileSchemaAttributesForOrg(ctx, "any-org")
 	require.Error(t, err)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	requireCauseIs(t, err, context.DeadlineExceeded)
 }
 
 // Test_TransactionStopsOnACancelledContext covers the transaction path, which
@@ -66,5 +67,20 @@ func Test_TransactionStopsOnACancelledContext(t *testing.T) {
 
 	err := profileStore.UpdateProfileConsents(ctx, "any-profile-id", nil)
 	require.Error(t, err)
-	require.ErrorIs(t, err, context.Canceled)
+	requireCauseIs(t, err, context.Canceled)
+}
+
+// requireCauseIs checks that the cause of a store failure is target.
+//
+// A store wraps its cause in a ServerError, which carries it in a field rather
+// than in the error chain, so errors.Is on the result alone would not find it.
+// The chain below that field is intact, because every layer under it wraps
+// with %w.
+func requireCauseIs(t *testing.T, err error, target error) {
+
+	t.Helper()
+
+	var serverErr *cdserrors.ServerError
+	require.ErrorAs(t, err, &serverErr)
+	require.ErrorIs(t, serverErr.Err, target)
 }
