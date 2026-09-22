@@ -1,5 +1,11 @@
 # CDS Documentation
 
+## Architecture
+
+| Document | Description |
+|---|---|
+| [Architecture](architecture.md) | How CDS is put together — request path, layering, data layer, workers, security, and the conventions that hold them together |
+
 ## Concepts
 
 | Document | Description |
