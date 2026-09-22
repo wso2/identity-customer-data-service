@@ -20,6 +20,7 @@ package workers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -56,15 +57,16 @@ func StartSchemaSyncWorker() error {
 	// the work one message causes.
 	lifecycle := newJobLifecycle()
 
-	if err := q.Start(func(schemaSync model.ProfileSchemaSync) {
-		err := lifecycle.run(func(ctx context.Context) {
-			processSchemaSyncJob(ctx, schemaSync)
+	if err := q.Start(func(schemaSync model.ProfileSchemaSync) error {
+		err := lifecycle.run(func(ctx context.Context) error {
+			return processSchemaSyncJob(ctx, schemaSync)
 		})
-		if err != nil {
+		if errors.Is(err, ErrWorkerStopping) {
 			log.GetLogger().Info(fmt.Sprintf(
 				"workers: the schema sync worker is stopping, so the job for tenant %s did not run: %v",
 				schemaSync.OrgId, err))
 		}
+		return err
 	}); err != nil {
 		_ = q.Close(context.Background())
 		return fmt.Errorf("workers: failed to start schema sync queue: %w", err)
@@ -115,8 +117,10 @@ func StopSchemaSyncWorker(ctx context.Context) error {
 	return lifecycle.stop(ctx, q.Close)
 }
 
-// processSchemaSyncJob processes a schema sync job
-func processSchemaSyncJob(ctx context.Context, schemaSync model.ProfileSchemaSync) {
+// processSchemaSyncJob processes a schema sync job. It returns an error when
+// the synchronisation did not happen, so that the caller can have the job
+// again.
+func processSchemaSyncJob(ctx context.Context, schemaSync model.ProfileSchemaSync) error {
 
 	logger := log.GetLogger()
 	logger.Info(fmt.Sprintf("Processing schema sync job for tenant: %s, event: %s", schemaSync.OrgId, schemaSync.Event))
@@ -127,8 +131,9 @@ func processSchemaSyncJob(ctx context.Context, schemaSync model.ProfileSchemaSyn
 	err := schemaService.SyncProfileSchema(ctx, schemaSync.OrgId)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to sync profile schema for tenant: %s", schemaSync.OrgId), log.Error(err))
-		return
+		return fmt.Errorf("workers: failed to sync the profile schema of tenant %s: %w", schemaSync.OrgId, err)
 	}
 
 	logger.Info(fmt.Sprintf("Profile schema sync completed successfully for tenant: %s", schemaSync.OrgId))
+	return nil
 }

@@ -71,15 +71,17 @@ func (l *jobLifecycle) begin() bool {
 // run executes one job under the worker context and counts it as active until
 // the handler returns. It refuses a job that arrives after the worker has
 // started to stop.
-func (l *jobLifecycle) run(work func(ctx context.Context)) error {
+//
+// It returns what the job returned, so the caller of the worker learns whether
+// the work is done. ErrWorkerStopping means the job did not run at all.
+func (l *jobLifecycle) run(work func(ctx context.Context) error) error {
 
 	if !l.begin() {
 		return ErrWorkerStopping
 	}
 	defer l.active.Done()
 
-	work(l.ctx)
-	return nil
+	return work(l.ctx)
 }
 
 // stop ends the worker in one order: no further job starts, the jobs that are

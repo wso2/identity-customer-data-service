@@ -43,7 +43,12 @@ type ProfileUnificationQueue interface {
 	// Implementations must start the consumer loop in a separate goroutine
 	// so that Start returns immediately. An error is returned when the queue
 	// cannot be started (e.g. broker subscription failure).
-	Start(handler func(profileModel.Profile)) error
+	//
+	// The handler reports the outcome of the item: nil when the work is done,
+	// and an error when it is not. A provider that can deliver an item again
+	// keeps an item the handler refused, and gives up on it only in a way the
+	// operator can see.
+	Start(handler func(profileModel.Profile) error) error
 
 	// Close performs a graceful shutdown of the queue, flushing any
 	// in-flight items and releasing underlying resources (connections,
@@ -67,7 +72,12 @@ type SchemaSyncQueue interface {
 	// Implementations must start the consumer loop in a separate goroutine
 	// so that Start returns immediately. An error is returned when the queue
 	// cannot be started (e.g. broker subscription failure).
-	Start(handler func(schemaModel.ProfileSchemaSync)) error
+	//
+	// The handler reports the outcome of the item: nil when the work is done,
+	// and an error when it is not. A provider that can deliver an item again
+	// keeps an item the handler refused, and gives up on it only in a way the
+	// operator can see.
+	Start(handler func(schemaModel.ProfileSchemaSync) error) error
 
 	// Close performs a graceful shutdown of the queue, flushing any
 	// in-flight items and releasing underlying resources (connections,

@@ -106,6 +106,9 @@ shutdown:
 # message delivery. Leave type as "memory" (or omit the block entirely) to
 # use the built-in in-memory queue, which is the default and is suitable
 # for local and single-instance deployments.
+# A job is acknowledged only after it is done, so a broker holds it until then.
+# A job that keeps failing is moved to "<queue name>.DLQ" after a few attempts,
+# where an operator can look at it and the queue behind it can move again.
 message_queue:
   type: "memory" # Options: "memory" (default), "activemq", or any registered custom provider
   broker:

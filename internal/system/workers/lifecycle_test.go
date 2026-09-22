@@ -72,11 +72,12 @@ func Test_stop_waitsForAnActiveJob(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	go func() {
-		_ = lifecycle.run(func(context.Context) {
+		_ = lifecycle.run(func(context.Context) error {
 			queue.active.Add(1)
 			close(started)
 			<-release
 			queue.active.Add(-1)
+			return nil
 		})
 	}()
 	<-started
@@ -119,10 +120,11 @@ func Test_stop_closesTheQueueAfterEveryHandlerReturns(t *testing.T) {
 
 	for i := 0; i < 8; i++ {
 		go func() {
-			_ = lifecycle.run(func(context.Context) {
+			_ = lifecycle.run(func(context.Context) error {
 				queue.active.Add(1)
 				time.Sleep(time.Millisecond)
 				queue.active.Add(-1)
+				return nil
 			})
 		}()
 	}
@@ -153,13 +155,31 @@ func Test_run_refusesAJobAfterTheWorkerStops(t *testing.T) {
 	}
 
 	var ran atomic.Bool
-	err := lifecycle.run(func(context.Context) { ran.Store(true) })
+	err := lifecycle.run(func(context.Context) error {
+		ran.Store(true)
+		return nil
+	})
 
 	if !errors.Is(err, ErrWorkerStopping) {
 		t.Errorf("expected ErrWorkerStopping, got %v", err)
 	}
 	if ran.Load() {
 		t.Error("the job ran after the worker had started to stop")
+	}
+}
+
+// Test_run_reportsWhatTheJobReturned checks that the outcome of the work
+// reaches the caller, which is how a queue learns that a message must stay.
+func Test_run_reportsWhatTheJobReturned(t *testing.T) {
+
+	lifecycle := newJobLifecycle()
+	failure := errors.New("the database is not available")
+
+	if err := lifecycle.run(func(context.Context) error { return failure }); !errors.Is(err, failure) {
+		t.Errorf("expected the failure of the job, got %v", err)
+	}
+	if err := lifecycle.run(func(context.Context) error { return nil }); err != nil {
+		t.Errorf("expected a job that succeeded to report nil, got %v", err)
 	}
 }
 
@@ -173,10 +193,11 @@ func Test_stop_cancelsTheJobAtTheDeadline(t *testing.T) {
 	started := make(chan struct{})
 	cancelled := make(chan struct{})
 	go func() {
-		_ = lifecycle.run(func(jobCtx context.Context) {
+		_ = lifecycle.run(func(jobCtx context.Context) error {
 			close(started)
 			<-jobCtx.Done()
 			close(cancelled)
+			return nil
 		})
 	}()
 	<-started
@@ -209,9 +230,10 @@ func Test_stop_reportsAnIncompleteShutdownAsSuch(t *testing.T) {
 	t.Cleanup(func() { close(release) })
 
 	go func() {
-		_ = lifecycle.run(func(context.Context) {
+		_ = lifecycle.run(func(context.Context) error {
 			close(started)
 			<-release
+			return nil
 		})
 	}()
 	<-started

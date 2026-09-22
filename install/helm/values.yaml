@@ -79,6 +79,8 @@ cloud:
           certName: "wso2carbontls.cer"
 
         message_queue:
+          # A job that keeps failing is moved to "<queue name>.DLQ", so that the
+          # queue behind it can move again.
           type: "memory" # Options: "activemq", "memory"
           broker:
             addr: "localhost"

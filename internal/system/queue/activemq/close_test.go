@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-stomp/stomp/v3"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
@@ -199,6 +200,51 @@ func Test_Close_endsTheConnectionAtTheDeadline(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Error("the connection to the broker was left open")
 	}
+
+	if after := settledGoroutines(); after > baseline {
+		t.Errorf("the close left %d goroutines behind", after-baseline)
+	}
+}
+
+// Test_Close_keepsItsDeadlineWhileASendIsWaiting covers the close that has to
+// wait its turn. A send that waits for a receipt holds the connection, so the
+// graceful disconnect starts only after it, and go-stomp then allows another 30
+// seconds for the receipt of the disconnect itself. Both waits are bounded well
+// inside the shutdown budget of the application.
+func Test_Close_keepsItsDeadlineWhileASendIsWaiting(t *testing.T) {
+
+	broker := startFakeBroker(t, false)
+
+	baseline := settledGoroutines()
+
+	q, err := NewProfileQueue(broker.addr(), "", "", "/queue/profiles", config.TLSConfig{})
+	if err != nil {
+		t.Fatalf("failed to connect to the fake broker: %v", err)
+	}
+
+	sending := make(chan error, 1)
+	go func() {
+		sending <- q.mc.getConn().Send("/queue/profiles", contentTypeJSON, []byte("{}"), stomp.SendOpt.Receipt)
+	}()
+
+	// Let the send take the connection before the close starts.
+	time.Sleep(200 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	closeErr := q.Close(ctx)
+	elapsed := time.Since(start)
+
+	if closeErr == nil {
+		t.Fatal("expected the forced close to be reported")
+	}
+	if elapsed > 12*time.Second {
+		t.Errorf("the close took %s, so a receipt it waits for is not bounded", elapsed)
+	}
+
+	<-sending
 
 	if after := settledGoroutines(); after > baseline {
 		t.Errorf("the close left %d goroutines behind", after-baseline)
