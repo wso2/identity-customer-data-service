@@ -42,6 +42,13 @@ CREATE TABLE IF NOT EXISTS profile_reference
     reference_reason             VARCHAR(255)
 );
 
+CREATE TABLE IF NOT EXISTS profile_unification_events
+(
+    event_id     VARCHAR(255) PRIMARY KEY,
+    profile_id   VARCHAR(255) NOT NULL,
+    processed_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00')
+);
+
 CREATE TABLE IF NOT EXISTS profile_schema
 (
     attribute_id           VARCHAR(255) NOT NULL PRIMARY KEY,

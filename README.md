@@ -168,6 +168,21 @@ Apply the schema:
 docker exec -i postgres psql -U cdsuser -d cdsdb < dbscripts/postgres.sql
 ```
 
+For an existing PostgreSQL installation, apply the profile-unification
+migration before deploying a version with atomic unification (do not rerun the
+full fresh-install schema):
+
+```bash
+docker exec -i postgres psql -v ON_ERROR_STOP=1 -U cdsuser -d cdsdb \
+  < dbscripts/migrations/001_profile_unification_events.sql
+```
+
+The `profile_unification_events` table records processed queue event IDs. It
+allows a redelivered event to be skipped without repeating a committed merge;
+the event claim and all merge writes commit in one database transaction. Keep
+the records for as long as a broker message can be redelivered. This does not
+make initial profile writes and broker enqueue atomic, or add broker retries.
+
 Set `DB_PASSWORD=cdspwd` in your `dev.env`, and point the datasource at it:
 
 ```yaml

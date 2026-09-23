@@ -39,7 +39,10 @@ type Reference struct {
 }
 
 type Profile struct {
-	ProfileId          string                 `json:"profile_id" bson:"profile_id"`
+	ProfileId string `json:"profile_id" bson:"profile_id"`
+	// UnificationEventID identifies one enqueue operation across broker redelivery.
+	// It is transport metadata, not part of the persisted profile row.
+	UnificationEventID string                 `json:"unification_event_id,omitempty" bson:"-"`
 	UserId             string                 `json:"user_id" bson:"user_id"`
 	OrgHandle          string                 `json:"org_handle" bson:"org_handle"`
 	CreatedAt          time.Time              `json:"created_at" bson:"created_at"`

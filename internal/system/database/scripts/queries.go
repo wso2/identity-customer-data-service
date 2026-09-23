@@ -387,6 +387,42 @@ var FetchReferencedProfiles = newQuery("CDS-PRF-16",
 		FROM profile_reference 
 		WHERE reference_profile_id = $1;`)
 
+// Unification claims and locks are kept in the same transaction as the merge.
+var ClaimProfileUnificationEvent = newQuery("CDS-PRF-19",
+	`INSERT INTO profile_unification_events (event_id, profile_id)
+	 VALUES ($1, $2) ON CONFLICT (event_id) DO NOTHING`)
+
+var GetProfileUnificationEvent = newQuery("CDS-PRF-20",
+	`SELECT event_id FROM profile_unification_events WHERE event_id = $1`)
+
+var LockProfileForUnification = newQuery("CDS-PRF-21",
+	`SELECT p.profile_id, p.user_id, p.org_handle, p.created_at, p.updated_at,
+	        p.location, p.list_profile, p.delete_profile, p.traits,
+	        p.identity_attributes, r.profile_status, r.reference_profile_id,
+	        r.reference_reason
+	 FROM profiles p JOIN profile_reference r ON r.profile_id = p.profile_id
+	 WHERE p.profile_id = $1 FOR UPDATE OF p, r`,
+	`SELECT p.profile_id, p.user_id, p.org_handle, p.created_at, p.updated_at,
+	        p.location, p.list_profile, p.delete_profile, p.traits,
+	        p.identity_attributes, r.profile_status, r.reference_profile_id,
+	        r.reference_reason
+	 FROM profiles p JOIN profile_reference r ON r.profile_id = p.profile_id
+	 WHERE p.profile_id = $1`)
+
+var LockApplicationDataForUnification = newQuery("CDS-PRF-22",
+	`SELECT app_id, application_data FROM application_data
+	 WHERE profile_id = $1 ORDER BY app_id FOR UPDATE`,
+	`SELECT app_id, application_data FROM application_data
+	 WHERE profile_id = $1 ORDER BY app_id`)
+
+var UpdateUnificationReference = newQuery("CDS-PRF-23",
+	`UPDATE profile_reference
+	 SET reference_profile_id = $1, reference_reason = $2, profile_status = $3
+	 WHERE profile_id = $4 AND org_handle = $5
+	 AND (($6 = '' AND profile_status = 'REFERENCE_PROFILE'
+	       AND (reference_profile_id IS NULL OR reference_profile_id = ''))
+	      OR ($6 <> '' AND profile_status = 'MERGED_TO' AND reference_profile_id = $6))`)
+
 var GetProfileByUserId = newQuery("CDS-PRF-17",
 	`
 		SELECT p.profile_id, p.user_id, p.created_at, p.updated_at,p.location, p.org_handle, p.list_profile, p.delete_profile, 
