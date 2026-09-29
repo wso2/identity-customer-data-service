@@ -52,8 +52,9 @@ type AuthServerConfig struct {
 	IsSystemAppGrantEnabled   bool                `yaml:"isSystemAppGrantEnabled"`
 }
 
-// SQLiteConfig holds the settings for the inbuilt datasource. Every field is
-// optional and falls back to a default.
+// SQLiteConfig holds the settings for the inbuilt datasource. A numeric field
+// of zero, which is also what an omitted field gives, means "use the
+// application default". A negative value is refused at start.
 type SQLiteConfig struct {
 	// Path is the database file location, relative to CDS_HOME unless
 	// absolute.
@@ -63,6 +64,30 @@ type SQLiteConfig struct {
 	Options string `yaml:"options"`
 	// MaxOpenConns bounds the connection pool.
 	MaxOpenConns int `yaml:"max_open_conns"`
+}
+
+// PostgresConfig holds the connection pool settings for PostgreSQL. The values
+// are per instance, because one instance holds one pool. A field of zero,
+// which is also what an omitted field gives, means "use the application
+// default". A negative value is refused at start.
+type PostgresConfig struct {
+	// MaxOpenConns bounds the connections the pool holds, in use and idle
+	// together.
+	MaxOpenConns int `yaml:"max_open_conns"`
+	// MaxIdleConns is how many unused connections stay open. It may not be
+	// above MaxOpenConns, and the server refuses to start when it is.
+	MaxIdleConns int `yaml:"max_idle_conns"`
+	// ConnMaxLifetimeSeconds retires a connection at this age, even a healthy
+	// one, so that a failover or a DNS change takes effect.
+	ConnMaxLifetimeSeconds int `yaml:"conn_max_lifetime_seconds"`
+	// ConnMaxIdleTimeSeconds closes a connection that stays unused for this
+	// long.
+	ConnMaxIdleTimeSeconds int `yaml:"conn_max_idle_time_seconds"`
+	// ConnectTimeoutSeconds bounds one connection attempt, from the TCP dial to
+	// the end of the startup handshake. It also bounds the check that runs when
+	// the pool opens, so a database that cannot be reached fails the server
+	// start within a known time instead of waiting for the operating system.
+	ConnectTimeoutSeconds int `yaml:"connect_timeout_seconds"`
 }
 
 // DataSourceConfig selects and configures the database.
@@ -77,11 +102,8 @@ type DataSourceConfig struct {
 	Password string `yaml:"password"`
 	SSLMode  string `yaml:"sslmode"`
 
-	// Connection pool sizing. Zero means "use the built-in default" so existing
-	// deployment.yaml files keep working untouched.
-	MaxOpenConns    int `yaml:"max_open_conns"`
-	MaxIdleConns    int `yaml:"max_idle_conns"`
-	ConnMaxLifetime int `yaml:"conn_max_lifetime_seconds"`
+	// PostgreSQL connection pool settings. Read only when Type is "postgres".
+	Postgres PostgresConfig `yaml:"postgres"`
 
 	// SQLite settings. Read only when Type is "sqlite".
 	SQLite SQLiteConfig `yaml:"sqlite"`
@@ -134,6 +156,7 @@ type Config struct {
 	TLS          TLSConfig          `yaml:"tls"`
 	Cleanup      CleanupConfig      `yaml:"cleanup"`
 	MessageQueue MessageQueueConfig `yaml:"message_queue"`
+	Shutdown     ShutdownConfig     `yaml:"shutdown"`
 	// ApplicationIdentifierType selects how applications are identified: "client_id" (default) or "app_id".
 	ApplicationIdentifierType string `yaml:"application_identifier_type"`
 
@@ -151,6 +174,13 @@ type IdentityResolutionConfig struct {
 	// effect of a change before committing to it, the derived values are the safer contract
 	// and the fields are rejected rather than quietly ignored.
 	AllowEvidenceStrengthOverride bool `yaml:"allow_evidence_strength_override"`
+}
+
+// ShutdownConfig bounds the graceful shutdown of the whole process. Zero, which
+// is also what an omitted field gives, means "use the application default". A
+// negative value is refused at start.
+type ShutdownConfig struct {
+	GracePeriodSeconds int `yaml:"grace_period_seconds"`
 }
 
 // UsesAppIDIdentifier reports whether applications are identified by the app ID.

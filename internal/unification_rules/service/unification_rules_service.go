@@ -19,6 +19,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -32,11 +33,12 @@ import (
 )
 
 type UnificationRuleServiceInterface interface {
-	AddUnificationRule(rule model.UnificationRule, orgHandle string) error
-	GetUnificationRules(orgHandle string) ([]model.UnificationRule, error)
-	GetUnificationRule(ruleId string) (*model.UnificationRule, error)
-	PatchUnificationRule(ruleId, orgHandle string, updatedRule model.UnificationRule) error
-	DeleteUnificationRule(ruleId string) error
+	AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgHandle string) error
+	GetUnificationRules(ctx context.Context, orgHandle string) ([]model.UnificationRule, error)
+	GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationRule, error)
+	PatchUnificationRule(ctx context.Context, ruleId, orgHandle string, updatedRule model.UnificationRule) error
+	DeleteUnificationRule(ctx context.Context, ruleId string) error
+	// GetUnificationOptions reads no data, so it takes no context.
 	GetUnificationOptions() model.UnificationOptionsResponse
 }
 
@@ -50,7 +52,8 @@ func GetUnificationRuleService() UnificationRuleServiceInterface {
 }
 
 // AddUnificationRule Adds a new unification rule.
-func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule, orgHandle string) error {
+func (urs *UnificationRuleService) AddUnificationRule(ctx context.Context,
+	rule model.UnificationRule, orgHandle string) error {
 
 	logger := log.GetLogger()
 	// Need to specifically prevent
@@ -71,7 +74,7 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 	}
 
 	profileSchemaService := provider.NewProfileSchemaProvider().GetProfileSchemaService()
-	schemaAttribute, err := profileSchemaService.GetProfileSchemaAttributeByName(rule.PropertyName, rule.OrgHandle)
+	schemaAttribute, err := profileSchemaService.GetProfileSchemaAttributeByName(ctx, rule.PropertyName, rule.OrgHandle)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while checking for the property: %s", rule.PropertyName)
@@ -101,7 +104,7 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 	}
 
 	// Check if a similar unification rule already exists
-	existingRules, err := store.GetUnificationRules(orgHandle)
+	existingRules, err := store.GetUnificationRules(ctx, orgHandle)
 	if err != nil {
 		return err
 	}
@@ -122,18 +125,20 @@ func (urs *UnificationRuleService) AddUnificationRule(rule model.UnificationRule
 		}
 	}
 	rule.PropertyId = schemaAttribute.AttributeId
-	return store.AddUnificationRule(rule, orgHandle)
+	return store.AddUnificationRule(ctx, rule, orgHandle)
 }
 
 // GetUnificationRules Fetches all resolution rules.
-func (urs *UnificationRuleService) GetUnificationRules(orgHandle string) ([]model.UnificationRule, error) {
-	return store.GetUnificationRules(orgHandle)
+func (urs *UnificationRuleService) GetUnificationRules(ctx context.Context,
+	orgHandle string) ([]model.UnificationRule, error) {
+	return store.GetUnificationRules(ctx, orgHandle)
 }
 
 // GetUnificationRule Fetches a specific resolution rule.
-func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.UnificationRule, error) {
+func (urs *UnificationRuleService) GetUnificationRule(ctx context.Context,
+	ruleId string) (*model.UnificationRule, error) {
 
-	unificationRule, err := store.GetUnificationRule(ruleId)
+	unificationRule, err := store.GetUnificationRule(ctx, ruleId)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +153,8 @@ func (urs *UnificationRuleService) GetUnificationRule(ruleId string) (*model.Uni
 }
 
 // PatchUnificationRule Applies a partial update on a specific resolution rule.
-func (urs *UnificationRuleService) PatchUnificationRule(ruleId, orgHandle string, updatedRule model.UnificationRule) error {
+func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
+	ruleId, orgHandle string, updatedRule model.UnificationRule) error {
 
 	if updatedRule.PropertyName == "user_id" {
 		return errors2.NewClientError(errors2.ErrorMessage{
@@ -159,7 +165,7 @@ func (urs *UnificationRuleService) PatchUnificationRule(ruleId, orgHandle string
 	}
 
 	// Validate that the priority is not already in use
-	existingRules, err := store.GetUnificationRules(orgHandle)
+	existingRules, err := store.GetUnificationRules(ctx, orgHandle)
 	if err != nil {
 		return err
 	}
@@ -172,13 +178,13 @@ func (urs *UnificationRuleService) PatchUnificationRule(ruleId, orgHandle string
 			}, http.StatusBadRequest)
 		}
 	}
-	return store.PatchUnificationRule(ruleId, updatedRule)
+	return store.PatchUnificationRule(ctx, ruleId, updatedRule)
 }
 
 // DeleteUnificationRule Removes a unification rule.
-func (urs *UnificationRuleService) DeleteUnificationRule(ruleId string) error {
+func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId string) error {
 
-	return store.DeleteUnificationRule(ruleId)
+	return store.DeleteUnificationRule(ctx, ruleId)
 }
 
 // attributeTypeOptions is the ordered list of all supported attribute types and their allowed

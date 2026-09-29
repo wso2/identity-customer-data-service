@@ -76,9 +76,9 @@ func (h *IdentityResolutionHandler) GetReviewTasks(w http.ResponseWriter, r *htt
 
 	var response *irModel.ReviewTaskListResponse
 	if profileID != "" {
-		response, err = svc.GetPendingReviewTasksByProfile(orgHandle, profileID, pageSize)
+		response, err = svc.GetPendingReviewTasksByProfile(r.Context(), orgHandle, profileID, pageSize)
 	} else {
-		response, err = svc.GetPendingReviewTasks(orgHandle, pageSize)
+		response, err = svc.GetPendingReviewTasks(r.Context(), orgHandle, pageSize)
 	}
 	if err != nil {
 		logger.Error("Handler: failed to fetch review tasks", log.Error(err))
@@ -144,7 +144,7 @@ func (h *IdentityResolutionHandler) ResolveReviewTask(w http.ResponseWriter, r *
 	approved := resolveReq.Decision == constants.ReviewStatusApproved
 
 	svc := provider.NewIdentityResolutionProvider().GetIdentityResolutionService()
-	err = svc.ResolveReviewTask(orgHandle, taskID, approved, resolvedBy, resolveReq.Notes)
+	err = svc.ResolveReviewTask(r.Context(), orgHandle, taskID, approved, resolvedBy, resolveReq.Notes)
 	if err != nil {
 		logger.Error("Handler: failed to resolve review task", log.Error(err))
 		utils.HandleError(w, err)

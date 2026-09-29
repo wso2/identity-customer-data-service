@@ -19,6 +19,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -53,7 +54,7 @@ func insertBareProfile(t *testing.T, org, userID string, traits map[string]inter
 		UpdatedAt:          time.Now().UTC(),
 		ProfileStatus:      &profileModel.ProfileStatus{},
 	}
-	if err := profileStore.InsertProfile(profile); err != nil {
+	if err := profileStore.InsertProfile(context.Background(), profile); err != nil {
 		t.Fatalf("insert profile: %v", err)
 	}
 	return profile
@@ -70,7 +71,7 @@ func Test_MergeMatchedProfiles_ReturnsSurvivingMaster(t *testing.T) {
 		existing := insertBareProfile(t, org, "user-1", map[string]interface{}{"name": "Ann"})
 		incoming := insertBareProfile(t, org, "", map[string]interface{}{"name": "Ann"})
 
-		master, err := workers.MergeMatchedProfiles(existing, incoming, constants.MergeReasonAutoMerge)
+		master, err := workers.MergeMatchedProfiles(context.Background(), existing, incoming, constants.MergeReasonAutoMerge)
 		if err != nil {
 			t.Fatalf("merge: %v", err)
 		}
@@ -87,7 +88,7 @@ func Test_MergeMatchedProfiles_ReturnsSurvivingMaster(t *testing.T) {
 		existing := insertBareProfile(t, org, "", map[string]interface{}{"name": "Ben"})
 		incoming := insertBareProfile(t, org, "user-2", map[string]interface{}{"name": "Ben"})
 
-		master, err := workers.MergeMatchedProfiles(existing, incoming, constants.MergeReasonAutoMerge)
+		master, err := workers.MergeMatchedProfiles(context.Background(), existing, incoming, constants.MergeReasonAutoMerge)
 		if err != nil {
 			t.Fatalf("merge: %v", err)
 		}
@@ -106,7 +107,7 @@ func Test_MergeMatchedProfiles_ReturnsSurvivingMaster(t *testing.T) {
 		existing := insertBareProfile(t, org, "", map[string]interface{}{"name": "Cal"})
 		incoming := insertBareProfile(t, org, "", map[string]interface{}{"name": "Cal"})
 
-		master, err := workers.MergeMatchedProfiles(existing, incoming, constants.MergeReasonAutoMerge)
+		master, err := workers.MergeMatchedProfiles(context.Background(), existing, incoming, constants.MergeReasonAutoMerge)
 		if err != nil {
 			t.Fatalf("merge: %v", err)
 		}
@@ -124,7 +125,7 @@ func Test_MergeMatchedProfiles_ReturnsSurvivingMaster(t *testing.T) {
 		existing := insertBareProfile(t, org, "user-3", map[string]interface{}{"name": "Dee"})
 		incoming := insertBareProfile(t, org, "user-4", map[string]interface{}{"name": "Dee"})
 
-		master, err := workers.MergeMatchedProfiles(existing, incoming, constants.MergeReasonAutoMerge)
+		master, err := workers.MergeMatchedProfiles(context.Background(), existing, incoming, constants.MergeReasonAutoMerge)
 		if err != nil {
 			t.Fatalf("merge: %v", err)
 		}
@@ -146,14 +147,14 @@ func Test_BlockingKeyLookup_IsScopedToOrg(t *testing.T) {
 	profileB := insertBareProfile(t, orgB, "", map[string]interface{}{"email": "shared@acme.com"})
 
 	key := []irModel.BlockingKey{{AttributeName: "traits.email", KeyValue: "shared@acme.com"}}
-	if err := irStore.UpsertBlockingKeys(profileA.ProfileId, orgA, key); err != nil {
+	if err := irStore.UpsertBlockingKeys(context.Background(), profileA.ProfileId, orgA, key); err != nil {
 		t.Fatalf("index profile A: %v", err)
 	}
-	if err := irStore.UpsertBlockingKeys(profileB.ProfileId, orgB, key); err != nil {
+	if err := irStore.UpsertBlockingKeys(context.Background(), profileB.ProfileId, orgB, key); err != nil {
 		t.Fatalf("index profile B: %v", err)
 	}
 
-	found, err := irStore.FindCandidateIDsByKeys(orgA, "traits.email",
+	found, err := irStore.FindCandidateIDsByKeys(context.Background(), orgA, "traits.email",
 		[]string{"shared@acme.com"}, "none", 100)
 	if err != nil {
 		t.Fatalf("candidate lookup: %v", err)
@@ -184,17 +185,17 @@ func Test_ResolveReviewTask_RejectsForeignOrg(t *testing.T) {
 		Status:             constants.ReviewStatusPending,
 		ScoreBreakdown:     map[string]float64{"traits.name": 1.0},
 	}
-	if err := irStore.InsertReviewTask(task); err != nil {
+	if err := irStore.InsertReviewTask(context.Background(), task); err != nil {
 		t.Fatalf("insert review task: %v", err)
 	}
 
-	pending, _, err := irStore.GetPendingReviewTasks(orgB, 10)
+	pending, _, err := irStore.GetPendingReviewTasks(context.Background(), orgB, 10)
 	if err != nil || len(pending) == 0 {
 		t.Fatalf("expected a pending task for %s: %v", orgB, err)
 	}
 
 	svc := irService.GetIdentityResolutionService()
-	if err := svc.ResolveReviewTask(orgA, pending[0].ID, true, "attacker", ""); err == nil {
+	if err := svc.ResolveReviewTask(context.Background(), orgA, pending[0].ID, true, "attacker", ""); err == nil {
 		t.Errorf("org %s resolved a task belonging to org %s", orgA, orgB)
 	}
 }
@@ -215,25 +216,25 @@ func Test_ReviewTask_CanBeRecreatedAfterCancellation(t *testing.T) {
 		MatchScore:         0.80,
 		Status:             constants.ReviewStatusPending,
 	}
-	if err := irStore.InsertReviewTask(task); err != nil {
+	if err := irStore.InsertReviewTask(context.Background(), task); err != nil {
 		t.Fatalf("insert review task: %v", err)
 	}
 
-	pending, _, err := irStore.GetPendingReviewTasks(org, 10)
+	pending, _, err := irStore.GetPendingReviewTasks(context.Background(), org, 10)
 	if err != nil || len(pending) == 0 {
 		t.Fatalf("expected a pending task: %v", err)
 	}
-	if err := irStore.UpdateReviewTaskStatus(pending[0].ID, constants.ReviewStatusCancelled,
+	if err := irStore.UpdateReviewTaskStatus(context.Background(), pending[0].ID, constants.ReviewStatusCancelled,
 		constants.CanceledBySystem, "cascade"); err != nil {
 		t.Fatalf("cancel task: %v", err)
 	}
 
 	task.MatchScore = 0.91
-	if err := irStore.InsertReviewTask(task); err != nil {
+	if err := irStore.InsertReviewTask(context.Background(), task); err != nil {
 		t.Fatalf("re-insert review task: %v", err)
 	}
 
-	reopened, _, err := irStore.GetPendingReviewTasks(org, 10)
+	reopened, _, err := irStore.GetPendingReviewTasks(context.Background(), org, 10)
 	if err != nil {
 		t.Fatalf("list tasks: %v", err)
 	}
@@ -254,14 +255,14 @@ func Test_BlockingKeys_RemovedWhenProfileDeleted(t *testing.T) {
 	profile := insertBareProfile(t, org, "", map[string]interface{}{"email": "gone@acme.com"})
 
 	key := []irModel.BlockingKey{{AttributeName: "traits.email", KeyValue: "gone@acme.com"}}
-	if err := irStore.UpsertBlockingKeys(profile.ProfileId, org, key); err != nil {
+	if err := irStore.UpsertBlockingKeys(context.Background(), profile.ProfileId, org, key); err != nil {
 		t.Fatalf("index profile: %v", err)
 	}
-	if err := profileService.GetProfilesService().DeleteProfile(profile.ProfileId); err != nil {
+	if err := profileService.GetProfilesService().DeleteProfile(context.Background(), profile.ProfileId); err != nil {
 		t.Fatalf("delete profile: %v", err)
 	}
 
-	found, err := irStore.FindCandidateIDsByKeys(org, "traits.email",
+	found, err := irStore.FindCandidateIDsByKeys(context.Background(), org, "traits.email",
 		[]string{"gone@acme.com"}, "none", 100)
 	if err != nil {
 		t.Fatalf("candidate lookup: %v", err)

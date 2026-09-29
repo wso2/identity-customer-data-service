@@ -42,6 +42,8 @@ func NewAdminConfigHandler() *AdminConfigHandler {
 // GetAdminConfig handles GET /admin/configs
 func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Request) {
 
+	ctx := r.Context()
+
 	if err := security.AuthnAndAuthz(r, "admin_config:view"); err != nil {
 		utils.HandleError(w, err)
 		return
@@ -49,7 +51,7 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	adminConfigProvider := provider.NewAdminConfigProvider()
 	adminConfigService := adminConfigProvider.GetAdminConfigService()
-	config, err := adminConfigService.GetAdminConfig(orgHandle)
+	config, err := adminConfigService.GetAdminConfig(ctx, orgHandle)
 
 	if err != nil {
 		utils.HandleError(w, err)
@@ -68,6 +70,8 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 
 // UpdateAdminConfig handles PATCH /admin/configs
 func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
 
 	if err := security.AuthnAndAuthz(r, "admin_config:update"); err != nil {
 		utils.HandleError(w, err)
@@ -90,7 +94,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 
 	adminConfigService := provider.NewAdminConfigProvider().GetAdminConfigService()
 
-	existingConfig, err := adminConfigService.GetAdminConfig(orgHandle)
+	existingConfig, err := adminConfigService.GetAdminConfig(ctx, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -123,7 +127,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		configToUpdate.ManualReviewThreshold = *config.ManualReviewThreshold
 	}
 
-	err = adminConfigService.UpdateAdminConfig(configToUpdate, orgHandle)
+	err = adminConfigService.UpdateAdminConfig(ctx, configToUpdate, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

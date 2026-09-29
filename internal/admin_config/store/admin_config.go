@@ -19,6 +19,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -31,7 +32,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
-func GetAdminConfig(orgHandle string) (*model.AdminConfig, error) {
+func GetAdminConfig(ctx context.Context, orgHandle string) (*model.AdminConfig, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -47,7 +48,7 @@ func GetAdminConfig(orgHandle string) (*model.AdminConfig, error) {
 	defer dbClient.Close()
 
 	query := scripts.GetOrgConfigurations
-	results, err := dbClient.ExecuteQuery(query, orgHandle)
+	results, err := dbClient.ExecuteQueryContext(ctx, query, orgHandle)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to execute query for fetching configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
@@ -62,7 +63,7 @@ func GetAdminConfig(orgHandle string) (*model.AdminConfig, error) {
 }
 
 // UpdateAdminConfig updates organization-level admin configuration (e.g., CDS enablement, schema sync flags).
-func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
+func UpdateAdminConfig(ctx context.Context, config model.AdminConfig, orgHandle string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -77,7 +78,7 @@ func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 	}
 	defer dbClient.Close()
 
-	tx, err := dbClient.BeginTx()
+	tx, err := dbClient.BeginTxContext(ctx)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to begin transaction for updating configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
@@ -94,7 +95,7 @@ func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 	if config.CDSEnabled {
 		cdsEnabledValue = "true"
 	}
-	_, err = tx.Exec(query, orgHandle, constants.ConfigCDSEnabled, cdsEnabledValue)
+	_, err = tx.ExecContext(ctx, query, orgHandle, constants.ConfigCDSEnabled, cdsEnabledValue)
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to update cds_enabled for organization: %s", orgHandle)
@@ -110,7 +111,7 @@ func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 	if config.InitialSchemaSyncDone {
 		schemaSyncValue = "true"
 	}
-	_, err = tx.Exec(query, orgHandle, constants.ConfigInitialSchemaSyncDone, schemaSyncValue)
+	_, err = tx.ExecContext(ctx, query, orgHandle, constants.ConfigInitialSchemaSyncDone, schemaSyncValue)
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to update initial_schema_sync_done for organization: %s", orgHandle)
@@ -133,7 +134,7 @@ func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 			Description: errorMsg,
 		}, err)
 	}
-	_, err = tx.Exec(query, orgHandle, constants.ConfigSystemApplications, string(systemAppsValue))
+	_, err = tx.ExecContext(ctx, query, orgHandle, constants.ConfigSystemApplications, string(systemAppsValue))
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to update system_applications for organization: %s", orgHandle)
@@ -190,7 +191,7 @@ func UpdateAdminConfig(config model.AdminConfig, orgHandle string) error {
 }
 
 // UpdateInitialSchemaSyncConfig updates organization-level admin configuration (e.g., CDS enablement, schema sync flags).
-func UpdateInitialSchemaSyncConfig(state bool, orgHandle string) error {
+func UpdateInitialSchemaSyncConfig(ctx context.Context, state bool, orgHandle string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -205,7 +206,7 @@ func UpdateInitialSchemaSyncConfig(state bool, orgHandle string) error {
 	}
 	defer dbClient.Close()
 
-	tx, err := dbClient.BeginTx()
+	tx, err := dbClient.BeginTxContext(ctx)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to begin transaction for updating configurations for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
@@ -222,7 +223,7 @@ func UpdateInitialSchemaSyncConfig(state bool, orgHandle string) error {
 	}
 
 	query := scripts.UpdateInitialSchemaSyncDoneConfig
-	_, err = tx.Exec(query, orgHandle, stateValue)
+	_, err = tx.ExecContext(ctx, query, orgHandle, stateValue)
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to execute update for configurations for organization: %s", orgHandle)

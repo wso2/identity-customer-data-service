@@ -19,6 +19,7 @@
 package model
 
 import (
+	"context"
 	adminStore "github.com/wso2/identity-customer-data-service/internal/admin_config/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -38,11 +39,11 @@ func DefaultThresholds() Thresholds {
 	}
 }
 
-func LoadThresholds(orgHandle string) Thresholds {
+func LoadThresholds(ctx context.Context, orgHandle string) Thresholds {
 	logger := log.GetLogger()
 	defaults := DefaultThresholds()
 
-	adminCfg, err := adminStore.GetAdminConfig(orgHandle)
+	adminCfg, err := adminStore.GetAdminConfig(ctx, orgHandle)
 	if err != nil || adminCfg == nil {
 		logger.Warn("LoadThresholds: failed to load admin config, using defaults")
 		return defaults

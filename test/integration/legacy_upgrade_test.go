@@ -19,6 +19,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -117,7 +118,7 @@ func Test_LegacyOrganisation_KeepsExactMatchMerging(t *testing.T) {
 
 			// A migrated rule must arrive with no stored strength, so the engine derives
 			// it. A column default here is what silently defeats the derivation.
-			rules, err := urStore.GetUnificationRules(org)
+			rules, err := urStore.GetUnificationRules(context.Background(), org)
 			if err != nil {
 				t.Fatalf("load rules: %v", err)
 			}
@@ -133,7 +134,7 @@ func Test_LegacyOrganisation_KeepsExactMatchMerging(t *testing.T) {
 			existing := insertBareProfile(t, org, "", shared)
 			incoming := insertBareProfile(t, org, "", shared)
 
-			master, mergeErr := workers.MergeMatchedProfiles(existing, incoming, constants.MergeReasonAutoMerge)
+			master, mergeErr := workers.MergeMatchedProfiles(context.Background(), existing, incoming, constants.MergeReasonAutoMerge)
 			if mergeErr != nil {
 				t.Fatalf("merge: %v", mergeErr)
 			}
@@ -146,7 +147,7 @@ func Test_LegacyOrganisation_KeepsExactMatchMerging(t *testing.T) {
 				if id == master.ProfileId {
 					continue
 				}
-				child, err := profileStore.GetProfile(id)
+				child, err := profileStore.GetProfile(context.Background(), id)
 				if err != nil || child == nil {
 					t.Fatalf("load %s: %v", id, err)
 				}
@@ -167,7 +168,7 @@ func Test_LegacyOrganisation_AutoMergeStaysEnabled(t *testing.T) {
 	org := newOrg("legacy-automerge")
 	insertLegacyAdminConfig(t, org)
 
-	thresholds := irModel.LoadThresholds(org)
+	thresholds := irModel.LoadThresholds(context.Background(), org)
 	if !thresholds.AutoMergeEnabled {
 		t.Error("an organisation with no auto_merge_enabled row must keep merging automatically")
 	}
@@ -197,7 +198,7 @@ func waitForBlockingKeys(t *testing.T, org, attribute, profileID string) {
 
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		ids, err := irStore.FindCandidateIDsByKeys(org, attribute,
+		ids, err := irStore.FindCandidateIDsByKeys(context.Background(), org, attribute,
 			[]string{"legacy@acme.com"}, "none", 100)
 		if err == nil {
 			for _, id := range ids {

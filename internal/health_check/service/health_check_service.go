@@ -19,8 +19,10 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
+
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -28,7 +30,7 @@ import (
 
 // HealthCheckServiceInterface defines the service interface.
 type HealthCheckServiceInterface interface {
-	CheckReadiness() error
+	CheckReadiness(ctx context.Context) error
 }
 
 // HealthCheckService is the default implementation.
@@ -39,7 +41,8 @@ func GetHealthCheckService() HealthCheckServiceInterface {
 	return &HealthCheckService{}
 }
 
-func (h HealthCheckService) CheckReadiness() error {
+// CheckReadiness reports whether this instance can serve traffic.
+func (h HealthCheckService) CheckReadiness(ctx context.Context) error {
 	logger := log.GetLogger()
 	if logger == nil {
 		return errors.New("logger not initialized")
@@ -53,7 +56,7 @@ func (h HealthCheckService) CheckReadiness() error {
 	defer dbClient.Close()
 
 	// Perform a lightweight query to ensure DB connectivity.
-	_, err = dbClient.ExecuteQuery(scripts.HealthCheckPing)
+	_, err = dbClient.ExecuteQueryContext(ctx, scripts.HealthCheckPing)
 	if err != nil {
 		return fmt.Errorf("database connectivity check failed: %v", err)
 	}

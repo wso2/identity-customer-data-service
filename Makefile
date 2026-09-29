@@ -50,8 +50,11 @@ else
 endif
 
 # Run the unit tests.
+#
+# The race detector runs here because the process shares one connection pool
+# across every request and every worker.
 unit-test:
-	go test ./internal/... ./dbscripts/...
+	go test -race ./internal/... ./dbscripts/...
 
 mq-integration-test:
 ifdef test
@@ -84,7 +87,7 @@ help:
 	@echo "  integration-test           - Run integration tests against PostgreSQL (use test=TestName to filter)."
 	@echo "  integration-test-sqlite    - Run integration tests against the inbuilt database (use test=TestName to filter)."
 	@echo "  mq-integration-test        - Run message queue integration tests (use test=TestName to filter)."
-	@echo "  unit-test                  - Run unit tests."
+	@echo "  unit-test                  - Run unit tests with the race detector."
 	@echo "  lint                       - Run golangci-lint."
 	@echo "  help                       - Show this help message."
 

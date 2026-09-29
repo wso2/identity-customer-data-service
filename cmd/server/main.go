@@ -50,13 +50,15 @@ func initDatabaseFromConfig(cdsConfig *config.Config) error {
 		return err
 	}
 
-	ds := cdsConfig.DataSource
-	if database.ResolveType(ds.Type) == database.TypeSQLite {
-		return provider.EnsureDatabase()
+	if err := provider.EnsureDatabase(); err != nil {
+		return err
 	}
 
-	log.GetLogger().Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, "+
-		"db host:%s, db port:%d", ds.Name, ds.Hostname, ds.Port))
+	ds := cdsConfig.DataSource
+	if database.ResolveType(ds.Type) != database.TypeSQLite {
+		log.GetLogger().Info(fmt.Sprintf("Database initialized successfully for configurations - db name:%s, "+
+			"db host:%s, db port:%d", ds.Name, ds.Hostname, ds.Port))
+	}
 
 	return nil
 }
@@ -91,6 +93,15 @@ func main() {
 		fmt.Println("Failed to initialize logger.", err)
 		os.Exit(1)
 	}
+
+	// Resolve the shutdown deadline at start, so a refused value stops the
+	// server before anything runs.
+	shutdownGrace, err := config.ResolveShutdownGracePeriod(cdsConfig.Shutdown)
+	if err != nil {
+		log.GetLogger().Error("Invalid shutdown configuration.", log.Error(err))
+		os.Exit(1)
+	}
+	log.GetLogger().Info(fmt.Sprintf("Shutdown grace period is %s", shutdownGrace))
 
 	// Initialize database. This creates and initializes the inbuilt database when
 	// one is configured, and must happen before the workers start since they
@@ -184,27 +195,20 @@ func main() {
 
 	// Block until a signal is received
 	<-quit
-	logger.Info("Shutdown signal received, draining connections...")
+	logger.Info("Shutdown signal received, stopping the server gracefully...")
 
-	// Give in-flight requests up to 15 seconds to complete
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
 
-	if err := server.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error.", log.Error(err))
-	}
-	if err := workers.StopProfileWorker(); err != nil {
-		logger.Error("Failed to stop profile worker.", log.Error(err))
-	}
-	if err := workers.StopSchemaSyncWorker(); err != nil {
-		logger.Error("Failed to stop schema sync worker.", log.Error(err))
+	workerList := []namedWorker{
+		{name: "profile", stop: workers.StopProfileWorker},
+		{name: "schema sync", stop: workers.StopSchemaSyncWorker},
+		{name: "cookie cleanup", stop: workers.StopCookieCleanupWorker},
 	}
 
-	workers.StopCookieCleanupWorker()
-
-	// Close the shared connection pool last, once nothing is still issuing queries.
-	if err := provider.ClosePool(); err != nil {
-		logger.Error("Failed to close the database connection pool.", log.Error(err))
+	if err := shutdown(ctx, logger, server.Shutdown, workerList, provider.CloseDB); err != nil {
+		logger.Error("Shutdown completed with unfinished work.", log.Error(err))
+		return
 	}
 
 	logger.Info("Shutdown complete")
