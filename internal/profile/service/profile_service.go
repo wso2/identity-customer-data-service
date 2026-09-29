@@ -867,16 +867,21 @@ func (ps *ProfilesService) UpdateProfile(profileId, orgHandle string, updatedPro
 			profileToUpDate.OrgHandle = orgHandle
 			queue.Enqueue(profileToUpDate)
 		} else {
-			if profileToUpDate.UserId != "" || hasAttributeMatchingAnyRule(flattenProfileAttrs(profileToUpDate), activeRules) {
-				// A rejection records a human deciding two profiles are different people.
-				// Discard it only when the data that decision was made about has actually
-				// changed — clearing on every update meant an unrelated edit resurrected
-				// every pair the admin had already dismissed.
-				if ruleValuesChanged(flattenProfileAttrs(*profile), flattenProfileAttrs(profileToUpDate), activeRules) {
-					if err := irStore.DeleteRejectionPairsForProfile(orgHandle, profileToUpDate.ProfileId); err != nil {
-						logger.Warn(fmt.Sprintf("UpdateProfile: failed to clear rejection pairs for profile '%s'", profileToUpDate.ProfileId), log.Error(err))
-					}
+			before := flattenProfileAttrs(*profile)
+			after := flattenProfileAttrs(profileToUpDate)
+			matchedValuesChanged := ruleValuesChanged(before, after, activeRules)
+
+			// A rejection records a human deciding two profiles are different people.
+			// Discard it only when the data that decision was made about has actually
+			// changed — clearing on every update meant an unrelated edit resurrected
+			// every pair the admin had already dismissed.
+			if matchedValuesChanged {
+				if err := irStore.DeleteRejectionPairsForProfile(orgHandle, profileToUpDate.ProfileId); err != nil {
+					logger.Warn(fmt.Sprintf("UpdateProfile: failed to clear rejection pairs for profile '%s'", profileToUpDate.ProfileId), log.Error(err))
 				}
+			}
+
+			if shouldResolveAfterUpdate(*profile, profileToUpDate, matchedValuesChanged, activeRules) {
 				profileToUpDate.OrgHandle = orgHandle
 				queue.Enqueue(profileToUpDate)
 			}
@@ -2162,4 +2167,28 @@ func toComparableStrings(value interface{}) []string {
 	default:
 		return []string{fmt.Sprintf("%v", value)}
 	}
+}
+
+// shouldResolveAfterUpdate reports whether an updated profile needs re-evaluating for
+// merges.
+//
+// Resolution is expensive — it rewrites the profile's whole blocking-key set and runs a
+// candidate query per key group — and an update that left every matched value untouched
+// would reach exactly the conclusion the previous write already reached. Gating on "does
+// this profile have matchable data" rather than "did that data change" meant any edit to
+// any attribute paid that cost, which on a profile carrying a userId was every edit.
+//
+// A changed userId still forces re-evaluation on its own: merging profiles that share a
+// userId is a system invariant that holds with no rules configured, so a profile that has
+// just gained or changed one must be re-examined even if no rule value moved.
+func shouldResolveAfterUpdate(before, after profileModel.Profile, matchedValuesChanged bool,
+	activeRules []UnificationModel.UnificationRule) bool {
+
+	if before.UserId != after.UserId {
+		return true
+	}
+	if !matchedValuesChanged {
+		return false
+	}
+	return after.UserId != "" || hasAttributeMatchingAnyRule(flattenProfileAttrs(after), activeRules)
 }

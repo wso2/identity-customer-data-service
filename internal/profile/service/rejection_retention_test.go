@@ -21,6 +21,7 @@ package service
 import (
 	"testing"
 
+	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	UnificationModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 )
@@ -138,4 +139,82 @@ func TestToComparableStrings(t *testing.T) {
 		t.Errorf("int => %v", got)
 	}
 	_ = constants.AttributeTypeEmail
+}
+
+// TestShouldResolveAfterUpdate covers the gate that decides whether an update pays for a
+// full re-resolution: a blocking-key rewrite plus a candidate query per key group. An
+// update that touched nothing a rule matches on would reach the same conclusion the
+// previous write already reached, so it must be skipped — except where the userId moved,
+// which is a merge trigger in its own right.
+func TestShouldResolveAfterUpdate(t *testing.T) {
+	rules := []UnificationModel.UnificationRule{
+		{PropertyName: "identity_attributes.email", IsActive: true},
+	}
+
+	withEmail := func(userID, email, city string) profileModel.Profile {
+		return profileModel.Profile{
+			UserId:             userID,
+			IdentityAttributes: map[string]interface{}{"email": email},
+			Traits:             map[string]interface{}{"city": city},
+		}
+	}
+
+	tests := []struct {
+		name                 string
+		before, after        profileModel.Profile
+		matchedValuesChanged bool
+		want                 bool
+	}{
+		{
+			// The case the gate exists for: a permanent profile edited in a way no rule
+			// looks at previously paid the whole pipeline on every write.
+			name:   "unrelated edit on a profile with a userId",
+			before: withEmail("u1", "a@acme.com", "Colombo"),
+			after:  withEmail("u1", "a@acme.com", "Kandy"),
+			want:   false,
+		},
+		{
+			name:                 "matched value changed",
+			before:               withEmail("u1", "a@acme.com", "Colombo"),
+			after:                withEmail("u1", "b@acme.com", "Colombo"),
+			matchedValuesChanged: true,
+			want:                 true,
+		},
+		{
+			// Same-userId merging holds with no rules configured, so a profile that has
+			// just gained one must be re-examined even though no rule value moved.
+			name:   "profile gained a userId",
+			before: withEmail("", "a@acme.com", "Colombo"),
+			after:  withEmail("u1", "a@acme.com", "Colombo"),
+			want:   true,
+		},
+		{
+			name:   "userId changed",
+			before: withEmail("u1", "a@acme.com", "Colombo"),
+			after:  withEmail("u2", "a@acme.com", "Colombo"),
+			want:   true,
+		},
+		{
+			name:                 "matched value changed but nothing matchable remains",
+			before:               withEmail("", "a@acme.com", "Colombo"),
+			after:                profileModel.Profile{Traits: map[string]interface{}{"city": "Colombo"}},
+			matchedValuesChanged: true,
+			want:                 false,
+		},
+		{
+			name:   "anonymous profile, unrelated edit",
+			before: withEmail("", "a@acme.com", "Colombo"),
+			after:  withEmail("", "a@acme.com", "Kandy"),
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldResolveAfterUpdate(tt.before, tt.after, tt.matchedValuesChanged, rules)
+			if got != tt.want {
+				t.Errorf("shouldResolveAfterUpdate = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

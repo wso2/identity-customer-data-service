@@ -209,15 +209,35 @@ func InsertBlockingKeys(profileID, orgHandle string, keys []model.BlockingKey) e
 	return nil
 }
 
-// InsertBlockingKeysBatch inserts blocking keys for many profiles in a single SQL statement.
+// blockingKeyRow is one pending index entry, flattened out of the per-profile map so the
+// insert can be chunked by row count.
+type blockingKeyRow struct {
+	profileID string
+	key       model.BlockingKey
+}
+
+// blockingKeyColumns is how many bind parameters each row consumes.
+const blockingKeyColumns = 5
+
+// maxBlockingKeyRowsPerInsert caps how many rows go into one statement.
+//
+// The PostgreSQL wire protocol allows at most 65535 bind parameters per statement, so at
+// five parameters per row the hard ceiling is 13107. A page of 500 profiles crosses that
+// once profiles average roughly 26 keys each — which ordinary data reaches: four email
+// addresses under a fuzzy rule is 20 keys before a fuzzy name adds 7 more. Past the limit
+// the whole statement is rejected, and because the backfill logs the failure and moves on,
+// those profiles are silently left out of the index. Chunking well below the ceiling keeps
+// the statement valid whatever the page holds.
+const maxBlockingKeyRowsPerInsert = 5000
+
+// InsertBlockingKeysBatch inserts blocking keys for many profiles, chunked so no single
+// statement exceeds the driver's bind-parameter limit.
+// Uses ON CONFLICT DO NOTHING to skip duplicates.
 func InsertBlockingKeysBatch(orgHandle string, perProfileKeys map[string][]model.BlockingKey) error {
 	logger := log.GetLogger()
 
-	totalKeys := 0
-	for _, keys := range perProfileKeys {
-		totalKeys += len(keys)
-	}
-	if totalKeys == 0 {
+	rows := flattenBlockingKeyRows(perProfileKeys)
+	if len(rows) == 0 {
 		return nil
 	}
 
@@ -231,31 +251,60 @@ func InsertBlockingKeysBatch(orgHandle string, perProfileKeys map[string][]model
 	}
 	defer dbClient.Close()
 
-	valueClauses := make([]string, 0, totalKeys)
-	args := make([]interface{}, 0, totalKeys*5)
-	argIdx := 1
+	for start := 0; start < len(rows); start += maxBlockingKeyRowsPerInsert {
+		end := start + maxBlockingKeyRowsPerInsert
+		if end > len(rows) {
+			end = len(rows)
+		}
+		chunk := rows[start:end]
 
-	for profileID, keys := range perProfileKeys {
-		for _, key := range keys {
+		valueClauses := make([]string, 0, len(chunk))
+		args := make([]interface{}, 0, len(chunk)*blockingKeyColumns)
+		argIdx := 1
+
+		for _, row := range chunk {
 			valueClauses = append(valueClauses,
 				fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3, argIdx+4))
-			args = append(args, uuid.New().String(), profileID, orgHandle, key.AttributeName, key.KeyValue)
-			argIdx += 5
+			args = append(args, uuid.New().String(), row.profileID, orgHandle,
+				row.key.AttributeName, row.key.KeyValue)
+			argIdx += blockingKeyColumns
+		}
+
+		insertQuery := scripts.IRInsertBlockingKeys.Format(strings.Join(valueClauses, ", "))
+		if _, err := dbClient.ExecuteQuery(insertQuery, args...); err != nil {
+			logger.Error(fmt.Sprintf(
+				"BlockingStore: batch insert failed for org '%s' at rows %d-%d of %d",
+				orgHandle, start, end, len(rows)), log.Error(err))
+			return errors2.NewServerError(errors2.ErrorMessage{
+				Code:    errors2.IR_BLOCKING_KEYS_FAILED.Code,
+				Message: errors2.IR_BLOCKING_KEYS_FAILED.Message,
+				Description: fmt.Sprintf("Failed to batch insert blocking keys for org: %s",
+					orgHandle),
+			}, err)
 		}
 	}
 
-	insertQuery := scripts.IRInsertBlockingKeys.Format(strings.Join(valueClauses, ", "))
+	return nil
+}
 
-	if _, err := dbClient.ExecuteQuery(insertQuery, args...); err != nil {
-		logger.Error("BlockingStore: failed to batch insert blocking keys", log.Error(err))
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IR_BLOCKING_KEYS_FAILED.Code,
-			Message:     errors2.IR_BLOCKING_KEYS_FAILED.Message,
-			Description: fmt.Sprintf("Failed to batch insert %d blocking keys for org: %s", totalKeys, orgHandle),
-		}, err)
+// flattenBlockingKeyRows turns the per-profile map into a flat, chunkable slice.
+func flattenBlockingKeyRows(perProfileKeys map[string][]model.BlockingKey) []blockingKeyRow {
+
+	total := 0
+	for _, keys := range perProfileKeys {
+		total += len(keys)
+	}
+	if total == 0 {
+		return nil
 	}
 
-	return nil
+	rows := make([]blockingKeyRow, 0, total)
+	for profileID, keys := range perProfileKeys {
+		for _, key := range keys {
+			rows = append(rows, blockingKeyRow{profileID: profileID, key: key})
+		}
+	}
+	return rows
 }
 
 func FindCandidateIDsByKeys(
