@@ -2209,8 +2209,34 @@ func shouldResolveAfterUpdate(before, after profileModel.Profile, matchedValuesC
 	if before.UserId != after.UserId {
 		return true
 	}
+
+	// A rule created or edited since this profile was last written has never been applied
+	// to it: the profile carries no blocking keys for that attribute, so nothing can match
+	// it until it is processed again. Skipping here on the grounds that no matched value
+	// changed would leave the profile invisible to the new rule until one of its values
+	// happens to change — which for a dormant profile may be never.
+	//
+	// The backfill that runs when a rule is activated covers this too. This is the second
+	// chance for the profiles it missed, and it costs nothing: the rules are already loaded.
+	if anyRuleNewerThan(before.UpdatedAt, activeRules) {
+		return true
+	}
+
 	if !matchedValuesChanged {
 		return false
 	}
 	return after.UserId != "" || hasAttributeMatchingAnyRule(flattenProfileAttrs(after), activeRules)
+}
+
+// anyRuleNewerThan reports whether an active rule changed after the given time.
+func anyRuleNewerThan(profileUpdatedAt time.Time, activeRules []UnificationModel.UnificationRule) bool {
+	for _, rule := range activeRules {
+		if !rule.IsActive {
+			continue
+		}
+		if rule.UpdatedAt.After(profileUpdatedAt) {
+			return true
+		}
+	}
+	return false
 }

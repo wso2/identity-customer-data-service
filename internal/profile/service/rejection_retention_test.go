@@ -20,6 +20,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -147,8 +148,11 @@ func TestToComparableStrings(t *testing.T) {
 // previous write already reached, so it must be skipped — except where the userId moved,
 // which is a merge trigger in its own right.
 func TestShouldResolveAfterUpdate(t *testing.T) {
+	profileWrittenAt := time.Now()
+	ruleOlderThanProfile := profileWrittenAt.Add(-time.Hour)
+
 	rules := []UnificationModel.UnificationRule{
-		{PropertyName: "identity_attributes.email", IsActive: true},
+		{PropertyName: "identity_attributes.email", IsActive: true, UpdatedAt: ruleOlderThanProfile},
 	}
 
 	withEmail := func(userID, email, city string) profileModel.Profile {
@@ -156,6 +160,7 @@ func TestShouldResolveAfterUpdate(t *testing.T) {
 			UserId:             userID,
 			IdentityAttributes: map[string]interface{}{"email": email},
 			Traits:             map[string]interface{}{"city": city},
+			UpdatedAt:          profileWrittenAt,
 		}
 	}
 
@@ -216,5 +221,43 @@ func TestShouldResolveAfterUpdate(t *testing.T) {
 				t.Errorf("shouldResolveAfterUpdate = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestShouldResolveAfterUpdateCatchesUpToANewRule covers the case that makes a newly added
+// rule work at all for profiles that already existed.
+//
+// Such a profile carries no blocking keys for the new attribute, so nothing can match it
+// until it is processed again. Gating purely on "did a matched value change" would skip it
+// — and for a profile whose values never change again, that is permanent. The backfill
+// triggered by activating the rule covers this as well; this is the second chance for the
+// profiles it missed.
+func TestShouldResolveAfterUpdateCatchesUpToANewRule(t *testing.T) {
+	profileWrittenAt := time.Now().Add(-time.Hour)
+
+	profile := profileModel.Profile{
+		Traits:    map[string]interface{}{"city": "Colombo"},
+		UpdatedAt: profileWrittenAt,
+	}
+
+	newRule := []UnificationModel.UnificationRule{
+		{PropertyName: "traits.city", IsActive: true, UpdatedAt: time.Now()},
+	}
+	if !shouldResolveAfterUpdate(profile, profile, false, newRule) {
+		t.Error("a profile predating an active rule must be re-resolved so it enters the index")
+	}
+
+	establishedRule := []UnificationModel.UnificationRule{
+		{PropertyName: "traits.city", IsActive: true, UpdatedAt: profileWrittenAt.Add(-time.Hour)},
+	}
+	if shouldResolveAfterUpdate(profile, profile, false, establishedRule) {
+		t.Error("an unrelated edit under an established rule should not pay for re-resolution")
+	}
+
+	inactiveNewRule := []UnificationModel.UnificationRule{
+		{PropertyName: "traits.city", IsActive: false, UpdatedAt: time.Now()},
+	}
+	if shouldResolveAfterUpdate(profile, profile, false, inactiveNewRule) {
+		t.Error("an inactive rule indexes nothing, so it should not trigger re-resolution")
 	}
 }
