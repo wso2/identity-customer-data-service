@@ -213,9 +213,7 @@ CREATE TABLE IF NOT EXISTS merge_audit_log (
     merge_type              VARCHAR(50) NOT NULL,
     match_score             DECIMAL(5,4),
     merged_by               VARCHAR(255),
-    merge_timestamp         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    merge_details           JSONB DEFAULT '{}'::jsonb,
-    rollback_data           JSONB DEFAULT '{}'::jsonb
+    merge_timestamp         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_merge_audit_org ON merge_audit_log(org_handle, merge_timestamp DESC);

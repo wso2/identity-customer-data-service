@@ -264,6 +264,8 @@ CREATE TABLE IF NOT EXISTS rejection_pairs
 CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p1 ON rejection_pairs (org_handle, profile_id_1);
 CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p2 ON rejection_pairs (org_handle, profile_id_2);
 
+-- An audit trail, not an undo log; see the PostgreSQL schema for why a merge cannot be
+-- reversed from it.
 CREATE TABLE IF NOT EXISTS merge_audit_log
 (
     id                   VARCHAR(255) PRIMARY KEY,
@@ -273,9 +275,7 @@ CREATE TABLE IF NOT EXISTS merge_audit_log
     merge_type           VARCHAR(50)  NOT NULL,
     match_score          DECIMAL(5, 4),
     merged_by            VARCHAR(255),
-    merge_timestamp      TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00'),
-    merge_details        TEXT                  DEFAULT '{}',
-    rollback_data        TEXT                  DEFAULT '{}'
+    merge_timestamp      TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00')
 );
 
 CREATE INDEX IF NOT EXISTS idx_merge_audit_org ON merge_audit_log (org_handle, merge_timestamp DESC);
