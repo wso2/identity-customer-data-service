@@ -115,16 +115,42 @@ even where they cannot be edited.
 
 ## How rules are evaluated
 
-When a profile is created or updated it is enqueued for unification. The worker:
+A profile write is enqueued for unification when any of the following is true. An update
+that changed nothing a rule matches on is skipped, because it would reach the conclusion the
+previous write already reached:
 
-1. Fetches all active rules for the org, sorted by `priority` ascending
-2. Fetches all existing master profiles for the org (excluding the current profile's own parent)
-3. For each rule, checks whether any existing master profile has the same value for `property_name` as the incoming profile
-4. On the first match, merges the two profiles and stops — only one rule fires per unification run
+- a value some active rule matches on changed
+- the profile's `userId` changed
+- an active rule is newer than the profile's last write (see below)
 
-Rules are evaluated **after** the system-level `userId` match. If two profiles share the same `userId`, they are always merged regardless of any rules.
+The worker then:
 
-See [how-unification-works.md](how-unification-works.md) for the full merge pipeline.
+1. Merges immediately if another master profile shares the same `userId` — a system
+   invariant that needs no rule
+2. Regenerates the profile's blocking keys from the active rules, replacing its previous set
+3. Asks the index which other profiles share a key, capped per key group
+4. Scores each of those candidates against the **whole** rule set
+5. Routes the result by the org's thresholds: merge, raise a review task, or do nothing
+
+Every rule is evaluated against every candidate — a rule does not "fire" on its own. One
+rule then speaks for the result and the others may only object; see
+[how-unification-works.md](how-unification-works.md) for that algorithm.
+
+---
+
+## When a rule starts applying
+
+A rule does not only affect profiles written after it. There are three paths by which an
+existing profile comes under a new rule, and they exist because no single one is sufficient:
+
+| Path | Covers | Limitation |
+|---|---|---|
+| The profile's next write | Any profile that is written again | Not immediate; never happens for a dormant profile |
+| A write while the rule is newer than the profile | An unrelated edit still brings the profile in | Still needs the profile to be written |
+| The backfill on activation | Every existing profile, immediately | Runs in the background; a restart mid-scan leaves it partial |
+
+The backfill is the only one that is both immediate and complete, which is why activating a
+rule triggers it. The other two are what make the index self-healing for anything it missed.
 
 ---
 
@@ -142,12 +168,28 @@ This reason appears in `merged_from[].reason` on the master profile after the me
 
 ## Priority guidance
 
+Priority is a **gate**, not a weight. Rules are walked in priority order and the first one
+that agrees sets the match score outright; lower-priority rules corroborate it but cannot
+raise it. Ordering therefore decides which rule is held accountable for a merge, which is
+what an operator sees when asking why two profiles were combined.
+
 - Assign lower priority numbers to high-confidence identifiers (e.g. `identity_attributes.email` at priority 1)
-- Assign higher priority numbers to weaker signals (e.g. `traits.phone` at priority 10)
+- Assign higher priority numbers to weaker signals (e.g. `traits.city` at priority 10)
 - Leave gaps between priorities (e.g. 10, 20, 30) so new rules can be inserted without reordering
+- Priorities must be unique within an organisation; a duplicate is rejected
+
+A lone agreement on a rule that is neither the top-priority one nor marked strong evidence
+cannot auto-merge on its own — it is capped to a review task.
 
 ---
 
 ## Enabling and disabling rules
 
-Setting `is_active: false` on a rule excludes it from evaluation without deleting it. Existing merges already recorded are not reversed when a rule is deactivated.
+Setting `is_active: false` excludes a rule from evaluation without deleting it, and removes
+that attribute's blocking keys for the organisation — the index shrinks rather than carrying
+entries nothing reads. Re-activating it starts the backfill again.
+
+Changing `attribute_type` on an active rule does both: the old keys are removed and rebuilt,
+because the key shape a type produces is different.
+
+Existing merges already recorded are not reversed when a rule is deactivated or deleted.

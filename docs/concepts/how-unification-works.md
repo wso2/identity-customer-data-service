@@ -10,7 +10,9 @@ Profile unification is the process of recognising that two separate profile reco
 Profile created / updated
          │
          ▼
-  Enqueued for unification (ProfileUnificationQueue)
+  Enqueued only if a matched value changed,
+  the userId changed, or a rule is newer
+  than the profile   (ProfileUnificationQueue)
          │
          ▼
   Worker picks up profile
@@ -41,6 +43,74 @@ This is a system-level invariant. It fires before any rules are evaluated and ca
 Active rules are fetched, defaulted, and sorted by `priority` ascending. Candidates are found from the blocking index, then every candidate is scored against the full rule set and routed by the org's thresholds.
 
 Deterministic and fuzzy rules are not alternative engines. A single comparison honours each rule's own `unification_method` — exact equality for `deterministic`, similarity for `fuzzy` — and aggregates them into one decision.
+
+### Finding candidates
+
+Comparing every profile against every other is O(n²) and unusable past a few thousand
+people, so candidates come from an index rather than a scan. Every value a rule matches on
+is reduced to one or more **blocking keys**, and two profiles are only compared when they
+already share a key.
+
+The exact key is the value reduced exactly as far as its matcher reduces it before
+comparing, which guarantees that any pair the matcher would call identical lands in the same
+bucket. A rule matched `fuzzy` writes additional keys that widen recall:
+
+| Rule | Value | Keys written |
+|---|---|---|
+| `EMAIL` deterministic | `J.Smith@Acme.com` | `j.smith@acme.com` |
+| `EMAIL` fuzzy | `J.Smith@Acme.com` | `j.smith@acme.com` + 4 LSH band hashes |
+| `NAME` fuzzy | `Jonathan Smith` | `jonathan smith`, `JN0N SM0`, `ANTN XMT`, + 4 LSH bands |
+| `PHONE` fuzzy | `+94 77 123 4567` | `94771234567`, `1234567` (7-digit suffix) |
+| `UNIQUE_ID` deterministic | `ABC-123` | `abc-123` |
+| `DATE` deterministic | `Jan 2, 2026` | `2026.01.02` |
+
+A deterministic rule writes the exact key and nothing else — LSH bands and phonetic codes
+would only gather values it can never score above zero. `DATE` and `UNIQUE_ID` normalise
+before keying because their matchers do, so `2026-01-02` and `Jan 2, 2026` meet.
+
+Keys are looked up grouped by attribute **and** by kind, exact before fuzzy, each group
+capped at 100 distinct profiles. A group matching more than that is skipped and logged: a
+value that common identifies nobody. The two kinds are queried separately so a crowded LSH
+band cannot push the result past the cap and take the exact-match key down with it.
+
+---
+
+### Comparing two values
+
+Comparison answers *how alike are these two values*; scoring answers *what does that mean
+for these two people*. A comparator knows nothing about thresholds or priorities, and every
+one follows the same shape:
+
+```
+raw equality?          → 1.0   (before any normalisation)
+mode == STRICT?        → 0.0   (a deterministic rule stops here)
+normalise both
+normalised equality?   → 1.0
+otherwise              → type-specific algorithm
+```
+
+`mode` comes from the rule, which is what lets the same comparator be exact for one rule and
+tolerant for another in the same evaluation.
+
+| Type | Normalisation | Fuzzy algorithm |
+|---|---|---|
+| `EMAIL` | lowercase, trim | split at `@`; Levenshtein on the local part, Jaro-Winkler on the domain; score is the **lower of the two** |
+| `NAME` | lowercase, strip punctuation, **sort tokens** | Jaro-Winkler; if Double Metaphone codes match exactly, floor at 0.9 |
+| `PHONE` | digits only | last 7 digits equal → 0.9, otherwise 0 |
+| `LOCATION` | lowercase, trim | expand street abbreviations, then Jaccard over tokens |
+| `FUZZY_STRING` | lowercase, trim | Jaro-Winkler |
+| `DATE` | parse to `YYYY.MM.DD` | none — equal or 0 |
+| `UNIQUE_ID` | lowercase, trim | none — equal or 0 |
+| `PRIMITIVE_EXACT` | none | none — raw equality or 0 |
+
+Email takes the *minimum* of its two halves rather than the average: a perfect local part
+against a stranger's domain is not a near-match, so the weaker half governs. `NAME` sorts
+tokens first, so `John Smith` and `Smith John` are identical.
+
+A multi-valued attribute takes the best pair — every input value against every candidate
+value, highest wins. One matching email out of three is a match on that rule.
+
+---
 
 ### What each rule reports
 
