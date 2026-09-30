@@ -151,7 +151,7 @@ func UpdateAdminConfig(ctx context.Context, config model.AdminConfig, orgHandle 
 	if config.AutoMergeEnabled {
 		autoMergeEnabledValue = "true"
 	}
-	_, err = tx.Exec(query, orgHandle, constants.ConfigAutoMergeEnabled, autoMergeEnabledValue)
+	_, err = tx.ExecContext(ctx, query, orgHandle, constants.ConfigAutoMergeEnabled, autoMergeEnabledValue)
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to update auto_merge_enabled for organization: %s", orgHandle)
@@ -163,7 +163,8 @@ func UpdateAdminConfig(ctx context.Context, config model.AdminConfig, orgHandle 
 		}, err)
 	}
 
-	_, err = tx.Exec(query, orgHandle, constants.ConfigAutoMergeThreshold, strconv.FormatFloat(config.AutoMergeThreshold, 'f', -1, 64))
+	_, err = tx.ExecContext(ctx, query, orgHandle, constants.ConfigAutoMergeThreshold,
+		strconv.FormatFloat(config.AutoMergeThreshold, 'f', -1, 64))
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to update auto_merge_threshold for organization: %s", orgHandle)
@@ -175,7 +176,8 @@ func UpdateAdminConfig(ctx context.Context, config model.AdminConfig, orgHandle 
 		}, err)
 	}
 
-	_, err = tx.Exec(query, orgHandle, constants.ConfigManualReviewThreshold, strconv.FormatFloat(config.ManualReviewThreshold, 'f', -1, 64))
+	_, err = tx.ExecContext(ctx, query, orgHandle, constants.ConfigManualReviewThreshold,
+		strconv.FormatFloat(config.ManualReviewThreshold, 'f', -1, 64))
 	if err != nil {
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to update manual_review_threshold for organization: %s", orgHandle)

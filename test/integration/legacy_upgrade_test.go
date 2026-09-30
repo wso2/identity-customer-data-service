@@ -64,7 +64,7 @@ func insertLegacyRule(t *testing.T, org, property string, priority int) {
 	}
 	defer dbClient.Close()
 
-	_, err = dbClient.ExecuteQuery(legacyRuleInsert,
+	_, err = dbClient.ExecuteQueryContext(context.Background(), legacyRuleInsert,
 		uuid.New().String(), org, fmt.Sprintf("legacy-%s", property), property,
 		priority, true, time.Now().UTC(), time.Now().UTC())
 	if err != nil {
@@ -83,7 +83,8 @@ func insertLegacyAdminConfig(t *testing.T, org string) {
 	}
 	defer dbClient.Close()
 
-	if _, err := dbClient.ExecuteQuery(legacyConfigInsert, org, constants.ConfigCDSEnabled, "true"); err != nil {
+	if _, err := dbClient.ExecuteQueryContext(context.Background(), legacyConfigInsert,
+		org, constants.ConfigCDSEnabled, "true"); err != nil {
 		t.Fatalf("insert legacy admin config: %v", err)
 	}
 }
