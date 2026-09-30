@@ -191,6 +191,12 @@ In addition to user-defined rules there is one built-in merge trigger:
 |---|---|
 | `system:user_id_match` | Two profiles share the same `userId` — merged automatically without any rule |
 
+Every other merge records the **name of the rule that drove it**, whether it merged
+automatically or an administrator approved it from the review queue. The rule is the
+highest-priority one whose score reached the agreement bar — the one the scorer held
+accountable — so a profile alone answers "why were these combined?" without joining to the
+review task.
+
 This reason appears in `merged_from[].reason` on the master profile after the merge.
 
 ---

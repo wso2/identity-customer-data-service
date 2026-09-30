@@ -32,6 +32,8 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
+	urModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
+	urStore "github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
 )
 
 type IdentityResolutionServiceInterface interface {
@@ -196,7 +198,23 @@ func (s *IdentityResolutionService) ResolveReviewTask(ctx context.Context, orgHa
 
 	// Run the merge BEFORE updating task status. If MergeMatchedProfiles surfaces
 	// an error, the task must stay PENDING so the caller can retry.
-	survivingMaster, mergeErr := workers.MergeMatchedProfiles(ctx, *candidate, *incomingProfile, constants.MergeReasonReviewMerge)
+	// Record which rule proposed the pair, not a generic "review_merge". The administrator
+	// approved a specific piece of evidence, and the child reference is the only place a
+	// support question — "why were these combined?" — can be answered from the profile
+	// alone. Derived from the task's breakdown because its score was capped on the way to
+	// review and no longer equals any single rule's score.
+	mergeReason := constants.MergeReasonReviewMerge
+	if rawRules, rulesErr := urStore.GetUnificationRules(ctx, task.OrgHandle); rulesErr == nil {
+		rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
+			constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
+			constants.DefaultMismatchStrength)
+		thresholds := model.LoadThresholds(ctx, task.OrgHandle)
+		if ruleName, found := urModel.PrimaryRuleName(task.ScoreBreakdown, rules, thresholds.ManualReview); found {
+			mergeReason = ruleName
+		}
+	}
+
+	survivingMaster, mergeErr := workers.MergeMatchedProfiles(ctx, *candidate, *incomingProfile, mergeReason)
 	if mergeErr != nil {
 		logger.Error(fmt.Sprintf("Service: review merge failed for task %s — '%s' and '%s'",
 			taskID, incomingProfile.ProfileId, candidate.ProfileId), log.Error(mergeErr))

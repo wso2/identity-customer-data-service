@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/wso2/identity-customer-data-service/internal/system/cache"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -34,6 +36,8 @@ import (
 
 // AddUnificationRule adds a new unification rule to the database
 func AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgId string) error {
+
+	defer invalidateRulesCache()
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -70,7 +74,29 @@ func AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgId s
 }
 
 // GetUnificationRules fetches all unification rules from the database
+// rulesCache holds an organisation's rule set between writes.
+//
+// Every profile write reads the rules at least twice — once to decide whether the write is
+// worth resolving, once in the worker that resolves it — and rules change perhaps a few
+// times a year. The TTL is a backstop rather than the mechanism: a write on this instance
+// invalidates immediately, and the TTL bounds how long another instance can serve a stale
+// set after a rule changes elsewhere.
+var rulesCache = cache.NewCache(constants.UnificationRulesCacheTTL)
+
+// invalidateRulesCache drops every cached rule set. Rule writes are rare and the cache is
+// small, so clearing all of it is cheaper than threading an org handle through the write
+// paths that only carry a rule id.
+func invalidateRulesCache() {
+	rulesCache.Clear()
+}
+
 func GetUnificationRules(ctx context.Context, orgHandle string) ([]model.UnificationRule, error) {
+
+	if cached, found := rulesCache.Get(orgHandle); found {
+		if rules, ok := cached.([]model.UnificationRule); ok {
+			return rules, nil
+		}
+	}
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -103,6 +129,8 @@ func GetUnificationRules(ctx context.Context, orgHandle string) ([]model.Unifica
 	for _, row := range results {
 		rules = append(rules, scanUnificationRule(row))
 	}
+
+	rulesCache.Set(orgHandle, rules)
 
 	logger.Info(fmt.Sprintf("Successfully fetched all unification rules for organization: %s", orgHandle))
 	return rules, nil
@@ -156,6 +184,8 @@ func GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationR
 // PatchUnificationRule applies partial updates to a unification rule.
 func PatchUnificationRule(ctx context.Context, ruleId string, updatedRule model.UnificationRule) error {
 
+	defer invalidateRulesCache()
+
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
@@ -192,6 +222,8 @@ func PatchUnificationRule(ctx context.Context, ruleId string, updatedRule model.
 
 // DeleteUnificationRule deletes a unification rule by its Id
 func DeleteUnificationRule(ctx context.Context, ruleId string) error {
+
+	defer invalidateRulesCache()
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()

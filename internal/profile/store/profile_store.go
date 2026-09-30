@@ -1314,7 +1314,15 @@ func GetAllProfilesWithFilter(ctx context.Context,
 
 // GetProfileIDsWithFilters returns distinct profile IDs that match the given deterministic filters.
 // Used by the hybrid fuzzy+deterministic search to narrow the fuzzy candidate set.
-func GetProfileIDsWithFilters(ctx context.Context, orgHandle string, filters []string) ([]string, error) {
+// GetProfileIDsWithFilters returns the profiles in an org matching the given filters,
+// restricted to restrictTo when it is non-empty.
+//
+// The restriction exists so hybrid search can intersect in the database rather than in Go.
+// Fetching every matching id and intersecting in memory made a loose filter a full-tenant
+// scan whose result was then mostly discarded; the fuzzy candidate set is already capped,
+// so pushing it down bounds both the query and the memory it returns.
+func GetProfileIDsWithFilters(ctx context.Context, orgHandle string, filters []string,
+	restrictTo []string) ([]string, error) {
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
 	if err != nil {
@@ -1480,6 +1488,17 @@ func GetProfileIDsWithFilters(ctx context.Context, orgHandle string, filters []s
 	}
 
 	conditions = append(conditions, "r.profile_status = 'REFERENCE_PROFILE'")
+
+	if len(restrictTo) > 0 {
+		placeholders := make([]string, 0, len(restrictTo))
+		for _, id := range restrictTo {
+			placeholders = append(placeholders, fmt.Sprintf("$%d", argID))
+			args = append(args, id)
+			argID++
+		}
+		conditions = append(conditions, "p.profile_id IN ("+strings.Join(placeholders, ", ")+")")
+	}
+
 	whereClause := "WHERE " + strings.Join(conditions, " AND ")
 	finalSQL := fmt.Sprintf("%s\n%s", baseSQL, whereClause)
 

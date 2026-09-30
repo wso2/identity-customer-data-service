@@ -18,7 +18,10 @@
 
 package model
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // UnificationRule represents rules for merging user profiles
 type UnificationRule struct {
@@ -61,4 +64,47 @@ func ApplyDefaults(rule UnificationRule, defaultAttributeType, defaultMethod str
 		rule.MismatchStrength = mismatchDefaults[rule.AttributeType]
 	}
 	return rule
+}
+
+// ActiveSortedByPriority returns the active rules in evaluation order, with the fields that
+// older rules predate filled in.
+//
+// Priority order is not cosmetic: the first rule that agrees sets the match score and is the
+// one recorded as the reason for the merge, so anything that reads rules for matching must
+// see them in the same order. Keeping one implementation is what stops the worker, the
+// search path and the review path disagreeing about which rule was responsible.
+func ActiveSortedByPriority(rules []UnificationRule, defaultAttributeType, defaultMethod string,
+	matchDefaults, mismatchDefaults map[string]string) []UnificationRule {
+
+	active := make([]UnificationRule, 0, len(rules))
+	for _, rule := range rules {
+		if !rule.IsActive {
+			continue
+		}
+		active = append(active, ApplyDefaults(rule, defaultAttributeType, defaultMethod,
+			matchDefaults, mismatchDefaults))
+	}
+
+	sort.Slice(active, func(i, j int) bool {
+		return active[i].Priority < active[j].Priority
+	})
+	return active
+}
+
+// PrimaryRuleName returns the name of the rule that drove a match: the highest-priority rule
+// whose score reaches the agreement bar.
+//
+// That is the rule the scorer held accountable, so it is what belongs on the merge as its
+// reason. Deriving it from the breakdown rather than from the final score matters because
+// the final score may have been capped on its way to a review task — comparing against it
+// would find no rule at all and fall back to a generic reason.
+func PrimaryRuleName(breakdown map[string]float64, rules []UnificationRule,
+	agreementThreshold float64) (string, bool) {
+
+	for _, rule := range rules {
+		if score, scored := breakdown[rule.PropertyName]; scored && score >= agreementThreshold {
+			return rule.RuleName, true
+		}
+	}
+	return "", false
 }

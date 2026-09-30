@@ -1859,24 +1859,12 @@ func (ps *ProfilesService) GetProfilesHybrid(
 	}
 
 	// Step 4: Get deterministic candidates via SQL.
-	deterministicIDs, err := profileStore.GetProfileIDsWithFilters(ctx, orgHandle, deterministicFilters)
+	// Step 4/5: the deterministic filter is applied to the fuzzy candidates rather than to
+	// the whole organisation, so the database performs the intersection and returns only
+	// what survives both paths.
+	candidateIDs, err := profileStore.GetProfileIDsWithFilters(ctx, orgHandle, deterministicFilters, fuzzyIDs)
 	if err != nil {
 		return nil, err
-	}
-	if len(deterministicIDs) == 0 {
-		return []profileModel.FuzzyMatchResult{}, nil
-	}
-
-	// Step 5: Intersect — candidates must satisfy both paths.
-	deterministicSet := make(map[string]bool, len(deterministicIDs))
-	for _, id := range deterministicIDs {
-		deterministicSet[id] = true
-	}
-	candidateIDs := make([]string, 0, len(fuzzyIDs))
-	for _, id := range fuzzyIDs {
-		if deterministicSet[id] {
-			candidateIDs = append(candidateIDs, id)
-		}
 	}
 	if len(candidateIDs) == 0 {
 		return []profileModel.FuzzyMatchResult{}, nil

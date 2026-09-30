@@ -56,7 +56,9 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 		return
 	}
 
-	rules := filterActiveRules(rawRules)
+	rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
+		constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
+		constants.DefaultMismatchStrength)
 	if len(rules) == 0 {
 		return
 	}
@@ -261,18 +263,17 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 			matchedProfile, loadErr := profileStore.GetProfile(ctx, sc.id)
 			if loadErr != nil || matchedProfile == nil {
 				logger.Error(fmt.Sprintf("AsyncWorker: failed to load matched profile '%s' for auto-merge", sc.id))
-				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
+				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview, rejections)
 				continue
 			}
 
 			// Attribute the merge to the rule that actually drove it, so the child
 			// reference records why rather than a generic "auto_merge".
+			// Attribute the merge to the rule that drove it, so the child reference
+			// records why rather than a generic "auto_merge".
 			mergeReason := constants.MergeReasonAutoMerge
-			for _, rule := range rules {
-				if score, ok := sc.breakdown[rule.PropertyName]; ok && score == sc.score {
-					mergeReason = rule.RuleName
-					break
-				}
+			if ruleName, found := urModel.PrimaryRuleName(sc.breakdown, rules, thresholds.ManualReview); found {
+				mergeReason = ruleName
 			}
 
 			// The surviving master is whichever profile the merge promoted — it is not
@@ -284,12 +285,12 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 				// cascade-cancel related tasks.
 				logger.Error(fmt.Sprintf("AsyncWorker: auto-merge failed for '%s' → '%s' — falling back to review task",
 					matchedProfile.ProfileId, freshProfile.ProfileId), log.Error(mergeErr))
-				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
+				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview, rejections)
 				continue
 			}
 			if survivingMaster == nil {
 				// Pair turned out to be unmergeable — surface it for review instead.
-				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
+				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview, rejections)
 				continue
 			}
 			merged = true
@@ -298,7 +299,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 			break
 		}
 
-		insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
+		insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview, rejections)
 	}
 
 	if merged {
@@ -335,20 +336,24 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 		for _, sc := range remaining {
 			decision := model.Decide(sc.score, thresholds)
 			if decision == constants.DecisionAutoMerge || decision == constants.DecisionManualReview {
-				insertReviewTask(ctx, orgHandle, mergedMaster.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
+				insertReviewTask(ctx, orgHandle, mergedMaster.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview, rejections)
 			}
 		}
 	}
 }
 
+// insertReviewTask records a pair for an administrator to decide on.
+//
+// The caller passes the rejections it already loaded rather than having this re-read them:
+// one evaluation can raise several tasks, and re-fetching the same set per task was a query
+// each time for data already in memory.
 func insertReviewTask(ctx context.Context, orgHandle, incomingProfileID, candidateProfileID string,
-	score float64, breakdown map[string]float64, agreementThreshold float64) {
+	score float64, breakdown map[string]float64, agreementThreshold float64,
+	rejections map[string]model.Rejection) {
+
 	logger := log.GetLogger()
 
-	rejections, err := irStore.GetRejectionsForProfile(ctx, orgHandle, incomingProfileID)
-	if err != nil {
-		logger.Warn(fmt.Sprintf("AsyncWorker: could not check rejection pairs for '%s', proceeding with task creation", incomingProfileID), log.Error(err))
-	} else if rejection, wasRejected := rejections[candidateProfileID]; wasRejected &&
+	if rejection, wasRejected := rejections[candidateProfileID]; wasRejected &&
 		!rejection.ShouldReconsider(score, breakdown, agreementThreshold) {
 		return
 	}
@@ -390,7 +395,9 @@ func ReindexAfterMerge(ctx context.Context, masterProfileID, triggerProfileId, o
 			log.Error(err))
 		return
 	}
-	rules := filterActiveRules(rawRules)
+	rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
+		constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
+		constants.DefaultMismatchStrength)
 
 	newKeys := engine.GenerateBlockingKeysFromRules(flattenProfile(&mergedProfile), rules)
 	if len(newKeys) > 0 {
@@ -506,21 +513,4 @@ func RemoveAttributeIndex(ctx context.Context, orgHandle string, attributeName s
 	if err := irStore.DeleteBlockingKeysByAttribute(ctx, orgHandle, attributeName); err != nil {
 		logger.Error(fmt.Sprintf("Reindexer: failed to remove attribute index '%s'", attributeName), log.Error(err))
 	}
-}
-
-// filterActiveRules returns only active unification rules sorted by priority.
-func filterActiveRules(rules []urModel.UnificationRule) []urModel.UnificationRule {
-	active := make([]urModel.UnificationRule, 0, len(rules))
-	for _, r := range rules {
-		if !r.IsActive {
-			continue
-		}
-		active = append(active, urModel.ApplyDefaults(r, constants.AttributeTypePrimitiveExact,
-			constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
-			constants.DefaultMismatchStrength))
-	}
-	sort.Slice(active, func(i, j int) bool {
-		return active[i].Priority < active[j].Priority
-	})
-	return active
 }

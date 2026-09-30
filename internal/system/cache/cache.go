@@ -137,3 +137,13 @@ func (c *Cache) Delete(key string) {
 
 	delete(c.items, key)
 }
+
+// Clear removes every entry. Used where a write invalidates a whole cached namespace and
+// threading the affected keys through the write path would cost more than re-reading.
+func (c *Cache) Clear() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.items = make(map[string]CacheItem)
+	c.sweepAt = initialSweepThreshold
+}
