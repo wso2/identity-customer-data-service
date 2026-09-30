@@ -25,18 +25,39 @@ have only ever used that behaviour keep it after upgrading, with no configuratio
   **enabled**, because reading it as disabled would silently route every merge the tenant
   relied on into the review queue instead.
 
-Two behaviours are genuinely new for an existing organisation, and both only ever make the
-engine *more* cautious:
+### What does change
 
-- If several rules apply to a pair and most of them actively disagree, an automatic merge is
-  downgraded to a review task rather than performed.
-- If a rule is typed as `DATE` or `UNIQUE_ID` and the two values differ, that disagreement
-  vetoes an automatic merge.
+Two behaviours are new, and both make the engine *more* cautious. The first **affects
+existing organisations with two or more rules, without any configuration change.**
 
-Neither can fire while every rule is an untyped legacy rule, because nothing is typed as
-`DATE` or `UNIQUE_ID` and a lone exact match has nothing to disagree with it. They begin to
-apply as an operator gives attributes their real types, which is the point at which they
-want the extra caution.
+**Conflicting evidence downgrades an automatic merge to a review task.** When several rules
+have data on both profiles and most of the ones that are not the primary signal actively
+disagree, the merge is not performed automatically — a person decides instead.
+
+Before, the first rule that matched merged the pair outright, whatever the other rules held.
+With two deterministic rules on `email` (priority 1) and `phone` (priority 2):
+
+| Both profiles hold | Before | Now |
+|---|---|---|
+| Same email, same phone | merged | merged |
+| Same email, **different phone** | merged | **review task** |
+| Same email, no phone on one side | merged | merged |
+| Different email, **same phone** | merged | **review task** |
+| No email on one side, same phone | merged | merged |
+| Different email, different phone | no action | no action |
+
+A *missing* value is not a disagreement, so it never blocks — only two present values that
+differ do. Two profiles sharing an email but holding different phone numbers is the shared
+household address case, which is why it now asks.
+
+Note that with exactly two rules a single disagreement is already a majority, so a two-rule
+organisation is the most conservative configuration there is. Adding a third rule can make
+merges *more* likely, not less.
+
+**A disagreement on a `DATE` or `UNIQUE_ID` attribute vetoes an automatic merge**, whatever
+else agrees. Unlike the above, this cannot affect an organisation that has never typed its
+attributes, because both types have to be declared. It begins to apply as an operator gives
+attributes their real types, which is the point at which the extra caution is wanted.
 
 ---
 

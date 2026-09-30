@@ -118,3 +118,81 @@ func TestLegacyRulesDoNotMergeOnMismatch(t *testing.T) {
 		t.Errorf("a deterministic rule merged two different values (score %.4f)", score)
 	}
 }
+
+// TestTwoLegacyRulesWithConflictingEvidence pins the one behaviour change that reaches an
+// existing organisation without it changing anything.
+//
+// Before typed matching, the first rule to match merged the pair outright whatever the other
+// rules held. Now, when the other applicable rules mostly disagree, the merge is downgraded
+// to a review task. With exactly two rules a single disagreement is already a majority, so
+// this is reachable on the most ordinary legacy setup there is — which is why it has to be
+// stated in the upgrade notes rather than filed under "only affects typed attributes".
+func TestTwoLegacyRulesWithConflictingEvidence(t *testing.T) {
+	if err := log.Init("error"); err != nil {
+		t.Fatalf("init logger: %v", err)
+	}
+
+	thresholds := model.Thresholds{AutoMergeEnabled: true, AutoMerge: 0.95, ManualReview: 0.75}
+	ctx := ScoringContext{OrgHandle: "legacy", Thresholds: thresholds}
+	rules := []urModel.UnificationRule{
+		legacyRule("identity_attributes.email", 1),
+		legacyRule("traits.phone", 2),
+	}
+
+	tests := []struct {
+		name     string
+		incoming map[string]interface{}
+		existing map[string]interface{}
+		want     string
+	}{
+		{
+			name:     "both attributes agree",
+			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			want:     constants.DecisionAutoMerge,
+		},
+		{
+			// The change. Same email, different phone: merged before, asks now.
+			name:     "top rule agrees, the other contradicts",
+			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0777654321"},
+			want:     constants.DecisionManualReview,
+		},
+		{
+			name:     "lower rule agrees, the top one contradicts",
+			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing: map[string]interface{}{"identity_attributes.email": "b@acme.com", "traits.phone": "0771234567"},
+			want:     constants.DecisionManualReview,
+		},
+		{
+			// A missing value is not a disagreement, so it must not block the merge.
+			name:     "top rule agrees, the other has no value to compare",
+			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing: map[string]interface{}{"identity_attributes.email": "a@acme.com"},
+			want:     constants.DecisionAutoMerge,
+		},
+		{
+			name:     "lower rule agrees, the top one has no value to compare",
+			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing: map[string]interface{}{"traits.phone": "0771234567"},
+			want:     constants.DecisionAutoMerge,
+		},
+		{
+			name:     "neither agrees",
+			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing: map[string]interface{}{"identity_attributes.email": "b@acme.com", "traits.phone": "0777654321"},
+			want:     constants.DecisionUnique,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			candidate := &model.ProfileData{ProfileID: "candidate", Attributes: tt.existing}
+			score, breakdown := ScoreCandidate(tt.incoming, candidate, rules, ctx)
+			if got := model.Decide(score, thresholds); got != tt.want {
+				t.Errorf("decision = %s (score %.4f, breakdown %v), want %s",
+					got, score, breakdown, tt.want)
+			}
+		})
+	}
+}
