@@ -881,15 +881,12 @@ func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 			after := flattenProfileAttrs(profileToUpDate)
 			matchedValuesChanged := ruleValuesChanged(before, after, activeRules)
 
-			// A rejection records a human deciding two profiles are different people.
-			// Discard it only when the data that decision was made about has actually
-			// changed — clearing on every update meant an unrelated edit resurrected
-			// every pair the admin had already dismissed.
-			if matchedValuesChanged {
-				if err := irStore.DeleteRejectionPairsForProfile(ctx, orgHandle, profileToUpDate.ProfileId); err != nil {
-					logger.Warn(fmt.Sprintf("UpdateProfile: failed to clear rejection pairs for profile '%s'", profileToUpDate.ProfileId), log.Error(err))
-				}
-			}
+			// Rejections are deliberately not cleared here. One records a human deciding
+			// two profiles are different people, which does not stop being true because
+			// an attribute changed — and discarding it on a value change put the same
+			// dismissed pair back in front of the administrator whenever anything moved.
+			// The evidence stored with the rejection is compared against each fresh
+			// evaluation instead, so only a materially stronger match reopens it.
 
 			if shouldResolveAfterUpdate(*profile, profileToUpDate, matchedValuesChanged, activeRules) {
 				profileToUpDate.OrgHandle = orgHandle

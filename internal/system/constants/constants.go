@@ -368,6 +368,17 @@ const (
 	// on one weak attribute (a shared city, a common given name) can never merge unattended.
 	MinAgreeingRulesForAutoMerge = 2
 
+	// RejectionReconsiderMargin is how much stronger a match must be than the one an
+	// administrator rejected before the pair is put in front of them again.
+	//
+	// A rejection says two profiles are different people, which does not stop being true
+	// because their data changed. Re-proposing on any change makes the queue a treadmill;
+	// never re-proposing means genuinely new evidence is ignored. The margin is the gap
+	// between those, and it exists to absorb the small score movements that ordinary edits
+	// cause without amounting to new information.
+	// NOTE: like the thresholds, a defensible starting point rather than a calibrated one.
+	RejectionReconsiderMargin = 0.05
+
 	// ScorePenaltyOffset is subtracted from the auto-merge threshold when capping a
 	// score just below it. The small gap keeps the score detectable as sub-threshold
 	// while remaining high enough to route to manual review.

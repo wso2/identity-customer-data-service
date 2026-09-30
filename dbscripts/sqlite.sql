@@ -249,8 +249,13 @@ CREATE TABLE IF NOT EXISTS rejection_pairs
 (
     id           VARCHAR(255) PRIMARY KEY,
     org_handle   VARCHAR(255) NOT NULL,
+    -- Stored with the lower id first, so one row means one pair whichever direction the
+    -- review task happened to run in.
     profile_id_1 VARCHAR(255) NOT NULL,
     profile_id_2 VARCHAR(255) NOT NULL,
+    -- The evidence the decision was made against; see the PostgreSQL schema for why.
+    match_score     DECIMAL(5, 4),
+    score_breakdown TEXT DEFAULT '{}',
     rejected_by  VARCHAR(255),
     rejected_at  TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00'),
     CONSTRAINT uq_rejection_pair UNIQUE (profile_id_1, profile_id_2)

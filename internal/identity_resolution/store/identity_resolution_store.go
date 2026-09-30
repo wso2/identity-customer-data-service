@@ -484,28 +484,47 @@ func InsertMergeAuditLog(ctx context.Context, entry model.MergeAuditEntry) error
 }
 
 // InsertRejectionPair stores a rejection pair in canonical order.
-func InsertRejectionPair(ctx context.Context, orgHandle, profileA, profileB, rejectedBy string) error {
+// InsertRejectionPair records that an administrator decided two profiles are different
+// people, along with the evidence they decided against.
+//
+// The pair is stored with the lower id first so one row means one pair, whichever direction
+// the review task happened to run in — the unique constraint is on the ordered columns, and
+// without normalising here the same pair could occupy two rows.
+func InsertRejectionPair(ctx context.Context, orgHandle, profileIDA, profileIDB, rejectedBy string,
+	matchScore float64, breakdown map[string]float64) error {
+
 	logger := log.GetLogger()
 
-	// Canonical ordering: smaller ID is profile_id_1.
-	id1, id2 := profileA, profileB
-	if id1 > id2 {
-		id1, id2 = id2, id1
+	first, second := profileIDA, profileIDB
+	if first > second {
+		first, second = second, first
 	}
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
-		return err
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_REVIEW_TASK_FAILED.Code,
+			Message:     errors2.IR_REVIEW_TASK_FAILED.Message,
+			Description: "Failed to connect to database for rejection pair insertion.",
+		}, err)
 	}
 	defer dbClient.Close()
 
-	rejectionID := uuid.New().String()
+	breakdownJSON, marshalErr := json.Marshal(breakdown)
+	if marshalErr != nil {
+		breakdownJSON = []byte("{}")
+	}
 
 	query := scripts.IRInsertRejectionPair
-	_, err = dbClient.ExecuteQueryContext(ctx, query, rejectionID, orgHandle, id1, id2, rejectedBy)
-	if err != nil {
-		logger.Error("Store: failed to insert rejection pair", log.Error(err))
-		return err
+	if _, err := dbClient.ExecuteQueryContext(ctx, query, uuid.New().String(), orgHandle,
+		first, second, matchScore, string(breakdownJSON), rejectedBy); err != nil {
+		logger.Error(fmt.Sprintf("Store: failed to record rejection for '%s' and '%s'",
+			first, second), log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.IR_REVIEW_TASK_FAILED.Code,
+			Message:     errors2.IR_REVIEW_TASK_FAILED.Message,
+			Description: fmt.Sprintf("Failed to record rejection for profiles %s and %s", first, second),
+		}, err)
 	}
 
 	return nil
@@ -533,7 +552,10 @@ func DeleteRejectionPairsForProfile(ctx context.Context, orgHandle, profileID st
 }
 
 // GetRejectedProfileIDs returns the set of profile IDs that have been rejected against the given profileID.
-func GetRejectedProfileIDs(ctx context.Context, orgHandle, profileID string) (map[string]struct{}, error) {
+// GetRejectionsForProfile returns every rejection involving the profile, keyed by the
+// profile on the other side of the pair, with the evidence each decision was made against.
+func GetRejectionsForProfile(ctx context.Context, orgHandle, profileID string) (map[string]model.Rejection, error) {
+
 	logger := log.GetLogger()
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -542,25 +564,52 @@ func GetRejectedProfileIDs(ctx context.Context, orgHandle, profileID string) (ma
 	}
 	defer dbClient.Close()
 
-	query := scripts.IRGetRejectedProfileIDs
-	rows, err := dbClient.ExecuteQueryContext(ctx, query, orgHandle, profileID)
+	query := scripts.IRGetRejectionsForProfile
+	results, err := dbClient.ExecuteQueryContext(ctx, query, orgHandle, profileID)
 	if err != nil {
-		logger.Warn("Store: failed to query rejection pairs", log.Error(err))
+		logger.Warn(fmt.Sprintf("Store: failed to load rejections for '%s'", profileID), log.Error(err))
 		return nil, err
 	}
 
-	rejected := make(map[string]struct{})
-	for _, row := range rows {
-		p1 := fmt.Sprintf("%v", row["profile_id_1"])
-		p2 := fmt.Sprintf("%v", row["profile_id_2"])
-		if p1 == profileID {
-			rejected[p2] = struct{}{}
-		} else {
-			rejected[p1] = struct{}{}
+	rejections := make(map[string]model.Rejection, len(results))
+	for _, row := range results {
+		first := fmt.Sprintf("%v", row["profile_id_1"])
+		second := fmt.Sprintf("%v", row["profile_id_2"])
+
+		other := second
+		if second == profileID {
+			other = first
 		}
+		if other == profileID {
+			continue
+		}
+
+		rejection := model.Rejection{OtherProfileID: other}
+
+		switch score := row["match_score"].(type) {
+		case float64:
+			rejection.MatchScore = score
+		case []byte:
+			if parsed, parseErr := strconv.ParseFloat(string(score), 64); parseErr == nil {
+				rejection.MatchScore = parsed
+			}
+		case string:
+			if parsed, parseErr := strconv.ParseFloat(score, 64); parseErr == nil {
+				rejection.MatchScore = parsed
+			}
+		}
+
+		switch raw := row["score_breakdown"].(type) {
+		case []byte:
+			_ = json.Unmarshal(raw, &rejection.ScoreBreakdown)
+		case string:
+			_ = json.Unmarshal([]byte(raw), &rejection.ScoreBreakdown)
+		}
+
+		rejections[other] = rejection
 	}
 
-	return rejected, nil
+	return rejections, nil
 }
 
 // RepointRejectionPairs moves every rejection involving fromProfileID onto toProfileID.

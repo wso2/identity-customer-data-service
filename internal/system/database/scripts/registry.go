@@ -114,7 +114,7 @@ func AllQueries() map[string]model.DBQuery {
 		"IRGetPendingReviewTasksByProfile":   IRGetPendingReviewTasksByProfile,
 		"IRGetProfilesByIDs":                 IRGetProfilesByIDs,
 		"IRGetProfilesForOrgAfter":           IRGetProfilesForOrgAfter,
-		"IRGetRejectedProfileIDs":            IRGetRejectedProfileIDs,
+		"IRGetRejectionsForProfile":          IRGetRejectionsForProfile,
 		"IRGetReviewTaskByID":                IRGetReviewTaskByID,
 		"IRInsertBlockingKeys":               IRInsertBlockingKeys,
 		"IRInsertMergeAuditLog":              IRInsertMergeAuditLog,

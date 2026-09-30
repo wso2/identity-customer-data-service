@@ -124,7 +124,10 @@ func (s *IdentityResolutionService) ResolveReviewTask(ctx context.Context, orgHa
 
 	if !approved {
 		// Store the rejection pair before marking the task rejected.
-		if err := irStore.InsertRejectionPair(ctx, task.OrgHandle, task.IncomingProfileID, task.CandidateProfileID, resolvedBy); err != nil {
+		// Keep the evidence the administrator decided against, so a later, materially
+		// stronger match can be reconsidered while ordinary edits leave the decision alone.
+		if err := irStore.InsertRejectionPair(ctx, task.OrgHandle, task.IncomingProfileID,
+			task.CandidateProfileID, resolvedBy, task.MatchScore, task.ScoreBreakdown); err != nil {
 			logger.Error(fmt.Sprintf("Service: failed to store rejection pair for task %s", taskID), log.Error(err))
 			return err
 		}

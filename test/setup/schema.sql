@@ -188,8 +188,15 @@ CREATE INDEX IF NOT EXISTS idx_review_tasks_incoming ON review_tasks(incoming_pr
 CREATE TABLE IF NOT EXISTS rejection_pairs (
     id              VARCHAR(255) PRIMARY KEY,
     org_handle      VARCHAR(255) NOT NULL,
+    -- Stored with the lower id first, so one row means one pair whichever direction the
+    -- review task happened to run in and the unique constraint below isenforceable.
     profile_id_1    VARCHAR(255) NOT NULL,
     profile_id_2    VARCHAR(255) NOT NULL,
+    -- The evidence the decision was made against. A rejection asserts that two profiles are
+    -- different people, which does not stop being true because an attribute changed — so it
+    -- is only reconsidered when later evidence is materially stronger than this.
+    match_score     DECIMAL(5,4),
+    score_breakdown JSONB DEFAULT '{}'::jsonb,
     rejected_by     VARCHAR(255),
     rejected_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_rejection_pair UNIQUE (profile_id_1, profile_id_2)

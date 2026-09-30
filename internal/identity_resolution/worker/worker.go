@@ -214,12 +214,14 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 		return scored[i].score > scored[j].score
 	})
 
-	// Filter out candidates that have been explicitly rejected against this profile.
-	rejectedIDs, _ := irStore.GetRejectedProfileIDs(ctx, orgHandle, freshProfile.ProfileId)
-	if len(rejectedIDs) > 0 {
+	// Drop candidates an administrator has already decided are different people, unless
+	// this evaluation is materially stronger than the one they rejected.
+	rejections, _ := irStore.GetRejectionsForProfile(ctx, orgHandle, freshProfile.ProfileId)
+	if len(rejections) > 0 {
 		var filtered []scoredCandidate
 		for _, sc := range scored {
-			if _, ok := rejectedIDs[sc.id]; ok {
+			rejection, wasRejected := rejections[sc.id]
+			if wasRejected && !rejection.ShouldReconsider(sc.score, sc.breakdown, thresholds.ManualReview) {
 				continue
 			}
 			filtered = append(filtered, sc)
@@ -259,7 +261,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 			matchedProfile, loadErr := profileStore.GetProfile(ctx, sc.id)
 			if loadErr != nil || matchedProfile == nil {
 				logger.Error(fmt.Sprintf("AsyncWorker: failed to load matched profile '%s' for auto-merge", sc.id))
-				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
+				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
 				continue
 			}
 
@@ -282,12 +284,12 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 				// cascade-cancel related tasks.
 				logger.Error(fmt.Sprintf("AsyncWorker: auto-merge failed for '%s' → '%s' — falling back to review task",
 					matchedProfile.ProfileId, freshProfile.ProfileId), log.Error(mergeErr))
-				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
+				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
 				continue
 			}
 			if survivingMaster == nil {
 				// Pair turned out to be unmergeable — surface it for review instead.
-				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
+				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
 				continue
 			}
 			merged = true
@@ -307,7 +309,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 			break
 		}
 
-		insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown)
+		insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
 	}
 
 	if merged {
@@ -344,20 +346,21 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 		for _, sc := range remaining {
 			decision := model.Decide(sc.score, thresholds)
 			if decision == constants.DecisionAutoMerge || decision == constants.DecisionManualReview {
-				insertReviewTask(ctx, orgHandle, mergedMaster.ProfileId, sc.id, sc.score, sc.breakdown)
+				insertReviewTask(ctx, orgHandle, mergedMaster.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview)
 			}
 		}
 	}
 }
 
 func insertReviewTask(ctx context.Context, orgHandle, incomingProfileID, candidateProfileID string,
-	score float64, breakdown map[string]float64) {
+	score float64, breakdown map[string]float64, agreementThreshold float64) {
 	logger := log.GetLogger()
 
-	rejectedIDs, err := irStore.GetRejectedProfileIDs(ctx, orgHandle, incomingProfileID)
+	rejections, err := irStore.GetRejectionsForProfile(ctx, orgHandle, incomingProfileID)
 	if err != nil {
 		logger.Warn(fmt.Sprintf("AsyncWorker: could not check rejection pairs for '%s', proceeding with task creation", incomingProfileID), log.Error(err))
-	} else if _, ok := rejectedIDs[candidateProfileID]; ok {
+	} else if rejection, wasRejected := rejections[candidateProfileID]; wasRejected &&
+		!rejection.ShouldReconsider(score, breakdown, agreementThreshold) {
 		return
 	}
 

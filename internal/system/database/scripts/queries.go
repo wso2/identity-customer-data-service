@@ -624,12 +624,16 @@ var IRUpdateReviewTaskStatus = newQuery("CDS-IDR-18",
 				 WHERE id = $4`)
 
 var IRInsertRejectionPair = newQuery("CDS-IDR-19",
-	`INSERT INTO rejection_pairs (id, org_handle, profile_id_1, profile_id_2, rejected_by)
-				 VALUES ($1, $2, $3, $4, $5)
-				 ON CONFLICT (profile_id_1, profile_id_2) DO NOTHING`)
+	`INSERT INTO rejection_pairs (id, org_handle, profile_id_1, profile_id_2, match_score,
+				 score_breakdown, rejected_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7)
+				 ON CONFLICT (profile_id_1, profile_id_2) DO UPDATE
+				 SET match_score = $5, score_breakdown = $6, rejected_by = $7`)
 
-var IRGetRejectedProfileIDs = newQuery("CDS-IDR-20",
-	`SELECT profile_id_1, profile_id_2 FROM rejection_pairs
+// IRGetRejectionsForProfile returns every rejection involving a profile, with the evidence
+// the decision was made against so a later, stronger match can be reconsidered.
+var IRGetRejectionsForProfile = newQuery("CDS-IDR-20",
+	`SELECT profile_id_1, profile_id_2, match_score, score_breakdown FROM rejection_pairs
 				 WHERE org_handle = $1 AND (profile_id_1 = $2 OR profile_id_2 = $2)`)
 
 var IRDeleteRejectionPairsForProfile = newQuery("CDS-IDR-21",
