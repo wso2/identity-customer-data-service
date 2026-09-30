@@ -103,7 +103,7 @@ func TestInstallSchemaDefinesEveryTestedTable(t *testing.T) {
 // TestIdentityResolutionTablesArePresent names the tables the resolution engine cannot run
 // without, so removing one fails loudly rather than at first merge attempt.
 func TestIdentityResolutionTablesArePresent(t *testing.T) {
-	required := []string{"blocking_keys", "review_tasks", "rejection_pairs", "merge_audit_log"}
+	required := []string{"blocking_keys", "review_tasks", "rejection_pairs"}
 
 	for _, path := range []string{installSchema, sqliteSchema, testSchema} {
 		present := make(map[string]bool)

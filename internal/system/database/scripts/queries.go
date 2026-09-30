@@ -647,7 +647,3 @@ var IRRepointRejectionPairs = newQuery("CDS-IDR-22",
 				     profile_id_2 = CASE WHEN profile_id_2 = $2 THEN $3 ELSE profile_id_2 END
 				 WHERE org_handle = $1 AND ($2 IN (profile_id_1, profile_id_2))
 				   AND profile_id_1 != $3 AND profile_id_2 != $3`)
-
-var IRInsertMergeAuditLog = newQuery("CDS-IDR-23",
-	`INSERT INTO merge_audit_log (id, org_handle, primary_profile_id, secondary_profile_id, merge_type, match_score, merged_by)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7)`)

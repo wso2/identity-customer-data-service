@@ -294,17 +294,6 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 			}
 			merged = true
 			mergedMaster = survivingMaster
-			if auditErr := irStore.InsertMergeAuditLog(ctx, model.MergeAuditEntry{
-				OrgHandle:          orgHandle,
-				PrimaryProfileID:   survivingMaster.ProfileId,
-				SecondaryProfileID: freshProfile.ProfileId,
-				MergeType:          constants.DecisionAutoMerge,
-				MatchScore:         sc.score,
-				MergedBy:           constants.MergeOnTrigger,
-			}); auditErr != nil {
-				logger.Error(fmt.Sprintf("AsyncWorker: failed to insert merge audit log for '%s' → '%s'",
-					survivingMaster.ProfileId, freshProfile.ProfileId), log.Error(auditErr))
-			}
 			remaining = scored[i+1:]
 			break
 		}

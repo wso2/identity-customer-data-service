@@ -163,7 +163,6 @@ CREATE INDEX IF NOT EXISTS idx_profiles_org_created_profile
 CREATE INDEX IF NOT EXISTS idx_profiles_org_user
     ON profiles (org_handle, user_id);
 
-
 -- ================================
 -- PROFILE_REFERENCE (Join + status filtering)
 -- ================================
@@ -178,7 +177,6 @@ CREATE INDEX IF NOT EXISTS idx_profile_reference_org_status_profile
 CREATE INDEX IF NOT EXISTS idx_profile_reference_reference_profile
     ON profile_reference (reference_profile_id);
 
-
 -- ================================
 -- APPLICATION_DATA (Joins + filtering)
 -- ================================
@@ -189,7 +187,6 @@ CREATE INDEX IF NOT EXISTS idx_application_data_profile_id
 CREATE INDEX IF NOT EXISTS idx_application_data_app_id
     ON application_data (app_id);
 
-
 -- ================================
 -- PROFILE_SCHEMA (Rare filtering, minimal indexes)
 -- ================================
@@ -199,7 +196,6 @@ CREATE INDEX IF NOT EXISTS idx_profile_schema_org_scope
 CREATE INDEX IF NOT EXISTS idx_profile_schema_org_attr_name
     ON profile_schema (org_handle, attribute_name);
 
-
 -- ================================
 -- UNIFICATION_RULES
 -- ================================
@@ -208,7 +204,6 @@ CREATE INDEX IF NOT EXISTS idx_unification_rules_org_active_priority
 
 CREATE INDEX IF NOT EXISTS idx_unification_rules_property_id
     ON unification_rules (property_id);
-
 
 -- Identity Resolution: the blocking index, review queue, rejections and merge audit.
 
@@ -264,18 +259,3 @@ CREATE TABLE IF NOT EXISTS rejection_pairs
 CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p1 ON rejection_pairs (org_handle, profile_id_1);
 CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p2 ON rejection_pairs (org_handle, profile_id_2);
 
--- An audit trail, not an undo log; see the PostgreSQL schema for why a merge cannot be
--- reversed from it.
-CREATE TABLE IF NOT EXISTS merge_audit_log
-(
-    id                   VARCHAR(255) PRIMARY KEY,
-    org_handle           VARCHAR(255) NOT NULL,
-    primary_profile_id   VARCHAR(255) NOT NULL,
-    secondary_profile_id VARCHAR(255) NOT NULL,
-    merge_type           VARCHAR(50)  NOT NULL,
-    match_score          DECIMAL(5, 4),
-    merged_by            VARCHAR(255),
-    merge_timestamp      TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00')
-);
-
-CREATE INDEX IF NOT EXISTS idx_merge_audit_org ON merge_audit_log (org_handle, merge_timestamp DESC);

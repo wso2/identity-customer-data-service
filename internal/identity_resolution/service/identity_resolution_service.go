@@ -215,20 +215,6 @@ func (s *IdentityResolutionService) ResolveReviewTask(ctx context.Context, orgHa
 		}, http.StatusConflict)
 	}
 
-	// The merge promotes one of the two profiles (or a brand-new neutral master) — record
-	// the profile that actually survived, not the candidate we happened to pass in first.
-	if auditErr := irStore.InsertMergeAuditLog(ctx, model.MergeAuditEntry{
-		OrgHandle:          task.OrgHandle,
-		PrimaryProfileID:   survivingMaster.ProfileId,
-		SecondaryProfileID: incomingProfile.ProfileId,
-		MergeType:          constants.DecisionManualReview,
-		MatchScore:         task.MatchScore,
-		MergedBy:           resolvedBy,
-	}); auditErr != nil {
-		logger.Error(fmt.Sprintf("Service: failed to insert merge audit log for review task %s — '%s' → '%s'",
-			taskID, incomingProfile.ProfileId, survivingMaster.ProfileId), log.Error(auditErr))
-	}
-
 	// Cascade cancel only after the merge has actually happened. Cancelling first meant a
 	// failed merge left the sibling tasks cancelled while this one stayed pending, and a
 	// cancelled pair cannot be re-proposed while a row for it already exists.

@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	irModel "github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
-	irStore "github.com/wso2/identity-customer-data-service/internal/identity_resolution/store"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
@@ -201,17 +199,6 @@ func unifyProfiles(ctx context.Context, newProfile profileModel.Profile) {
 				}
 				if mergedMaster == nil {
 					continue
-				}
-				if auditErr := irStore.InsertMergeAuditLog(ctx, irModel.MergeAuditEntry{
-					OrgHandle:          newProfile.OrgHandle,
-					PrimaryProfileID:   mergedMaster.ProfileId,
-					SecondaryProfileID: newProfile.ProfileId,
-					MergeType:          constants.DecisionAutoMerge,
-					MatchScore:         1.0,
-					MergedBy:           constants.MergeOnTrigger,
-				}); auditErr != nil {
-					logger.Error(fmt.Sprintf("unifyProfiles: failed to insert audit log for userId-match merge of '%s' → '%s'",
-						existingMasterProfile.ProfileId, newProfile.ProfileId), log.Error(auditErr))
 				}
 				return
 			}

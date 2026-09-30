@@ -451,38 +451,6 @@ func scanReviewTask(row map[string]interface{}) model.ReviewTask {
 	return task
 }
 
-func InsertMergeAuditLog(ctx context.Context, entry model.MergeAuditEntry) error {
-	logger := log.GetLogger()
-
-	dbClient, err := provider.NewDBProvider().GetDBClient()
-	if err != nil {
-		logger.Error("Store: failed to get DB client for audit log", log.Error(err))
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IR_AUDIT_LOG.Code,
-			Message:     errors2.IR_AUDIT_LOG.Message,
-			Description: "Failed to connect to database for audit log.",
-		}, err)
-	}
-	defer dbClient.Close()
-
-	auditID := uuid.New().String()
-
-	query := scripts.IRInsertMergeAuditLog
-	_, err = dbClient.ExecuteQueryContext(ctx, query,
-		auditID, entry.OrgHandle, entry.PrimaryProfileID, entry.SecondaryProfileID,
-		entry.MergeType, entry.MatchScore, entry.MergedBy)
-	if err != nil {
-		logger.Error("Store: failed to insert merge audit log", log.Error(err))
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IR_AUDIT_LOG.Code,
-			Message:     errors2.IR_AUDIT_LOG.Message,
-			Description: fmt.Sprintf("Failed to insert merge audit log for %s → %s", entry.PrimaryProfileID, entry.SecondaryProfileID),
-		}, err)
-	}
-
-	return nil
-}
-
 // InsertRejectionPair stores a rejection pair in canonical order.
 // InsertRejectionPair records that an administrator decided two profiles are different
 // people, along with the evidence they decided against.
