@@ -245,7 +245,12 @@ Setting `is_active: false` excludes a rule from evaluation without deleting it, 
 that attribute's blocking keys for the organisation — the index shrinks rather than carrying
 entries nothing reads. Re-activating it starts the backfill again.
 
-Changing `attribute_type` on an active rule does both: the old keys are removed and rebuilt,
-because the key shape a type produces is different.
+Changing `attribute_type` **or** `unification_method` on an active rule does both: the old
+keys are removed and rebuilt, because each of those changes the shape of the keys the rule
+writes. The method matters as much as the type — a rule switched from `deterministic` to
+`fuzzy` has only its exact key in the index, so without a rebuild it keeps behaving exactly
+like a deterministic rule for every existing profile while appearing to be fuzzy.
+
+Changing a rule's name or priority needs no rebuild; neither affects the keys.
 
 Existing merges already recorded are not reversed when a rule is deactivated or deleted.

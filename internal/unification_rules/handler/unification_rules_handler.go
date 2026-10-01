@@ -415,8 +415,17 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		utils.SafeGo("unification rule index removal", func() { worker.RemoveAttributeIndex(ctx, orgHandle, newRule.PropertyName) })
 	}
 
-	// AttributeType change on an already-active rule invalidates the blocking-key shape.
-	if wasActive && nowActive && oldRule.AttributeType != newRule.AttributeType {
+	// Either of these changes the shape of the keys the rule writes, so what is already in
+	// the index no longer matches what the rule would produce now.
+	//
+	// attribute_type decides the normalisation and which extra keys exist at all;
+	// unification_method decides whether the recall-widening keys are written — a rule
+	// switched from deterministic to fuzzy has only its exact key indexed, so it keeps
+	// behaving exactly like a deterministic rule for every existing profile until each one
+	// happens to be rewritten. The rule looks enabled and finds nothing new.
+	keyShapeChanged := oldRule.AttributeType != newRule.AttributeType ||
+		oldRule.UnificationMethod != newRule.UnificationMethod
+	if wasActive && nowActive && keyShapeChanged {
 		utils.SafeGo("unification rule index rebuild", func() {
 			worker.RemoveAttributeIndex(ctx, orgHandle, newRule.PropertyName)
 			worker.IndexNewAttribute(ctx, orgHandle, *newRule)
