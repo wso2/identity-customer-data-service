@@ -119,80 +119,146 @@ func TestLegacyRulesDoNotMergeOnMismatch(t *testing.T) {
 	}
 }
 
-// TestTwoLegacyRulesWithConflictingEvidence pins the one behaviour change that reaches an
-// existing organisation without it changing anything.
+// TestTwoLegacyRulesWithConflictingEvidence pins what deterministic_match_decisive decides.
 //
 // Before typed matching, the first rule to match merged the pair outright whatever the other
-// rules held. Now, when the other applicable rules mostly disagree, the merge is downgraded
-// to a review task. With exactly two rules a single disagreement is already a majority, so
-// this is reachable on the most ordinary legacy setup there is — which is why it has to be
-// stated in the upgrade notes rather than filed under "only affects typed attributes".
+// rules held. With the setting on — the default, and what every organisation predating it
+// gets — that is still exactly what happens. With it off, the other applicable rules may
+// object: when most of them disagree, the merge is downgraded to a review task. With exactly
+// two rules a single disagreement is already a majority, so the two columns differ on the
+// most ordinary legacy setup there is.
 func TestTwoLegacyRulesWithConflictingEvidence(t *testing.T) {
 	if err := log.Init("error"); err != nil {
 		t.Fatalf("init logger: %v", err)
 	}
 
-	thresholds := model.Thresholds{AutoMergeEnabled: true, AutoMerge: 0.95, ManualReview: 0.75}
-	ctx := ScoringContext{OrgHandle: "legacy", Thresholds: thresholds}
 	rules := []urModel.UnificationRule{
 		legacyRule("identity_attributes.email", 1),
 		legacyRule("traits.phone", 2),
 	}
 
 	tests := []struct {
-		name     string
-		incoming map[string]interface{}
-		existing map[string]interface{}
-		want     string
+		name         string
+		incoming     map[string]interface{}
+		existing     map[string]interface{}
+		wantDecisive string
+		wantOpen     string
 	}{
 		{
-			name:     "both attributes agree",
-			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
-			existing: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
-			want:     constants.DecisionAutoMerge,
+			name:         "both attributes agree",
+			incoming:     map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing:     map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			wantDecisive: constants.DecisionAutoMerge,
+			wantOpen:     constants.DecisionAutoMerge,
 		},
 		{
-			// The change. Same email, different phone: merged before, asks now.
-			name:     "top rule agrees, the other contradicts",
-			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
-			existing: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0777654321"},
-			want:     constants.DecisionManualReview,
+			// Same email, different phone. Decisive merges as before; open asks.
+			name:         "top rule agrees, the other contradicts",
+			incoming:     map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing:     map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0777654321"},
+			wantDecisive: constants.DecisionAutoMerge,
+			wantOpen:     constants.DecisionManualReview,
 		},
 		{
-			name:     "lower rule agrees, the top one contradicts",
-			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
-			existing: map[string]interface{}{"identity_attributes.email": "b@acme.com", "traits.phone": "0771234567"},
-			want:     constants.DecisionManualReview,
+			name:         "lower rule agrees, the top one contradicts",
+			incoming:     map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing:     map[string]interface{}{"identity_attributes.email": "b@acme.com", "traits.phone": "0771234567"},
+			wantDecisive: constants.DecisionAutoMerge,
+			wantOpen:     constants.DecisionManualReview,
 		},
 		{
-			// A missing value is not a disagreement, so it must not block the merge.
-			name:     "top rule agrees, the other has no value to compare",
-			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
-			existing: map[string]interface{}{"identity_attributes.email": "a@acme.com"},
-			want:     constants.DecisionAutoMerge,
+			// A missing value is not a disagreement, so it must not block the merge either way.
+			name:         "top rule agrees, the other has no value to compare",
+			incoming:     map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing:     map[string]interface{}{"identity_attributes.email": "a@acme.com"},
+			wantDecisive: constants.DecisionAutoMerge,
+			wantOpen:     constants.DecisionAutoMerge,
 		},
 		{
-			name:     "lower rule agrees, the top one has no value to compare",
-			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
-			existing: map[string]interface{}{"traits.phone": "0771234567"},
-			want:     constants.DecisionAutoMerge,
+			name:         "lower rule agrees, the top one has no value to compare",
+			incoming:     map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing:     map[string]interface{}{"traits.phone": "0771234567"},
+			wantDecisive: constants.DecisionAutoMerge,
+			wantOpen:     constants.DecisionAutoMerge,
 		},
 		{
-			name:     "neither agrees",
-			incoming: map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
-			existing: map[string]interface{}{"identity_attributes.email": "b@acme.com", "traits.phone": "0777654321"},
-			want:     constants.DecisionUnique,
+			// Decisive only short-circuits an agreement; it never manufactures one.
+			name:         "neither agrees",
+			incoming:     map[string]interface{}{"identity_attributes.email": "a@acme.com", "traits.phone": "0771234567"},
+			existing:     map[string]interface{}{"identity_attributes.email": "b@acme.com", "traits.phone": "0777654321"},
+			wantDecisive: constants.DecisionUnique,
+			wantOpen:     constants.DecisionUnique,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			candidate := &model.ProfileData{ProfileID: "candidate", Attributes: tt.existing}
-			score, breakdown := ScoreCandidate(tt.incoming, candidate, rules, ctx)
-			if got := model.Decide(score, thresholds); got != tt.want {
-				t.Errorf("decision = %s (score %.4f, breakdown %v), want %s",
-					got, score, breakdown, tt.want)
+	for _, decisive := range []bool{true, false} {
+		modeName := "open to objection"
+		if decisive {
+			modeName = "decisive (default)"
+		}
+		thresholds := model.Thresholds{AutoMergeEnabled: true, AutoMerge: 0.95, ManualReview: 0.75,
+			DeterministicMatchDecisive: decisive}
+		ctx := ScoringContext{OrgHandle: "legacy", Thresholds: thresholds}
+
+		for _, tt := range tests {
+			want := tt.wantOpen
+			if decisive {
+				want = tt.wantDecisive
 			}
-		})
+			t.Run(modeName+"/"+tt.name, func(t *testing.T) {
+				candidate := &model.ProfileData{ProfileID: "candidate", Attributes: tt.existing}
+				score, breakdown := ScoreCandidate(tt.incoming, candidate, rules, ctx)
+				if got := model.Decide(score, thresholds); got != want {
+					t.Errorf("decision = %s (score %.4f, breakdown %v), want %s",
+						got, score, breakdown, want)
+				}
+			})
+		}
 	}
+}
+
+// TestDeterministicMatchDecisiveLeavesFuzzyRulesOpen checks the setting's boundary: it
+// only ever vouches for an exact match. A fuzzy agreement still has to survive the other
+// rules' objections, however the organisation has the setting.
+func TestDeterministicMatchDecisiveLeavesFuzzyRulesOpen(t *testing.T) {
+	if err := log.Init("error"); err != nil {
+		t.Fatalf("init logger: %v", err)
+	}
+
+	thresholds := model.Thresholds{AutoMergeEnabled: true, AutoMerge: 0.95, ManualReview: 0.75,
+		DeterministicMatchDecisive: true}
+	ctx := ScoringContext{OrgHandle: "acme", Thresholds: thresholds}
+
+	name := testRule("traits.name", constants.AttributeTypeName, constants.UnificationMethodFuzzy, 1)
+	dob := testRule("traits.dob", constants.AttributeTypeDate, constants.UnificationMethodDeterministic, 2)
+	email := testRule("identity_attributes.email", constants.AttributeTypeEmail, constants.UnificationMethodDeterministic, 3)
+
+	t.Run("fuzzy agreement with a deterministic disagreement still asks", func(t *testing.T) {
+		incoming := map[string]interface{}{"traits.name": "Jonathan Smith", "traits.dob": "1990-01-02"}
+		existing := map[string]interface{}{"traits.name": "Jonathon Smith", "traits.dob": "1991-07-09"}
+		candidate := &model.ProfileData{ProfileID: "candidate", Attributes: existing}
+
+		score, breakdown := ScoreCandidate(incoming, candidate, []urModel.UnificationRule{name, dob}, ctx)
+		if got := model.Decide(score, thresholds); got != constants.DecisionManualReview {
+			t.Errorf("decision = %s (score %.4f, breakdown %v), want %s",
+				got, score, breakdown, constants.DecisionManualReview)
+		}
+	})
+
+	t.Run("a deterministic agreement below a fuzzy one is still decisive", func(t *testing.T) {
+		// Name agrees first and would otherwise be the primary signal; dob then disagrees
+		// and would veto. The exact email match at the lowest priority merged before typed
+		// matching regardless of where it sat, so it must still carry the pair.
+		incoming := map[string]interface{}{"traits.name": "Jonathan Smith", "traits.dob": "1990-01-02",
+			"identity_attributes.email": "j.smith@acme.com"}
+		existing := map[string]interface{}{"traits.name": "Jonathon Smith", "traits.dob": "1991-07-09",
+			"identity_attributes.email": "j.smith@acme.com"}
+		candidate := &model.ProfileData{ProfileID: "candidate", Attributes: existing}
+
+		score, breakdown := ScoreCandidate(incoming, candidate, []urModel.UnificationRule{name, dob, email}, ctx)
+		if got := model.Decide(score, thresholds); got != constants.DecisionAutoMerge {
+			t.Errorf("decision = %s (score %.4f, breakdown %v), want %s",
+				got, score, breakdown, constants.DecisionAutoMerge)
+		}
+	})
 }

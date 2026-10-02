@@ -70,3 +70,49 @@ func TestAdminConfigRowsDefaultAutoMergeEnabled(t *testing.T) {
 		})
 	}
 }
+
+// TestAdminConfigRowsDefaultDeterministicMatchDecisive is the same upgrade guard for the
+// setting that decides whether other rules may object to an exact match.
+//
+// Before typed matching, any deterministic rule matching merged the pair outright. An org
+// predating this key has no row for it, and reading that absence as "off" would let other
+// rules start sending its merges to review the moment it upgraded. Absence must read as on;
+// only an explicit "false" opens exact matches to objection.
+func TestAdminConfigRowsDefaultDeterministicMatchDecisive(t *testing.T) {
+	tests := []struct {
+		name string
+		rows []map[string]interface{}
+		want bool
+	}{
+		{
+			name: "org predating the key",
+			rows: []map[string]interface{}{
+				{"config": constants.ConfigAutoMergeEnabled, "value": "true"},
+			},
+			want: true,
+		},
+		{
+			name: "explicitly opened to objection",
+			rows: []map[string]interface{}{
+				{"config": constants.ConfigDeterministicMatchDecisive, "value": "false"},
+			},
+			want: false,
+		},
+		{
+			name: "explicitly decisive",
+			rows: []map[string]interface{}{
+				{"config": constants.ConfigDeterministicMatchDecisive, "value": "true"},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := scanAdminConfigRows("acme", tt.rows)
+			if config.DeterministicMatchDecisive != tt.want {
+				t.Errorf("DeterministicMatchDecisive = %v, want %v", config.DeterministicMatchDecisive, tt.want)
+			}
+		})
+	}
+}

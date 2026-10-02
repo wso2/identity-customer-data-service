@@ -24,20 +24,29 @@ have only ever used that behaviour keep it after upgrading, with no configuratio
   configured before the key existed simply has no row for it; that absence reads as
   **enabled**, because reading it as disabled would silently route every merge the tenant
   relied on into the review queue instead.
+- A deterministic match stays **decisive**. Before, the first rule that matched merged the
+  pair outright, whatever the other rules held; that is still what happens unless the
+  organisation chooses otherwise, through the `deterministic_match_decisive` admin setting
+  described next. Like `auto_merge_enabled`, an organisation with no row for it reads as
+  **on**.
 
-### What does change
+### Letting other rules object: `deterministic_match_decisive`
 
-Two behaviours are new, and both make the engine *more* cautious. The first **affects
-existing organisations with two or more rules, without any configuration change.**
+Every rule is now evaluated for every candidate pair, so the engine knows when the *other*
+rules disagree with a match. What it does with that knowledge is an organisation's choice.
 
-**Conflicting evidence downgrades an automatic merge to a review task.** When several rules
-have data on both profiles and most of the ones that are not the primary signal actively
-disagree, the merge is not performed automatically — a person decides instead.
+**`deterministic_match_decisive: true` — the default.** A pair agreeing on any deterministic
+rule merges immediately. The other rules are not consulted, exactly as before typed
+matching. Fuzzy rules are unaffected either way: a fuzzy agreement always has to survive
+the objections below.
 
-Before, the first rule that matched merged the pair outright, whatever the other rules held.
+**`deterministic_match_decisive: false`.** A deterministic match becomes the primary signal
+but the other applicable rules may object. When most of them actively disagree, the merge
+is not performed automatically — a review task is raised and a person decides.
+
 With two deterministic rules on `email` (priority 1) and `phone` (priority 2):
 
-| Both profiles hold | Before | Now |
+| Both profiles hold | decisive (default) | open to objection |
 |---|---|---|
 | Same email, same phone | merged | merged |
 | Same email, **different phone** | merged | **review task** |
@@ -46,18 +55,22 @@ With two deterministic rules on `email` (priority 1) and `phone` (priority 2):
 | No email on one side, same phone | merged | merged |
 | Different email, different phone | no action | no action |
 
-A *missing* value is not a disagreement, so it never blocks — only two present values that
-differ do. Two profiles sharing an email but holding different phone numbers is the shared
-household address case, which is why it now asks.
+A *missing* value is not a disagreement, so it never blocks in either mode — only two
+present values that differ do. Two profiles sharing an email but holding different phone
+numbers is the shared household address case, which is why the open mode asks.
 
 Note that with exactly two rules a single disagreement is already a majority, so a two-rule
-organisation is the most conservative configuration there is. Adding a third rule can make
-merges *more* likely, not less.
+organisation in the open mode is the most conservative configuration there is. Adding a
+third rule can make merges *more* likely, not less.
 
-**A disagreement on a `DATE` or `UNIQUE_ID` attribute vetoes an automatic merge**, whatever
-else agrees. Unlike the above, this cannot affect an organisation that has never typed its
-attributes, because both types have to be declared. It begins to apply as an operator gives
-attributes their real types, which is the point at which the extra caution is wanted.
+Objections only ever downgrade an automatic merge to a review task. Nothing merges in the
+open mode that would not have merged in the decisive one, and nothing that merged becomes
+"no action" — the decision moves from automatic to human, never away.
+
+**A disagreement on a `DATE` or `UNIQUE_ID` attribute vetoes an automatic merge** in the
+open mode, whatever else agrees. This cannot affect an organisation that has never typed
+its attributes, because both types have to be declared. It begins to apply as an operator
+gives attributes their real types, which is the point at which the extra caution is wanted.
 
 ---
 
@@ -108,8 +121,8 @@ can judge the effect on existing profiles.
 > **Disclaimer — this setting's scope is provisional.** It currently sits at deployment
 > level because it gates an API surface rather than matching behaviour: whether a field is
 > writable is a property of the build being run. Every other setting that shapes who gets
-> merged — `auto_merge_enabled` and both thresholds — is per organisation in the admin
-> config, so this may move there once there is a way for an operator to preview what a
+> merged — `auto_merge_enabled`, `deterministic_match_decisive` and both thresholds — is per
+> organisation in the admin config, so this may move there once there is a way for an operator to preview what a
 > strength change would do to their existing profiles. Treat its location as unsettled and
 > avoid building tooling that assumes it is server-wide.
 

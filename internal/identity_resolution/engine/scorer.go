@@ -60,9 +60,14 @@ func evaluateRules(
 	evaluations := make([]model.RuleEvaluation, 0, len(rules))
 
 	for rank, rule := range rules {
+		// Each rule is matched in its own mode, so a deterministic rule stays exact while
+		// a fuzzy rule tolerates typos within the same evaluation.
+		deterministic := rule.UnificationMethod != constants.UnificationMethodFuzzy
+
 		eval := model.RuleEvaluation{
 			PropertyName:     rule.PropertyName,
 			AttributeType:    rule.AttributeType,
+			Deterministic:    deterministic,
 			MatchStrength:    rule.MatchStrength,
 			MismatchStrength: rule.MismatchStrength,
 			Rank:             rank,
@@ -77,10 +82,8 @@ func evaluateRules(
 			continue
 		}
 
-		// Each rule is matched in its own mode, so a deterministic rule stays exact while
-		// a fuzzy rule tolerates typos within the same evaluation.
 		effectiveMode := constants.UnificationModeStrict
-		if rule.UnificationMethod == constants.UnificationMethodFuzzy {
+		if !deterministic {
 			effectiveMode = constants.UnificationModeSmart
 		}
 
@@ -114,7 +117,10 @@ func evaluateRules(
 //     Unknown and take no part in what follows.
 //  2. Walk the rules in priority order; the first one that agrees becomes the primary
 //     signal and its score is the result. Lower-priority rules cannot dilute it.
-//  3. A UNIQUE_ID agreeing exactly is conclusive on its own and returns immediately.
+//  3. A UNIQUE_ID agreeing exactly is conclusive on its own and returns immediately. So
+//     is any deterministic rule agreeing, when the organisation has
+//     deterministic_match_decisive on — which is the default, and how unification worked
+//     before typed matching. Turning it off lets the steps below object.
 //  4. A disagreement on a discriminating attribute (national ID, date of birth) vetoes
 //     auto-merge — two present, clearly different values of that kind mean different
 //     people, whatever else matches.
@@ -189,6 +195,23 @@ func ScoreCandidate(
 	// A unique identifier that matches exactly is conclusive on its own.
 	if primary.AttributeType == constants.AttributeTypeUniqueID && primary.Score >= 1.0 {
 		return 1.0, breakdown
+	}
+
+	// Before typed matching, any deterministic rule matching merged the pair, whatever
+	// position it held and whatever the other rules said. An organisation that keeps
+	// deterministic_match_decisive on keeps exactly that — so the check is over every
+	// agreeing rule, not just the primary: a fuzzy rule ranked above an exact match must
+	// not demote it to something the other rules can object to.
+	if thresholds.DeterministicMatchDecisive {
+		for i := range evaluations {
+			eval := &evaluations[i]
+			if eval.Deterministic && eval.Verdict == model.VerdictAgree {
+				logger.Debug("Scorer: deterministic rule agrees and is decisive for this org",
+					log.String("candidateID", candidate.ProfileID),
+					log.String("property", eval.PropertyName))
+				return 1.0, breakdown
+			}
+		}
 	}
 
 	cap := thresholds.AutoMerge - constants.ScorePenaltyOffset

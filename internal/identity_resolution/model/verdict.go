@@ -46,6 +46,8 @@ const (
 type RuleEvaluation struct {
 	PropertyName  string
 	AttributeType string
+	// Deterministic is true when the rule matches on exact equality rather than similarity.
+	Deterministic bool
 	// MatchStrength and MismatchStrength are the rule's evidence weights for agreement
 	// and disagreement respectively.
 	MatchStrength    string

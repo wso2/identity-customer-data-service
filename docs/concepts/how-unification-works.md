@@ -146,7 +146,7 @@ The score is **not an average**. Averaging made every rule's weight depend on ho
 |---|---|---|
 | 1 | **Evaluate** | Score every rule in its own mode. `UNKNOWN` rules take no further part. |
 | 2 | **Primary signal** | Walk rules in priority order; the first that `AGREE`s is the primary. Its score is the result — lower-priority rules cannot dilute it. |
-| 3 | **Unique-ID short-circuit** | A `UNIQUE_ID` agreeing exactly returns 1.0 immediately. |
+| 3 | **Decisive short-circuit** | A `UNIQUE_ID` agreeing exactly returns 1.0 immediately. So does *any* deterministic rule agreeing — at any priority — when the org's `deterministic_match_decisive` is on, which is the default. Steps 4–6 then never run. |
 | 4 | **Discriminating veto** | Any `mismatch_strength: HIGH` rule that `DISAGREE`s caps the score just below auto-merge. |
 | 5 | **Conflicting evidence** | If most other applicable rules `DISAGREE`, cap below auto-merge. |
 | 6 | **Lone-agreement gate** | A single agreeing rule may auto-merge only if it is `match_strength: HIGH` or the top-priority rule, **and** the matched value is not already shared by ≥ `RarityCommonMinProfiles` profiles in the org. |
@@ -164,6 +164,11 @@ Caps only ever downgrade `AUTO_MERGE` to `MANUAL_REVIEW`. They never suppress a 
 | below that | `UNIQUE` — no action |
 
 `AUTO_MERGE` additionally requires `auto_merge_enabled` on the org's admin config.
+
+Whether the objections in steps 4–6 apply to a deterministic match at all is also per
+organisation: `deterministic_match_decisive` (default on) makes an exact match conclusive on
+its own, as it was before typed matching; turning it off lets the other rules send it to
+review instead. See [Unification Rules](unification-rules.md#letting-other-rules-object-deterministic_match_decisive).
 
 ### Worked examples
 

@@ -215,6 +215,9 @@ const (
 	ConfigAutoMergeEnabled      = "auto_merge_enabled"
 	ConfigAutoMergeThreshold    = "auto_merge_threshold"
 	ConfigManualReviewThreshold = "manual_review_threshold"
+	// ConfigDeterministicMatchDecisive: when true, a pair agreeing on any deterministic rule
+	// merges without the other rules being consulted — the behaviour before typed matching.
+	ConfigDeterministicMatchDecisive = "deterministic_match_decisive"
 )
 
 const (

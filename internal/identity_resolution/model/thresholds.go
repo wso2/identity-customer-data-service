@@ -29,13 +29,18 @@ type Thresholds struct {
 	AutoMergeEnabled bool
 	AutoMerge        float64
 	ManualReview     float64
+	// DeterministicMatchDecisive makes an agreement on any deterministic rule conclusive on
+	// its own, skipping the objections the other rules could raise. This is how unification
+	// behaved before typed matching, so it is the default; an organisation opts out of it.
+	DeterministicMatchDecisive bool
 }
 
 func DefaultThresholds() Thresholds {
 	return Thresholds{
-		AutoMergeEnabled: true,
-		AutoMerge:        constants.DefaultAutoMergeThreshold,
-		ManualReview:     constants.DefaultManualReviewThreshold,
+		AutoMergeEnabled:           true,
+		AutoMerge:                  constants.DefaultAutoMergeThreshold,
+		ManualReview:               constants.DefaultManualReviewThreshold,
+		DeterministicMatchDecisive: true,
 	}
 }
 
@@ -50,6 +55,7 @@ func LoadThresholds(ctx context.Context, orgHandle string) Thresholds {
 	}
 
 	defaults.AutoMergeEnabled = adminCfg.AutoMergeEnabled
+	defaults.DeterministicMatchDecisive = adminCfg.DeterministicMatchDecisive
 
 	if adminCfg.AutoMergeThreshold > 0 {
 		defaults.AutoMerge = adminCfg.AutoMergeThreshold
