@@ -333,54 +333,6 @@ FROM profiles p
 LEFT JOIN profile_reference r
     ON p.profile_id = r.profile_id`)
 
-var GetAllReferenceProfileExceptCurrent = newQuery("CDS-PRF-15",
-	`
-	SELECT 
-		p.profile_id, 
-		p.user_id, 
-		r.profile_status, 
-		r.reference_profile_id, 
-		r.reference_reason, 
-		p.org_handle,
-		p.delete_profile,
-		p.list_profile, 
-		p.traits, 
-		p.identity_attributes
-	FROM 
-		profiles p
-	JOIN 
-		profile_reference r ON p.profile_id = r.profile_id
-	WHERE 
-		r.profile_status = 'REFERENCE_PROFILE'
-		AND p.profile_id != $1
-		AND p.org_handle = $2;`,
-	// Same statement, ordered by insertion. Unification stops at the first
-	// match, so the row order decides which hierarchy a profile joins.
-	// PostgreSQL returns these rows in insertion order in practice, while
-	// SQLite is free to return them in any order, so rowid reproduces it.
-	// created_at cannot be used: this statement does not select it.
-	`
-	SELECT
-		p.profile_id,
-		p.user_id,
-		r.profile_status,
-		r.reference_profile_id,
-		r.reference_reason,
-		p.org_handle,
-		p.delete_profile,
-		p.list_profile,
-		p.traits,
-		p.identity_attributes
-	FROM
-		profiles p
-	JOIN
-		profile_reference r ON p.profile_id = r.profile_id
-	WHERE
-		r.profile_status = 'REFERENCE_PROFILE'
-		AND p.profile_id != $1
-		AND p.org_handle = $2
-	ORDER BY p.rowid ASC;`)
-
 var FetchReferencedProfiles = newQuery("CDS-PRF-16",
 	`
 		SELECT profile_id, reference_reason, profile_status 
@@ -398,6 +350,61 @@ var GetProfileByUserId = newQuery("CDS-PRF-17",
 		WHERE 
 			p.user_id = $1
 			AND r.profile_status = 'REFERENCE_PROFILE';`)
+
+// FindOldestReferenceProfileIDByUserID returns one profile ID using explicit
+// ordering so the result is independent of the database's scan order.
+var FindOldestReferenceProfileIDByUserID = newQuery("CDS-PRF-19",
+	`SELECT p.profile_id
+	FROM profiles p JOIN profile_reference r ON r.profile_id = p.profile_id
+	WHERE p.org_handle = $1 AND r.org_handle = $1
+	AND r.profile_status = 'REFERENCE_PROFILE'
+	AND p.profile_id != $2 AND p.user_id = $3
+	ORDER BY p.created_at, p.profile_id LIMIT 1`)
+
+// FindOldestReferenceProfileIDByAttributeValues is completed with a validated
+// JSON column name. All attribute paths and values are bound parameters.
+var FindOldestReferenceProfileIDByAttributeValues = newQuery("CDS-PRF-20",
+	// The indexable JSONPath predicate is followed by an exact check: lax
+	// JSONPath equality alone can also match strings inside nested arrays.
+	`SELECT p.profile_id
+	FROM profiles p JOIN profile_reference r ON r.profile_id = p.profile_id
+	WHERE p.org_handle = $1 AND r.org_handle = $1
+	AND r.profile_status = 'REFERENCE_PROFILE'
+	AND p.profile_id != $2
+	AND ($3 = '' OR COALESCE(p.user_id, '') = '' OR p.user_id = $3)
+	AND %[1]s @? $4::jsonpath AND EXISTS (
+		SELECT 1 FROM jsonb_path_query(%[1]s, $5::jsonpath) leaf(value),
+		LATERAL jsonb_array_elements(CASE jsonb_typeof(leaf.value)
+			WHEN 'array' THEN leaf.value ELSE jsonb_build_array(leaf.value) END) element(value)
+		WHERE jsonb_typeof(element.value) = 'string'
+		AND element.value IN (SELECT value FROM jsonb_array_elements($6::jsonb))
+	)
+	ORDER BY p.created_at, p.profile_id LIMIT 1`,
+	// Arrays of objects do not consume a path component; terminal arrays
+	// contribute only their immediate string elements.
+	`SELECT p.profile_id
+	FROM profiles p JOIN profile_reference r ON r.profile_id = p.profile_id
+	WHERE p.org_handle = $1 AND r.org_handle = $1
+	AND r.profile_status = 'REFERENCE_PROFILE'
+	AND p.profile_id != $2
+	AND ($3 = '' OR COALESCE(p.user_id, '') = '' OR p.user_id = $3)
+	AND EXISTS (
+		WITH RECURSIVE field(value, type, depth) AS (
+			SELECT %[1]s, json_type(%[1]s), 0
+			UNION ALL
+			SELECT child.value, child.type,
+				field.depth + CASE WHEN field.type = 'object' THEN 1 ELSE 0 END
+			FROM field, json_each(CASE WHEN field.type IN ('object', 'array')
+				THEN field.value ELSE '[]' END) child
+			WHERE (field.type = 'object' AND field.depth < json_array_length($4)
+				AND child.key = json_extract($4, '$[' || field.depth || ']'))
+			OR (field.type = 'array' AND child.type != 'array'
+				AND field.depth <= json_array_length($4))
+		)
+		SELECT 1 FROM field WHERE depth = json_array_length($4)
+		AND type = 'text' AND value COLLATE BINARY IN (SELECT value FROM json_each($5))
+	)
+	ORDER BY p.created_at, p.profile_id LIMIT 1`)
 
 var InsertConsentCategory = newQuery("CDS-CON-04",
 	`INSERT INTO consent_categories (category_name, category_identifier, org_handle, purpose, destinations, is_mandatory)

@@ -212,8 +212,18 @@ func InsertApplicationData(ctx context.Context, profileId string, apps []model.A
 	return nil
 }
 
-// GetProfile retrieves a profile by its Id
+// GetProfileOptions controls which related profile data is loaded.
+type GetProfileOptions struct {
+	IncludeApplicationData bool
+}
+
+// GetProfile retrieves a profile by its ID, including application data.
 func GetProfile(ctx context.Context, profileId string) (*model.Profile, error) {
+	return GetProfileWithOptions(ctx, profileId, GetProfileOptions{IncludeApplicationData: true})
+}
+
+// GetProfileWithOptions retrieves a profile by its ID using the supplied loading options.
+func GetProfileWithOptions(ctx context.Context, profileId string, options GetProfileOptions) (*model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -263,7 +273,9 @@ func GetProfile(ctx context.Context, profileId string) (*model.Profile, error) {
 		}, err)
 		return nil, serverError
 	}
-	profile.ApplicationData, _ = FetchApplicationData(ctx, profileId)
+	if options.IncludeApplicationData {
+		profile.ApplicationData, _ = FetchApplicationData(ctx, profileId)
+	}
 	return &profile, nil
 }
 
@@ -1326,103 +1338,6 @@ func sanitizeForAlias(input string) string {
 	return sanitized
 }
 
-func GetAllReferenceProfilesExceptForCurrent(ctx context.Context,
-	currentProfile model.Profile) ([]model.Profile, error) {
-
-	dbClient, err := provider.NewDBProvider().GetDBClient()
-	logger := log.GetLogger()
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to get database client for fetching master profiles for profile: %s",
-			currentProfile.ProfileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_PROFILE.Code,
-			Message:     errors2.GET_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return nil, serverError
-	}
-	defer dbClient.Close()
-
-	query := scripts.GetAllReferenceProfileExceptCurrent
-
-	results, err := dbClient.ExecuteQueryContext(ctx, query, currentProfile.ProfileId, currentProfile.OrgHandle)
-	if err != nil {
-		errorMsg := fmt.Sprintf("Failed fetching all master profiles except for current profile: %s", currentProfile.ProfileId)
-		logger.Debug(errorMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GET_PROFILE.Code,
-			Message:     errors2.GET_PROFILE.Message,
-			Description: errorMsg,
-		}, err)
-		return nil, serverError
-	}
-
-	var profiles []model.Profile
-	for _, row := range results {
-		var (
-			profile                                                      model.Profile
-			traitsJSON, identityJSON                                     []byte
-			isReferenceProfile, isWaitOnUser, isWaitOnAdmin, listProfile bool
-			referenceProfileId, profileStatus                            string
-		)
-
-		profile.UserId = row["user_id"].(string)
-		profile.ProfileId = row["profile_id"].(string)
-		referenceProfileId = row["reference_profile_id"].(string)
-		listProfile = row["list_profile"].(bool)
-		deleteProfile := row["delete_profile"].(bool)
-		traitsJSON = row["traits"].([]byte)
-		identityJSON = row["identity_attributes"].([]byte)
-		profileStatus = row["profile_status"].(string) // Assuming profile_status is a boolean field
-		if profileStatus == constants.ReferenceProfile {
-			isReferenceProfile = true
-		}
-		if profileStatus == constants.WaitOnUser {
-			isWaitOnUser = true
-		}
-		if profileStatus == constants.WaitOnAdmin {
-			isWaitOnAdmin = true
-		}
-
-		profile.ProfileStatus = &model.ProfileStatus{
-			IsReferenceProfile: isReferenceProfile,
-			IsWaitingOnAdmin:   isWaitOnAdmin,
-			IsWaitingOnUser:    isWaitOnUser,
-			ReferenceProfileId: referenceProfileId,
-			ListProfile:        listProfile,
-			DeleteProfile:      deleteProfile,
-		}
-
-		if err := json.Unmarshal(traitsJSON, &profile.Traits); err != nil {
-			errMsg := fmt.Sprintf("Failed to unmarshal traits for profile: %s", profile.ProfileId)
-			logger.Debug(errMsg, log.Error(err))
-			serverError := errors2.NewServerError(errors2.ErrorMessage{
-				Code:        errors2.GET_PROFILE.Code,
-				Message:     errors2.GET_PROFILE.Message,
-				Description: errMsg,
-			}, err)
-			return nil, serverError
-		}
-		if err := json.Unmarshal(identityJSON, &profile.IdentityAttributes); err != nil {
-			errMsg := fmt.Sprintf("Failed to unmarshal identity attributes for profile: %s", profile.ProfileId)
-			logger.Debug(errMsg, log.Error(err))
-			serverError := errors2.NewServerError(errors2.ErrorMessage{
-				Code:        errors2.GET_PROFILE.Code,
-				Message:     errors2.GET_PROFILE.Message,
-				Description: errMsg,
-			}, err)
-			return nil, serverError
-		}
-
-		profile.ApplicationData, _ = FetchApplicationData(ctx, profile.ProfileId)
-
-		profiles = append(profiles, profile)
-	}
-
-	return profiles, nil
-}
-
 // UpdateProfileReferences updates the references of a parent profile with the provided child profiles.
 func UpdateProfileReferences(ctx context.Context, parentProfile model.Profile, children []model.Reference) error {
 
@@ -2061,4 +1976,58 @@ func UpdateProfileConsents(ctx context.Context, profileId string, consents []mod
 
 	logger.Info(fmt.Sprintf("Successfully updated consents for profile: %s", profileId))
 	return nil
+}
+
+// FindOldestReferenceProfileIDByUserID returns the oldest reference profile
+// with the supplied user ID, excluding the supplied profile ID.
+func FindOldestReferenceProfileIDByUserID(ctx context.Context, orgHandle, userID,
+	excludedProfileID string) (string, error) {
+	if userID == "" {
+		return "", nil
+	}
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return "", fmt.Errorf("get database client for user-ID profile lookup: %w", err)
+	}
+	defer dbClient.Close()
+	rows, err := dbClient.ExecuteQueryContext(ctx, scripts.FindOldestReferenceProfileIDByUserID,
+		orgHandle, excludedProfileID, userID)
+	if err != nil {
+		return "", fmt.Errorf("find reference profile by user ID: %w", err)
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+	return rows[0]["profile_id"].(string), nil
+}
+
+// FindOldestReferenceProfileIDByAttributeValues returns the oldest reference
+// profile whose attribute at property matches one of values and whose user ID
+// is compatible with the incoming profile. The supplied profile ID is excluded
+// from the search.
+func FindOldestReferenceProfileIDByAttributeValues(ctx context.Context, orgHandle, property string,
+	values []string, excludedProfileID, incomingUserID string) (string, error) {
+	if len(values) == 0 {
+		return "", nil
+	}
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return "", fmt.Errorf("get database client for attribute profile lookup: %w", err)
+	}
+	defer dbClient.Close()
+	query, matchArgs, err := scripts.BuildFindOldestReferenceProfileIDByAttributeValuesQuery(
+		dbClient.DBType(), property, values)
+	if err != nil {
+		return "", fmt.Errorf("build attribute profile lookup: %w", err)
+	}
+	args := []interface{}{orgHandle, excludedProfileID, incomingUserID}
+	args = append(args, matchArgs...)
+	rows, err := dbClient.ExecuteQueryContext(ctx, query, args...)
+	if err != nil {
+		return "", fmt.Errorf("find reference profile by attribute values: %w", err)
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+	return rows[0]["profile_id"].(string), nil
 }
