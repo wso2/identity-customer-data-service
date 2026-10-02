@@ -30,6 +30,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	sysconfig "github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
 // AdminConfigServiceInterface defines the service interface.
@@ -94,6 +95,7 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 
 func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 	updatedConfig model.AdminConfig, orgHandle string) error {
+	logger := log.GetLogger()
 	isCDSEnabledInitialState := a.IsCDSEnabled(ctx, orgHandle)
 	isInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(ctx, orgHandle)
 
@@ -105,6 +107,7 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 		// CDS is being enabled for the first time. Trigger initial schema sync.
 		err := schemaService.SyncProfileSchema(ctx, orgHandle)
 		if err != nil {
+			logger.Error(fmt.Sprintf("UpdateAdminConfig: schema sync failed for org=%s", orgHandle), log.Error(err))
 			return err
 		}
 		// Seed the mandatory "Identity Data" consent category after schema is ready.
@@ -112,6 +115,7 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 			return err
 		}
 		updatedConfig.InitialSchemaSyncDone = true
+		logger.Debug(fmt.Sprintf("UpdateAdminConfig: CDS enabled for org=%s", orgHandle))
 	}
 
 	// In app_id mode, register each system application so its clientId->app_id mapping exists for the GET path.

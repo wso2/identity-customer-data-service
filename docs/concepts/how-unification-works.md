@@ -10,7 +10,9 @@ Profile unification is the process of recognising that two separate profile reco
 Profile created / updated
          │
          ▼
-  Enqueued for unification (ProfileUnificationQueue)
+  Enqueued only if a matched value changed,
+  the userId changed, or a rule is newer
+  than the profile   (ProfileUnificationQueue)
          │
          ▼
   Worker picks up profile
@@ -19,12 +21,9 @@ Profile created / updated
          │
          └─ Step 2: rule-based match?
                    │
-                   └─ for each active rule (sorted by priority):
-                         does any master profile share the same
-                         value for rule.property_name?
-                              │
-                              yes ──► merge (rule.rule_name) ──► stop
-                              no  ──► try next rule
+                   ├─ block:  find candidates sharing an index key
+                   ├─ score:  evaluate every rule against each candidate
+                   └─ decide: AUTO_MERGE / MANUAL_REVIEW / UNIQUE
 ```
 
 ---
@@ -41,7 +40,169 @@ This is a system-level invariant. It fires before any rules are evaluated and ca
 
 ## Step 2 — Rule-based matching
 
-Active rules for the org are fetched, filtered, and sorted by `priority` ascending. For each rule CDS compares the value of `rule.property_name` across the incoming profile and all existing master profiles. The first rule that produces a match triggers a merge.
+Active rules are fetched, defaulted, and sorted by `priority` ascending. Candidates are found from the blocking index, then every candidate is scored against the full rule set and routed by the org's thresholds.
+
+Deterministic and fuzzy rules are not alternative engines. A single comparison honours each rule's own `unification_method` — exact equality for `deterministic`, similarity for `fuzzy` — and aggregates them into one decision.
+
+### Finding candidates
+
+Comparing every profile against every other is O(n²) and unusable past a few thousand
+people, so candidates come from an index rather than a scan. Every value a rule matches on
+is reduced to one or more **blocking keys**, and two profiles are only compared when they
+already share a key.
+
+The exact key is the value reduced exactly as far as its matcher reduces it before
+comparing, which guarantees that any pair the matcher would call identical lands in the same
+bucket. A rule matched `fuzzy` writes additional keys that widen recall:
+
+| Rule | Value | Keys written |
+|---|---|---|
+| `EMAIL` deterministic | `J.Smith@Acme.com` | `j.smith@acme.com` |
+| `EMAIL` fuzzy | `J.Smith@Acme.com` | `j.smith@acme.com` + 4 LSH band hashes |
+| `NAME` fuzzy | `Jonathan Smith` | `jonathan smith`, `JN0N SM0`, `ANTN XMT`, + 4 LSH bands |
+| `PHONE` fuzzy | `+94 77 123 4567` | `94771234567`, `1234567` (7-digit suffix) |
+| `UNIQUE_ID` deterministic | `ABC-123` | `abc-123` |
+| `DATE` deterministic | `Jan 2, 2026` | `2026.01.02` |
+
+A deterministic rule writes the exact key and nothing else — LSH bands and phonetic codes
+would only gather values it can never score above zero. `DATE` and `UNIQUE_ID` normalise
+before keying because their matchers do, so `2026-01-02` and `Jan 2, 2026` meet.
+
+Keys are looked up grouped by attribute **and** by kind, exact before fuzzy, each group
+capped at 100 distinct profiles. A group matching more than that is skipped and logged: a
+value that common identifies nobody. The two kinds are queried separately so a crowded LSH
+band cannot push the result past the cap and take the exact-match key down with it.
+
+---
+
+### Comparing two values
+
+Comparison answers *how alike are these two values*; scoring answers *what does that mean
+for these two people*. A comparator knows nothing about thresholds or priorities, and every
+one follows the same shape:
+
+```
+raw equality?          → 1.0   (before any normalisation)
+mode == STRICT?        → 0.0   (a deterministic rule stops here)
+normalise both
+normalised equality?   → 1.0
+otherwise              → type-specific algorithm
+```
+
+`mode` comes from the rule, which is what lets the same comparator be exact for one rule and
+tolerant for another in the same evaluation.
+
+| Type | Normalisation | Fuzzy algorithm |
+|---|---|---|
+| `EMAIL` | lowercase, trim | split at `@`; Levenshtein on the local part, Jaro-Winkler on the domain; score is the **lower of the two** |
+| `NAME` | lowercase, strip punctuation, **sort tokens** | Jaro-Winkler; if Double Metaphone codes match exactly, floor at 0.9 |
+| `PHONE` | digits only | last 7 digits equal → 0.9, otherwise 0 |
+| `LOCATION` | lowercase, trim | expand street abbreviations, then Jaccard over tokens |
+| `FUZZY_STRING` | lowercase, trim | Jaro-Winkler |
+| `DATE` | parse to `YYYY.MM.DD` | none — equal or 0 |
+| `UNIQUE_ID` | lowercase, trim | none — equal or 0 |
+| `PRIMITIVE_EXACT` | none | none — raw equality or 0 |
+
+Email takes the *minimum* of its two halves rather than the average: a perfect local part
+against a stranger's domain is not a near-match, so the weaker half governs. `NAME` sorts
+tokens first, so `John Smith` and `Smith John` are identical.
+
+A multi-valued attribute takes the best pair — every input value against every candidate
+value, highest wins. One matching email out of three is a match on that rule.
+
+---
+
+### What each rule reports
+
+A rule produces a similarity score *and* a verdict. The verdict matters because a score alone cannot distinguish "these are different people" from "there was nothing to compare":
+
+| Verdict | When | Effect on the decision |
+|---|---|---|
+| `AGREE` | score ≥ `manual_review_threshold` | Can become the primary signal; counts toward the agreement total |
+| `INCONCLUSIVE` | score between the contradiction and agreement bars | Ignored in both directions |
+| `DISAGREE` | score ≤ `ScoreContradictionThreshold` (0.3) | Counts as contradicting evidence |
+| `UNKNOWN` | either side has no value, or holds a value that identifies nobody | Excluded entirely — never affects the score |
+
+`UNKNOWN` covers placeholders as well as absent values: role mailboxes (`noreply@`, `info@`), reserved domains (`example.com`), sentinel dates (`1970-01-01`), repeated-digit phone numbers and `N/A`-style text. Two profiles agreeing on one of those agree on nothing.
+
+### Evidence strength
+
+Agreement and disagreement on the same attribute rarely carry equal weight, so each rule declares both directions independently:
+
+| | `match_strength` | `mismatch_strength` |
+|---|---|---|
+| **Email** | HIGH — sharing an address strongly implies one person | LOW — most people have several addresses |
+| **Date of birth** | LOW — birthdays collide constantly | HIGH — two different dates is near-proof of difference |
+| **National ID** | HIGH | HIGH |
+| **Name** | LOW | MEDIUM |
+
+Both default from `attribute_type` when the operator does not set them. A rule with `mismatch_strength: HIGH` is *discriminating*: a disagreement on it vetoes automatic merging whatever else agrees.
+
+### The algorithm
+
+The score is **not an average**. Averaging made every rule's weight depend on how many other rules happened to be configured, so adding a rule weakened every existing match, and a rule that disagreed pulled a strong match down by exactly as much as a rule with no data — which meant two sparse profiles outscored two well-populated ones. Instead one rule speaks for the match and the rest may only object.
+
+| Step | | |
+|---|---|---|
+| 1 | **Evaluate** | Score every rule in its own mode. `UNKNOWN` rules take no further part. |
+| 2 | **Primary signal** | Walk rules in priority order; the first that `AGREE`s is the primary. Its score is the result — lower-priority rules cannot dilute it. |
+| 3 | **Decisive short-circuit** | A `UNIQUE_ID` agreeing exactly returns 1.0 immediately. So does *any* deterministic rule agreeing — at any priority — when the org's `deterministic_match_decisive` is on, which is the default. Steps 4–6 then never run. |
+| 4 | **Discriminating veto** | Any `mismatch_strength: HIGH` rule that `DISAGREE`s caps the score just below auto-merge. |
+| 5 | **Conflicting evidence** | If most other applicable rules `DISAGREE`, cap below auto-merge. |
+| 6 | **Lone-agreement gate** | A single agreeing rule may auto-merge only if it is `match_strength: HIGH` or the top-priority rule, **and** the matched value is not already shared by ≥ `RarityCommonMinProfiles` profiles in the org. |
+
+Caps only ever downgrade `AUTO_MERGE` to `MANUAL_REVIEW`. They never suppress a match to `UNIQUE` — the primary signal still stands. If no rule agrees, the highest applicable score is returned, which is below the review threshold by construction.
+
+**Value rarity** (step 6) is read from the `blocking_keys` index: how many profiles in the org already carry the matched value. Rarity may only weaken evidence, never strengthen it — an uncommon value being wrong is just as wrong as a common one, so rarity lowers the chance of coincidence without adding corroboration.
+
+### Decision thresholds
+
+| Score | Decision |
+|---|---|
+| ≥ `auto_merge_threshold` (default 0.95) | `AUTO_MERGE` |
+| ≥ `manual_review_threshold` (default 0.75) | `MANUAL_REVIEW` — a review task is created |
+| below that | `UNIQUE` — no action |
+
+`AUTO_MERGE` additionally requires `auto_merge_enabled` on the org's admin config.
+
+Whether the objections in steps 4–6 apply to a deterministic match at all is also per
+organisation: `deterministic_match_decisive` (default on) makes an exact match conclusive on
+its own, as it was before typed matching; turning it off lets the other rules send it to
+review instead. See [Unification Rules](unification-rules.md#letting-other-rules-object-deterministic_match_decisive).
+
+### Worked examples
+
+Rules: **P1** `nic` (UNIQUE_ID, deterministic) · **P2** `name` (NAME, fuzzy) · **P3** `city` (LOCATION, fuzzy). Thresholds 0.95 / 0.75.
+
+| # | Scenario | nic | name | city | Outcome | Why |
+|---|---|---|---|---|---|---|
+| 1 | All agree | 1.00 | 0.97 | 1.00 | **AUTO_MERGE** | Unique ID agrees exactly — short-circuit |
+| 2 | NIC differs, name close | 0.00 | 0.97 | 1.00 | **MANUAL_REVIEW** | Name is primary; NIC is discriminating and disagrees → veto |
+| 3 | NIC absent on one side | — | 0.97 | 1.00 | **AUTO_MERGE** | Name and city both agree — two independent agreements |
+| 4 | NIC absent, only name | — | 0.97 | — | **MANUAL_REVIEW** | Lone agreement on a LOW-strength attribute |
+| 5 | Only city shared | — | — | 1.00 | **MANUAL_REVIEW** | Lone agreement, not top priority, weak attribute |
+| 6 | NIC agrees, everything else differs | 1.00 | 0.10 | 0.00 | **AUTO_MERGE** | Unique ID is conclusive on its own |
+| 7 | Nothing reaches the bar | 0.00 | 0.42 | 0.30 | **UNIQUE** | No primary signal |
+
+Rules: **P1** `email` (EMAIL, deterministic) · **P2** `dob` (DATE, deterministic).
+
+| # | Scenario | email | dob | Outcome | Why |
+|---|---|---|---|---|---|
+| 8 | Email agrees, DOB absent | 1.00 | — | **AUTO_MERGE** | Email is `match_strength: HIGH` and top priority |
+| 9 | Email agrees, DOB differs | 1.00 | 0.00 | **MANUAL_REVIEW** | DOB is `mismatch_strength: HIGH` → veto |
+| 10 | Email agrees but 300 profiles share it | 1.00 | — | **MANUAL_REVIEW** | Value too common to identify anyone |
+| 11 | Both hold `noreply@example.com` | — | — | **UNIQUE** | Placeholder reads as `UNKNOWN`, not as agreement |
+
+### Why the previous model was replaced
+
+With P1 `nic` deterministic and P2 `name` fuzzy, weights 2 and 1, the old weighted average divided by the total applicable weight:
+
+```
+NIC differs, name matches 0.95:   (0.0 × 2 + 0.95 × 1) / 3  =  0.32  →  UNIQUE
+NIC absent,  name matches 0.95:   (0.95 × 1) / 1            =  0.95  →  AUTO_MERGE
+```
+
+The same name evidence produced no action when the NICs contradicted, and an automatic merge when the NIC was simply missing — profiles merged more readily the less was known about them. Both rows are now `MANUAL_REVIEW`.
 
 ---
 

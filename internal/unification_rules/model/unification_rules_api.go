@@ -19,22 +19,34 @@
 package model
 
 type UnificationRuleAPIRequest struct {
-	RuleName     string `json:"rule_name" bson:"rule_name" binding:"required"`
-	PropertyName string `json:"property_name" bson:"property_name" binding:"required"`
-	Priority     int    `json:"priority" bson:"priority" binding:"required"`
-	IsActive     bool   `json:"is_active" bson:"is_active" binding:"required"`
+	RuleName          string `json:"rule_name" bson:"rule_name" binding:"required"`
+	PropertyName      string `json:"property_name" bson:"property_name" binding:"required"`
+	Priority          int    `json:"priority" bson:"priority" binding:"required"`
+	IsActive          bool   `json:"is_active" bson:"is_active" binding:"required"`
+	AttributeType     string `json:"attribute_type" bson:"attribute_type" binding:"required"`
+	UnificationMethod string `json:"unification_method" bson:"unification_method" binding:"required"`
+	MatchStrength     string `json:"match_strength" bson:"match_strength"`
+	MismatchStrength  string `json:"mismatch_strength" bson:"mismatch_strength"`
 }
 
 type UnificationRuleAPIResponse struct {
-	RuleId       string `json:"rule_id" bson:"rule_id" binding:"required"`
-	RuleName     string `json:"rule_name" bson:"rule_name" binding:"required"`
-	PropertyName string `json:"property_name" bson:"property_name" binding:"required"`
-	Priority     int    `json:"priority" bson:"priority" binding:"required"`
-	IsActive     bool   `json:"is_active" bson:"is_active" binding:"required"`
+	RuleId            string `json:"rule_id" bson:"rule_id" binding:"required"`
+	RuleName          string `json:"rule_name" bson:"rule_name" binding:"required"`
+	PropertyName      string `json:"property_name" bson:"property_name" binding:"required"`
+	Priority          int    `json:"priority" bson:"priority" binding:"required"`
+	IsActive          bool   `json:"is_active" bson:"is_active" binding:"required"`
+	AttributeType     string `json:"attribute_type" bson:"attribute_type"`
+	UnificationMethod string `json:"unification_method" bson:"unification_method"`
+	MatchStrength     string `json:"match_strength" bson:"match_strength"`
+	MismatchStrength  string `json:"mismatch_strength" bson:"mismatch_strength"`
 }
 
 type UnificationRuleUpdateRequest struct {
-	RuleName *string `json:"rule_name" bson:"rule_name"`
-	Priority *int    `json:"priority" bson:"priority"`
-	IsActive *bool   `json:"is_active" bson:"is_active"`
+	RuleName          *string `json:"rule_name" bson:"rule_name"`
+	Priority          *int    `json:"priority" bson:"priority"`
+	IsActive          *bool   `json:"is_active" bson:"is_active"`
+	AttributeType     *string `json:"attribute_type" bson:"attribute_type"`
+	UnificationMethod *string `json:"unification_method" bson:"unification_method"`
+	MatchStrength     *string `json:"match_strength" bson:"match_strength"`
+	MismatchStrength  *string `json:"mismatch_strength" bson:"mismatch_strength"`
 }

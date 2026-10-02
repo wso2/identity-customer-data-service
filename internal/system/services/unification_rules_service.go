@@ -40,6 +40,7 @@ func NewUnificationRulesService(mux *http.ServeMux) *UnificationRulesService {
 
 	const base = constants.ApiBasePath + "/v1"
 	// Register routes using Go 1.22 ServeMux patterns on shared mux
+	s.mux.HandleFunc("GET "+base+"/unification-rules/options", s.unificationRulesHandler.GetUnificationOptions)
 	s.mux.HandleFunc("POST "+base+"/unification-rules", s.unificationRulesHandler.AddUnificationRule)
 	s.mux.HandleFunc("GET "+base+"/unification-rules", s.unificationRulesHandler.GetUnificationRules)
 	s.mux.HandleFunc("GET "+base+"/unification-rules/{ruleId}", s.unificationRulesHandler.GetUnificationRule)

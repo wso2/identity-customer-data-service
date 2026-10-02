@@ -42,6 +42,8 @@ type AuthServerConfig struct {
 	ClaimEndpoint             string              `yaml:"claim_endpoint"`
 	ClientID                  string              `yaml:"client_id"`
 	ClientSecret              string              `yaml:"client_secret"`
+	SubOrgClientID            string              `yaml:"sub_org_client_id"`
+	SubOrgClientSecret        string              `yaml:"sub_org_client_secret"`
 	IntrospectionClientId     string              `yaml:"introspection_client_id"`
 	IntrospectionClientSecret string              `yaml:"introspection_client_secret"`
 	AdminUsername             string              `yaml:"admin_username"`
@@ -157,6 +159,21 @@ type Config struct {
 	Shutdown     ShutdownConfig     `yaml:"shutdown"`
 	// ApplicationIdentifierType selects how applications are identified: "client_id" (default) or "app_id".
 	ApplicationIdentifierType string `yaml:"application_identifier_type"`
+
+	IdentityResolution IdentityResolutionConfig `yaml:"identity_resolution"`
+}
+
+// IdentityResolutionConfig holds server-wide settings for profile matching.
+type IdentityResolutionConfig struct {
+	// AllowEvidenceStrengthOverride lets a unification rule carry its own match_strength
+	// and mismatch_strength instead of taking the values derived from its attribute_type.
+	//
+	// Off by default. The strengths decide whether an attribute can merge two profiles on
+	// its own and whether a difference in it blocks a merge outright, so getting them wrong
+	// silently changes who gets merged. Until there is a way for an operator to see the
+	// effect of a change before committing to it, the derived values are the safer contract
+	// and the fields are rejected rather than quietly ignored.
+	AllowEvidenceStrengthOverride bool `yaml:"allow_evidence_strength_override"`
 }
 
 // ShutdownConfig bounds the graceful shutdown of the whole process. Zero, which

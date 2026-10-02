@@ -68,6 +68,19 @@ CREATE TABLE unification_rules
     property_id   VARCHAR(255) REFERENCES profile_schema(attribute_id) ON DELETE CASCADE,
     priority      INT          NOT NULL,
     is_active     BOOLEAN      NOT NULL,
+    attribute_type     VARCHAR(255) NOT NULL DEFAULT 'PRIMITIVE_EXACT',
+    unification_method VARCHAR(255) NOT NULL DEFAULT 'deterministic',
+    -- How much an agreement on this attribute supports a merge, and how much a
+    -- disagreement opposes one. Independent because the two directions rarely carry equal
+    -- weight: matching emails strongly imply the same person while differing emails imply
+    -- little, and a date of birth is the reverse.
+    --
+    -- Left NULL, each is derived from attribute_type at load time. A value here is an
+    -- explicit operator override. They must not carry a column default: a default would
+    -- stamp a concrete strength onto every pre-existing row when the column is added,
+    -- which reads as a deliberate choice and overrides what the attribute type implies.
+    match_strength     VARCHAR(20),
+    mismatch_strength  VARCHAR(20),
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
@@ -142,6 +155,63 @@ CREATE TABLE cds_config (
     PRIMARY KEY (org_handle, config)
 );
 
+CREATE TABLE IF NOT EXISTS blocking_keys (
+    key_id          VARCHAR(255) PRIMARY KEY,
+    profile_id      VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
+    org_handle      VARCHAR(255) NOT NULL,
+    attribute_name  VARCHAR(255) NOT NULL,       -- Rule property name (e.g., "identity_attributes.emailaddress")
+    key_value       VARCHAR(512) NOT NULL,       -- Normalized blocking key (e.g., "john.smith@example.com", "J500 S530")
+
+    CONSTRAINT uq_blocking_key UNIQUE (org_handle, attribute_name, key_value, profile_id)
+);
+
+-- Index for profile-level operations
+CREATE INDEX IF NOT EXISTS idx_blocking_keys_profile ON blocking_keys(profile_id);
+
+CREATE TABLE IF NOT EXISTS review_tasks (
+    id                  VARCHAR(255) PRIMARY KEY,
+    org_handle          VARCHAR(255) NOT NULL,
+    incoming_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,  -- New/edited profile that triggered the review
+    candidate_profile_id   VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,  -- Candidate profile that matched
+    match_score         DECIMAL(5,4) NOT NULL,       -- Score between 0 and 1 (e.g., 0.87)
+    status              VARCHAR(50) NOT NULL DEFAULT 'PENDING',  -- PENDING, APPROVED, CANCELLED, REJECTED
+    match_reason        TEXT,                        -- JSON or text explaining why matched
+    score_breakdown     JSONB DEFAULT '{}'::jsonb,   -- Detailed score per attribute
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at         TIMESTAMPTZ,
+    resolved_by         VARCHAR(255),                -- User ID who resolved
+    resolution_notes    TEXT,
+    CONSTRAINT uq_review_task_profiles UNIQUE (incoming_profile_id, candidate_profile_id)
+);
+
+-- Index for fetching pending reviews by org
+CREATE INDEX IF NOT EXISTS idx_review_tasks_org_status ON review_tasks(org_handle, status);
+CREATE INDEX IF NOT EXISTS idx_review_tasks_created ON review_tasks(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_review_tasks_incoming ON review_tasks(incoming_profile_id, status);
+
+-- When a profile edited, or deleted we need to deleted rejected pairs, if we use review task table to mark rejection
+-- pairs as rejected we can not do that with keeping history correctly. But with this rejection pair table we can do that.
+-- Rejection pairs: profiles that an admin explicitly rejected as non-matches.
+CREATE TABLE IF NOT EXISTS rejection_pairs (
+    id              VARCHAR(255) PRIMARY KEY,
+    org_handle      VARCHAR(255) NOT NULL,
+    -- Stored with the lower id first, so one row means one pair whichever direction the
+    -- review task happened to run in and the unique constraint below isenforceable.
+    profile_id_1    VARCHAR(255) NOT NULL,
+    profile_id_2    VARCHAR(255) NOT NULL,
+    -- The evidence the decision was made against. A rejection asserts that two profiles are
+    -- different people, which does not stop being true because an attribute changed — so it
+    -- is only reconsidered when later evidence is materially stronger than this.
+    match_score     DECIMAL(5,4),
+    score_breakdown JSONB DEFAULT '{}'::jsonb,
+    rejected_by     VARCHAR(255),
+    rejected_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_rejection_pair UNIQUE (profile_id_1, profile_id_2)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p1 ON rejection_pairs(org_handle, profile_id_1);
+CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p2 ON rejection_pairs(org_handle, profile_id_2);
+
 -- ================================
 -- PROFILES (Hot path: tenant + cursor pagination + ordering)
 -- ================================
@@ -157,7 +227,6 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id_trgm
     ON profiles USING GIN (user_id gin_trgm_ops);
 
-
 -- ================================
 -- PROFILE_REFERENCE (Join + status filtering)
 -- ================================
@@ -171,7 +240,6 @@ CREATE INDEX IF NOT EXISTS idx_profile_reference_org_status_profile
 -- For lookups by reference_profile_id
 CREATE INDEX IF NOT EXISTS idx_profile_reference_reference_profile
     ON profile_reference (reference_profile_id);
-
 
 -- ================================
 -- APPLICATION_DATA (Joins + filtering)
@@ -188,7 +256,6 @@ CREATE INDEX IF NOT EXISTS idx_application_data_app_id
 CREATE INDEX IF NOT EXISTS idx_application_data_app_specific_gin
     ON application_data USING GIN ((application_data -> 'app_specific_data'));
 
-
 -- ================================
 -- JSONB FILTERING (Profiles)
 -- ================================
@@ -199,7 +266,6 @@ CREATE INDEX IF NOT EXISTS idx_profiles_traits_gin
 CREATE INDEX IF NOT EXISTS idx_profiles_identity_attributes_gin
     ON profiles USING GIN (identity_attributes);
 
-
 -- ================================
 -- PROFILE_SCHEMA (Rare filtering, minimal indexes)
 -- ================================
@@ -208,7 +274,6 @@ CREATE INDEX IF NOT EXISTS idx_profile_schema_org_scope
 
 CREATE INDEX IF NOT EXISTS idx_profile_schema_org_attr_name
     ON profile_schema (org_handle, attribute_name);
-
 
 -- ================================
 -- UNIFICATION_RULES
