@@ -43,6 +43,8 @@ func QueryPlaceholders(n int) string {
 func CompleteStatement(name, statement string) string {
 
 	switch name {
+	case "FindOldestReferenceProfileIDByAttributeValues":
+		return fmt.Sprintf(statement, "p.identity_attributes")
 	case "InsertIdentityClaimsForProfileSchema":
 		return statement + QueryPlaceholders(13)
 	case "InsertProfileSchemaAttributesForScope":

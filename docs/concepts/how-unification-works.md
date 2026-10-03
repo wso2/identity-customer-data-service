@@ -31,7 +31,7 @@ Profile created / updated
 
 ## Step 1 — System userId match
 
-If the incoming profile has a non-empty `userId`, CDS checks all existing master profiles for the same org. If any master profile has the same `userId`, the two profiles are merged immediately — no unification rule is required.
+If the incoming profile has a non-empty `userId`, CDS searches for a master profile with the same user ID in the organization. If one is found, the profiles are merged without evaluating unification rules.
 
 This is a system-level invariant. It fires before any rules are evaluated and cannot be disabled.
 
@@ -41,7 +41,9 @@ This is a system-level invariant. It fires before any rules are evaluated and ca
 
 ## Step 2 — Rule-based matching
 
-Active rules for the org are fetched, filtered, and sorted by `priority` ascending. For each rule CDS compares the value of `rule.property_name` across the incoming profile and all existing master profiles. The first rule that produces a match triggers a merge.
+If there is no user-ID match, CDS evaluates the organization's active unification rules in priority order. For each rule, it searches for a master profile with a matching value for the configured property. The first match triggers a merge, and no remaining rules are evaluated.
+
+If multiple profiles match, the oldest matching master is selected consistently.
 
 ---
 
