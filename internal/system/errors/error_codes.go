@@ -383,14 +383,55 @@ var (
 	//   156xx - Server errors
 	//   17xxx - Client errors
 
+	ORGANIZATION_STORE = ErrorMessage{
+		Code:    errorPrefix + "15601",
+		Message: "Error while accessing organizations.",
+	}
+
 	ORGANIZATION_SYNC = ErrorMessage{
 		Code:    errorPrefix + "15602",
 		Message: "Error while syncing organizations with the identity provider.",
 	}
 
+	SHARE_STORE = ErrorMessage{
+		Code:    errorPrefix + "15603",
+		Message: "Error while accessing share policies.",
+	}
+
+	SHARE_BAD_REQUEST = ErrorMessage{
+		Code:    errorPrefix + "17001",
+		Message: "Invalid share request.",
+	}
+
+	SHARED_RESOURCE_READ_ONLY = ErrorMessage{
+		Code:        errorPrefix + "17002",
+		Message:     "Shared resource is read-only.",
+		Description: "Only the owner organization can change a shared resource.",
+	}
+
+	SHARE_POLICY_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "17003",
+		Message: "Share policy not found.",
+	}
+
+	SHARED_NAME_CONFLICT = ErrorMessage{
+		Code:    errorPrefix + "17004",
+		Message: "Name is used by a shared resource.",
+	}
+
+	SHARE_MISSING_ATTRIBUTE = ErrorMessage{
+		Code:    errorPrefix + "17005",
+		Message: "Rule attribute is not visible in a target organization.",
+	}
+
 	ORGANIZATION_NOT_FOUND = ErrorMessage{
 		Code:    errorPrefix + "17006",
 		Message: "Organization not found.",
+	}
+
+	SHARE_POLICY_EXISTS = ErrorMessage{
+		Code:    errorPrefix + "17008",
+		Message: "Policy already exists.",
 	}
 
 	ORGANIZATION_PATH_NOT_SUPPORTED = ErrorMessage{
