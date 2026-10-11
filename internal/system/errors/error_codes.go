@@ -383,6 +383,11 @@ var (
 	//   156xx - Server errors
 	//   17xxx - Client errors
 
+	ORGANIZATION_SYNC = ErrorMessage{
+		Code:    errorPrefix + "15602",
+		Message: "Error while syncing organizations with the identity provider.",
+	}
+
 	ORGANIZATION_NOT_FOUND = ErrorMessage{
 		Code:    errorPrefix + "17006",
 		Message: "Organization not found.",
