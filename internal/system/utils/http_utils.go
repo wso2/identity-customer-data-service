@@ -117,14 +117,46 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 		orgHandle := parts[0]
 		remainingPath := "/" + parts[1]
 
-		// Add tenant to request context and preserve remaining path (including API version)
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, orgHandle)
+		if strings.HasPrefix(remainingPath, "/o/") {
+			// Organization management: /t/{primary_handle}/o/{org_id}/... is the path of a sub org. The
+			// path names the org. The auth layer checks that the org_id claim of the token is equal to it.
+			segments := strings.SplitN(strings.TrimPrefix(remainingPath, "/o/"), "/", 2)
+			if len(segments) != 2 || segments[0] == "" || SubOrgResolver == nil {
+				http.NotFound(w, r)
+				return
+			}
+			orgId := segments[0]
+			subOrgHandle, err := SubOrgResolver(r.Context(), orgHandle, orgId)
+			if err != nil {
+				HandleError(w, error2.NewClientError(error2.ErrorMessage{
+					Code:        error2.ORGANIZATION_NOT_FOUND.Code,
+					Message:     error2.ORGANIZATION_NOT_FOUND.Message,
+					Description: err.Error(),
+				}, http.StatusNotFound))
+				return
+			}
+			ctx = context.WithValue(ctx, constants.TenantContextKey, subOrgHandle)
+			ctx = context.WithValue(ctx, constants.OrgIdContextKey, orgId)
+			remainingPath = "/" + segments[1]
+		} else if IsSubOrgHandle != nil && IsSubOrgHandle(r.Context(), orgHandle) {
+			HandleError(w, error2.NewClientError(error2.ORGANIZATION_PATH_NOT_SUPPORTED, http.StatusBadRequest))
+			return
+		}
 		r = r.WithContext(ctx)
 		r.URL.Path = remainingPath
 
 		handlerFunc(w, r)
 	})
 }
+
+// SubOrgResolver returns the handle of the sub org of the path /t/{primary_handle}/o/{org_id}/...,
+// after it checks that the org is in the tree of the primary org. The organization service sets it.
+var SubOrgResolver func(ctx context.Context, primaryHandle, orgId string) (string, error)
+
+// IsSubOrgHandle reports whether a handle names a sub org, which must use the path of a sub org.
+// The organization service sets it.
+var IsSubOrgHandle func(ctx context.Context, orgHandle string) bool
 
 // RespondJSON sends a JSON response with the given status code and payload
 func RespondJSON(w http.ResponseWriter, status int, payload any, resource string) {

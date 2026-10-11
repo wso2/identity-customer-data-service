@@ -379,6 +379,21 @@ var (
 		Description: "Customer data service is not enabled for the organization",
 	}
 
+	// Organization management: organizations and sharing.
+	//   156xx - Server errors
+	//   17xxx - Client errors
+
+	ORGANIZATION_NOT_FOUND = ErrorMessage{
+		Code:    errorPrefix + "17006",
+		Message: "Organization not found.",
+	}
+
+	ORGANIZATION_PATH_NOT_SUPPORTED = ErrorMessage{
+		Code:        errorPrefix + "17009",
+		Message:     "Organization path not supported.",
+		Description: "The requested organization cannot be accessed using this API path.",
+	}
+
 	INVALID_FILTER_FORMAT = ErrorMessage{
 		Code:    errorPrefix + "19001",
 		Message: "Invalid filter format.",

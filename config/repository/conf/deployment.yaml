@@ -83,6 +83,32 @@ auth_server:
     consent_category:delete:
       - "internal_cds_consent_category_delete"
 
+    # Organization management: the operations of a request on the path of a sub organization,
+    # /t/{primary_handle}/o/{org_id}/...
+    # A sub organization writes profiles only. It has no other write operation.
+    org:profile:create:
+      - "internal_org_cds_profile_create"
+    org:profile:update:
+      - "internal_org_cds_profile_update"
+    org:profile:view:
+      - "internal_org_cds_profile_view"
+    org:profile:delete:
+      - "internal_org_cds_profile_delete"
+    org:profile:link:
+      - "internal_org_cds_profile_link"
+
+    org:unification_rules:view:
+      - "internal_org_cds_unification_rule_view"
+
+    org:profile_schema:view:
+      - "internal_org_cds_profile_schema_view"
+
+    org:admin_config:view:
+      - "internal_org_cds_admin_config_view"
+
+    org:consent_category:view:
+      - "internal_org_cds_consent_category_view"
+
 
 sync:
   schema:

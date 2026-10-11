@@ -37,6 +37,14 @@ var (
 
 // ValidateAuthenticationAndReturnClaims validates Authorization: Bearer token from the HTTP request
 func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]interface{}, error) {
+	return ValidateTokenForOrg(token, orgHandle, "")
+}
+
+// ValidateTokenForOrg validates the token for the org of the path. On the path of a sub org,
+// /t/{primary_handle}/o/{org_id}/..., pathOrgId is the org ID of the path, and the org_id claim of
+// the token must be equal to it. On the path of a primary org, pathOrgId is empty, and the
+// org_handle claim must be equal to the handle of the path. CDS does not take the org from a claim.
+func ValidateTokenForOrg(token, orgHandle, pathOrgId string) (map[string]interface{}, error) {
 
 	logger := log.GetLogger()
 	cfg := config.GetCDSRuntime().Config
@@ -54,7 +62,7 @@ func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]
 		}
 
 		// Validate org claims against request org handle
-		if !validateClaims(orgHandle, claims) {
+		if !validateClaims(orgHandle, pathOrgId, claims) {
 			logger.Debug("JWT claims validation failed")
 			return nil, unauthorizedError()
 		}
@@ -91,6 +99,20 @@ func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]
 	active, ok := introspectionClaims[constants.ActiveClaim].(bool)
 	if !ok || !active {
 		logger.Debug("Opaque token is not active according to introspection")
+		return nil, unauthorizedError()
+	}
+
+	// Organization management: on the path of a sub org, the org_id claim must be the org of the
+	// path. On the path of a primary org, an org-switched token names another org and does not
+	// match.
+	if pathOrgId != "" {
+		if tokenOrgId, _ := introspectionClaims[constants.OrgIdClaim].(string); tokenOrgId != pathOrgId {
+			logger.Debug(fmt.Sprintf("Opaque token is for organization '%s', not for '%s'", tokenOrgId, pathOrgId))
+			return nil, unauthorizedError()
+		}
+	} else if tokenOrg, ok := introspectionClaims[constants.OrgHandleClaim].(string); ok && tokenOrg != "" &&
+		tokenOrg != orgHandle {
+		logger.Debug(fmt.Sprintf("Opaque token is for organization '%s', not for '%s'", tokenOrg, orgHandle))
 		return nil, unauthorizedError()
 	}
 
@@ -135,18 +157,19 @@ func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 	return claims, nil
 }
 
-// validateClaims ensures the token has `active: true` and the expected audience and org_handle
-func validateClaims(orgHandle string, claims map[string]interface{}) bool {
+// validateClaims ensures the token has the org of the path, an expiry in the future, and the
+// expected audience. On the path of a sub org, the org_id claim must be equal to pathOrgId. On the
+// path of a primary org, the org_handle claim must be equal to orgHandle.
+func validateClaims(orgHandle, pathOrgId string, claims map[string]interface{}) bool {
 
 	logger := log.GetLogger()
-	orgHandleInClaimRaw, ok := claims[constants.OrgHandleClaim]
-	if !ok || orgHandleInClaimRaw != orgHandle {
+	if pathOrgId != "" {
+		if orgIdInClaim, _ := claims[constants.OrgIdClaim].(string); orgIdInClaim != pathOrgId {
+			logger.Debug("Token does not have the org_id claim of the path.")
+			return false
+		}
+	} else if orgHandleInClaim, _ := claims[constants.OrgHandleClaim].(string); orgHandleInClaim != orgHandle {
 		logger.Debug("Token does not have the expected org_handle claim.")
-		return false
-	}
-	orgHandleInClaim, ok := orgHandleInClaimRaw.(string)
-	if !ok || orgHandleInClaim != orgHandle {
-		logger.Debug("Token org_handle claim is not valid.")
 		return false
 	}
 
