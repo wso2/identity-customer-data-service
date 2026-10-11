@@ -117,3 +117,20 @@ func TestAuthorize_existingPrimaryOrgBehavior(t *testing.T) {
 	status, _ = statusOf(t, authorize(primaryOrgRequest(), map[string]interface{}{}, "profile:create"))
 	assert.Equal(t, http.StatusForbidden, status, "no scope claim")
 }
+
+func TestAuthorizePrimary(t *testing.T) {
+
+	setUp(t)
+
+	assert.NoError(t, authorizePrimary(primaryOrgRequest(), claims("internal_cds_admin_config_update"),
+		"admin_config:update"))
+
+	status, _ := statusOf(t, authorizePrimary(primaryOrgRequest(), claims("internal_org_cds_admin_config_update"),
+		"admin_config:update"))
+	assert.Equal(t, http.StatusForbidden, status, "an org scope must not authorize an operation of the primary org")
+
+	status, code := statusOf(t, authorizePrimary(subOrgRequest(),
+		claims("internal_cds_admin_config_update internal_org_cds_admin_config_update"), "admin_config:update"))
+	assert.Equal(t, http.StatusBadRequest, status, "an operation of the primary org in a sub org")
+	assert.Equal(t, errors.SUB_ORG_CONFIG_NOT_ALLOWED.Code, code)
+}

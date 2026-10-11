@@ -27,6 +27,7 @@ import (
 	"github.com/google/uuid"
 	model "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	"github.com/wso2/identity-customer-data-service/internal/consent/store"
+	"github.com/wso2/identity-customer-data-service/internal/organization/suborg"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -86,6 +87,9 @@ func (cs *ConsentCategoryService) GetConsentCategory(ctx context.Context, id str
 func (cs *ConsentCategoryService) AddConsentCategory(ctx context.Context,
 	category model.ConsentCategory) (*model.ConsentCategory, error) {
 
+	if err := suborg.RejectWrite(ctx, category.OrgHandle); err != nil {
+		return nil, err
+	}
 	err, isValid := cs.validateConsentCat(category)
 
 	if !isValid || err != nil {
@@ -211,6 +215,9 @@ func inferScope(attributeName string) string {
 // UpdateConsentCategory updates an existing category.
 func (cs *ConsentCategoryService) UpdateConsentCategory(ctx context.Context, category model.ConsentCategory) error {
 
+	if err := suborg.RejectWrite(ctx, category.OrgHandle); err != nil {
+		return err
+	}
 	if category.CategoryIdentifier == "" {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.BAD_REQUEST.Code,
@@ -244,6 +251,15 @@ func (cs *ConsentCategoryService) DeleteConsentCategory(ctx context.Context, cat
 			Message:     errors2.BAD_REQUEST.Message,
 			Description: "Consent category Id is required for update.",
 		}, http.StatusBadRequest)
+	}
+	cat, err := store.GetConsentCategoryByID(ctx, categoryId)
+	if err != nil {
+		return err
+	}
+	if cat != nil {
+		if err := suborg.RejectWrite(ctx, cat.OrgHandle); err != nil {
+			return err
+		}
 	}
 	if err := guardMandatoryCategory(ctx, categoryId); err != nil {
 		return err

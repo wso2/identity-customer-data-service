@@ -429,6 +429,12 @@ var (
 		Message: "Organization not found.",
 	}
 
+	SUB_ORG_CONFIG_NOT_ALLOWED = ErrorMessage{
+		Code:        errorPrefix + "17007",
+		Message:     "Configuration is inherited.",
+		Description: "A child organization inherits the CDS enablement from its primary organization.",
+	}
+
 	SHARE_POLICY_EXISTS = ErrorMessage{
 		Code:    errorPrefix + "17008",
 		Message: "Policy already exists.",
@@ -438,6 +444,12 @@ var (
 		Code:        errorPrefix + "17009",
 		Message:     "Organization path not supported.",
 		Description: "The requested organization cannot be accessed using this API path.",
+	}
+	SUB_ORG_WRITE_NOT_ALLOWED = ErrorMessage{
+		Code:    errorPrefix + "17013",
+		Message: "Child organization is read-only.",
+		Description: "A child organization cannot change the profile schema, the unification rules, the consent " +
+			"categories, the sharing policies, or the configuration. It can write profiles.",
 	}
 
 	INVALID_FILTER_FORMAT = ErrorMessage{

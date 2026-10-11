@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	orgModel "github.com/wso2/identity-customer-data-service/internal/organization/model"
 	orgStore "github.com/wso2/identity-customer-data-service/internal/organization/store"
+	"github.com/wso2/identity-customer-data-service/internal/organization/suborg"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -180,6 +181,9 @@ func StatesForOrg(ctx context.Context, resourceType, orgHandle string) (map[stri
 func CreatePolicy(ctx context.Context, resourceType, resourceId string, initiator orgModel.Organization,
 	req model.PolicyRequest) (*model.PolicyResponse, error) {
 
+	if !initiator.IsPrimary() {
+		return nil, suborg.WriteNotAllowed()
+	}
 	existing, err := store.GetPolicy(ctx, resourceType, resourceId, initiator.OrgId)
 	if err != nil {
 		return nil, err
@@ -242,6 +246,9 @@ func GetPolicy(ctx context.Context, resourceType, resourceId, policyId string,
 func UpdatePolicy(ctx context.Context, resourceType, resourceId, policyId string, initiator orgModel.Organization,
 	req model.PolicyRequest) (*model.PolicyResponse, error) {
 
+	if !initiator.IsPrimary() {
+		return nil, suborg.WriteNotAllowed()
+	}
 	p, err := policyOf(ctx, resourceType, resourceId, policyId, initiator)
 	if err != nil {
 		return nil, err
@@ -265,6 +272,9 @@ func UpdatePolicy(ctx context.Context, resourceType, resourceId, policyId string
 func DeletePolicy(ctx context.Context, resourceType, resourceId, policyId string,
 	initiator orgModel.Organization) error {
 
+	if !initiator.IsPrimary() {
+		return suborg.WriteNotAllowed()
+	}
 	p, err := policyOf(ctx, resourceType, resourceId, policyId, initiator)
 	if err != nil {
 		return err

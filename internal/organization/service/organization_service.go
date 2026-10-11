@@ -1,0 +1,455 @@
+/*
+ * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package service
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"sort"
+	"sync"
+	"time"
+
+	adminConfigStore "github.com/wso2/identity-customer-data-service/internal/admin_config/store"
+	consentService "github.com/wso2/identity-customer-data-service/internal/consent/service"
+	"github.com/wso2/identity-customer-data-service/internal/organization/model"
+	"github.com/wso2/identity-customer-data-service/internal/organization/store"
+	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/idp"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
+)
+
+// ProvisionResult summarizes one provisioning of a customer tree.
+type ProvisionResult struct {
+	PrimaryOrgId string   `json:"primary_org_id"`
+	Total        int      `json:"total"`
+	Added        []string `json:"added"`
+	Deleted      []string `json:"deleted"`
+}
+
+// provisionLocks serializes the provisioning of one primary org, so that two events do not
+// provision the same tree at the same time.
+var provisionLocks sync.Map
+
+// ProvisionTree reads the org tree of the primary org from the identity provider and makes the
+// stored orgs match it. It initializes each new org that the organization access enables. It runs
+// when the primary org enables CDS, when an event names an org whose parent CDS does not know, and
+// when a request names an org that CDS does not know.
+func ProvisionTree(ctx context.Context, primaryHandle string) (*ProvisionResult, error) {
+
+	lock, _ := provisionLocks.LoadOrStore(primaryHandle, &sync.Mutex{})
+	lock.(*sync.Mutex).Lock()
+	defer lock.(*sync.Mutex).Unlock()
+
+	logger := log.GetLogger()
+	adapter := idp.GetAdapter()
+
+	primaryInfo, err := adapter.GetPrimaryOrganization(ctx, primaryHandle)
+	if err != nil {
+		return nil, err
+	}
+	primary := model.Organization{
+		OrgId:        primaryInfo.Id,
+		OrgHandle:    primaryHandle,
+		OrgName:      primaryInfo.Name,
+		PrimaryOrgId: primaryInfo.Id,
+		Status:       model.StatusActive,
+	}
+	if err := store.UpsertOrganization(ctx, primary); err != nil {
+		return nil, err
+	}
+
+	descendants, err := adapter.ListDescendants(ctx, primaryHandle)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := store.GetOrganizationsByPrimaryOrg(ctx, primary.OrgId)
+	if err != nil {
+		return nil, err
+	}
+	known := map[string]model.Organization{}
+	for _, o := range existing {
+		known[o.OrgId] = o
+	}
+
+	orgs := buildTree(primary, descendants)
+	result := &ProvisionResult{PrimaryOrgId: primary.OrgId, Total: len(orgs) + 1, Added: []string{},
+		Deleted: []string{}}
+	seen := map[string]bool{primary.OrgId: true}
+	for _, org := range orgs {
+		seen[org.OrgId] = true
+		previous, wasKnown := known[org.OrgId]
+		if err := store.UpsertOrganization(ctx, org); err != nil {
+			return nil, err
+		}
+		if !wasKnown || previous.Status == model.StatusDeleted {
+			initializeIfEnabled(ctx, org)
+			result.Added = append(result.Added, org.OrgHandle)
+		}
+	}
+	for _, o := range existing {
+		if !seen[o.OrgId] && o.Status != model.StatusDeleted {
+			if err := store.UpdateOrganizationStatus(ctx, o.OrgId, model.StatusDeleted); err != nil {
+				return nil, err
+			}
+			result.Deleted = append(result.Deleted, o.OrgHandle)
+		}
+	}
+
+	logger.Info(fmt.Sprintf("Provisioned the org tree of primary organization '%s': %d orgs, %d added, "+
+		"%d deleted.", primaryHandle, result.Total, len(result.Added), len(result.Deleted)))
+	return result, nil
+}
+
+// buildTree links each descendant to its parent, and returns the orgs with each parent before its
+// children, so that CDS stores a parent first. An org whose chain does not reach the primary org is
+// left out.
+func buildTree(primary model.Organization, descendants []idp.Organization) []model.Organization {
+
+	byId := map[string]idp.Organization{}
+	for _, d := range descendants {
+		byId[d.Id] = d
+	}
+	built := map[string]model.Organization{primary.OrgId: primary}
+	level := map[string]int{primary.OrgId: 0}
+	var resolve func(id string, guard int) (model.Organization, bool)
+	resolve = func(id string, guard int) (model.Organization, bool) {
+		if org, ok := built[id]; ok {
+			return org, true
+		}
+		d, ok := byId[id]
+		if !ok || guard > 64 {
+			return model.Organization{}, false
+		}
+		parent, ok := resolve(d.ParentId, guard+1)
+		if !ok {
+			return model.Organization{}, false
+		}
+		status := model.StatusActive
+		if d.Status == model.StatusDisabled {
+			status = model.StatusDisabled
+		}
+		org := model.Organization{
+			OrgId:        d.Id,
+			OrgHandle:    d.Handle,
+			OrgName:      d.Name,
+			ParentOrgId:  parent.OrgId,
+			PrimaryOrgId: primary.OrgId,
+			Status:       status,
+		}
+		built[id] = org
+		level[id] = level[parent.OrgId] + 1
+		return org, true
+	}
+
+	result := make([]model.Organization, 0, len(descendants))
+	for _, d := range descendants {
+		if org, ok := resolve(d.Id, 0); ok {
+			result = append(result, org)
+		} else {
+			log.GetLogger().Warn(fmt.Sprintf("Skipping organization '%s', because its parent chain does not reach "+
+				"the primary organization.", d.Id))
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if level[result[i].OrgId] != level[result[j].OrgId] {
+			return level[result[i].OrgId] < level[result[j].OrgId]
+		}
+		return result[i].OrgId < result[j].OrgId
+	})
+	return result
+}
+
+// initializeIfEnabled initializes a new sub org when the organization access of its primary org
+// enables it. An org that the selection does not cover is initialized when it enters the selection.
+func initializeIfEnabled(ctx context.Context, org model.Organization) {
+
+	enabled, err := sharingService.IsOrgEnabled(ctx, org)
+	if err != nil {
+		log.GetLogger().Warn(fmt.Sprintf("Failed to read the enablement of organization '%s'.", org.OrgHandle),
+			log.Error(err))
+		return
+	}
+	if enabled {
+		initializeOrg(ctx, org)
+	}
+}
+
+// initializeOrg runs the per-org initialization for a new sub org: it syncs the identity
+// attributes and seeds the mandatory consent category. A failure is logged and is visible in the
+// org list as initial_sync_done=false.
+func initializeOrg(ctx context.Context, org model.Organization) {
+
+	logger := log.GetLogger()
+	if err := schemaService.GetProfileSchemaService().SyncProfileSchema(ctx, org.OrgHandle); err != nil {
+		logger.Warn(fmt.Sprintf("Failed to sync the identity attributes of organization '%s'.", org.OrgHandle),
+			log.Error(err))
+		return
+	}
+	if err := consentService.GetConsentCategoryService().SeedDefaultConsentCategory(ctx, org.OrgHandle); err != nil {
+		logger.Warn(fmt.Sprintf("Failed to seed the consent category of organization '%s'.", org.OrgHandle),
+			log.Error(err))
+		return
+	}
+	if err := adminConfigStore.UpdateInitialSchemaSyncConfig(ctx, true, org.OrgHandle); err != nil {
+		logger.Warn(fmt.Sprintf("Failed to mark the initial sync of organization '%s'.", org.OrgHandle),
+			log.Error(err))
+	}
+}
+
+// HandleSyncEvent applies an org lifecycle event that the identity provider pushes. pathHandle is
+// the org of the request path, which is an org of the same tree.
+func HandleSyncEvent(ctx context.Context, pathHandle string, event model.SyncEvent) error {
+
+	primaryHandle, err := enabledPrimaryHandle(ctx, pathHandle)
+	if err != nil {
+		return err
+	}
+	primary, err := store.GetOrganizationByHandle(ctx, primaryHandle)
+	if err != nil {
+		return err
+	}
+	if primary == nil {
+		_, err := ProvisionTree(ctx, primaryHandle)
+		return err
+	}
+
+	switch event.Event {
+	case model.EventOrgCreated, model.EventOrgUpdated:
+		info, err := idp.GetAdapter().GetOrganization(ctx, primaryHandle, event.OrgId)
+		if err != nil {
+			return err
+		}
+		if info == nil {
+			log.GetLogger().Info(fmt.Sprintf("The identity provider does not report organization '%s' under "+
+				"primary organization '%s'. Ignoring the event.", event.OrgId, primaryHandle))
+			return nil
+		}
+		parent, err := store.GetOrganizationById(ctx, info.ParentId)
+		if err != nil {
+			return err
+		}
+		previous, err := store.GetOrganizationById(ctx, info.Id)
+		if err != nil {
+			return err
+		}
+		// An unknown parent or a move needs the full tree.
+		if parent == nil || (previous != nil && previous.ParentOrgId != info.ParentId) {
+			_, err := ProvisionTree(ctx, primaryHandle)
+			return err
+		}
+		status := model.StatusActive
+		if info.Status == model.StatusDisabled {
+			status = model.StatusDisabled
+		}
+		org := model.Organization{
+			OrgId:        info.Id,
+			OrgHandle:    info.Handle,
+			OrgName:      info.Name,
+			ParentOrgId:  parent.OrgId,
+			PrimaryOrgId: primary.OrgId,
+			Status:       status,
+		}
+		if err := store.UpsertOrganization(ctx, org); err != nil {
+			return err
+		}
+		if previous == nil || previous.Status == model.StatusDeleted {
+			initializeIfEnabled(ctx, org)
+		}
+		return nil
+
+	case model.EventOrgDeleted:
+		previous, err := store.GetOrganizationById(ctx, event.OrgId)
+		if err != nil || previous == nil {
+			return err
+		}
+		return store.UpdateOrganizationStatus(ctx, previous.OrgId, model.StatusDeleted)
+
+	default:
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:    errors2.BAD_REQUEST.Code,
+			Message: errors2.BAD_REQUEST.Message,
+			Description: fmt.Sprintf("Unsupported organization event '%s'. Use %s, %s, or %s.", event.Event,
+				model.EventOrgCreated, model.EventOrgUpdated, model.EventOrgDeleted),
+		}, http.StatusBadRequest)
+	}
+}
+
+// enabledPrimaryHandle returns the handle of the primary org of the org, when the primary org
+// enabled CDS.
+func enabledPrimaryHandle(ctx context.Context, orgHandle string) (string, error) {
+
+	primaryHandle := orgHandle
+	org, err := store.GetOrganizationByHandle(ctx, orgHandle)
+	if err != nil {
+		return "", err
+	}
+	if org != nil && !org.IsPrimary() {
+		primary, err := store.GetOrganizationById(ctx, org.PrimaryOrgId)
+		if err != nil {
+			return "", err
+		}
+		if primary != nil {
+			primaryHandle = primary.OrgHandle
+		}
+	}
+	config, err := adminConfigStore.GetAdminConfig(ctx, primaryHandle)
+	if err != nil {
+		return "", err
+	}
+	if config == nil || !config.CDSEnabled {
+		return "", errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.CDS_NOT_ENABLED.Code,
+			Message:     errors2.CDS_NOT_ENABLED.Message,
+			Description: errors2.CDS_NOT_ENABLED.Description,
+		}, http.StatusBadRequest)
+	}
+	return primaryHandle, nil
+}
+
+// negativeCache remembers the handles that no enabled tree has, so that the just-in-time
+// lookup does not call the identity provider on each request.
+var negativeCache sync.Map
+
+const negativeCacheTTL = 2 * time.Minute
+
+// PrimaryHandleOf returns the handle of the primary org of the org. When CDS does not know the org,
+// it reads the trees of the primary orgs that enabled CDS again, once in each cache period. The
+// bool is false when no enabled tree has the org.
+func PrimaryHandleOf(ctx context.Context, orgHandle string) (string, bool) {
+
+	org, err := store.GetOrganizationByHandle(ctx, orgHandle)
+	if err == nil && org == nil {
+		org = provisionJustInTime(ctx, orgHandle)
+	}
+	if org == nil {
+		return "", false
+	}
+	if org.IsPrimary() {
+		return org.OrgHandle, true
+	}
+	if org.Status != model.StatusActive {
+		return "", false
+	}
+	primary, err := store.GetOrganizationById(ctx, org.PrimaryOrgId)
+	if err != nil || primary == nil {
+		return "", false
+	}
+	return primary.OrgHandle, true
+}
+
+func provisionJustInTime(ctx context.Context, orgHandle string) *model.Organization {
+
+	if until, ok := negativeCache.Load(orgHandle); ok && time.Now().Before(until.(time.Time)) {
+		return nil
+	}
+	logger := log.GetLogger()
+	primaryHandles, err := store.GetEnabledPrimaryOrgHandles(ctx)
+	if err != nil {
+		return nil
+	}
+	for _, primaryHandle := range primaryHandles {
+		if primaryHandle == orgHandle {
+			continue
+		}
+		primaryOrg, err := store.GetOrganizationByHandle(ctx, primaryHandle)
+		if err != nil || (primaryOrg != nil && !primaryOrg.IsPrimary()) {
+			continue
+		}
+		if _, err := ProvisionTree(ctx, primaryHandle); err != nil {
+			logger.Debug(fmt.Sprintf("Just-in-time provisioning of primary organization '%s' failed.", primaryHandle),
+				log.Error(err))
+			continue
+		}
+		if org, err := store.GetOrganizationByHandle(ctx, orgHandle); err == nil && org != nil {
+			logger.Info(fmt.Sprintf("Provisioned organization '%s' just in time.", orgHandle))
+			return org
+		}
+	}
+	negativeCache.Store(orgHandle, time.Now().Add(negativeCacheTTL))
+	return nil
+}
+
+// SubOrgHandleOf returns the handle of the sub org of the path /t/{primary_handle}/o/{org_id}/...
+// The org must be a sub org in the tree of the primary org. When CDS does not know the org, and the
+// primary org enabled CDS, CDS reads the tree of the primary org again, once in each cache period.
+func SubOrgHandleOf(ctx context.Context, primaryHandle, orgId string) (string, error) {
+
+	org, err := store.GetOrganizationById(ctx, orgId)
+	if err != nil {
+		return "", err
+	}
+	if org == nil {
+		org = provisionIdJustInTime(ctx, primaryHandle, orgId)
+	}
+	notFound := fmt.Errorf("the organization '%s' is not in the organization tree of '%s'", orgId, primaryHandle)
+	if org == nil || org.IsPrimary() || org.Status == model.StatusDeleted {
+		return "", notFound
+	}
+	primary, err := store.GetOrganizationById(ctx, org.PrimaryOrgId)
+	if err != nil {
+		return "", err
+	}
+	if primary == nil || primary.OrgHandle != primaryHandle {
+		return "", notFound
+	}
+	return org.OrgHandle, nil
+}
+
+// IsSubOrgHandle reports whether the handle names a sub org. For a handle that CDS does not know,
+// it uses the just-in-time lookup, so that the first request of a new sub org on /t/{handle}/...
+// is refused too.
+func IsSubOrgHandle(ctx context.Context, orgHandle string) bool {
+
+	org, err := store.GetOrganizationByHandle(ctx, orgHandle)
+	if err != nil {
+		return false
+	}
+	if org != nil {
+		return !org.IsPrimary()
+	}
+	primaryHandle, known := PrimaryHandleOf(ctx, orgHandle)
+	return known && primaryHandle != orgHandle
+}
+
+// provisionIdJustInTime reads the tree of the primary org again for an org ID that CDS does not
+// know. The cache period applies to the primary org and not to each org ID, so a caller cannot make
+// CDS read the tree for each random org ID.
+func provisionIdJustInTime(ctx context.Context, primaryHandle, orgId string) *model.Organization {
+
+	key := "primary-jit/" + primaryHandle
+	if until, ok := negativeCache.Load(key); ok && time.Now().Before(until.(time.Time)) {
+		return nil
+	}
+	negativeCache.Store(key, time.Now().Add(negativeCacheTTL))
+	config, err := adminConfigStore.GetAdminConfig(ctx, primaryHandle)
+	if err == nil && config != nil && config.CDSEnabled {
+		if _, err := ProvisionTree(ctx, primaryHandle); err != nil {
+			log.GetLogger().Debug(fmt.Sprintf("Just-in-time provisioning of primary organization '%s' failed.",
+				primaryHandle),
+				log.Error(err))
+		} else if org, err := store.GetOrganizationById(ctx, orgId); err == nil && org != nil {
+			log.GetLogger().Info(fmt.Sprintf("Provisioned organization '%s' just in time.", orgId))
+			return org
+		}
+	}
+	return nil
+}

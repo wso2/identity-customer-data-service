@@ -27,6 +27,8 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/store"
 	appProvider "github.com/wso2/identity-customer-data-service/internal/application/provider"
 	consentService "github.com/wso2/identity-customer-data-service/internal/consent/service"
+	orgService "github.com/wso2/identity-customer-data-service/internal/organization/service"
+	"github.com/wso2/identity-customer-data-service/internal/organization/suborg"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	sysconfig "github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -45,12 +47,23 @@ type AdminConfigServiceInterface interface {
 // AdminConfigService is the default implementation.
 type AdminConfigService struct{}
 
+// IsCDSEnabled reports whether CDS is enabled for the org. A sub org is enabled when its primary
+// org enabled CDS and the organization access of the primary org reaches the sub org. When CDS does
+// not know the org, it asks the identity provider.
 func (a AdminConfigService) IsCDSEnabled(ctx context.Context, orgHandle string) bool {
 	config, err := store.GetAdminConfig(ctx, orgHandle)
-	if err != nil || config == nil {
+	if err == nil && config != nil && config.CDSEnabled {
+		return true
+	}
+	primaryHandle, known := orgService.PrimaryHandleOf(ctx, orgHandle)
+	if !known || primaryHandle == orgHandle {
 		return false
 	}
-	return config.CDSEnabled
+	primaryConfig, err := store.GetAdminConfig(ctx, primaryHandle)
+	if err != nil || primaryConfig == nil || !primaryConfig.CDSEnabled {
+		return false
+	}
+	return orgService.IsSubOrgEnabled(ctx, orgHandle)
 }
 
 func (a AdminConfigService) IsInitialSchemaSyncDone(ctx context.Context, orgHandle string) bool {
@@ -86,14 +99,26 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 		SystemApplications:    []string{},
 	}
 	config, err := store.GetAdminConfig(ctx, orgHandle)
-	if err != nil || config == nil {
+	if err != nil {
 		return defaultConfig, err
+	}
+	if config == nil {
+		config = &defaultConfig
+	}
+	// A sub org shows the enablement of its primary org. IsCDSEnabled also provisions an unknown
+	// sub org just in time.
+	if !config.CDSEnabled {
+		config.CDSEnabled = a.IsCDSEnabled(ctx, orgHandle)
 	}
 	return *config, nil
 }
 
 func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 	updatedConfig model.AdminConfig, orgHandle string) error {
+	// A sub org inherits the configuration of its primary org and cannot change it.
+	if err := suborg.RejectWrite(ctx, orgHandle); err != nil {
+		return err
+	}
 	isCDSEnabledInitialState := a.IsCDSEnabled(ctx, orgHandle)
 	isInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(ctx, orgHandle)
 
@@ -132,7 +157,18 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 		}
 	}
 
-	return store.UpdateAdminConfig(ctx, updatedConfig, orgHandle)
+	if err := store.UpdateAdminConfig(ctx, updatedConfig, orgHandle); err != nil {
+		return err
+	}
+
+	// When a primary org enables CDS, CDS reads its org tree. No sub org is enabled until the
+	// primary org selects the sub orgs with the organization access.
+	if !isCDSEnabledInitialState && updatedConfig.CDSEnabled {
+		if _, err := orgService.ProvisionTree(ctx, orgHandle); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a AdminConfigService) UpdateInitialSchemaSync(ctx context.Context, state bool, orgHandle string) error {

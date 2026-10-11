@@ -97,6 +97,19 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 	return authorize(r, claims, operation)
 }
 
+// AuthnAndAuthzPrimary performs authentication and authorization for an operation that only a
+// primary organization runs. Such an operation has no org form. On the path of a sub org, the
+// request is authenticated and then refused with SUB_ORG_CONFIG_NOT_ALLOWED, and no scope is
+// checked.
+func AuthnAndAuthzPrimary(r *http.Request, operation string) error {
+
+	claims, err := authenticate(r)
+	if err != nil {
+		return err
+	}
+	return authorizePrimary(r, claims, operation)
+}
+
 // authenticate validates the bearer token for the org of the path and returns its claims.
 func authenticate(r *http.Request) (map[string]interface{}, error) {
 
@@ -150,6 +163,20 @@ func authorize(r *http.Request, claims map[string]interface{}, operation string)
 		return clientError
 	}
 	return nil
+}
+
+// authorizePrimary refuses an operation of the primary org in a sub org, and checks the operation
+// in a primary org.
+func authorizePrimary(r *http.Request, claims map[string]interface{}, operation string) error {
+
+	if pathOrgIdOf(r) != "" {
+		return errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.SUB_ORG_CONFIG_NOT_ALLOWED.Code,
+			Message:     errors.SUB_ORG_CONFIG_NOT_ALLOWED.Message,
+			Description: "Only the primary organization can perform this operation.",
+		}, http.StatusBadRequest)
+	}
+	return authorize(r, claims, operation)
 }
 
 // pathOrgIdOf returns the org ID of the path of a sub org, /t/{primary_handle}/o/{org_id}/..., that
