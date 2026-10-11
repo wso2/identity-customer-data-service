@@ -72,12 +72,15 @@ type RuleInfo struct {
 	OwnerOrgId   string
 }
 
-// EngineInput is everything the engine reads for one tree.
+// EngineInput is everything the engine reads for one tree. IdentitySourceOrgId is the org whose
+// identity attributes the other orgs of the tree inherit. When it is empty, each org sees only its
+// own.
 type EngineInput struct {
-	Orgs       []TreeOrg
-	Attributes []AttributeInfo
-	Rules      []RuleInfo
-	Policies   []model.Policy
+	Orgs                []TreeOrg
+	Attributes          []AttributeInfo
+	Rules               []RuleInfo
+	Policies            []model.Policy
+	IdentitySourceOrgId string
 }
 
 type tree struct {
@@ -243,6 +246,12 @@ func evaluate(in EngineInput, only string) []model.State {
 		}
 		localAttributes[a.OwnerOrgId][a.nameKey()] = a
 	}
+	inherited := map[string]AttributeInfo{} // name -> identity attribute of the source org
+	for key, a := range localAttributes[in.IdentitySourceOrgId] {
+		if in.IdentitySourceOrgId != "" && strings.HasPrefix(a.Name, constants.IdentityAttributes+".") {
+			inherited[key] = a
+		}
+	}
 	rulesById := map[string]RuleInfo{}
 	localRules := map[string]map[string]RuleInfo{} // org -> property name -> rule
 	for _, r := range in.Rules {
@@ -329,7 +338,8 @@ func evaluate(in EngineInput, only string) []model.State {
 			} else if other, exists := activeSharedRules[orgId][rule.PropertyName]; exists && other.Id != rule.Id {
 				state.State, state.Reason, state.ConflictingResourceId = model.StateConflicted,
 					model.ReasonSharedNameConflict, other.Id
-			} else if !hasCompatibleAttribute(rule, attributesById, localAttributes[orgId], activeShared[orgId]) {
+			} else if !hasCompatibleAttribute(rule, attributesById, localAttributes[orgId], inherited,
+				activeShared[orgId]) {
 				state.State, state.Reason = model.StateInactiveMissingAttribute, model.ReasonMissingAttribute
 			} else {
 				if activeSharedRules[orgId] == nil {
@@ -344,11 +354,15 @@ func evaluate(in EngineInput, only string) []model.State {
 }
 
 // hasCompatibleAttribute reports whether the org sees an attribute with the name of the rule
-// property and the same value type as the attribute of the rule in its owner org.
+// property and the same value type as the attribute of the rule in its owner org. The org sees its
+// local attributes, the inherited identity attributes, and its active shared attributes.
 func hasCompatibleAttribute(rule RuleInfo, attributesById map[string]AttributeInfo,
-	local map[string]AttributeInfo, shared map[string]AttributeInfo) bool {
+	local, inherited, shared map[string]AttributeInfo) bool {
 
 	candidate, ok := local[rule.PropertyName]
+	if !ok {
+		candidate, ok = inherited[rule.PropertyName]
+	}
 	if !ok {
 		candidate, ok = shared[rule.PropertyName]
 	}

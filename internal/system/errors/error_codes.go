@@ -452,6 +452,13 @@ var (
 			"categories, the sharing policies, or the configuration. It can write profiles.",
 	}
 
+	INHERITED_ATTRIBUTE_READ_ONLY = ErrorMessage{
+		Code:    errorPrefix + "17010",
+		Message: "Inherited attribute is read-only.",
+		Description: "A child organization inherits the identity attributes from its primary organization. " +
+			"The identity provider controls them.",
+	}
+
 	INVALID_FILTER_FORMAT = ErrorMessage{
 		Code:    errorPrefix + "19001",
 		Message: "Invalid filter format.",

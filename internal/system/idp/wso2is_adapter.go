@@ -85,7 +85,7 @@ func (a *WSO2ISAdapter) GetOrganization(_ context.Context, primaryHandle, orgId 
 }
 
 // IdentityAttributeSourceHandle returns the handle of the primary org. In IS, a sub org inherits
-// the claims of its primary org.
+// the claims of its primary org and cannot change them.
 func (a *WSO2ISAdapter) IdentityAttributeSourceHandle(_ string, primaryHandle string) string {
 	return primaryHandle
 }

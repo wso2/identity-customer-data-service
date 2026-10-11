@@ -57,6 +57,8 @@ const (
 const (
 	OriginOwned  = "OWNED"
 	OriginShared = "SHARED"
+	// OriginInherited is an identity attribute that a sub org inherits from its primary org.
+	OriginInherited = "INHERITED"
 )
 
 // Target is one stored target of a policy.
