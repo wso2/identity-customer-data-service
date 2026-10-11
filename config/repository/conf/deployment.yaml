@@ -64,6 +64,8 @@ auth_server:
       - "internal_cds_unification_rule_update"
     unification_rules:delete:
       - "internal_cds_unification_rule_delete"
+    unification_rules:share:
+      - "internal_cds_unification_rule_share"
 
     profile_schema:view:
       - "internal_cds_profile_schema_view"

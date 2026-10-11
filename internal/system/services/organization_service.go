@@ -64,5 +64,12 @@ func NewOrganizationService(mux *http.ServeMux) *OrganizationService {
 	s.mux.HandleFunc("GET "+attrPolicies+"/{policyId}", s.shares.GetSchemaAttributePolicy)
 	s.mux.HandleFunc("PUT "+attrPolicies+"/{policyId}", s.shares.UpdateSchemaAttributePolicy)
 	s.mux.HandleFunc("DELETE "+attrPolicies+"/{policyId}", s.shares.DeleteSchemaAttributePolicy)
+
+	const rulePolicies = base + "/unification-rules/{ruleId}/sharing-policies"
+	s.mux.HandleFunc("POST "+rulePolicies, s.shares.CreateUnificationRulePolicy)
+	s.mux.HandleFunc("GET "+rulePolicies, s.shares.ListUnificationRulePolicies)
+	s.mux.HandleFunc("GET "+rulePolicies+"/{policyId}", s.shares.GetUnificationRulePolicy)
+	s.mux.HandleFunc("PUT "+rulePolicies+"/{policyId}", s.shares.UpdateUnificationRulePolicy)
+	s.mux.HandleFunc("DELETE "+rulePolicies+"/{policyId}", s.shares.DeleteUnificationRulePolicy)
 	return s
 }

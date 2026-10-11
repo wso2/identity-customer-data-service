@@ -33,11 +33,12 @@ import (
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
+	ruleService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 )
 
 const shareResource = "share policy"
 
-// ShareHandler serves the share endpoints of schema attributes.
+// ShareHandler serves the share endpoints of schema attributes and unification rules.
 type ShareHandler struct{}
 
 func NewShareHandler() *ShareHandler {
@@ -58,6 +59,15 @@ func schemaAttributeOf(r *http.Request, orgHandle string) (string, string, error
 	return model.ResourceSchemaAttribute, attr.AttributeId, nil
 }
 
+func unificationRuleOf(r *http.Request, orgHandle string) (string, string, error) {
+
+	rule, err := ruleService.ValidateShareableRule(r.Context(), r.PathValue("ruleId"), orgHandle)
+	if err != nil {
+		return "", "", err
+	}
+	return model.ResourceUnificationRule, rule.RuleId, nil
+}
+
 func (h *ShareHandler) CreateSchemaAttributePolicy(w http.ResponseWriter, r *http.Request) {
 	h.create(w, r, "profile_schema:share", schemaAttributeOf)
 }
@@ -76,6 +86,26 @@ func (h *ShareHandler) UpdateSchemaAttributePolicy(w http.ResponseWriter, r *htt
 
 func (h *ShareHandler) DeleteSchemaAttributePolicy(w http.ResponseWriter, r *http.Request) {
 	h.delete(w, r, "profile_schema:share", schemaAttributeOf)
+}
+
+func (h *ShareHandler) CreateUnificationRulePolicy(w http.ResponseWriter, r *http.Request) {
+	h.create(w, r, "unification_rules:share", unificationRuleOf)
+}
+
+func (h *ShareHandler) ListUnificationRulePolicies(w http.ResponseWriter, r *http.Request) {
+	h.list(w, r, "unification_rules:view", unificationRuleOf)
+}
+
+func (h *ShareHandler) GetUnificationRulePolicy(w http.ResponseWriter, r *http.Request) {
+	h.get(w, r, "unification_rules:view", unificationRuleOf)
+}
+
+func (h *ShareHandler) UpdateUnificationRulePolicy(w http.ResponseWriter, r *http.Request) {
+	h.update(w, r, "unification_rules:share", unificationRuleOf)
+}
+
+func (h *ShareHandler) DeleteUnificationRulePolicy(w http.ResponseWriter, r *http.Request) {
+	h.delete(w, r, "unification_rules:share", unificationRuleOf)
 }
 
 func (h *ShareHandler) create(w http.ResponseWriter, r *http.Request, operation string, resolve resourceOf) {
