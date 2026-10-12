@@ -61,3 +61,32 @@ const (
 	EventOrgUpdated = "ORG_UPDATED"
 	EventOrgDeleted = "ORG_DELETED"
 )
+
+// Tree sync states of a primary org. NOT_SYNCED means that no tree sync started yet.
+const (
+	TreeSyncNotSynced = "NOT_SYNCED"
+	TreeSyncSyncing   = "SYNCING"
+	TreeSyncSynced    = "SYNCED"
+	TreeSyncFailed    = "FAILED"
+)
+
+// The cds_config keys of the primary org that hold the tree sync state.
+const (
+	ConfigTreeSyncState      = "tree_sync_state"
+	ConfigTreeSyncStartedAt  = "tree_sync_started_at"
+	ConfigTreeSyncFinishedAt = "tree_sync_finished_at"
+	ConfigTreeSyncedAt       = "tree_synced_at"
+	ConfigTreeSyncOrgCount   = "tree_sync_org_count"
+	ConfigTreeSyncError      = "tree_sync_error"
+)
+
+// TreeSyncStatus is the state of the tree sync of a primary org. LastSyncedAt is the end of the
+// last sync that completed. Organization access needs it.
+type TreeSyncStatus struct {
+	State        string     `json:"state"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
+	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
+	OrgCount     *int       `json:"org_count,omitempty"`
+	Error        string     `json:"error,omitempty"`
+}

@@ -21,6 +21,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ import (
 	shareModel "github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
 	shareStore "github.com/wso2/identity-customer-data-service/internal/sharing/store"
+	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
@@ -54,6 +56,9 @@ func IsSubOrgEnabled(ctx context.Context, orgHandle string) bool {
 func CreateOrgAccess(ctx context.Context, primary model.Organization,
 	req shareModel.PolicyRequest) (*shareModel.OrgAccessResponse, error) {
 
+	if err := requireSyncedTree(ctx, primary); err != nil {
+		return nil, err
+	}
 	existing, err := orgAccessOf(ctx, primary)
 	if err != nil {
 		return nil, err
@@ -117,6 +122,9 @@ func GetOrgAccess(ctx context.Context, primary model.Organization,
 func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId string,
 	req shareModel.PolicyRequest) (*shareModel.OrgAccessResponse, error) {
 
+	if err := requireSyncedTree(ctx, primary); err != nil {
+		return nil, err
+	}
 	p, err := orgAccessById(ctx, primary, policyId)
 	if err != nil {
 		return nil, err
@@ -156,6 +164,25 @@ func DeleteOrgAccess(ctx context.Context, primary model.Organization, policyId s
 		return err
 	}
 	return shareStore.DeletePolicy(ctx, p.PolicyId)
+}
+
+// requireSyncedTree returns ORGANIZATIONS_NOT_SYNCED until a tree sync of the primary org completes
+// once. A later sync that runs or fails does not block, because the tree of the last completed sync
+// stays.
+func requireSyncedTree(ctx context.Context, primary model.Organization) error {
+
+	status, err := store.GetTreeSyncStatus(ctx, primary.OrgHandle)
+	if err != nil {
+		return err
+	}
+	if status.LastSyncedAt == nil {
+		return errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.ORGANIZATIONS_NOT_SYNCED.Code,
+			Message:     errors2.ORGANIZATIONS_NOT_SYNCED.Message,
+			Description: errors2.ORGANIZATIONS_NOT_SYNCED.Description,
+		}, http.StatusBadRequest)
+	}
+	return nil
 }
 
 func orgAccessOf(ctx context.Context, primary model.Organization) (*shareModel.Policy, error) {

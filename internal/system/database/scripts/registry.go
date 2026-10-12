@@ -95,7 +95,6 @@ func AllQueries() map[string]model.DBQuery {
 		"GetOrganizationByHandle":           GetOrganizationByHandle,
 		"GetOrganizationsByPrimaryOrg":      GetOrganizationsByPrimaryOrg,
 		"UpdateOrganizationStatus":          UpdateOrganizationStatus,
-		"GetEnabledPrimaryOrgHandles":       GetEnabledPrimaryOrgHandles,
 		"GetOrganizationChain":              GetOrganizationChain,
 		"InsertSharePolicy":                 InsertSharePolicy,
 		"GetSharePolicyById":                GetSharePolicyById,

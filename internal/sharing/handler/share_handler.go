@@ -233,18 +233,15 @@ func (h *ShareHandler) prepare(w http.ResponseWriter, r *http.Request, operation
 	return org, resourceType, resourceId, true
 }
 
-// knownOrg returns the org of the handle. When CDS does not have a primary org yet, it provisions
-// its tree first.
+// knownOrg returns the org of the handle. When CDS does not have a primary org yet, it reads and
+// stores the primary org first.
 func knownOrg(ctx context.Context, orgHandle string) (*orgModel.Organization, error) {
 
 	org, err := orgStore.GetOrganizationByHandle(ctx, orgHandle)
 	if err != nil || org != nil {
 		return org, err
 	}
-	if _, err := orgService.ProvisionTree(ctx, orgHandle); err != nil {
-		return nil, err
-	}
-	org, err = orgStore.GetOrganizationByHandle(ctx, orgHandle)
+	org, err = orgService.EnsurePrimary(ctx, orgHandle)
 	if err != nil {
 		return nil, err
 	}

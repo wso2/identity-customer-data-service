@@ -21,6 +21,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
@@ -127,24 +128,77 @@ func UpdateOrganizationStatus(ctx context.Context, orgId, status string) error {
 	return nil
 }
 
-// GetEnabledPrimaryOrgHandles returns the handles of the orgs that enabled CDS themselves.
-func GetEnabledPrimaryOrgHandles(ctx context.Context) ([]string, error) {
+// GetTreeSyncStatus returns the tree sync state of the primary org, from its cds_config keys. A
+// primary org without the keys is NOT_SYNCED.
+func GetTreeSyncStatus(ctx context.Context, primaryHandle string) (*model.TreeSyncStatus, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {
-		return nil, serverError("Failed to get a database client to read configurations.", err)
+		return nil, serverError("Failed to get a database client to read the organization sync state.", err)
 	}
 	defer dbClient.Close()
 
-	results, err := dbClient.ExecuteQueryContext(ctx, scripts.GetEnabledPrimaryOrgHandles)
+	results, err := dbClient.ExecuteQueryContext(ctx, scripts.GetOrgConfigurations, primaryHandle)
 	if err != nil {
-		return nil, serverError("Failed to read the organizations that enabled CDS.", err)
+		return nil, serverError(fmt.Sprintf("Failed to read the organization sync state of: %s", primaryHandle), err)
 	}
-	handles := make([]string, 0, len(results))
+	status := &model.TreeSyncStatus{State: model.TreeSyncNotSynced}
 	for _, row := range results {
-		handles = append(handles, rows.String(row, "org_handle"))
+		value := rows.String(row, "value")
+		switch rows.String(row, "config") {
+		case model.ConfigTreeSyncState:
+			if value != "" {
+				status.State = value
+			}
+		case model.ConfigTreeSyncStartedAt:
+			status.StartedAt = parseTime(value)
+		case model.ConfigTreeSyncFinishedAt:
+			status.FinishedAt = parseTime(value)
+		case model.ConfigTreeSyncedAt:
+			status.LastSyncedAt = parseTime(value)
+		case model.ConfigTreeSyncOrgCount:
+			if count, err := strconv.Atoi(value); err == nil {
+				status.OrgCount = &count
+			}
+		case model.ConfigTreeSyncError:
+			status.Error = value
+		}
 	}
-	return handles, nil
+	return status, nil
+}
+
+// SetTreeSyncValues writes cds_config keys of the primary org in one transaction. An empty value
+// clears the key.
+func SetTreeSyncValues(ctx context.Context, primaryHandle string, values map[string]string) error {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return serverError("Failed to get a database client to store the organization sync state.", err)
+	}
+	defer dbClient.Close()
+
+	tx, err := dbClient.BeginTxContext(ctx)
+	if err != nil {
+		return serverError(fmt.Sprintf("Failed to store the organization sync state of: %s", primaryHandle), err)
+	}
+	for key, value := range values {
+		if _, err := tx.ExecContext(ctx, scripts.UpdateOrgConfiguration, primaryHandle, key, value); err != nil {
+			_ = tx.Rollback()
+			return serverError(fmt.Sprintf("Failed to store the organization sync state of: %s", primaryHandle), err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return serverError(fmt.Sprintf("Failed to store the organization sync state of: %s", primaryHandle), err)
+	}
+	return nil
+}
+
+func parseTime(value string) *time.Time {
+	t, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return nil
+	}
+	return &t
 }
 
 func getOne(ctx context.Context, query dbmodel.DBQuery, arg string) (*model.Organization, error) {

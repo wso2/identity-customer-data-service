@@ -50,6 +50,8 @@ func NewOrganizationService(mux *http.ServeMux) *OrganizationService {
 
 	const base = constants.ApiBasePath + "/v1"
 	s.mux.HandleFunc("POST "+base+"/organizations/event-sync", s.organizations.SyncOrganization)
+	s.mux.HandleFunc("POST "+base+"/organizations/sync", s.organizations.StartTreeSync)
+	s.mux.HandleFunc("GET "+base+"/organizations/sync-status", s.organizations.GetTreeSync)
 
 	const orgAccess = base + "/organizations/access-policies"
 	s.mux.HandleFunc("POST "+orgAccess, s.organizations.CreateOrgAccess)

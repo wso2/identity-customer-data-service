@@ -29,6 +29,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
 // ISOrganization is an organization from the IS organization management API.
@@ -77,14 +78,18 @@ func (c *IdentityClient) GetOrganization(primaryHandle, orgId string) (ISOrganiz
 }
 
 // ListDescendantOrganizations returns all organizations below the primary organization that
-// primaryHandle names. The list API does not return the parent, so the caller reads each
-// organization for it.
+// primaryHandle names. It reads all pages, and returns an error when a page fails. The list API
+// does not return the parent, so the caller reads each organization for it.
 func (c *IdentityClient) ListDescendantOrganizations(primaryHandle string) ([]ISOrganization, error) {
 
 	next := fmt.Sprintf("https://%s/t/%s/api/server/v1/organizations?recursive=true&limit=100", c.BaseURL,
 		url.PathEscape(primaryHandle))
 	var all []ISOrganization
-	for pages := 0; next != "" && pages < 100; pages++ {
+	for pages := 1; next != ""; pages++ {
+		if pages%100 == 0 {
+			log.GetLogger().Info(fmt.Sprintf("Read %d pages (%d organizations) of the tree of primary "+
+				"organization '%s'.", pages, len(all), primaryHandle))
+		}
 		var page isOrganizationList
 		if _, err := c.getJSON(next, primaryHandle, &page); err != nil {
 			return nil, err

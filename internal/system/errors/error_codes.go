@@ -459,6 +459,18 @@ var (
 			"The identity provider controls them.",
 	}
 
+	ORGANIZATIONS_NOT_SYNCED = ErrorMessage{
+		Code:        errorPrefix + "17011",
+		Message:     "Organizations are not synced.",
+		Description: "Sync the organizations with POST /organizations/sync, and wait until it completes.",
+	}
+
+	TREE_SYNC_RUNNING = ErrorMessage{
+		Code:        errorPrefix + "17012",
+		Message:     "Organization sync is running.",
+		Description: "Wait until the running sync completes. GET /organizations/sync-status returns its state.",
+	}
+
 	INVALID_FILTER_FORMAT = ErrorMessage{
 		Code:    errorPrefix + "19001",
 		Message: "Invalid filter format.",

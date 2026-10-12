@@ -49,10 +49,6 @@ var GetOrganizationsByPrimaryOrg = newQuery("CDS-ORG-04",
 var UpdateOrganizationStatus = newQuery("CDS-ORG-05",
 	`UPDATE organizations SET status = $1, updated_at = $2 WHERE org_id = $3`)
 
-// GetEnabledPrimaryOrgHandles returns the org handles that enabled CDS themselves.
-var GetEnabledPrimaryOrgHandles = newQuery("CDS-ORG-06",
-	`SELECT org_handle FROM cds_config WHERE config = 'cds_enabled' AND value = 'true'`)
-
 // chainOf is the ancestor chain of the org $1, the org included. hops is 0 for the org, 1 for its
 // parent, and so on. CDS stores no depth: the position in the chain gives the order.
 const chainOf = `WITH RECURSIVE chain (org_id, parent_org_id, hops) AS (

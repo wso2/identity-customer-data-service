@@ -35,6 +35,7 @@ import (
 
 const (
 	orgAccessResource = "organization access"
+	treeSyncResource  = "organization sync"
 )
 
 // OrganizationHandler serves the CDS view of the org tree.
@@ -69,6 +70,38 @@ func (h *OrganizationHandler) SyncOrganization(w http.ResponseWriter, r *http.Re
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// StartTreeSync handles POST /organizations/sync. It starts the background sync of the org
+// tree of the primary org and returns 202 with the state.
+func (h *OrganizationHandler) StartTreeSync(w http.ResponseWriter, r *http.Request) {
+
+	primary, ok := primaryOf(w, r, "organization:update")
+	if !ok {
+		return
+	}
+	status, err := service.StartTreeSync(r.Context(), primary.OrgHandle)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusAccepted, status, treeSyncResource)
+}
+
+// GetTreeSync handles GET /organizations/sync-status. It returns the state of the tree sync of the
+// primary org.
+func (h *OrganizationHandler) GetTreeSync(w http.ResponseWriter, r *http.Request) {
+
+	primary, ok := primaryOf(w, r, "organization:view")
+	if !ok {
+		return
+	}
+	status, err := service.GetTreeSyncStatus(r.Context(), primary.OrgHandle)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusOK, status, treeSyncResource)
 }
 
 // The organization access endpoints. Only a primary org that enabled CDS calls them.
@@ -165,9 +198,8 @@ func primaryOf(w http.ResponseWriter, r *http.Request, operation string) (*model
 	}
 	org, err := store.GetOrganizationByHandle(r.Context(), orgHandle)
 	if err == nil && org == nil {
-		if _, err = service.ProvisionTree(r.Context(), orgHandle); err == nil {
-			org, err = store.GetOrganizationByHandle(r.Context(), orgHandle)
-		}
+		// Store the primary org when CDS does not have it yet.
+		org, err = service.EnsurePrimary(r.Context(), orgHandle)
 	}
 	if err != nil {
 		utils.HandleError(w, err)
