@@ -60,9 +60,39 @@ func TokenSortName(name string) string {
 	return strings.Join(tokens, " ")
 }
 
-// NormalizeEmail lowercases and trims an email address.
+// NormalizeEmail reduces an address to the mailbox it actually reaches.
+//
+// Lowercasing and trimming are not enough: a sub-address tag, a trailing root dot on the
+// domain, and (at Google only) dots in the local part are all discarded by the receiving mail
+// server, so two addresses differing only in those reach one inbox and belong to one person.
+//
+// This feeds blocking as well as matching, which is deliberate — a pair the matcher calls
+// identical has to share an exact blocking key, or the two profiles are never compared.
 func NormalizeEmail(email string) string {
-	return strings.TrimSpace(strings.ToLower(email))
+	trimmed := strings.TrimSpace(strings.ToLower(email))
+
+	local, domain, ok := strings.Cut(trimmed, "@")
+	if !ok {
+		return trimmed
+	}
+
+	// A trailing dot denotes the DNS root and names the same domain.
+	domain = strings.TrimSuffix(domain, ".")
+
+	// RFC 5233 sub-addressing: everything from the first '+' is a tag for the recipient's
+	// own filing, not part of the mailbox.
+	if plus := strings.IndexByte(local, '+'); plus > 0 {
+		local = local[:plus]
+	}
+
+	// Google ignores dots in the local part. No other provider promises this, so it stays
+	// scoped to their domains rather than applied generally — elsewhere j.smith and jsmith
+	// are two different mailboxes.
+	if domain == "gmail.com" || domain == "googlemail.com" {
+		local = strings.ReplaceAll(local, ".", "")
+	}
+
+	return local + "@" + domain
 }
 
 func NormalizePhone(phone string) string {

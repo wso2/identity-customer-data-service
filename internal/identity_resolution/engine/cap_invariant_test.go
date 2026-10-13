@@ -40,20 +40,24 @@ func TestCappedMatchStillReachesReview(t *testing.T) {
 		t.Fatalf("init logger: %v", err)
 	}
 
-	// Name agrees strongly; date of birth is present on both sides and differs, and DATE
+	// Name agrees outright; date of birth is present on both sides and differs, and DATE
 	// carries a HIGH mismatch strength, so the veto fires and the score is capped.
+	//
+	// The names are identical rather than merely similar. What is under test is the cap, so
+	// the primary score should not depend on how the name comparator happens to score a near
+	// miss — this test previously pinned 0.9714 and broke when that comparison changed.
 	rules := []urModel.UnificationRule{
 		testRule("traits.name", constants.AttributeTypeName, constants.UnificationMethodFuzzy, 1),
 		testRule("traits.dob", constants.AttributeTypeDate, constants.UnificationMethodDeterministic, 2),
 	}
 	incoming := map[string]interface{}{"traits.name": "Jonathan Smith", "traits.dob": "1990-01-02"}
-	existing := map[string]interface{}{"traits.name": "Jonathon Smith", "traits.dob": "1991-07-09"}
+	existing := map[string]interface{}{"traits.name": "Jonathan Smith", "traits.dob": "1991-07-09"}
 
 	// Every combination admitted by validateThresholds whose review threshold is also below
 	// the primary rule's score. That second condition is the test's own precondition rather
 	// than a property of the engine: a match scoring under the review threshold is not
 	// review-worthy to begin with, so capping cannot be what suppressed it.
-	const primaryScore = 0.9714
+	const primaryScore = 1.0
 
 	combinations := []struct{ autoMerge, manualReview float64 }{
 		{0.95, 0.75},

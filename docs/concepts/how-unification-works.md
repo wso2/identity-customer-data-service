@@ -154,7 +154,7 @@ The score is **not an average**. Averaging made every rule's weight depend on ho
 | 3 | **Decisive short-circuit** | A `UNIQUE_ID` agreeing exactly returns 1.0 immediately. So does *any* deterministic rule agreeing — at any priority — when the org's `deterministic_match_decisive` is on, which is the default. Steps 4–6 then never run. |
 | 4 | **Discriminating veto** | Any `mismatch_strength: HIGH` rule that `DISAGREE`s caps the score just below auto-merge. |
 | 5 | **Conflicting evidence** | If most other applicable rules `DISAGREE`, cap below auto-merge. |
-| 6 | **Lone-agreement gate** | A single agreeing rule may auto-merge only if it is `match_strength: HIGH` or the top-priority rule, **and** the matched value is not already shared by ≥ `RarityCommonMinProfiles` profiles in the org. |
+| 6 | **Lone-agreement gate** | A single agreeing rule may auto-merge only if it is `match_strength: HIGH`, or the top-priority rule whose evidence is not `LOW`, **and** the matched value is not already shared by ≥ `RarityCommonMinProfiles` profiles in the org. A sole configured rule is always top-priority, so priority alone cannot promote `LOW` evidence — otherwise an org whose only rule is a tolerant name match would merge *Ivan Petrov* into *Ivana Petrov* unattended. |
 
 Caps only ever downgrade `AUTO_MERGE` to `MANUAL_REVIEW`. They never suppress a match to `UNIQUE` — the primary signal still stands. If no rule agrees, the highest applicable score is returned, which is below the review threshold by construction.
 

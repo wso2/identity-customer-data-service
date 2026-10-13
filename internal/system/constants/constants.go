@@ -365,10 +365,14 @@ const (
 	ScoreContradictionThreshold = 0.3
 
 	// MinAgreeingRulesForAutoMerge is how many rules must independently agree before a
-	// match may auto-merge. The exception is the org's highest-priority rule: when the
-	// operator's strongest configured signal is the one agreeing, it may carry an
-	// auto-merge alone. Any other single agreement is capped to manual review, so a match
-	// on one weak attribute (a shared city, a common given name) can never merge unattended.
+	// match may auto-merge. There are two exceptions, and both require the attribute to
+	// identify a person on its own: evidence the type marks HIGH, or the org's
+	// highest-priority rule when its evidence is not marked LOW.
+	//
+	// Priority alone is not enough. It says which signal to prefer among several, and an
+	// organisation with one configured rule has made no such statement — everything is
+	// rank 0. Letting rank promote LOW evidence would merge two people who merely share a
+	// name, which is the outcome LOW exists to prevent.
 	MinAgreeingRulesForAutoMerge = 2
 
 	// RejectionReconsiderMargin is how much stronger a match must be than the one an
@@ -499,6 +503,13 @@ const (
 	// NOTE: There is no mathematically perfect universal constant for this value. Must be tuned per-tenant.
 	NamePhoneticExactJWMin = 0.9
 
+	// NameAmbiguousPartFloor is where a name sits when exactly one part differs but still
+	// shares its first letter. A diminutive and an initial that could stand for either of two
+	// people are the same evidence from the engine's side: too weak to merge on, too strong
+	// to discard. The floor keeps such a pair at the review bar instead of below it, where it
+	// would never be raised at all.
+	NameAmbiguousPartFloor = 0.75
+
 	// PhoneticAlternateScore is returned by PhoneticSimilarity when two names share a
 	// Double Metaphone alternate code but not the primary code. Lower than 1.0 to reflect
 	// the reduced certainty of an alternate encoding.
@@ -517,13 +528,11 @@ const (
 	// This must be tuned based on a tenant's regional data.
 	PhoneSuffixBlockingLength = 7
 
-	// NOTE: There is no mathematically perfect constant for a partial phone match.
-	// This baseline dictates the score awarded when only the suffix matches,
-	// but the area/country codes actively differ or are completely missing.
-	// PhoneSuffixMatchScore is returned when two phone numbers share the same last
-	// PhoneSuffixBlockingLength digits but differ elsewhere (e.g., different country
-	// codes). A suffix-only match is strong evidence but not conclusive.
-	PhoneSuffixMatchScore = 0.9
+	// A suffix-only score used to live here, awarded when two numbers shared their last
+	// PhoneSuffixBlockingLength digits but differed before them. It is gone: that window
+	// excludes the operator and area codes, so it could not distinguish two subscribers,
+	// and no value for it was right. Numbers are now resolved into country code and
+	// national significant number and compared as numbers.
 )
 
 // Jaro-Winkler algorithm

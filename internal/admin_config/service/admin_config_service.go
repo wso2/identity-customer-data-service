@@ -21,6 +21,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/model"
@@ -110,6 +111,14 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 //
 // Zero means the organisation has never set that threshold, so the shipped default is what
 // it is actually running and is what gets validated.
+// thresholdPrecision is the number of decimal places a score is expressed in, and so the
+// precision these comparisons are meaningful to.
+const thresholdPrecision = 10000
+
+func roundToThresholdPrecision(value float64) float64 {
+	return math.Round(value*thresholdPrecision) / thresholdPrecision
+}
+
 func validateThresholds(autoMerge, manualReview float64) error {
 	if autoMerge == 0 {
 		autoMerge = constants.DefaultAutoMergeThreshold
@@ -129,7 +138,11 @@ func validateThresholds(autoMerge, manualReview float64) error {
 		}, http.StatusBadRequest)
 	}
 
-	if highest := autoMerge - constants.ScorePenaltyOffset; manualReview > highest {
+	// Rounded to the precision the thresholds are expressed in. Subtracting the offset in
+	// binary floating point lands just under the decimal value — 0.82 - 0.01 is
+	// 0.80999999999999994 — so an exactly representable pair like 0.82/0.81 would be refused
+	// for being a ten-thousandth of a percent too high, which no caller can act on.
+	if highest := roundToThresholdPrecision(autoMerge - constants.ScorePenaltyOffset); manualReview > highest {
 		return errors.NewClientError(errors.ErrorMessage{
 			Code:    errors.UPDATE_CONFIG_BAD_REQUEST.Code,
 			Message: errors.UPDATE_CONFIG_BAD_REQUEST.Message,

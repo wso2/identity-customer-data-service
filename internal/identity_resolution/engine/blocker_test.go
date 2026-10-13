@@ -122,6 +122,9 @@ func TestExactBlockingKeyAgreesWithMatcher(t *testing.T) {
 		{"unique id case", constants.AttributeTypeUniqueID, "ABC123", "abc123"},
 		{"unique id padding", constants.AttributeTypeUniqueID, " ABC123 ", "abc123"},
 		{"email case", constants.AttributeTypeEmail, "J.Smith@Acme.com", "j.smith@acme.com"},
+		{"email sub-address tag", constants.AttributeTypeEmail, "j.smith+news@acme.com", "j.smith@acme.com"},
+		{"email trailing root dot", constants.AttributeTypeEmail, "j.smith@acme.com.", "j.smith@acme.com"},
+		{"gmail ignores dots", constants.AttributeTypeEmail, "j.smith@gmail.com", "jsmith@gmail.com"},
 		{"name token order", constants.AttributeTypeName, "John Smith", "Smith John"},
 		{"phone formatting", constants.AttributeTypePhone, "+94 77 123 4567", "94771234567"},
 		{"phone punctuation", constants.AttributeTypePhone, "(077) 123-4567", "0771234567"},
@@ -193,28 +196,21 @@ func TestGenerateBlockingKeysSkipsEmptyValues(t *testing.T) {
 	}
 }
 
-// TestNormalizePhoneKeepsInternationalPrefix documents a known limitation rather than
-// asserting desired behaviour: "+94..." and "0094..." are the same number, but only "+" is
-// stripped, so the two normalize differently and reach the matcher as a suffix match (0.9)
-// instead of an exact one. That still clears the agreement bar, so it does not lose the
-// match — but the pair is scored as weaker evidence than it is, and the exact blocking
-// keys differ. Update this test when prefix normalization lands.
-func TestNormalizePhoneKeepsInternationalPrefix(t *testing.T) {
-	plus := ExactBlockingKey(constants.AttributeTypePhone, "+94 77 123 4567")
-	zeros := ExactBlockingKey(constants.AttributeTypePhone, "0094771234567")
-
-	if plus == zeros {
-		t.Fatalf("international prefixes now normalize alike (%q) — fold this case into "+
-			"TestExactBlockingKeyAgreesWithMatcher and delete this test", plus)
-	}
-
+// TestNormalizePhoneInternationalPrefixScoresExact pins what used to be a documented
+// limitation. "+94..." and "0094..." are one number, and the matcher now resolves both to the
+// same country code and national number, so the pair scores an exact 1.0 rather than the 0.9
+// suffix fallback it used to earn.
+//
+// The blocking keys still differ, because keys are built from the digits as written. That
+// costs nothing here: the phone suffix key gathers the pair as candidates regardless, and the
+// matcher is what decides.
+func TestNormalizePhoneInternationalPrefixScoresExact(t *testing.T) {
 	score, verdict := MatchAttribute("+94 77 123 4567", "0094771234567",
 		constants.AttributeTypePhone, constants.UnificationModeSmart)
 	if verdict == model.VerdictUnknown {
 		t.Fatalf("expected a comparable pair, got %s", verdict)
 	}
-	if score != constants.PhoneSuffixMatchScore {
-		t.Errorf("expected the suffix fallback score %.2f, got %.4f",
-			constants.PhoneSuffixMatchScore, score)
+	if score != 1.0 {
+		t.Errorf("expected the same number written two ways to score 1.0, got %.4f", score)
 	}
 }

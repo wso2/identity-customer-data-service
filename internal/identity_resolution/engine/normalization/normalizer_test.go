@@ -123,3 +123,45 @@ func TestNormalizeForTypeIsStableAcrossCalls(t *testing.T) {
 		}
 	}
 }
+
+// TestNormalizeEmailReducesToTheMailbox covers the spellings that reach one inbox.
+func TestNormalizeEmailReducesToTheMailbox(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+	}{
+		{"case and padding", "  J.Smith@Acme.COM ", "j.smith@acme.com"},
+		{"sub-address tag", "j.smith+newsletter@acme.com", "j.smith@acme.com"},
+		{"tag containing dots", "j.smith+a.b.c@acme.com", "j.smith@acme.com"},
+		{"trailing root dot", "j.smith@acme.com.", "j.smith@acme.com"},
+		{"gmail folds dots", "j.smith@gmail.com", "jsmith@gmail.com"},
+		{"googlemail folds dots", "j.smith@googlemail.com", "jsmith@googlemail.com"},
+		{"dots kept elsewhere", "j.smith@acme.com", "j.smith@acme.com"},
+		{"leading plus is not a tag", "+promo@acme.com", "+promo@acme.com"},
+		{"not an address at all", "not-an-email", "not-an-email"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeEmail(tt.in); got != tt.want {
+				t.Errorf("NormalizeEmail(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNormalizeEmailKeepsDistinctMailboxesApart guards the other direction: the rules above
+// must not fold two addresses that genuinely reach different people.
+func TestNormalizeEmailKeepsDistinctMailboxesApart(t *testing.T) {
+	pairs := [][2]string{
+		{"j.smith@acme.com", "jsmith@acme.com"},   // only Google ignores dots
+		{"j.smith@acme.com", "j.smith@acme.co"},   // different domain
+		{"j.smith@acme.com", "a.smith@acme.com"},  // different mailbox
+		{"j.smith@gmail.com", "j.smith@acme.com"}, // same local, different provider
+	}
+
+	for _, p := range pairs {
+		if NormalizeEmail(p[0]) == NormalizeEmail(p[1]) {
+			t.Errorf("%q and %q are different mailboxes but normalized alike", p[0], p[1])
+		}
+	}
+}

@@ -247,11 +247,18 @@ func ScoreCandidate(
 	}
 
 	// A lone agreement may carry an auto-merge only when the attribute identifies a person
-	// on its own — either the operator marked it as strong evidence, or it is their
-	// highest-priority rule — and only when the matched value is not one many profiles in
-	// the tenant already share. A shared corporate address agrees on nothing.
+	// on its own, and only when the matched value is not one many profiles in the tenant
+	// already share. A shared corporate address agrees on nothing.
+	//
+	// Being the operator's highest-priority rule counts as identifying — but it cannot
+	// promote evidence the type itself calls weak. Priority is a statement about which
+	// signal to prefer among several; with a single configured rule everything is rank 0,
+	// so that statement was never made. Without this, an organisation whose only rule is a
+	// tolerant name match merges "Ivan Petrov" into "Ivana Petrov" unattended, which is
+	// precisely what match_strength LOW exists to prevent.
 	if agreeingCount < constants.MinAgreeingRulesForAutoMerge && finalScore > cap {
-		identifying := primary.MatchStrength == constants.EvidenceStrengthHigh || primary.Rank == 0
+		identifying := primary.MatchStrength == constants.EvidenceStrengthHigh ||
+			(primary.Rank == 0 && primary.MatchStrength != constants.EvidenceStrengthLow)
 		if !identifying || ctx.isCommonValue(primary) {
 			finalScore = cap
 		}

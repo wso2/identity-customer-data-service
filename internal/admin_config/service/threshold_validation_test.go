@@ -40,6 +40,16 @@ func TestValidateThresholds(t *testing.T) {
 		{"narrow but valid band", 0.80, 0.79, false},
 		{"review just above the contradiction bar", 0.95, 0.31, false},
 
+		// Pairs exactly one offset apart, where subtracting the offset in binary floating
+		// point lands just under the decimal value. Each of these was refused before the
+		// bound was rounded, for a difference far below the precision a score is given in.
+		{"one offset apart at 0.82", 0.82, 0.81, false},
+		{"one offset apart at 0.35", 0.35, 0.34, false},
+		{"one offset apart at 0.41", 0.41, 0.40, false},
+		{"one offset apart at 0.47", 0.47, 0.46, false},
+		{"one offset apart at 0.57", 0.57, 0.56, false},
+		{"one offset apart at 0.69", 0.69, 0.68, false},
+
 		{"review above the cap — a held-back match would vanish", 0.95, 0.95, true},
 		{"thresholds equal — the measured suppression case", 0.75, 0.75, true},
 		{"review between the cap and auto-merge", 0.95, 0.945, true},
