@@ -80,6 +80,55 @@ exactly the typo matches they exist to find.
 
 ---
 
+### How the index is stored
+
+`blocking_keys` is the largest table in the system. A profile writes one key per
+deterministic rule and several per fuzzy rule, so a tenant with five rules holds roughly
+twenty rows per profile — half a billion rows at twenty-five million profiles. Three things
+about its definition were chosen by measurement rather than taste, and the figures below are
+from a million-row table on PostgreSQL 14 after `ANALYZE`.
+
+**There is no surrogate key.** The table had a `key_id` UUID primary key that nothing
+referenced, while the natural key `(org_handle, attribute_name, key_value, profile_id)`
+already identified a row. The surrogate cost its own column and its own index on every row —
+roughly 38 GB at the target size, for an identifier no query used. The natural key is now the
+primary key, and its column order matches the candidate lookup: equality on `org_handle` and
+`attribute_name`, `IN` on `key_value`.
+
+**It is partitioned in two levels** — by `org_handle`, and by `key_value` within each of
+those. Both single-key arrangements fail, in opposite ways:
+
+| Partition key | Partitions scanned | Execution | Single-tenant deployment |
+|---|---|---|---|
+| `(org_handle, key_value)` combined | 16 | 19.1 ms | splits |
+| `org_handle` alone | 1 | 0.095 ms | **every row in one partition** |
+| **two levels** | **≤ 4** | **0.15 ms** | **splits** |
+
+A combined hash key over both columns prunes nothing, because PostgreSQL prunes hash
+partitions only when it has an equality clause for every column of the key, and candidate
+lookup supplies `key_value` as an `IN` list. Partitioning on `org_handle` alone prunes
+perfectly but leaves a single-organisation deployment — the common shape on-premises — with
+every row in one partition, which is the case most in need of smaller indexes. Two levels
+prune at both: `org_handle` by equality, and `key_value` because single-column hash pruning
+does apply to an `IN` list.
+
+**The moduli follow the access pattern.** A lookup touches at most one sub-partition per key
+it searches for, so widening the second level costs reads nothing. What holds it at four is
+the per-profile delete during re-indexing: it has no `key_value`, so it prunes to one
+organisation and then probes every sub-partition beneath it.
+
+```
+4 LSH keys        3 index-only scans    0.70 ms
+1 exact key       1 index-only scan     0.17 ms
+crowded phonetic  1 scan, 44 rows       0.94 ms
+DELETE (reindex)  4 index scans         0.22 ms
+```
+
+SQLite has no partitioning, so the inbuilt datasource takes the key change only. It is not
+the datasource that reaches this scale.
+
+---
+
 ### Comparing two values
 
 Comparison answers *how alike are these two values*; scoring answers *what does that mean

@@ -155,33 +155,12 @@ CREATE TABLE cds_config (
     PRIMARY KEY (org_handle, config)
 );
 
--- The blocking index is the largest table in the system: a profile writes one key per
--- deterministic rule and several per fuzzy rule, so a tenant with five rules holds roughly
--- twenty rows per profile. At twenty-five million profiles that is half a billion rows,
--- which is why this table carries no surrogate key and is partitioned.
---
--- There is no key_id. A surrogate identifier nothing references would cost its own column
--- and its own index on every one of those rows, and the natural key already identifies a
--- row uniquely.
---
--- Partitioned in two levels: by org_handle, and within each of those by key_value.
---
--- A single hash key over both columns does not work. PostgreSQL prunes hash partitions only
--- when it has an equality clause for every column of the key, and candidate lookup supplies
--- key_value as an IN list, so a combined key prunes nothing: measured on a million rows it
--- scanned all sixteen partitions at 19.1 ms where the two-level arrangement scanned four at
--- 0.15 ms.
---
--- Partitioning on org_handle alone prunes perfectly but leaves a single-organisation
--- deployment with every row in one partition, which is the common shape here and the one
--- most in need of smaller indexes. Sub-partitioning by key_value splits that tenant while
--- org_handle still prunes the first level, and single-column hash pruning does apply to an
--- IN list, so the second level prunes too.
---
--- The moduli are chosen around the access pattern. A lookup touches at most one
--- sub-partition per key it searches for, so a wider second level costs reads nothing; the
--- per-profile delete has no key_value and probes every sub-partition beneath one
--- organisation, which is what keeps it narrow at four.
+-- The largest table in the system: roughly twenty rows per profile for a tenant with five
+-- rules, so half a billion rows at twenty-five million profiles. Three things below are
+-- load-bearing and were settled by measurement — the absence of a surrogate key, the column
+-- order of the primary key, and two levels of hash partitioning rather than one combined
+-- key, which would prune nothing. See "How the index is stored" in
+-- docs/concepts/how-unification-works.md before changing any of them.
 CREATE TABLE IF NOT EXISTS blocking_keys (
     profile_id      VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
     org_handle      VARCHAR(255) NOT NULL,
