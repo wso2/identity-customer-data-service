@@ -142,6 +142,22 @@ CREATE TABLE cds_config (
     PRIMARY KEY (org_handle, config)
 );
 
+-- Credentials of the Identity Server application CDS calls the management APIs
+-- with, one row per organisation, written when that organisation enables CDS on a
+-- deployment that provisions its own applications.
+--
+-- client_secret is sealed, never plaintext, and key_id names the key that sealed
+-- it. It cannot be hashed: CDS presents this secret to the token endpoint on every
+-- token request, and a hash cannot be presented.
+CREATE TABLE org_system_applications (
+    org_handle    VARCHAR(255) NOT NULL,
+    app_id        VARCHAR(255) NOT NULL,
+    client_id     VARCHAR(255) NOT NULL,
+    client_secret TEXT         NOT NULL,
+    key_id        VARCHAR(64)  NOT NULL,
+    PRIMARY KEY (org_handle)
+);
+
 -- ================================
 -- PROFILES (Hot path: tenant + cursor pagination + ordering)
 -- ================================

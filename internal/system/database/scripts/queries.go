@@ -501,5 +501,15 @@ var UpdateInitialSchemaSyncDoneConfig = newQuery("CDS-CFG-04",
                  ON CONFLICT (org_handle, config) 
                  DO UPDATE SET value = EXCLUDED.value`)
 
+var GetOrgSystemApplication = newQuery("CDS-SAP-01",
+	`SELECT app_id, client_id, client_secret, key_id FROM org_system_applications WHERE org_handle = $1`)
+
+var UpsertOrgSystemApplication = newQuery("CDS-SAP-02",
+	`INSERT INTO org_system_applications (org_handle, app_id, client_id, client_secret, key_id) 
+                 VALUES ($1, $2, $3, $4, $5) 
+                 ON CONFLICT (org_handle) 
+                 DO UPDATE SET app_id = EXCLUDED.app_id, client_id = EXCLUDED.client_id, 
+                               client_secret = EXCLUDED.client_secret, key_id = EXCLUDED.key_id`)
+
 // HealthCheckPing checks that the datasource answers.
 var HealthCheckPing = newQuery("CDS-SYS-01", `SELECT 1;`)
