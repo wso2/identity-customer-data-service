@@ -62,6 +62,7 @@ func GetAdminConfig(ctx context.Context, orgHandle string) (*model.AdminConfig, 
 		CDSEnabled:            false,
 		InitialSchemaSyncDone: false,
 		SystemApplications:    []string{},
+		CORSAllowedOrigins:    []string{},
 	}
 
 	if len(results) == 0 {
@@ -88,6 +89,11 @@ func GetAdminConfig(ctx context.Context, orgHandle string) (*model.AdminConfig, 
 			var apps []string
 			if err := json.Unmarshal([]byte(value), &apps); err == nil {
 				config.SystemApplications = apps
+			}
+		case constants.ConfigCORSAllowedOrigins:
+			var origins []string
+			if err := json.Unmarshal([]byte(value), &origins); err == nil {
+				config.CORSAllowedOrigins = origins
 			}
 		}
 	}
@@ -172,6 +178,29 @@ func UpdateAdminConfig(ctx context.Context, config model.AdminConfig, orgHandle 
 		_ = tx.Rollback()
 		errorMsg := fmt.Sprintf("Failed to update system_applications for organization: %s", orgHandle)
 
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	corsOriginsValue, err := json.Marshal(config.CORSAllowedOrigins)
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to marshal cors_allowed_origins for organization: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	_, err = tx.ExecContext(ctx, query, orgHandle, constants.ConfigCORSAllowedOrigins, string(corsOriginsValue))
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to update cors_allowed_origins for organization: %s", orgHandle)
 		logger.Debug(errorMsg, log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,

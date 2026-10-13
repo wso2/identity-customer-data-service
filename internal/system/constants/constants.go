@@ -205,6 +205,7 @@ const (
 	ConfigCDSEnabled            = "cds_enabled"
 	ConfigInitialSchemaSyncDone = "initial_schema_sync_done"
 	ConfigSystemApplications    = "system_applications"
+	ConfigCORSAllowedOrigins    = "cors_allowed_origins"
 )
 
 const (
