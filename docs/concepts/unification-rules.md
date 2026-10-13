@@ -87,16 +87,20 @@ gives attributes their real types, which is the point at which the extra caution
 | `is_active` | Only active rules are evaluated during unification |
 | `attribute_type` | What kind of value the attribute holds, which decides how it is compared and indexed |
 | `unification_method` | `deterministic` (exact) or `fuzzy` (tolerates variation). Rules of both kinds are evaluated side by side. |
-| `match_strength` | How much an agreement on this attribute supports a merge |
-| `mismatch_strength` | How much a disagreement opposes one |
+| `match_strength` | How much an agreement on this attribute supports a merge. Derived from `attribute_type` unless overridden |
+| `mismatch_strength` | How much a disagreement opposes one. Derived from `attribute_type` unless overridden |
 | `created_at` / `updated_at` | Timestamps |
 
 ---
 
-## Choosing the evidence strengths
+## How the evidence strengths are set
 
-`match_strength` and `mismatch_strength` are asked for separately because agreement and
-disagreement on the same attribute rarely carry equal weight:
+The engine derives both from `attribute_type`. There is nothing to choose: the table below
+is the whole of it, and an operator configures a rule's strengths by giving the attribute
+its real type.
+
+The two are kept separate because agreement and disagreement on the same attribute rarely
+carry equal weight:
 
 - Two profiles sharing an **email address** are almost certainly the same person, but two
   *different* addresses say very little — most people have several.
@@ -109,14 +113,18 @@ disagreement on the same attribute rarely carry equal weight:
 | `MEDIUM` | Real evidence, but another attribute must also agree | Counts against the match without blocking it |
 | `LOW` | Close to coincidence on its own | Says little; people legitimately have several |
 
-Both are derived from `attribute_type` using the table below, so a rule created without
-thinking about strengths still behaves sensibly.
+Overriding a derived strength per rule is gated on
+`identity_resolution.allow_evidence_strength_override` in `deployment.yaml`, which is **off
+by default and is not a setting operators are asked to reach for**. The strengths decide
+whether an attribute can merge two profiles on its own and whether a difference in it blocks
+a merge outright, so getting one wrong silently changes who gets merged; the derived values
+are the supported contract and the Console offers no way to change them. The setting exists
+so the capability can be opened deliberately once there is a way to preview the effect on
+existing profiles, not as a tuning knob to be turned today.
 
-Setting them per rule is gated on `identity_resolution.allow_evidence_strength_override` in
-`deployment.yaml`, which is **off by default**. While it is off, sending either field is
-rejected rather than quietly ignored — a caller that believes it set a strength and is
-overruled would misread every merge decision that followed. Turn it on only where someone
-can judge the effect on existing profiles.
+While it is off, sending either field is rejected rather than quietly ignored — a caller that
+believes it set a strength and is overruled would misread every merge decision that
+followed.
 
 > **Disclaimer — this setting's scope is provisional.** It currently sits at deployment
 > level because it gates an API surface rather than matching behaviour: whether a field is
@@ -126,10 +134,10 @@ can judge the effect on existing profiles.
 > strength change would do to their existing profiles. Treat its location as unsettled and
 > avoid building tooling that assumes it is server-wide.
 
-`PRIMITIVE_EXACT` is what a rule written before typed matching resolves to, and it is
-treated as strong in both directions on purpose: previously any rule matching exactly merged
-the two profiles outright, and an upgrade must not quietly change that. An operator who
-wants a weaker reading gives the attribute its real type.
+`PRIMITIVE_EXACT` is what a rule written before typed matching resolves to, and its
+`match_strength` is `HIGH` on purpose: previously any rule matching exactly merged the two
+profiles outright, and an upgrade must not quietly change that. An operator who wants a
+weaker reading gives the attribute its real type.
 
 | Attribute type | `match_strength` | `mismatch_strength` |
 |---|---|---|
@@ -142,8 +150,17 @@ wants a weaker reading gives the attribute its real type.
 | `FUZZY_STRING` | MEDIUM | LOW |
 | `PRIMITIVE_EXACT` | HIGH | MEDIUM |
 
-The strengths are returned on the rule so a client can display what the engine is applying,
-even where they cannot be edited.
+Neither strength is part of the API on a server with the override off, in either direction:
+sending one is rejected, and none is returned. A field no caller can set is not worth
+describing, and the value there is a pure function of `attribute_type` — which the response
+already carries — so returning it would make this table part of the API contract and turn a
+retune of the scoring weights into a breaking change.
+
+Where the override is on, a response carries a strength only where an operator really set
+one. An absent field means the rule inherits from its `attribute_type`, which is what the
+row holds: reporting the derived value instead would leave an editor unable to tell a
+deliberate choice from an inherited one, and would freeze a rule copied through
+`GET`-then-`POST` against any later change to the table.
 
 ---
 

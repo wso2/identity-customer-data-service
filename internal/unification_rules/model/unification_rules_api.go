@@ -29,6 +29,19 @@ type UnificationRuleAPIRequest struct {
 	MismatchStrength  string `json:"mismatch_strength" bson:"mismatch_strength"`
 }
 
+// UnificationRuleAPIResponse carries the evidence strengths only on a server that lets an
+// operator set them, and only where one actually did.
+//
+// Both halves matter. While identity_resolution.allow_evidence_strength_override is off the
+// fields are refused on the way in, so returning them would describe a setting no caller can
+// make; the value would be a pure function of attribute_type — already in this response —
+// and publishing it would turn a retune of the scoring weights into an API change.
+//
+// Where the override is on, an omitted field means the rule inherits from attribute_type,
+// which is exactly what the row holds. Returning the derived value instead would make a
+// rule copied through GET-then-POST freeze its strengths as explicit overrides while the
+// original kept following the table, and would leave an editor unable to tell a deliberate
+// choice from an inherited one.
 type UnificationRuleAPIResponse struct {
 	RuleId            string `json:"rule_id" bson:"rule_id" binding:"required"`
 	RuleName          string `json:"rule_name" bson:"rule_name" binding:"required"`
@@ -37,8 +50,8 @@ type UnificationRuleAPIResponse struct {
 	IsActive          bool   `json:"is_active" bson:"is_active" binding:"required"`
 	AttributeType     string `json:"attribute_type" bson:"attribute_type"`
 	UnificationMethod string `json:"unification_method" bson:"unification_method"`
-	MatchStrength     string `json:"match_strength" bson:"match_strength"`
-	MismatchStrength  string `json:"mismatch_strength" bson:"mismatch_strength"`
+	MatchStrength     string `json:"match_strength,omitempty" bson:"match_strength,omitempty"`
+	MismatchStrength  string `json:"mismatch_strength,omitempty" bson:"mismatch_strength,omitempty"`
 }
 
 type UnificationRuleUpdateRequest struct {

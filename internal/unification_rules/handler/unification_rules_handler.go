@@ -199,8 +199,8 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		IsActive:          addedRule.IsActive,
 		AttributeType:     addedRule.AttributeType,
 		UnificationMethod: addedRule.UnificationMethod,
-		MatchStrength:     effectiveStrength(addedRule.MatchStrength, constants.DefaultMatchStrength, addedRule.AttributeType),
-		MismatchStrength:  effectiveStrength(addedRule.MismatchStrength, constants.DefaultMismatchStrength, addedRule.AttributeType),
+		MatchStrength:     exposedStrength(addedRule.MatchStrength),
+		MismatchStrength:  exposedStrength(addedRule.MismatchStrength),
 	}
 
 	// Trigger reindex if rule is active.
@@ -249,12 +249,8 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 			IsActive:          rule.IsActive,
 			AttributeType:     rule.AttributeType,
 			UnificationMethod: rule.UnificationMethod,
-			// Strengths are stored only when an operator overrides them, so the column is
-			// usually empty and the engine derives from attribute_type on every read. The
-			// list has to derive too, or it reports nothing where the scorer is applying a
-			// real value — and reports it differently from every other endpoint.
-			MatchStrength:    effectiveStrength(rule.MatchStrength, constants.DefaultMatchStrength, rule.AttributeType),
-			MismatchStrength: effectiveStrength(rule.MismatchStrength, constants.DefaultMismatchStrength, rule.AttributeType),
+			MatchStrength:     exposedStrength(rule.MatchStrength),
+			MismatchStrength:  exposedStrength(rule.MismatchStrength),
 		}
 		rulesResponse = append(rulesResponse, tempRule)
 	}
@@ -306,8 +302,8 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		IsActive:          rule.IsActive,
 		AttributeType:     rule.AttributeType,
 		UnificationMethod: rule.UnificationMethod,
-		MatchStrength:     effectiveStrength(rule.MatchStrength, constants.DefaultMatchStrength, rule.AttributeType),
-		MismatchStrength:  effectiveStrength(rule.MismatchStrength, constants.DefaultMismatchStrength, rule.AttributeType),
+		MatchStrength:     exposedStrength(rule.MatchStrength),
+		MismatchStrength:  exposedStrength(rule.MismatchStrength),
 	}
 	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
 }
@@ -473,8 +469,8 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		IsActive:          newRule.IsActive,
 		AttributeType:     newRule.AttributeType,
 		UnificationMethod: newRule.UnificationMethod,
-		MatchStrength:     effectiveStrength(newRule.MatchStrength, constants.DefaultMatchStrength, newRule.AttributeType),
-		MismatchStrength:  effectiveStrength(newRule.MismatchStrength, constants.DefaultMismatchStrength, newRule.AttributeType),
+		MatchStrength:     exposedStrength(newRule.MatchStrength),
+		MismatchStrength:  exposedStrength(newRule.MismatchStrength),
 	}
 	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
 }
@@ -577,6 +573,23 @@ func resolveEvidenceStrength(supplied string, field string) (string, *errors2.Cl
 	return supplied, nil
 }
 
+// exposedStrength reports what a response should carry for a rule's evidence strength.
+//
+// Nothing, unless this server lets an operator set one: while the override is refused on the
+// way in, describing a strength on the way out would report a setting no caller can make,
+// and the value is derived from attribute_type, which the response already carries.
+//
+// Where the override is allowed it is the stored value and not the derived one, so an
+// omitted field means the rule inherits from its attribute type — the same thing the row
+// holds, and the only form a caller can send back without turning an inherited strength
+// into a deliberate one.
+func exposedStrength(stored string) string {
+	if !evidenceStrengthOverrideAllowed() {
+		return ""
+	}
+	return stored
+}
+
 // evidenceStrengthOverrideAllowed reports whether this deployment lets a rule carry its own
 // evidence strengths.
 func evidenceStrengthOverrideAllowed() bool {
@@ -590,18 +603,4 @@ func invalidEvidenceStrength(field, value string) *errors2.ClientError {
 		Description: fmt.Sprintf("Invalid %s: '%s'. Allowed values: %s, %s, %s.", field, value,
 			constants.EvidenceStrengthHigh, constants.EvidenceStrengthMedium, constants.EvidenceStrengthLow),
 	}, http.StatusBadRequest)
-}
-
-// effectiveStrength reports the strength the matching engine will apply to a rule: the
-// operator's override where one was set, otherwise the value derived from the attribute
-// type. Responses carry this rather than the stored NULL, so a client can always show what
-// is in force even where the field cannot be edited.
-func effectiveStrength(stored string, defaults map[string]string, attrType string) string {
-	if stored != "" {
-		return stored
-	}
-	if derived, ok := defaults[attrType]; ok {
-		return derived
-	}
-	return constants.EvidenceStrengthMedium
 }

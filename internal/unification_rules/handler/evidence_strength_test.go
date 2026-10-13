@@ -50,29 +50,32 @@ func TestEvidenceStrengthStoresNothingWhenNotSupplied(t *testing.T) {
 	}
 }
 
-// TestEffectiveStrengthDerivesFromAttributeType is what a client sees, and what the engine
-// applies, for a rule with no stored override.
-func TestEffectiveStrengthDerivesFromAttributeType(t *testing.T) {
-	tests := []struct {
-		attrType string
-		stored   string
-		want     string
-	}{
-		{constants.AttributeTypeEmail, "", constants.EvidenceStrengthHigh},
-		{constants.AttributeTypeName, "", constants.EvidenceStrengthLow},
-		// A rule predating typed matching resolves to PRIMITIVE_EXACT, which must stay
-		// strong enough to merge on its own.
-		{constants.AttributeTypePrimitiveExact, "", constants.EvidenceStrengthHigh},
-		// An explicit override wins over the derived value.
-		{constants.AttributeTypeEmail, constants.EvidenceStrengthLow, constants.EvidenceStrengthLow},
-		// An unrecognised type still yields a usable strength.
-		{"NOT_A_REAL_TYPE", "", constants.EvidenceStrengthMedium},
-	}
+// TestStrengthIsNotExposedWhileOverrideDisabled is the read half of the same setting. A
+// server that refuses the field on the way in must not describe it on the way out, or a
+// client reads a value it has no way to change and which is really a function of
+// attribute_type.
+func TestStrengthIsNotExposedWhileOverrideDisabled(t *testing.T) {
+	withOverrideAllowed(t, false)
 
-	for _, tt := range tests {
-		if got := effectiveStrength(tt.stored, constants.DefaultMatchStrength, tt.attrType); got != tt.want {
-			t.Errorf("effectiveStrength(%q, %s) = %q, want %q", tt.stored, tt.attrType, got, tt.want)
-		}
+	// Even a rule carrying a stored override — set while the flag was on, or seeded
+	// directly — stays out of the response while the setting is off.
+	if got := exposedStrength(constants.EvidenceStrengthLow); got != "" {
+		t.Errorf("exposedStrength = %q, want nothing exposed", got)
+	}
+}
+
+// TestOnlyAStoredStrengthIsExposed covers the enabled server. An inherited strength is
+// reported as absent rather than as its derived value, so a caller can tell a deliberate
+// choice from an inherited one and can send the response back without freezing the rule
+// against a later change to the derivation table.
+func TestOnlyAStoredStrengthIsExposed(t *testing.T) {
+	withOverrideAllowed(t, true)
+
+	if got := exposedStrength(constants.EvidenceStrengthLow); got != constants.EvidenceStrengthLow {
+		t.Errorf("exposedStrength(override) = %q, want %q", got, constants.EvidenceStrengthLow)
+	}
+	if got := exposedStrength(""); got != "" {
+		t.Errorf("exposedStrength(inherited) = %q, want nothing exposed", got)
 	}
 }
 
