@@ -28,6 +28,7 @@ import (
 	appProvider "github.com/wso2/identity-customer-data-service/internal/application/provider"
 	consentService "github.com/wso2/identity-customer-data-service/internal/consent/service"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	sysconfig "github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
@@ -99,6 +100,21 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 
 	// Schema sync status should not be changed via this method.
 	updatedConfig.InitialSchemaSyncDone = isInitialSchemaSyncDoneInitialState
+
+	// Provisioning comes before anything that calls the Identity Server, because on a
+	// deployment that provisions its own applications the organisation has no
+	// credentials to call it with until this has run - the schema sync below being the
+	// first such call.
+	//
+	// A deployment that is provisioned for builds no client at all here: constructing
+	// one loads the outbound TLS material, and failing to load it ends the process.
+	cdsConfig := sysconfig.GetCDSRuntime().Config
+	if cdsConfig.AuthServer.SystemApplication.AutoProvision &&
+		!isCDSEnabledInitialState && updatedConfig.CDSEnabled {
+		if err := client.NewIdentityClient(cdsConfig).ProvisionSystemApplication(ctx, orgHandle); err != nil {
+			return err
+		}
+	}
 
 	schemaService := service.GetProfileSchemaService()
 	if !isCDSEnabledInitialState && !isInitialSchemaSyncDoneInitialState && updatedConfig.CDSEnabled {

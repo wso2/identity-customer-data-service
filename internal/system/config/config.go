@@ -48,6 +48,49 @@ type AuthServerConfig struct {
 	AdminPassword             string              `yaml:"admin_password"`
 	RequiredScopes            map[string][]string `yaml:"required_scopes"`
 	IsSystemAppGrantEnabled   bool                `yaml:"isSystemAppGrantEnabled"`
+
+	// SystemApplication governs the Identity Server application CDS calls the
+	// management APIs with.
+	SystemApplication SystemApplicationConfig `yaml:"system_application"`
+}
+
+// SystemApplicationConfig governs the machine-to-machine application CDS
+// authenticates to the Identity Server management APIs with.
+//
+// A deployment that has its applications provisioned for it - the cloud control
+// plane does this - leaves AutoProvision off and keeps using the single
+// ClientID/ClientSecret pair above. That pair belongs to one tenant and can only
+// authenticate at that tenant's token endpoint, so a deployment serving more than
+// one organisation, which is the on-premise case, turns AutoProvision on: CDS then
+// creates one application per organisation as that organisation enables CDS and
+// holds the credentials in its own database.
+type SystemApplicationConfig struct {
+	// AutoProvision lets CDS create the application itself over the Identity Server
+	// management APIs. It does that as the configured administrator, since an
+	// organisation has no application to get a token with until this has run, so a
+	// deployment that turns it on is granting CDS the use of those credentials.
+	AutoProvision bool `yaml:"auto_provision"`
+	// NamePrefix starts the application name; the organisation handle completes it.
+	NamePrefix string `yaml:"name_prefix"`
+	// EncryptionKey seals the provisioned client secrets at rest: KeyLength bytes,
+	// base64 encoded, as `openssl rand -base64 32` prints. Required when
+	// AutoProvision is on, and the server refuses to start without it.
+	//
+	// The secret cannot be hashed instead. CDS presents it to the token endpoint on
+	// every token request, and a hash cannot be presented.
+	EncryptionKey string `yaml:"encryption_key"`
+}
+
+// SystemApplicationName is the name of the application provisioned for one
+// organisation. It is derived rather than stored so that an application already
+// in the Identity Server is adopted rather than duplicated.
+func (c SystemApplicationConfig) SystemApplicationName(orgHandle string) string {
+
+	prefix := c.NamePrefix
+	if prefix == "" {
+		prefix = DefaultSystemAppNamePrefix
+	}
+	return prefix + " - " + orgHandle
 }
 
 // SQLiteConfig holds the settings for the inbuilt datasource. A numeric field
@@ -143,6 +186,10 @@ const (
 	ApplicationIdentifierTypeClientID = "client_id"
 	ApplicationIdentifierTypeAppID    = "app_id"
 )
+
+// DefaultSystemAppNamePrefix names the provisioned applications when the
+// deployment does not choose a prefix of its own.
+const DefaultSystemAppNamePrefix = "CDS System App"
 
 type Config struct {
 	Addr         AddrConfig         `yaml:"addr"`

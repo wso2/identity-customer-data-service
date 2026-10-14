@@ -38,6 +38,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
+	"github.com/wso2/identity-customer-data-service/internal/system/systemapp"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 )
@@ -89,6 +90,14 @@ func main() {
 	// Initialize logger
 	if err := log.Init(cdsConfig.Log.LogLevel); err != nil {
 		fmt.Println("Failed to initialize logger.", err)
+		os.Exit(1)
+	}
+
+	// A deployment that provisions its own Identity Server applications but cannot
+	// seal their secrets, or has no administrator credentials to provision with, is
+	// stopped here rather than at the first organisation that tries to enable CDS.
+	if err := systemapp.ValidateConfig(cdsConfig.AuthServer); err != nil {
+		log.GetLogger().Error("Invalid system application configuration.", log.Error(err))
 		os.Exit(1)
 	}
 
