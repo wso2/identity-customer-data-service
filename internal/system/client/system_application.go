@@ -30,23 +30,10 @@ import (
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/idp/credential"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/systemapp"
 )
-
-// systemAPISubscriptions is exactly what FetchToken asks a token for, grouped by
-// the API resource that owns each scope. A provisioned application is subscribed
-// to these and nothing else - an application that can do more than CDS needs is a
-// larger credential to lose - so this list and the scopes in FetchToken have to
-// move together.
-var systemAPISubscriptions = []struct {
-	Identifier string
-	Scopes     []string
-}{
-	{"/api/server/v1/applications", []string{"internal_application_mgt_view"}},
-	{"/api/server/v1/claim-dialects", []string{"internal_claim_meta_view"}},
-	{"/scim2/Users", []string{"internal_user_mgt_list", "internal_user_mgt_view"}},
-}
 
 // ProvisionSystemApplication makes sure orgHandle has an Identity Server
 // application CDS can call the management APIs with, and records its credentials.
@@ -58,7 +45,13 @@ var systemAPISubscriptions = []struct {
 //
 // A deployment that has its applications provisioned for it does nothing here and
 // keeps using the configured pair.
-func (c *IdentityClient) ProvisionSystemApplication(ctx context.Context, orgHandle string) error {
+//
+// permissions is what the application has to be able to do, in CDS's terms. They are
+// translated to the API resources and scopes the Identity Server grants them with, so
+// the application ends up able to do what CDS asks for and nothing besides - an
+// application that can do more than CDS needs is a larger credential to lose.
+func (c *IdentityClient) ProvisionSystemApplication(ctx context.Context, orgHandle string,
+	permissions []credential.Permission) error {
 
 	logger := log.GetLogger()
 	authCfg := config.GetCDSRuntime().Config.AuthServer
@@ -91,8 +84,13 @@ func (c *IdentityClient) ProvisionSystemApplication(ctx context.Context, orgHand
 		logger.Info(fmt.Sprintf("Adopting existing system application '%s' of organization: %s", name, orgHandle))
 	}
 
-	for _, subscription := range systemAPISubscriptions {
-		if err := c.authorizeSystemAPI(appID, orgHandle, subscription.Identifier, subscription.Scopes); err != nil {
+	for _, permission := range permissions {
+		granted, known := wso2Permissions[permission]
+		if !known {
+			return provisioningFailed(orgHandle, fmt.Sprintf(
+				"the Identity Server has no API resource that grants '%s'", permission), nil)
+		}
+		if err := c.authorizeSystemAPI(appID, orgHandle, granted.APIResource, granted.Scopes); err != nil {
 			return err
 		}
 	}

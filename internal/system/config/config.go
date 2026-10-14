@@ -47,7 +47,11 @@ type AuthServerConfig struct {
 	AdminUsername             string              `yaml:"admin_username"`
 	AdminPassword             string              `yaml:"admin_password"`
 	RequiredScopes            map[string][]string `yaml:"required_scopes"`
-	IsSystemAppGrantEnabled   bool                `yaml:"isSystemAppGrantEnabled"`
+	// IsSystemAppGrantEnabled is deprecated: set idp.type to "asgardeo" instead. The
+	// system application grant is an Asgardeo flow, so this flag only ever said which
+	// identity provider the deployment runs. It is still honoured when idp.type says
+	// nothing.
+	IsSystemAppGrantEnabled bool `yaml:"isSystemAppGrantEnabled"`
 
 	// SystemApplication governs the Identity Server application CDS calls the
 	// management APIs with.
@@ -197,6 +201,7 @@ type Config struct {
 	Log          LogConfig          `yaml:"log"`
 	Auth         AuthConfig         `yaml:"auth"`
 	AuthServer   AuthServerConfig   `yaml:"auth_server"`
+	IdP          IdPConfig          `yaml:"idp"`
 	DataSource   DataSourceConfig   `yaml:"datasource"`
 	TLS          TLSConfig          `yaml:"tls"`
 	Cleanup      CleanupConfig      `yaml:"cleanup"`
@@ -204,6 +209,14 @@ type Config struct {
 	Shutdown     ShutdownConfig     `yaml:"shutdown"`
 	// ApplicationIdentifierType selects how applications are identified: "client_id" (default) or "app_id".
 	ApplicationIdentifierType string `yaml:"application_identifier_type"`
+}
+
+// IdPConfig selects the identity provider of the deployment. One CDS deployment works
+// with one identity provider.
+type IdPConfig struct {
+	// Type is "wso2is" (the default when it is empty) or "asgardeo". It replaces
+	// auth_server.isSystemAppGrantEnabled, which said the same thing in one bit.
+	Type string `yaml:"type"`
 }
 
 // ShutdownConfig bounds the graceful shutdown of the whole process. Zero, which

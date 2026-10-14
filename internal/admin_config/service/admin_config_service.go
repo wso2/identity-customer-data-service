@@ -28,9 +28,9 @@ import (
 	appProvider "github.com/wso2/identity-customer-data-service/internal/application/provider"
 	consentService "github.com/wso2/identity-customer-data-service/internal/consent/service"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
-	"github.com/wso2/identity-customer-data-service/internal/system/client"
 	sysconfig "github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/idp/credential"
 )
 
 // AdminConfigServiceInterface defines the service interface.
@@ -101,17 +101,19 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 	// Schema sync status should not be changed via this method.
 	updatedConfig.InitialSchemaSyncDone = isInitialSchemaSyncDoneInitialState
 
-	// Provisioning comes before anything that calls the Identity Server, because on a
-	// deployment that provisions its own applications the organisation has no
-	// credentials to call it with until this has run - the schema sync below being the
-	// first such call.
+	// Provisioning comes before anything that calls the identity provider, because on a
+	// deployment that creates its own credentials the organisation has none to call it
+	// with until this has run - the schema sync below being the first such call.
 	//
-	// A deployment that is provisioned for builds no client at all here: constructing
-	// one loads the outbound TLS material, and failing to load it ends the process.
-	cdsConfig := sysconfig.GetCDSRuntime().Config
-	if cdsConfig.AuthServer.SystemApplication.AutoProvision &&
-		!isCDSEnabledInitialState && updatedConfig.CDSEnabled {
-		if err := client.NewIdentityClient(cdsConfig).ProvisionSystemApplication(ctx, orgHandle); err != nil {
+	// There is no test for which provider this is. A provider that issues CDS its
+	// credentials from outside returns from Provision without acting, so the decision
+	// stays with the provider rather than being restated here.
+	if !isCDSEnabledInitialState && updatedConfig.CDSEnabled {
+		source, err := credential.GetSource()
+		if err != nil {
+			return err
+		}
+		if err := source.Provision(ctx, orgHandle); err != nil {
 			return err
 		}
 	}

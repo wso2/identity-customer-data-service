@@ -1,21 +1,54 @@
 # The System Application
 
-CDS calls the Identity Server management APIs on behalf of each organisation it
+CDS calls the identity provider's management APIs on behalf of each organisation it
 serves: it reads the claim dialects to build the profile schema, resolves
-applications, and looks up users over SCIM. Those calls need an access token, and
-that token comes from a machine-to-machine application in the Identity Server.
+applications, and looks up users. Those calls need a credential, and on a WSO2
+Identity Server that credential comes from a machine-to-machine application.
 
-This guide is about where that application comes from.
+This guide is about where that application comes from, and how CDS decides what to do
+for the identity provider it is pointed at.
+
+---
+
+## Which identity provider
+
+```yaml
+idp:
+  type: "wso2is"   # or "asgardeo"
+```
+
+One deployment works with one identity provider. The setting decides how CDS
+authenticates itself:
+
+| | `wso2is` | `asgardeo` |
+|---|---|---|
+| How a credential is obtained | `client_credentials` against the organisation's token endpoint | `system_app_grant` exchanged at the super tenant |
+| Authorization scheme | `Bearer` | `SystemApp` |
+| Who creates the application | CDS, if `auto_provision` is on | the Asgardeo control plane |
+
+`auth_server.isSystemAppGrantEnabled` is the deprecated spelling of the same choice.
+The system application grant is an Asgardeo flow, so that flag only ever said which
+provider you were on — one bit for a choice that now has more than two answers. It is
+still honoured when `idp.type` says nothing, and the server warns at start; `idp.type`
+wins wherever both are set.
+
+Nothing above the credential source names a grant, a scheme, or an `internal_` scope.
+CDS asks for a credential carrying the permissions it needs — `read:applications`,
+`read:claims`, `read:users` — and puts the result in an `Authorization` header. A
+provider that authenticates with a static key or a client certificate, rather than a
+grant, answers without a round trip.
 
 ---
 
 ## Two deployment shapes
 
 **Provisioned for.** Something outside CDS creates the application and hands CDS
-its credentials as `AUTH_SERVER_CLIENT_ID` and `AUTH_SERVER_CLIENT_SECRET`. The
-cloud control plane does this, and so does
+its credentials as `AUTH_SERVER_CLIENT_ID` and `AUTH_SERVER_CLIENT_SECRET`. Asgardeo
+does this from its control plane, and so does
 [`scripts/local-setup/script.sh`](local-development.md). CDS reads the pair at
-start and presents it on every token request.
+start and presents it on every token request. Provisioning does nothing on such a
+deployment — the credential source declines it, rather than every caller testing
+which provider it is talking to.
 
 **Provisioning itself.** CDS creates the application, as each organisation enables
 CDS, and holds the credentials in its own database. This is the on-premise shape.
@@ -24,7 +57,7 @@ The first is the default. The second is what `auto_provision` turns on.
 
 ---
 
-## Why one configured pair is not enough on-premise
+## Why one configured pair is not enough on-premise (`wso2is`)
 
 An OAuth client in the Identity Server belongs to one tenant, and can only
 authenticate at the token endpoint of that tenant. CDS builds a token endpoint per
@@ -72,13 +105,15 @@ management API call and needs the application to exist first.
    way, therefore does not produce a second application.
 3. Otherwise a machine-to-machine application is created: `client_credentials`
    grant, JWT access tokens, management application.
-4. It is subscribed to exactly the APIs CDS asks a token for, and nothing more:
+4. It is subscribed to exactly the permissions CDS asks for, and nothing more. The
+   mapping from a permission to the API resource and scopes that grant it is the
+   identity provider's business, not CDS's:
 
-   | API resource | Scopes |
-   |---|---|
-   | `/api/server/v1/applications` | `internal_application_mgt_view` |
-   | `/api/server/v1/claim-dialects` | `internal_claim_meta_view` |
-   | `/scim2/Users` | `internal_user_mgt_list`, `internal_user_mgt_view` |
+   | CDS permission | API resource | Scopes |
+   |---|---|---|
+   | `read:applications` | `/api/server/v1/applications` | `internal_application_mgt_view` |
+   | `read:claims` | `/api/server/v1/claim-dialects` | `internal_claim_meta_view` |
+   | `read:users` | `/scim2/Users` | `internal_user_mgt_list`, `internal_user_mgt_view` |
 
 5. The credentials the Identity Server issued are read back and stored.
 
@@ -120,7 +155,26 @@ by deleting the organisation's row and re-enabling, which re-provisions.
 
 ## Where the credentials are used
 
-`FetchToken` resolves the organisation's own credentials where a row exists, and
-falls back to the configured `client_id` / `client_secret` where none does. A
-deployment with `auto_provision` off does not read the table at all, so its token
-path is unchanged.
+The `wso2is` source resolves the organisation's own credentials where a row exists,
+and falls back to the configured `client_id` / `client_secret` where none does. A
+deployment with `auto_provision` off does not read the table at all, so its token path
+is unchanged.
+
+---
+
+## Adding another identity provider
+
+Implement `credential.Source` — `Token` and `Provision` — and register it from an
+`init` function under the name `idp.type` should accept. The contract lives in
+[`internal/system/idp/credential`](../../internal/system/idp/credential/credential.go)
+and depends on nothing provider-specific; the implementations live beside the HTTP
+machinery that talks to each provider.
+
+A provider with no grant concept returns a credential it already holds. A provider
+that issues CDS its credentials from outside returns `nil` from `Provision`. Neither
+needs a change anywhere else.
+
+Two things are **not** behind this contract yet, and a new provider will meet both:
+inbound token validation (`internal/system/authn` still assumes JWT-or-introspection,
+an `iam-cds` audience and an Identity Server Console client), and the `/t/{org}` URL
+tenancy the management calls are built on.

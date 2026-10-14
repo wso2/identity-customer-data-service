@@ -32,9 +32,11 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	_ "github.com/wso2/identity-customer-data-service/internal/system/client" // registers the identity provider credential sources
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/idp/credential"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/managers"
 	_ "github.com/wso2/identity-customer-data-service/internal/system/queue/activemq" // registers the ActiveMQ queue provider
@@ -100,6 +102,22 @@ func main() {
 		log.GetLogger().Error("Invalid system application configuration.", log.Error(err))
 		os.Exit(1)
 	}
+
+	// Resolve the identity provider of this deployment, and the source that
+	// authenticates CDS to it. Nothing fetches a token until this has run.
+	idpType, fromDeprecatedFlag := credential.ResolveType(
+		cdsConfig.IdP.Type, cdsConfig.AuthServer.IsSystemAppGrantEnabled)
+	if fromDeprecatedFlag {
+		log.GetLogger().Warn("auth_server.isSystemAppGrantEnabled is deprecated and will be removed. " +
+			"Set idp.type to \"" + credential.TypeAsgardeo + "\" instead.")
+	}
+	credentialSource, err := credential.NewSource(idpType)
+	if err != nil {
+		log.GetLogger().Error("Invalid identity provider configuration.", log.Error(err))
+		os.Exit(1)
+	}
+	credential.SetSource(idpType, credentialSource)
+	log.GetLogger().Info("Identity provider: " + idpType)
 
 	// Resolve the shutdown deadline at start, so a refused value stops the
 	// server before anything runs.
