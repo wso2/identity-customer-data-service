@@ -108,6 +108,21 @@ var (
 		Message: "Error while resolving application information.",
 	}
 
+	GET_SYSTEM_APPLICATION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15114",
+		Message: "Error while reading the system application credentials of the organization.",
+	}
+
+	SAVE_SYSTEM_APPLICATION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15115",
+		Message: "Error while persisting the system application credentials of the organization.",
+	}
+
+	PROVISION_SYSTEM_APPLICATION_FAILED = ErrorMessage{
+		Code:    errorPrefix + "15116",
+		Message: "Error while provisioning the system application of the organization.",
+	}
+
 	ADD_UNIFICATION_RULE = ErrorMessage{
 		Code:    errorPrefix + "15201",
 		Message: "Error while adding unification rules.",

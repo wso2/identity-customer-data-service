@@ -23,6 +23,11 @@ Lightweight, extensible Customer Data Server built to power personalized experie
         - Select JWT as Access Token type.
         - Add "iam-cds" to the Audience.
 
+   > A single application serves a single tenant, because an Identity Server OAuth
+   > client can only authenticate at the token endpoint of the tenant it belongs to.
+   > To have CDS create one per organisation instead, as each enables CDS, see
+   > [The System Application](docs/guides/system-application.md).
+
 2. Create an Admin user
     - Go to WSO2 Identity Server Console .
     - Navigate to User Management section --> Users.

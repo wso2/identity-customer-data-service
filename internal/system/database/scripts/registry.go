@@ -90,6 +90,8 @@ func AllQueries() map[string]model.DBQuery {
 		"UpdateOrgConfiguration":                      UpdateOrgConfiguration,
 		"GetOrgConfiguration":                         GetOrgConfiguration,
 		"UpdateInitialSchemaSyncDoneConfig":           UpdateInitialSchemaSyncDoneConfig,
+		"GetOrgSystemApplication":                     GetOrgSystemApplication,
+		"UpsertOrgSystemApplication":                  UpsertOrgSystemApplication,
 		"HealthCheckPing":                             HealthCheckPing,
 
 		// Templates the stores complete at runtime.

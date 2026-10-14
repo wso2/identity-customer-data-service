@@ -40,6 +40,7 @@ import (
 
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/idp/credential"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
@@ -48,8 +49,26 @@ type IdentityClient struct {
 	HTTPClient *http.Client
 }
 
-// NewIdentityClient creates an IdentityClient with a TLS/mTLS-ready HTTP client.
+// NewIdentityClient creates an IdentityClient with a TLS/mTLS-ready HTTP client. It
+// ends the process when the outbound TLS material cannot be loaded.
+//
+// Prefer NewIdentityClientWithError anywhere the caller can report the failure itself,
+// and in particular at start, where a configuration problem should be reported next to
+// every other one rather than from inside a constructor.
 func NewIdentityClient(cfg config.Config) *IdentityClient {
+
+	identityClient, err := NewIdentityClientWithError(cfg)
+	if err != nil {
+		log.GetLogger().Error("Failed to create outbound HTTPS client for IS", log.Error(err))
+		os.Exit(1)
+	}
+	return identityClient
+}
+
+// NewIdentityClientWithError creates an IdentityClient and returns the reason it could
+// not, rather than ending the process.
+func NewIdentityClientWithError(cfg config.Config) (*IdentityClient, error) {
+
 	baseHostPort := cfg.AuthServer.Host
 	if cfg.AuthServer.Port != "" {
 		baseHostPort = cfg.AuthServer.Host + ":" + cfg.AuthServer.Port
@@ -58,14 +77,13 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 
 	httpClient, err := newOutboundHTTPClient(cfg.TLS, cfg.AuthServer.Host)
 	if err != nil {
-		log.GetLogger().Error("Failed to create outbound HTTPS client for IS", log.Error(err))
-		os.Exit(1)
+		return nil, err
 	}
 
 	return &IdentityClient{
 		BaseURL:    baseHostPort,
 		HTTPClient: httpClient,
-	}
+	}, nil
 }
 
 // Builds an HTTP client with TLS/mTLS configuration for outbound requests.
@@ -133,72 +151,33 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig, serverHostForSNI string) (*h
 	}, nil
 }
 
-// FetchToken retrieves an access token for the given org.
-// If system app grant is enabled, it uses system_app_grant
-// Otherwise, it falls back to client_credentials per org.
-func (c *IdentityClient) FetchToken(orgHandle string) (string, error) {
-	logger := log.GetLogger()
-	authCfg := config.GetCDSRuntime().Config.AuthServer
+// FetchToken returns a credential for calling the identity provider's management APIs
+// as orgHandle, carrying the permissions every management call in this file needs.
+//
+// Which grant produced it, what the provider calls its scopes, and whether a grant was
+// involved at all belong to the configured credential source. This file knows only that
+// the result goes in an Authorization header.
+//
+// It carries no context because the methods that call it carry none either; threading
+// one through is a change of its own. See credential.Source.Token.
+func (c *IdentityClient) FetchToken(orgHandle string) (credential.Token, error) {
 
-	// Common scope for both flows.
-	scope := strings.Join([]string{
-		"internal_application_mgt_view",
-		"internal_claim_meta_view",
-		"internal_user_mgt_list",
-		"internal_user_mgt_view",
-	}, constants.SpaceSeparator)
-
-	if authCfg.IsSystemAppGrantEnabled {
-		logger.Debug(fmt.Sprintf("Fetching token using system_app_grant for org: %s", orgHandle))
-		return c.fetchOrganizationToken(orgHandle, authCfg, scope)
-	}
-
-	logger.Debug(fmt.Sprintf("Fetching token using client_credentials for org: %s", orgHandle))
-	return c.fetchClientCredentialsToken(orgHandle, authCfg, scope)
-}
-
-func (c *IdentityClient) buildTokenEndpoint(orgId, tokenEndpoint string) string {
-	return fmt.Sprintf("https://%s/t/%s%s", c.BaseURL, orgId, tokenEndpoint)
-}
-
-// fetchOrganizationToken obtains an organization-scoped token via system_app_grant.
-func (c *IdentityClient) fetchOrganizationToken(
-	orgHandle string,
-	authCfg config.AuthServerConfig,
-	scope string,
-) (string, error) {
-
-	logger := log.GetLogger()
-
-	// Fetch super-tenant token
-	baseForm := url.Values{}
-	baseForm.Set("grant_type", "system_app_grant")
-	baseForm.Set("scope", scope)
-	baseForm.Set("organizationHandle", orgHandle)
-	endpoint := c.buildTokenEndpoint("carbon.super", authCfg.TokenEndpoint)
-	logger.Debug(fmt.Sprintf("Fetching super-tenant system_app_grant token for org: %s", orgHandle))
-	// Note: The super-tenant token is not used directly — the grant exchange happens using client credentials.
-	orgToken, err := c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, baseForm, orgHandle)
+	source, err := credential.GetSource()
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to fetch super-tenant token for the organization:%s", orgHandle)
-		return "", errors2.NewServerError(errors2.ErrorMessage{
+		errorMsg := fmt.Sprintf("No identity provider is configured to authenticate to for the "+
+			"organization:%s", orgHandle)
+		log.GetLogger().Debug(errorMsg, log.Error(err))
+		return credential.Token{}, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.TOKEN_FETCH_FAILED.Code,
 			Message:     errors2.TOKEN_FETCH_FAILED.Message,
 			Description: errorMsg,
 		}, err)
 	}
-	logger.Debug(fmt.Sprintf("Successfully obtained organization-scoped token for org: %s", orgHandle))
-	return orgToken, nil
+	return source.Token(orgHandle, credential.ManagementPermissions())
 }
 
-// fetchClientCredentialsToken obtains an organization-scoped token directly using client_credentials grant.
-func (c *IdentityClient) fetchClientCredentialsToken(orgId string, authCfg config.AuthServerConfig, scope string) (string, error) {
-
-	endpoint := c.buildTokenEndpoint(orgId, authCfg.TokenEndpoint)
-	form := url.Values{}
-	form.Set("grant_type", "client_credentials")
-	form.Set("scope", scope)
-	return c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, form, orgId)
+func (c *IdentityClient) buildTokenEndpoint(orgId, tokenEndpoint string) string {
+	return fmt.Sprintf("https://%s/t/%s%s", c.BaseURL, orgId, tokenEndpoint)
 }
 
 // requestToken performs the actual HTTP POST and extracts access_token from JSON.
@@ -299,13 +278,7 @@ func (c *IdentityClient) FetchApplicationIdentifier(applicationIdentifier, orgHa
 		logger.Debug(fmt.Sprintf("Failed to get token for org: %s", orgHandle), log.Error(err))
 		return result, err
 	}
-
-	authCfg := config.GetCDSRuntime().Config.AuthServer
-	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
+	req.Header.Set("Authorization", token.Header())
 
 	log.GetLogger().Info("Filtering applications at:" + u.String())
 	resp, err := c.HTTPClient.Do(req)
@@ -369,12 +342,8 @@ func (c *IdentityClient) GetApplication(appID, orgHandle string) (idpModel.Appli
 	if err != nil {
 		return app, false, err
 	}
-	authCfg := config.GetCDSRuntime().Config.AuthServer
-	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
+
+	req.Header.Set("Authorization", token.Header())
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -411,10 +380,10 @@ func (c *IdentityClient) IntrospectToken(token, orgHandle string) (map[string]in
 
 	authConfig := config.GetCDSRuntime().Config.AuthServer
 	var introspectionEndpoint string
-	if authConfig.IsSystemAppGrantEnabled {
-		log.GetLogger().Debug("Token introspection with IS through internal host as system_app_grant is enabled")
+	if credential.ResolvedType() == credential.TypeAsgardeo {
+		log.GetLogger().Debug("Token introspection through the internal host, as this deployment is Asgardeo")
 		introspectionEndpoint = "https://" + authConfig.ADUISHostname + "/t/" + orgHandle + authConfig.IntrospectionEndPoint
-		form.Set("appTenant", "carbon.super")
+		form.Set("appTenant", constants.SuperTenantDomain)
 	} else {
 		// It is possible to introspect any token against super tenant introspection endpoint and super tenant client credentials
 		introspectionEndpoint = "https://" + c.BaseURL + "/t/carbon.super" + authConfig.IntrospectionEndPoint
@@ -568,12 +537,8 @@ func (c *IdentityClient) GetAllDialects(orgHandle string) ([]map[string]interfac
 			orgHandle), log.Error(err))
 		return nil, err
 	}
-	authCfg := config.GetCDSRuntime().Config.AuthServer
-	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
+
+	req.Header.Set("Authorization", token.Header())
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -611,12 +576,8 @@ func (c *IdentityClient) GetClaimsByDialect(dialectID, orgId string) ([]map[stri
 		logger.Debug(fmt.Sprintf("Failed to get token for fetching the claims of dialectID:%s of the organization:%s", dialectID, orgId), log.Error(err))
 		return nil, err
 	}
-	authCfg := config.GetCDSRuntime().Config.AuthServer
-	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
+
+	req.Header.Set("Authorization", token.Header())
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -657,12 +618,8 @@ func (c *IdentityClient) GetLocalClaimsMap(orgId string) (map[string]map[string]
 			orgId), log.Error(err))
 		return nil, err
 	}
-	authCfg := config.GetCDSRuntime().Config.AuthServer
-	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
+
+	req.Header.Set("Authorization", token.Header())
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -853,12 +810,8 @@ func (c *IdentityClient) GetSCIMUser(orgId, userId string) (map[string]interface
 			userId, orgId), log.Error(err))
 		return nil, err
 	}
-	authCfg := config.GetCDSRuntime().Config.AuthServer
-	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
+
+	req.Header.Set("Authorization", token.Header())
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
