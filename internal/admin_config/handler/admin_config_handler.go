@@ -61,6 +61,7 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 	resp := model.AdminConfigAPI{
 		CDSEnabled:         config.CDSEnabled,
 		SystemApplications: config.SystemApplications,
+		CORSAllowedOrigins: config.CORSAllowedOrigins,
 	}
 	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }
@@ -102,6 +103,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		InitialSchemaSyncDone: existingConfig.InitialSchemaSyncDone,
 		CDSEnabled:            existingConfig.CDSEnabled,
 		SystemApplications:    existingConfig.SystemApplications,
+		CORSAllowedOrigins:    existingConfig.CORSAllowedOrigins,
 	}
 
 	// Update only if provided in request
@@ -111,8 +113,11 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	if config.SystemApplications != nil {
 		configToUpdate.SystemApplications = config.SystemApplications
 	}
+	if config.CORSAllowedOrigins != nil {
+		configToUpdate.CORSAllowedOrigins = config.CORSAllowedOrigins
+	}
 
-	err = adminConfigService.UpdateAdminConfig(ctx, configToUpdate, orgHandle)
+	err = adminConfigService.UpdateAdminConfig(ctx, &configToUpdate, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -121,6 +126,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	resp := model.AdminConfigAPI{
 		CDSEnabled:         configToUpdate.CDSEnabled,
 		SystemApplications: configToUpdate.SystemApplications,
+		CORSAllowedOrigins: configToUpdate.CORSAllowedOrigins,
 	}
 	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }
