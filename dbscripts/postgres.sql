@@ -218,3 +218,46 @@ CREATE INDEX IF NOT EXISTS idx_unification_rules_org_active_priority
 
 CREATE INDEX IF NOT EXISTS idx_unification_rules_property_id
     ON unification_rules (property_id);
+
+-- ================================
+-- ORGANIZATION MANAGEMENT: ORGANIZATIONS AND SHARING
+-- ================================
+
+-- The org tree that CDS learns from the identity provider.
+CREATE TABLE organizations (
+    org_id         VARCHAR(255) PRIMARY KEY,
+    org_handle     VARCHAR(255) NOT NULL UNIQUE,
+    org_name       VARCHAR(255),
+    parent_org_id  VARCHAR(255),
+    primary_org_id    VARCHAR(255) NOT NULL,
+    status         VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_organizations_parent ON organizations (parent_org_id);
+
+CREATE INDEX idx_organizations_primary ON organizations (primary_org_id);
+
+-- One policy for each resource and initiating org. The organization access of a primary org is a
+-- policy with resource_type ORGANIZATION_ACCESS and resource_id CDS.
+CREATE TABLE cds_share_policy (
+    policy_id         VARCHAR(255) PRIMARY KEY,
+    resource_type     VARCHAR(64)  NOT NULL,
+    resource_id       VARCHAR(255) NOT NULL,
+    owning_org_id     VARCHAR(255) NOT NULL,
+    initiating_org_id VARCHAR(255) NOT NULL,
+    UNIQUE (resource_type, resource_id, initiating_org_id)
+);
+
+CREATE INDEX idx_share_policy_initiating ON cds_share_policy (initiating_org_id, resource_type);
+
+-- ALL_CHILDREN stores the initiating org as target_org_id.
+CREATE TABLE cds_share_policy_target (
+    policy_id     VARCHAR(255) NOT NULL REFERENCES cds_share_policy (policy_id) ON DELETE CASCADE,
+    target_scope  VARCHAR(32)  NOT NULL,
+    target_org_id VARCHAR(255) NOT NULL,
+    PRIMARY KEY (policy_id, target_scope, target_org_id)
+);
+
+CREATE INDEX idx_share_target_org ON cds_share_policy_target (target_org_id, policy_id);

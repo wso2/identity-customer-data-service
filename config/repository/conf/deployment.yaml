@@ -23,6 +23,11 @@ addr:
 
 server_url: "https://localhost:8900" # Public-facing base URL used for constructing Location headers
 
+# The identity provider of this deployment: wso2is (default). One CDS deployment works with one
+# identity provider.
+idp:
+  type: "wso2is"
+
 auth_server:
   host: "localhost"
   port : 9443
@@ -59,6 +64,8 @@ auth_server:
       - "internal_cds_unification_rule_update"
     unification_rules:delete:
       - "internal_cds_unification_rule_delete"
+    unification_rules:share:
+      - "internal_cds_unification_rule_share"
 
     profile_schema:view:
       - "internal_cds_profile_schema_view"
@@ -68,11 +75,21 @@ auth_server:
       - "internal_cds_profile_schema_update"
     profile_schema:delete:
       - "internal_cds_profile_schema_delete"
+    # Organization management: share a schema attribute or a unification rule with child
+    # organizations.
+    profile_schema:share:
+      - "internal_cds_profile_schema_share"
 
     admin_config:view:
       - "internal_cds_admin_config_view"
     admin_config:update:
       - "internal_cds_admin_config_update"
+    # Organization management: the organization sync and the organization access of the primary
+    # organization.
+    organization:view:
+      - "internal_cds_organization_view"
+    organization:update:
+      - "internal_cds_organization_update"
 
     consent_category:view:
       - "internal_cds_consent_category_view"
@@ -82,6 +99,32 @@ auth_server:
       - "internal_cds_consent_category_update"
     consent_category:delete:
       - "internal_cds_consent_category_delete"
+
+    # Organization management: the operations of a request on the path of a sub organization,
+    # /t/{primary_handle}/o/{org_id}/...
+    # A sub organization writes profiles only. It has no other write operation.
+    org:profile:create:
+      - "internal_org_cds_profile_create"
+    org:profile:update:
+      - "internal_org_cds_profile_update"
+    org:profile:view:
+      - "internal_org_cds_profile_view"
+    org:profile:delete:
+      - "internal_org_cds_profile_delete"
+    org:profile:link:
+      - "internal_org_cds_profile_link"
+
+    org:unification_rules:view:
+      - "internal_org_cds_unification_rule_view"
+
+    org:profile_schema:view:
+      - "internal_org_cds_profile_schema_view"
+
+    org:admin_config:view:
+      - "internal_org_cds_admin_config_view"
+
+    org:consent_category:view:
+      - "internal_org_cds_consent_category_view"
 
 
 sync:

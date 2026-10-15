@@ -27,6 +27,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/authn"
 	"github.com/wso2/identity-customer-data-service/internal/system/authz"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
@@ -84,7 +85,33 @@ func validateAdminCredentials(token string) (bool, error) {
 }
 
 // AuthnAndAuthz performs authentication and authorization for the given HTTP request and operation.
+// The operation is selected from the org context of the request: the operation itself in a primary
+// org, and its org form (org:<operation>) in a sub org. Only the scopes of that operation authorize
+// it.
 func AuthnAndAuthz(r *http.Request, operation string) error {
+
+	claims, err := authenticate(r)
+	if err != nil {
+		return err
+	}
+	return authorize(r, claims, operation)
+}
+
+// AuthnAndAuthzPrimary performs authentication and authorization for an operation that only a
+// primary organization runs. Such an operation has no org form. On the path of a sub org, the
+// request is authenticated and then refused with SUB_ORG_CONFIG_NOT_ALLOWED, and no scope is
+// checked.
+func AuthnAndAuthzPrimary(r *http.Request, operation string) error {
+
+	claims, err := authenticate(r)
+	if err != nil {
+		return err
+	}
+	return authorizePrimary(r, claims, operation)
+}
+
+// authenticate validates the bearer token for the org of the path and returns its claims.
+func authenticate(r *http.Request) (map[string]interface{}, error) {
 
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") || authHeader == "" {
@@ -93,7 +120,7 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 			Message:     errors.UN_AUTHORIZED.Message,
 			Description: "Missing or invalid Authorization header",
 		}, http.StatusUnauthorized)
-		return clientError
+		return nil, clientError
 	}
 
 	orgHandle := utils.ExtractOrgHandleFromPath(r)
@@ -101,19 +128,24 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	//  Validate token
-	claims, err := authn.ValidateAuthenticationAndReturnClaims(token, orgHandle)
+	claims, err := authn.ValidateTokenForOrg(token, orgHandle, pathOrgIdOf(r))
 	if err != nil {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.UN_AUTHORIZED.Code,
 			Message:     errors.UN_AUTHORIZED.Message,
 			Description: "Missing or invalid Authorization header",
 		}, http.StatusUnauthorized)
-		return clientError
+		return nil, clientError
 	}
+	return claims, nil
+}
+
+// authorize checks the scopes of the claims against the operation of the org context of the request.
+func authorize(r *http.Request, claims map[string]interface{}, operation string) error {
 
 	//  Validate authorization
-	scope, ok := claims["scope"]
-	if !ok || scope == nil {
+	scope, ok := claims["scope"].(string)
+	if !ok {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.FORBIDDEN.Code,
 			Message:     errors.FORBIDDEN.Message,
@@ -122,7 +154,7 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 		return clientError
 	}
 
-	if !authz.ValidatePermission(scope.(string), operation) {
+	if !authz.ValidatePermission(scope, authz.OperationFor(operation, pathOrgIdOf(r))) {
 		clientError := errors.NewClientError(errors.ErrorMessage{
 			Code:        errors.FORBIDDEN.Code,
 			Message:     errors.FORBIDDEN.Message,
@@ -131,4 +163,26 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 		return clientError
 	}
 	return nil
+}
+
+// authorizePrimary refuses an operation of the primary org in a sub org, and checks the operation
+// in a primary org.
+func authorizePrimary(r *http.Request, claims map[string]interface{}, operation string) error {
+
+	if pathOrgIdOf(r) != "" {
+		return errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.SUB_ORG_CONFIG_NOT_ALLOWED.Code,
+			Message:     errors.SUB_ORG_CONFIG_NOT_ALLOWED.Message,
+			Description: "Only the primary organization can perform this operation.",
+		}, http.StatusBadRequest)
+	}
+	return authorize(r, claims, operation)
+}
+
+// pathOrgIdOf returns the org ID of the path of a sub org, /t/{primary_handle}/o/{org_id}/..., that
+// the tenant dispatcher resolved. It is empty on the path of a primary org.
+func pathOrgIdOf(r *http.Request) string {
+
+	pathOrgId, _ := r.Context().Value(constants.OrgIdContextKey).(string)
+	return pathOrgId
 }
