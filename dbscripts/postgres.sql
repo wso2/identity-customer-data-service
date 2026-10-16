@@ -70,15 +70,8 @@ CREATE TABLE unification_rules
     is_active     BOOLEAN      NOT NULL,
     attribute_type     VARCHAR(255) NOT NULL DEFAULT 'PRIMITIVE_EXACT',
     unification_method VARCHAR(255) NOT NULL DEFAULT 'deterministic',
-    -- How much an agreement on this attribute supports a merge, and how much a
-    -- disagreement opposes one. Independent because the two directions rarely carry equal
-    -- weight: matching emails strongly imply the same person while differing emails imply
-    -- little, and a date of birth is the reverse.
-    --
-    -- Left NULL, each is derived from attribute_type at load time. A value here is an
-    -- explicit operator override. They must not carry a column default: a default would
-    -- stamp a concrete strength onto every pre-existing row when the column is added,
-    -- which reads as a deliberate choice and overrides what the attribute type implies.
+    -- NULL means "derive from attribute_type"; a value is an operator override. No column
+    -- default, deliberately — see docs/concepts/unification-rules.md.
     match_strength     VARCHAR(20),
     mismatch_strength  VARCHAR(20),
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -155,23 +148,21 @@ CREATE TABLE cds_config (
     PRIMARY KEY (org_handle, config)
 );
 
--- The largest table in the system: roughly twenty rows per profile for a tenant with five
--- rules, so half a billion rows at twenty-five million profiles. Three things below are
--- load-bearing and were settled by measurement — the absence of a surrogate key, the column
--- order of the primary key, and two levels of hash partitioning rather than one combined
--- key, which would prune nothing. See "How the index is stored" in
--- docs/concepts/how-unification-works.md before changing any of them.
+-- The largest table in the system. The absent surrogate key, the primary key's column
+-- order and the two partition moduli were all settled by measurement: read "How the index
+-- is stored" in docs/concepts/how-unification-works.md before changing any of them.
 CREATE TABLE IF NOT EXISTS blocking_keys (
     profile_id      VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
     org_handle      VARCHAR(255) NOT NULL,
     attribute_name  VARCHAR(255) NOT NULL,       -- Rule property name (e.g., "identity_attributes.emailaddress")
-    key_value       VARCHAR(512) NOT NULL,       -- Normalized blocking key (e.g., "john.smith@example.com", "J500 S530")
+    key_value       VARCHAR(512) NOT NULL,       -- Normalized blocking key; 512 because it holds a whole value, not an id
 
-    -- Column order matches the candidate lookup, which filters org_handle and
-    -- attribute_name for equality and key_value with IN.
+    -- Column order matches the candidate lookup: equality, equality, then IN.
     PRIMARY KEY (org_handle, attribute_name, key_value, profile_id)
 ) PARTITION BY HASH (org_handle);
 
+-- 8 x 4 = 32 leaves; the loop bounds are just REMAINDER 0..modulus-1. A modulus cannot be
+-- changed without rebuilding the table, so read the doc before touching either.
 DO $$
 BEGIN
     FOR i IN 0..7 LOOP
@@ -186,9 +177,7 @@ BEGIN
     END LOOP;
 END $$;
 
--- Re-indexing a profile deletes its keys first. org_handle prunes that to one organisation's
--- partition, but there is no key_value to prune the level below, so it probes each of that
--- organisation's four sub-partitions through this index.
+-- Serves the per-profile delete during re-indexing, which has no key_value to prune on.
 CREATE INDEX IF NOT EXISTS idx_blocking_keys_org_profile ON blocking_keys(org_handle, profile_id);
 
 CREATE TABLE IF NOT EXISTS review_tasks (
@@ -212,19 +201,16 @@ CREATE INDEX IF NOT EXISTS idx_review_tasks_org_status ON review_tasks(org_handl
 CREATE INDEX IF NOT EXISTS idx_review_tasks_created ON review_tasks(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_review_tasks_incoming ON review_tasks(incoming_profile_id, status);
 
--- When a profile edited, or deleted we need to deleted rejected pairs, if we use review task table to mark rejection
--- pairs as rejected we can not do that with keeping history correctly. But with this rejection pair table we can do that.
--- Rejection pairs: profiles that an admin explicitly rejected as non-matches.
+-- Pairs an administrator explicitly rejected as non-matches. Kept separate from
+-- review_tasks so profile edits and deletes can clear them without losing task history.
 CREATE TABLE IF NOT EXISTS rejection_pairs (
     id              VARCHAR(255) PRIMARY KEY,
     org_handle      VARCHAR(255) NOT NULL,
-    -- Stored with the lower id first, so one row means one pair whichever direction the
-    -- review task happened to run in and the unique constraint below isenforceable.
+    -- Lower id first, so one row is one pair whichever way the review task ran.
     profile_id_1    VARCHAR(255) NOT NULL,
     profile_id_2    VARCHAR(255) NOT NULL,
-    -- The evidence the decision was made against. A rejection asserts that two profiles are
-    -- different people, which does not stop being true because an attribute changed — so it
-    -- is only reconsidered when later evidence is materially stronger than this.
+    -- The evidence the rejection was made against; reconsidered only when later evidence
+    -- is materially stronger. See "Rejections" in docs/concepts/unification-rules.md.
     match_score     DECIMAL(5,4),
     score_breakdown JSONB DEFAULT '{}'::jsonb,
     rejected_by     VARCHAR(255),

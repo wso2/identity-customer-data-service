@@ -46,14 +46,9 @@ Deterministic and fuzzy rules are not alternative engines. A single comparison h
 
 ### Finding candidates
 
-Comparing every profile against every other is O(n²) and unusable past a few thousand
-people, so candidates come from an index rather than a scan. Every value a rule matches on
-is reduced to one or more **blocking keys**, and two profiles are only compared when they
-already share a key.
+Comparing every profile against every other is O(n²) and unusable past a few thousand people, so candidates come from an index rather than a scan. Every value a rule matches on is reduced to one or more **blocking keys**, and two profiles are only compared when they already share a key.
 
-The exact key is the value reduced exactly as far as its matcher reduces it before
-comparing, which guarantees that any pair the matcher would call identical lands in the same
-bucket. A rule matched `fuzzy` writes additional keys that widen recall:
+The exact key is the value reduced exactly as far as its matcher reduces it before comparing, which guarantees that any pair the matcher would call identical lands in the same bucket. A rule matched `fuzzy` writes additional keys that widen recall:
 
 | Rule | Value | Keys written |
 |---|---|---|
@@ -64,39 +59,21 @@ bucket. A rule matched `fuzzy` writes additional keys that widen recall:
 | `UNIQUE_ID` deterministic | `ABC-123` | `abc-123` |
 | `DATE` deterministic | `Jan 2, 2026` | `2026.01.02` |
 
-A deterministic rule writes the exact key and nothing else — LSH bands and phonetic codes
-would only gather values it can never score above zero. `DATE` and `UNIQUE_ID` normalise
-before keying because their matchers do, so `2026-01-02` and `Jan 2, 2026` meet.
+A deterministic rule writes the exact key and nothing else — LSH bands and phonetic codes would only gather values it can never score above zero. `DATE` and `UNIQUE_ID` normalise before keying because their matchers do, so `2026-01-02` and `Jan 2, 2026` meet.
 
-Keys are looked up grouped by attribute **and** by key kind — exact, phonetic, LSH band,
-phone suffix — narrowest kind first, each group capped at 100 distinct profiles. A group
-matching more than that is skipped and logged: a value that common identifies nobody.
+Keys are looked up grouped by attribute **and** by key kind — exact, phonetic, LSH band, phone suffix — narrowest kind first, each group capped at 100 distinct profiles. A group matching more than that is skipped and logged: a value that common identifies nobody.
 
-Each kind is queried separately because they do not share a selectivity. A phonetic code
-deliberately covers every spelling that sounds alike, while each spelling produces its own
-LSH bands, so for a common name the phonetic code saturates long before any band does.
-Sharing one lookup would let it exhaust the cap and discard the bands with it, losing
-exactly the typo matches they exist to find.
+Each kind is queried separately because they do not share a selectivity. A phonetic code deliberately covers every spelling that sounds alike, while each spelling produces its own LSH bands, so for a common name the phonetic code saturates long before any band does. Sharing one lookup would let it exhaust the cap and discard the bands with it, losing exactly the typo matches they exist to find.
 
 ---
 
 ### How the index is stored
 
-`blocking_keys` is the largest table in the system. A profile writes one key per
-deterministic rule and several per fuzzy rule, so a tenant with five rules holds roughly
-twenty rows per profile — half a billion rows at twenty-five million profiles. Three things
-about its definition were chosen by measurement rather than taste, and the figures below are
-from a million-row table on PostgreSQL 14 after `ANALYZE`.
+`blocking_keys` is the largest table in the system. A profile writes one key per deterministic rule and several per fuzzy rule, so a tenant with five rules holds roughly twenty rows per profile — half a billion rows at twenty-five million profiles. Three things about its definition were chosen by measurement rather than taste, and the figures below are from a million-row table on PostgreSQL 14 after `ANALYZE`.
 
-**There is no surrogate key.** The table had a `key_id` UUID primary key that nothing
-referenced, while the natural key `(org_handle, attribute_name, key_value, profile_id)`
-already identified a row. The surrogate cost its own column and its own index on every row —
-roughly 38 GB at the target size, for an identifier no query used. The natural key is now the
-primary key, and its column order matches the candidate lookup: equality on `org_handle` and
-`attribute_name`, `IN` on `key_value`.
+**There is no surrogate key.** The table had a `key_id` UUID primary key that nothing referenced, while the natural key `(org_handle, attribute_name, key_value, profile_id)` already identified a row. The surrogate cost its own column and its own index on every row — roughly 38 GB at the target size, for an identifier no query used. The natural key is now the primary key, and its column order matches the candidate lookup: equality on `org_handle` and `attribute_name`, `IN` on `key_value`.
 
-**It is partitioned in two levels** — by `org_handle`, and by `key_value` within each of
-those. Both single-key arrangements fail, in opposite ways:
+**It is partitioned in two levels** — by `org_handle`, and by `key_value` within each of those. Both single-key arrangements fail, in opposite ways:
 
 | Partition key | Partitions scanned | Execution | Single-tenant deployment |
 |---|---|---|---|
@@ -104,18 +81,9 @@ those. Both single-key arrangements fail, in opposite ways:
 | `org_handle` alone | 1 | 0.095 ms | **every row in one partition** |
 | **two levels** | **≤ 4** | **0.15 ms** | **splits** |
 
-A combined hash key over both columns prunes nothing, because PostgreSQL prunes hash
-partitions only when it has an equality clause for every column of the key, and candidate
-lookup supplies `key_value` as an `IN` list. Partitioning on `org_handle` alone prunes
-perfectly but leaves a single-organisation deployment — the common shape on-premises — with
-every row in one partition, which is the case most in need of smaller indexes. Two levels
-prune at both: `org_handle` by equality, and `key_value` because single-column hash pruning
-does apply to an `IN` list.
+A combined hash key over both columns prunes nothing, because PostgreSQL prunes hash partitions only when it has an equality clause for every column of the key, and candidate lookup supplies `key_value` as an `IN` list. Partitioning on `org_handle` alone prunes perfectly but leaves a single-organisation deployment — the common shape on-premises — with every row in one partition, which is the case most in need of smaller indexes. Two levels prune at both: `org_handle` by equality, and `key_value` because single-column hash pruning does apply to an `IN` list.
 
-**The moduli follow the access pattern.** A lookup touches at most one sub-partition per key
-it searches for, so widening the second level costs reads nothing. What holds it at four is
-the per-profile delete during re-indexing: it has no `key_value`, so it prunes to one
-organisation and then probes every sub-partition beneath it.
+**The moduli follow the access pattern.** A lookup touches at most one sub-partition per key it searches for, so widening the second level costs reads nothing. What holds it at four is the per-profile delete during re-indexing: it has no `key_value`, so it prunes to one organisation and then probes every sub-partition beneath it. The first level's eight is a fan-out sized for the target table rather than a measured optimum — 8 x 4 is 32 leaves, roughly 15M rows each at half a billion. Both are worth revisiting before this carries real data, because a hash modulus cannot be changed without rebuilding the table.
 
 ```
 4 LSH keys        3 index-only scans    0.70 ms
@@ -124,16 +92,13 @@ crowded phonetic  1 scan, 44 rows       0.94 ms
 DELETE (reindex)  4 index scans         0.22 ms
 ```
 
-SQLite has no partitioning, so the inbuilt datasource takes the key change only. It is not
-the datasource that reaches this scale.
+SQLite has no partitioning, so the inbuilt datasource takes the key change only. It is not the datasource that reaches this scale.
 
 ---
 
 ### Comparing two values
 
-Comparison answers *how alike are these two values*; scoring answers *what does that mean
-for these two people*. A comparator knows nothing about thresholds or priorities, and every
-one follows the same shape:
+Comparison answers *how alike are these two values*; scoring answers *what does that mean for these two people*. A comparator knows nothing about thresholds or priorities, and every one follows the same shape:
 
 ```
 raw equality?          → 1.0   (before any normalisation)
@@ -143,8 +108,7 @@ normalised equality?   → 1.0
 otherwise              → type-specific algorithm
 ```
 
-`mode` comes from the rule, which is what lets the same comparator be exact for one rule and
-tolerant for another in the same evaluation.
+`mode` comes from the rule, which is what lets the same comparator be exact for one rule and tolerant for another in the same evaluation.
 
 | Type | Normalisation | Fuzzy algorithm |
 |---|---|---|
@@ -157,12 +121,9 @@ tolerant for another in the same evaluation.
 | `UNIQUE_ID` | lowercase, trim | none — equal or 0 |
 | `PRIMITIVE_EXACT` | none | none — raw equality or 0 |
 
-Email takes the *minimum* of its two halves rather than the average: a perfect local part
-against a stranger's domain is not a near-match, so the weaker half governs. `NAME` sorts
-tokens first, so `John Smith` and `Smith John` are identical.
+Email takes the *minimum* of its two halves rather than the average: a perfect local part against a stranger's domain is not a near-match, so the weaker half governs. `NAME` sorts tokens first, so `John Smith` and `Smith John` are identical.
 
-A multi-valued attribute takes the best pair — every input value against every candidate
-value, highest wins. One matching email out of three is a match on that rule.
+A multi-valued attribute takes the best pair — every input value against every candidate value, highest wins. One matching email out of three is a match on that rule.
 
 ---
 
@@ -219,26 +180,11 @@ Caps only ever downgrade `AUTO_MERGE` to `MANUAL_REVIEW`. They never suppress a 
 
 `AUTO_MERGE` additionally requires `auto_merge_enabled` on the org's admin config.
 
-A merge records the name of the rule that **decided** it, which is not always the first rule
-that agreed. With `deterministic_match_decisive` on, an exact match at any priority ends the
-evaluation, so a fuzzy rule ranked above it agreed without deciding anything; attributing the
-merge to that fuzzy rule would record a similarity match where an exact identifier was the
-cause. The reason follows the same order the scorer used: a unique identifier matching
-exactly as the primary signal, then a deterministic agreement where those are decisive, then
-the first agreement of any kind.
+A merge records the name of the rule that **decided** it, which is not always the first rule that agreed. With `deterministic_match_decisive` on, an exact match at any priority ends the evaluation, so a fuzzy rule ranked above it agreed without deciding anything; attributing the merge to that fuzzy rule would record a similarity match where an exact identifier was the cause. The reason follows the same order the scorer used: a unique identifier matching exactly as the primary signal, then a deterministic agreement where those are decisive, then the first agreement of any kind.
 
-Both thresholds are validated against each other, not only against 0 and 1: an organisation
-must keep `0.3 < manual_review_threshold <= auto_merge_threshold - 0.01`. The upper bound
-keeps the cap applied to a held-back match above the review threshold, so an objection
-downgrades a merge to a review task rather than suppressing the pair entirely. The lower
-bound matters because `manual_review_threshold` is also the bar a rule must clear to count
-as agreeing, so a value near the contradiction bar lets near-unrelated values become the
-primary signal.
+Both thresholds are validated against each other, not only against 0 and 1: an organisation must keep `0.3 < manual_review_threshold <= auto_merge_threshold - 0.01`. The upper bound keeps the cap applied to a held-back match above the review threshold, so an objection downgrades a merge to a review task rather than suppressing the pair entirely. The lower bound matters because `manual_review_threshold` is also the bar a rule must clear to count as agreeing, so a value near the contradiction bar lets near-unrelated values become the primary signal.
 
-Whether the objections in steps 4–6 apply to a deterministic match at all is also per
-organisation: `deterministic_match_decisive` (default on) makes an exact match conclusive on
-its own, as it was before typed matching; turning it off lets the other rules send it to
-review instead. See [Unification Rules](unification-rules.md#letting-other-rules-object-deterministic_match_decisive).
+Whether the objections in steps 4–6 apply to a deterministic match at all is also per organisation: `deterministic_match_decisive` (default on) makes an exact match conclusive on its own, as it was before typed matching; turning it off lets the other rules send it to review instead. See [Unification Rules](unification-rules.md#letting-other-rules-object-deterministic_match_decisive).
 
 ### Worked examples
 

@@ -70,15 +70,8 @@ CREATE TABLE IF NOT EXISTS unification_rules
     is_active     BOOLEAN      NOT NULL,
     attribute_type     VARCHAR(255) NOT NULL DEFAULT 'PRIMITIVE_EXACT',
     unification_method VARCHAR(255) NOT NULL DEFAULT 'deterministic',
-    -- How much an agreement on this attribute supports a merge, and how much a
-    -- disagreement opposes one. Independent because the two directions rarely carry equal
-    -- weight: matching emails strongly imply the same person while differing emails imply
-    -- little, and a date of birth is the reverse.
-    --
-    -- Left NULL, each is derived from attribute_type at load time. A value here is an
-    -- explicit operator override. They must not carry a column default: a default would
-    -- stamp a concrete strength onto every pre-existing row when the column is added,
-    -- which reads as a deliberate choice and overrides what the attribute type implies.
+    -- NULL means "derive from attribute_type"; a value is an operator override. No column
+    -- default, deliberately — see docs/concepts/unification-rules.md.
     match_strength     VARCHAR(20),
     mismatch_strength  VARCHAR(20),
     created_at    TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00'),
@@ -207,10 +200,8 @@ CREATE INDEX IF NOT EXISTS idx_unification_rules_property_id
 
 -- Identity Resolution: the blocking index, review queue, rejections and merge audit.
 
--- No surrogate key: the natural key already identifies a row, and on the largest table in
--- the system an unreferenced identifier costs a column and an index per row. SQLite has no
--- partitioning, so the PostgreSQL two-level partitioning of this table has
--- no counterpart here; the inbuilt datasource is not the one that reaches that scale.
+-- No surrogate key, and none of the PostgreSQL partitioning: SQLite has neither the feature
+-- nor the scale. See "How the index is stored" in docs/concepts/how-unification-works.md.
 CREATE TABLE IF NOT EXISTS blocking_keys
 (
     profile_id     VARCHAR(255) NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
@@ -247,8 +238,7 @@ CREATE TABLE IF NOT EXISTS rejection_pairs
 (
     id           VARCHAR(255) PRIMARY KEY,
     org_handle   VARCHAR(255) NOT NULL,
-    -- Stored with the lower id first, so one row means one pair whichever direction the
-    -- review task happened to run in.
+    -- Lower id first, so one row is one pair whichever way the review task ran.
     profile_id_1 VARCHAR(255) NOT NULL,
     profile_id_2 VARCHAR(255) NOT NULL,
     -- The evidence the decision was made against; see the PostgreSQL schema for why.
