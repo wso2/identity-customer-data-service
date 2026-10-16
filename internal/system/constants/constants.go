@@ -319,13 +319,23 @@ const (
 )
 
 const (
-	// Maximum number of candidates per rule. If we allow any number of
-	// candidates per rule, the issue is that rule attribute value is very common
-	// and we can not merge profile with very comman data.
+	// MaxCandidatesPerRule caps how many profiles one key group may return. A value shared
+	// by very many profiles identifies nobody, and scoring them all costs a comparison each.
+	//
+	// The cap sits above RarityCommonMinProfiles on purpose: a value common enough to lose
+	// its rarity bonus is still retrieved and scored, and only one shared more widely still
+	// is dropped at retrieval, where no amount of scoring would make it identifying.
 	MaxCandidatesPerRule = 100
 )
 
 const (
+	// Shipped defaults for an organisation that has set no thresholds of its own. Both are
+	// per-org admin config, and validation requires manual_review <= auto_merge - ScorePenaltyOffset.
+	//
+	// 0.95 sits above where a genuine typo lands — Jonathan Smith / Jonathon Smyth measured
+	// 0.9429 — so a lone name similarity goes to review rather than merging unattended.
+	// 0.75 is also the bar a rule must clear to count as agreeing, which is why it is kept
+	// well clear of ScoreContradictionThreshold.
 	DefaultAutoMergeThreshold    = 0.95
 	DefaultManualReviewThreshold = 0.75
 )
@@ -344,7 +354,9 @@ const (
 	LSHBands = 4
 	LSHRows  = 2
 
-	// LSHMinLength is the minimum string length required to generate a hash.
+	// LSHMinLength is the minimum string length required to generate a hash. Four characters
+	// yield three character bigrams; below that a signature is built from one or two shingles,
+	// so a single shared bigram collides a whole band and the keys stop discriminating.
 	LSHMinLength = 4
 
 	// MaxMetaphoneLen truncates phonetic codes to 4 characters (approx. 2 syllables).
