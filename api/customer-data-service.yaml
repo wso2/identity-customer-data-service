@@ -654,6 +654,60 @@ components:
           type: boolean
           description: Whether the rule is currently active
           example: true
+        attribute_type:
+          type: string
+          description: |
+            What kind of value the attribute holds. Determines which comparison is applied
+            and which blocking keys are indexed.
+
+            Optional. Omitted, it defaults to `PRIMITIVE_EXACT`, which is how a rule written
+            before typed matching is read. It is **required when `unification_method` is
+            `fuzzy`**, because it selects how two values are compared and there is nothing
+            sensible to assume.
+
+            It still shapes behaviour under `deterministic`: `DATE` and `UNIQUE_ID` are
+            normalized before comparing, so a date written two ways still matches, and the
+            type seeds the evidence strengths.
+          enum: [PRIMITIVE_EXACT, FUZZY_STRING, NAME, EMAIL, PHONE, LOCATION, DATE, UNIQUE_ID]
+          example: "EMAIL"
+        unification_method:
+          type: string
+          description: |
+            Whether this rule matches on exact equality or tolerates variation. Rules of
+            both kinds are evaluated side by side within a single comparison. Only
+            FUZZY_STRING, NAME, EMAIL, PHONE and LOCATION support `fuzzy`.
+
+            Optional. Omitted, it defaults to `deterministic`.
+          enum: [deterministic, fuzzy]
+          example: "deterministic"
+        match_strength:
+          type: string
+          description: |
+            How much an agreement on this attribute supports a merge. HIGH means the
+            attribute identifies a person well enough to merge on it alone; MEDIUM and LOW
+            require a second agreeing rule.
+
+            Present only on a server that sets
+            `identity_resolution.allow_evidence_strength_override`, which is off by default.
+            Elsewhere sending it is rejected and it is never returned, because the value is
+            derived from `attribute_type` and no caller can change it.
+
+            Where the setting is on, an absent field means the rule inherits the strength
+            its `attribute_type` implies; a present one is a deliberate override.
+          enum: [HIGH, MEDIUM, LOW]
+          example: "HIGH"
+        mismatch_strength:
+          type: string
+          description: |
+            How much a disagreement on this attribute opposes a merge. HIGH makes the
+            attribute discriminating: two present, differing values veto an automatic merge
+            whatever else agrees. Independent of `match_strength`, because the two
+            directions rarely carry equal weight — matching emails strongly imply the same
+            person while differing emails imply little, and a date of birth is the reverse.
+
+            Gated and reported exactly as `match_strength`.
+          enum: [HIGH, MEDIUM, LOW]
+          example: "LOW"
         created_at:
           type: integer
           format: int64
@@ -680,6 +734,49 @@ components:
           type: boolean
           description: Whether the rule is currently active
           example: true
+        attribute_type:
+          type: string
+          description: |
+            What kind of value the attribute holds. Determines which comparison is applied
+            and which blocking keys are indexed.
+          enum: [PRIMITIVE_EXACT, FUZZY_STRING, NAME, EMAIL, PHONE, LOCATION, DATE, UNIQUE_ID]
+          example: "EMAIL"
+        unification_method:
+          type: string
+          description: |
+            Whether this rule matches on exact equality or tolerates variation. Rules of
+            both kinds are evaluated side by side within a single comparison. Only
+            FUZZY_STRING, NAME, EMAIL, PHONE and LOCATION support `fuzzy`.
+          enum: [deterministic, fuzzy]
+          example: "deterministic"
+        match_strength:
+          type: string
+          description: |
+            How much an agreement on this attribute supports a merge. HIGH means the
+            attribute identifies a person well enough to merge on it alone; MEDIUM and LOW
+            require a second agreeing rule.
+
+            Present only on a server that sets
+            `identity_resolution.allow_evidence_strength_override`, which is off by default.
+            Elsewhere sending it is rejected and it is never returned, because the value is
+            derived from `attribute_type` and no caller can change it.
+
+            Where the setting is on, an absent field means the rule inherits the strength
+            its `attribute_type` implies; a present one is a deliberate override.
+          enum: [HIGH, MEDIUM, LOW]
+          example: "HIGH"
+        mismatch_strength:
+          type: string
+          description: |
+            How much a disagreement on this attribute opposes a merge. HIGH makes the
+            attribute discriminating: two present, differing values veto an automatic merge
+            whatever else agrees. Independent of `match_strength`, because the two
+            directions rarely carry equal weight — matching emails strongly imply the same
+            person while differing emails imply little, and a date of birth is the reverse.
+
+            Gated and reported exactly as `match_strength`.
+          enum: [HIGH, MEDIUM, LOW]
+          example: "LOW"
 
     ConsentCategory:
       type: object

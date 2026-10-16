@@ -38,6 +38,8 @@ type UnificationRuleServiceInterface interface {
 	GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationRule, error)
 	PatchUnificationRule(ctx context.Context, ruleId, orgHandle string, updatedRule model.UnificationRule) error
 	DeleteUnificationRule(ctx context.Context, ruleId string) error
+	// GetUnificationOptions reads no data, so it takes no context.
+	GetUnificationOptions() model.UnificationOptionsResponse
 }
 
 // UnificationRuleService is the default implementation of the UnificationRuleServiceInterface.
@@ -183,4 +185,76 @@ func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
 func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId string) error {
 
 	return store.DeleteUnificationRule(ctx, ruleId)
+}
+
+// attributeTypeOptions is the ordered list of all supported attribute types and their allowed
+// matching methods, derived entirely from system constants — no database access required.
+var attributeTypeOptions = []model.AttributeTypeOption{
+	{
+		Value: constants.AttributeTypePrimitiveExact,
+		Label: constants.AttributeTypeLabelPrimitiveExact,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeFuzzyString,
+		Label: constants.AttributeTypeLabelFuzzyString,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypeName,
+		Label: constants.AttributeTypeLabelName,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyPhonetic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeEmail,
+		Label: constants.AttributeTypeLabelEmail,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypePhone,
+		Label: constants.AttributeTypeLabelPhone,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyFormat},
+		},
+	},
+	{
+		Value: constants.AttributeTypeLocation,
+		Label: constants.AttributeTypeLabelLocation,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypeDate,
+		Label: constants.AttributeTypeLabelDate,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeUniqueID,
+		Label: constants.AttributeTypeLabelUniqueID,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+}
+
+// GetUnificationOptions returns the supported attribute types and their allowed matching
+// methods.
+func (urs *UnificationRuleService) GetUnificationOptions() model.UnificationOptionsResponse {
+	return model.UnificationOptionsResponse{AttributeTypes: attributeTypeOptions}
 }
