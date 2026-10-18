@@ -27,10 +27,8 @@ import (
 	"time"
 
 	adminConfigStore "github.com/wso2/identity-customer-data-service/internal/admin_config/store"
-	consentService "github.com/wso2/identity-customer-data-service/internal/consent/service"
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
 	"github.com/wso2/identity-customer-data-service/internal/organization/store"
-	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/idp"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -278,7 +276,6 @@ func syncTree(ctx context.Context, primaryHandle string) (*syncResult, error) {
 			return nil, err
 		}
 		if !wasKnown || previous.Status == model.StatusDeleted {
-			initializeIfEnabled(ctx, org)
 			result.Added = append(result.Added, org.OrgHandle)
 		}
 	}
@@ -362,35 +359,6 @@ func buildTree(primary model.Organization, descendants []idp.Organization) []mod
 	return result
 }
 
-// initializeIfEnabled initializes a new sub organization when the organization access includes it.
-func initializeIfEnabled(ctx context.Context, org model.Organization) {
-
-	enabled, err := sharingService.IsOrgEnabled(ctx, org)
-	if err != nil {
-		log.GetLogger().Warn(fmt.Sprintf("Failed to read the enablement of organization '%s'.", org.OrgHandle),
-			log.Error(err))
-		return
-	}
-	if enabled {
-		initializeOrg(ctx, org)
-	}
-}
-
-// initializeOrg initializes a sub organization.
-func initializeOrg(ctx context.Context, org model.Organization) {
-
-	logger := log.GetLogger()
-	if err := consentService.GetConsentCategoryService().SeedDefaultConsentCategory(ctx, org.OrgHandle); err != nil {
-		logger.Warn(fmt.Sprintf("Failed to seed the consent category of organization '%s'.", org.OrgHandle),
-			log.Error(err))
-		return
-	}
-	if err := adminConfigStore.UpdateInitialSchemaSyncConfig(ctx, true, org.OrgHandle); err != nil {
-		logger.Warn(fmt.Sprintf("Failed to mark the initial sync of organization '%s'.", org.OrgHandle),
-			log.Error(err))
-	}
-}
-
 // HandleSyncEvent applies an organization lifecycle event. Events are ignored until the first tree
 // sync of the primary organization starts.
 func HandleSyncEvent(ctx context.Context, pathHandle string, event model.SyncEvent) error {
@@ -458,13 +426,7 @@ func HandleSyncEvent(ctx context.Context, pathHandle string, event model.SyncEve
 			PrimaryOrgId: primary.OrgId,
 			Status:       status,
 		}
-		if err := store.UpsertOrganization(ctx, org); err != nil {
-			return err
-		}
-		if previous == nil || previous.Status == model.StatusDeleted {
-			initializeIfEnabled(ctx, org)
-		}
-		return nil
+		return store.UpsertOrganization(ctx, org)
 
 	case model.EventOrgDeleted:
 		previous, err := store.GetOrganizationById(ctx, event.OrgId)

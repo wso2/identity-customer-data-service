@@ -38,6 +38,7 @@ import (
 	consentStore "github.com/wso2/identity-customer-data-service/internal/consent/store"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
+	"github.com/wso2/identity-customer-data-service/internal/profile_schema/identitysource"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -992,7 +993,7 @@ func (ps *ProfilesService) UpdateProfileConsents(ctx context.Context,
 	logger := log.GetLogger()
 
 	// Reject any attempt to modify a mandatory consent category.
-	mandatoryIds, err := consentStore.GetMandatoryConsentCategoryIds(ctx, orgHandle)
+	mandatoryIds, err := consentStore.GetMandatoryConsentCategoryIds(ctx, identitysource.HandleOf(ctx, orgHandle))
 	if err != nil {
 		return err
 	}

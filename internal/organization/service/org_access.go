@@ -20,19 +20,16 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
-	adminConfigStore "github.com/wso2/identity-customer-data-service/internal/admin_config/store"
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
 	"github.com/wso2/identity-customer-data-service/internal/organization/store"
 	shareModel "github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
 	shareStore "github.com/wso2/identity-customer-data-service/internal/sharing/store"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
 // The organization access of a primary organization selects the sub organizations that can use CDS.
@@ -76,14 +73,12 @@ func CreateOrgAccess(ctx context.Context, primary model.Organization,
 		InitiatingOrgId: primary.OrgId,
 		Targets:         targets,
 	}
-	orgs, err := validateOrgAccess(ctx, primary, p)
-	if err != nil {
+	if err := validateOrgAccess(ctx, primary, p); err != nil {
 		return nil, err
 	}
 	if err := shareStore.CreatePolicy(ctx, p); err != nil {
 		return nil, err
 	}
-	initializeSelected(ctx, orgs, p)
 	resp := toOrgAccessResponse(p)
 	return &resp, nil
 }
@@ -140,14 +135,12 @@ func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId s
 			"then create a new one.")
 	}
 	p.Targets = targets
-	orgs, err := validateOrgAccess(ctx, primary, *p)
-	if err != nil {
+	if err := validateOrgAccess(ctx, primary, *p); err != nil {
 		return nil, err
 	}
 	if err := shareStore.ReplaceTargets(ctx, p.PolicyId, targets); err != nil {
 		return nil, err
 	}
-	initializeSelected(ctx, orgs, *p)
 	resp := toOrgAccessResponse(*p)
 	return &resp, nil
 }
@@ -198,38 +191,16 @@ func orgAccessById(ctx context.Context, primary model.Organization, policyId str
 	return p, nil
 }
 
-func validateOrgAccess(ctx context.Context, primary model.Organization,
-	p shareModel.Policy) ([]model.Organization, error) {
+func validateOrgAccess(ctx context.Context, primary model.Organization, p shareModel.Policy) error {
 
 	orgs, err := store.GetOrganizationsByPrimaryOrg(ctx, primary.OrgId)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if problems := sharingService.ValidatePolicy(treeOf(orgs), p); len(problems) > 0 {
-		return nil, sharingService.BadRequest(strings.Join(problems, "; "))
+		return sharingService.BadRequest(strings.Join(problems, "; "))
 	}
-	return orgs, nil
-}
-
-// initializeSelected initializes the selected organizations that are not initialized yet.
-func initializeSelected(ctx context.Context, orgs []model.Organization, p shareModel.Policy) {
-
-	byId := map[string]model.Organization{}
-	for _, o := range orgs {
-		byId[o.OrgId] = o
-	}
-	for _, id := range sharingService.Reach(treeOf(orgs), p) {
-		org := byId[id]
-		config, err := adminConfigStore.GetAdminConfig(ctx, org.OrgHandle)
-		if err != nil {
-			log.GetLogger().Warn(fmt.Sprintf("Failed to read the configuration of organization '%s'.",
-				org.OrgHandle), log.Error(err))
-			continue
-		}
-		if config == nil || !config.InitialSchemaSyncDone {
-			initializeOrg(ctx, org)
-		}
-	}
+	return nil
 }
 
 func treeOf(orgs []model.Organization) []sharingService.TreeOrg {
