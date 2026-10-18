@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -425,6 +426,42 @@ func TestEventsApplyAfterTheFirstSync(t *testing.T) {
 	}
 }
 
+func TestDeleteEventAppliesOnlyToSubOrgsOfThePathTree(t *testing.T) {
+
+	ctx := setUp(t, &fakeIdP{orgs: tree()})
+	if _, err := StartTreeSync(ctx, primaryHandle); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, ctx, model.TreeSyncSynced)
+	waitIdle(t)
+	for _, org := range []model.Organization{
+		{OrgId: "other-primary", OrgHandle: "other.com", PrimaryOrgId: "other-primary", Status: model.StatusActive},
+		{OrgId: "other-team", OrgHandle: "other-team", ParentOrgId: "other-primary", PrimaryOrgId: "other-primary",
+			Status: model.StatusActive},
+	} {
+		if err := store.UpsertOrganization(ctx, org); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, orgId := range []string{"other-team", "other-primary", primaryId} {
+		if err := HandleSyncEvent(ctx, primaryHandle, model.SyncEvent{Event: model.EventOrgDeleted,
+			OrgId: orgId}); err != nil {
+			t.Fatal(err)
+		}
+		if got := orgStatus(t, ctx, orgId); got != model.StatusActive {
+			t.Errorf("a delete event on the path of %s must not change %s, got %q", primaryHandle, orgId, got)
+		}
+	}
+	if err := HandleSyncEvent(ctx, primaryHandle, model.SyncEvent{Event: model.EventOrgDeleted,
+		OrgId: "teama"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := orgStatus(t, ctx, "teama"); got != model.StatusDeleted {
+		t.Fatalf("expected teama DELETED, got %q", got)
+	}
+}
+
 // requestSyncAgain requests one more run of the running sync.
 func requestSyncAgain() {
 
@@ -552,10 +589,12 @@ func TestUnknownOrgsAreNotLookedUp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := SubOrgHandleOf(ctx, primaryHandle, "region1"); err == nil {
-		t.Fatal("expected an unknown org ID to be not found")
+	var notFound *errors2.ClientError
+	if _, err := SubOrgHandleOf(ctx, primaryHandle, "region1"); !errors.As(err, &notFound) ||
+		notFound.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected an unknown org ID to be not found, got %v", err)
 	}
-	if IsSubOrgHandle(ctx, "region1") {
+	if isSub, err := IsSubOrgHandle(ctx, "region1"); err != nil || isSub {
 		t.Fatal("an unknown handle is not a sub org")
 	}
 	if _, known := PrimaryHandleOf(ctx, "region1"); known {

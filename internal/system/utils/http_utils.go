@@ -128,19 +128,22 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 			orgId := segments[0]
 			subOrgHandle, err := SubOrgResolver(r.Context(), orgHandle, orgId)
 			if err != nil {
-				HandleError(w, error2.NewClientError(error2.ErrorMessage{
-					Code:        error2.ORGANIZATION_NOT_FOUND.Code,
-					Message:     error2.ORGANIZATION_NOT_FOUND.Message,
-					Description: err.Error(),
-				}, http.StatusNotFound))
+				HandleError(w, err)
 				return
 			}
 			ctx = context.WithValue(ctx, constants.TenantContextKey, subOrgHandle)
 			ctx = context.WithValue(ctx, constants.OrgIdContextKey, orgId)
 			remainingPath = "/" + segments[1]
-		} else if IsSubOrgHandle != nil && IsSubOrgHandle(r.Context(), orgHandle) {
-			HandleError(w, error2.NewClientError(error2.ORGANIZATION_PATH_NOT_SUPPORTED, http.StatusBadRequest))
-			return
+		} else if IsSubOrgHandle != nil {
+			isSubOrg, err := IsSubOrgHandle(r.Context(), orgHandle)
+			if err != nil {
+				HandleError(w, err)
+				return
+			}
+			if isSubOrg {
+				HandleError(w, error2.NewClientError(error2.ORGANIZATION_PATH_NOT_SUPPORTED, http.StatusBadRequest))
+				return
+			}
 		}
 		r = r.WithContext(ctx)
 		r.URL.Path = remainingPath
@@ -149,11 +152,12 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 	})
 }
 
-// SubOrgResolver returns the handle of the sub organization of a sub organization path.
+// SubOrgResolver returns the handle of the sub organization of a sub organization path. It returns a
+// client error when the organization is not in the tree, and a server error when the lookup fails.
 var SubOrgResolver func(ctx context.Context, primaryHandle, orgId string) (string, error)
 
 // IsSubOrgHandle reports whether the handle belongs to a sub organization.
-var IsSubOrgHandle func(ctx context.Context, orgHandle string) bool
+var IsSubOrgHandle func(ctx context.Context, orgHandle string) (bool, error)
 
 // RespondJSON sends a JSON response with the given status code and payload
 func RespondJSON(w http.ResponseWriter, status int, payload any, resource string) {

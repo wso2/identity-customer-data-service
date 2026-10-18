@@ -413,6 +413,11 @@ func HandleSyncEvent(ctx context.Context, pathHandle string, event model.SyncEve
 		if err != nil || previous == nil {
 			return err
 		}
+		if previous.IsPrimary() || previous.PrimaryOrgId != primary.OrgId {
+			log.GetLogger().Info(fmt.Sprintf("Ignoring the organization event %s of '%s', because it is not a sub "+
+				"organization of primary organization '%s'.", event.Event, event.OrgId, primaryHandle))
+			return nil
+		}
 		return store.UpdateOrganizationStatus(ctx, previous.OrgId, model.StatusDeleted)
 	}
 	return nil
@@ -477,7 +482,12 @@ func SubOrgHandleOf(ctx context.Context, primaryHandle, orgId string) (string, e
 	if err != nil {
 		return "", err
 	}
-	notFound := fmt.Errorf("the organization '%s' is not in the organization tree of '%s'", orgId, primaryHandle)
+	notFound := errors2.NewClientError(errors2.ErrorMessage{
+		Code:    errors2.ORGANIZATION_NOT_FOUND.Code,
+		Message: errors2.ORGANIZATION_NOT_FOUND.Message,
+		Description: fmt.Sprintf("The organization '%s' is not in the organization tree of '%s'.", orgId,
+			primaryHandle),
+	}, http.StatusNotFound)
 	if org == nil || org.IsPrimary() || org.Status == model.StatusDeleted {
 		return "", notFound
 	}
@@ -492,8 +502,11 @@ func SubOrgHandleOf(ctx context.Context, primaryHandle, orgId string) (string, e
 }
 
 // IsSubOrgHandle reports whether the handle belongs to a stored sub organization.
-func IsSubOrgHandle(ctx context.Context, orgHandle string) bool {
+func IsSubOrgHandle(ctx context.Context, orgHandle string) (bool, error) {
 
 	org, err := store.GetOrganizationByHandle(ctx, orgHandle)
-	return err == nil && org != nil && !org.IsPrimary()
+	if err != nil {
+		return false, err
+	}
+	return org != nil && !org.IsPrimary(), nil
 }

@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	error2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
+	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
 // serve sends a request through the tenant dispatcher and returns the status, the organization
@@ -55,16 +56,16 @@ func serveRecorded(t *testing.T, path string) (*httptest.ResponseRecorder, strin
 func TestTenantDispatcherOrgPath(t *testing.T) {
 
 	defer func(resolver func(context.Context, string, string) (string, error), isSub func(context.Context,
-		string) bool) {
+		string) (bool, error)) {
 		SubOrgResolver, IsSubOrgHandle = resolver, isSub
 	}(SubOrgResolver, IsSubOrgHandle)
 	SubOrgResolver = func(_ context.Context, primaryHandle, orgId string) (string, error) {
 		if primaryHandle == "carbon.super" && orgId == "4f088c20" {
 			return "region1", nil
 		}
-		return "", errors.New("not in the tree")
+		return "", error2.NewClientError(error2.ORGANIZATION_NOT_FOUND, http.StatusNotFound)
 	}
-	IsSubOrgHandle = func(_ context.Context, orgHandle string) bool { return orgHandle == "region1" }
+	IsSubOrgHandle = func(_ context.Context, orgHandle string) (bool, error) { return orgHandle == "region1", nil }
 
 	if code, org, path := serve(t, "/t/carbon.super/cds/api/v1/config"); code != 200 || org != "carbon.super" ||
 		path != "/cds/api/v1/config" {
@@ -88,8 +89,8 @@ func TestTenantDispatcherOrgPath(t *testing.T) {
 
 func TestTenantDispatcherSubOrgHandleOnPrimaryOrgPath(t *testing.T) {
 
-	defer func(isSub func(context.Context, string) bool) { IsSubOrgHandle = isSub }(IsSubOrgHandle)
-	IsSubOrgHandle = func(_ context.Context, orgHandle string) bool { return orgHandle == "region1" }
+	defer func(isSub func(context.Context, string) (bool, error)) { IsSubOrgHandle = isSub }(IsSubOrgHandle)
+	IsSubOrgHandle = func(_ context.Context, orgHandle string) (bool, error) { return orgHandle == "region1", nil }
 
 	rec, org, _ := serveRecorded(t, "/t/region1/cds/api/v1/config")
 	if rec.Code != http.StatusBadRequest {
@@ -128,5 +129,37 @@ func TestTenantDispatcherSubOrgHandleOnPrimaryOrgPath(t *testing.T) {
 	// The dispatcher accepts a handle that is not a stored sub organization.
 	if code, org, _ := serve(t, "/t/unknown.org/cds/api/v1/config"); code != http.StatusOK || org != "unknown.org" {
 		t.Errorf("unknown handle: got %d %q", code, org)
+	}
+}
+
+func TestTenantDispatcherLookupFailure(t *testing.T) {
+
+	if err := log.Init("ERROR"); err != nil {
+		t.Fatalf("failed to initialize the logger: %v", err)
+	}
+
+	defer func(resolver func(context.Context, string, string) (string, error), isSub func(context.Context,
+		string) (bool, error)) {
+		SubOrgResolver, IsSubOrgHandle = resolver, isSub
+	}(SubOrgResolver, IsSubOrgHandle)
+	failure := error2.NewServerError(error2.ErrorMessage{
+		Code:        error2.ORGANIZATION_STORE.Code,
+		Message:     error2.ORGANIZATION_STORE.Message,
+		Description: "Failed to read the organization.",
+	}, errors.New("connection refused"))
+	SubOrgResolver = func(_ context.Context, _, _ string) (string, error) { return "", failure }
+	IsSubOrgHandle = func(_ context.Context, _ string) (bool, error) { return false, failure }
+
+	for _, path := range []string{"/t/carbon.super/o/4f088c20/cds/api/v1/config", "/t/carbon.super/cds/api/v1/config"} {
+		rec, org, _ := serveRecorded(t, path)
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("%s: expected 500, got %d", path, rec.Code)
+		}
+		if org != "" {
+			t.Errorf("%s: the handler must not run, but it got org %q", path, org)
+		}
+		if strings.Contains(rec.Body.String(), "connection refused") {
+			t.Errorf("%s: the body reveals the cause: %q", path, rec.Body.String())
+		}
 	}
 }
