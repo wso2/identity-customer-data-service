@@ -32,6 +32,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/identitysource"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
@@ -287,8 +288,12 @@ func DeletePolicy(ctx context.Context, resourceType, resourceId, policyId string
 	return store.DeletePolicy(ctx, p.PolicyId)
 }
 
-// DeletePoliciesOfResource deletes all policies of the resource.
+// DeletePoliciesOfResource deletes all policies of the resource. It does nothing when organization
+// management is disabled.
 func DeletePoliciesOfResource(ctx context.Context, resourceType, resourceId string) error {
+	if !config.OrganizationManagementEnabled() {
+		return nil
+	}
 	return store.DeletePoliciesOfResource(ctx, resourceType, resourceId)
 }
 

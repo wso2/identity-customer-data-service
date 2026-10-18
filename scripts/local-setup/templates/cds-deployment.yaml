@@ -61,6 +61,9 @@ tls:
   server_key: "server.key"
   trust_store: "trust_store.pem"
 
+organization_management:
+  enabled: true
+
 # Must match [console.extensions] cds_application_identifier_type in
 # is-deployment.toml.
 application_identifier_type: app_id

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	dbmodel "github.com/wso2/identity-customer-data-service/internal/system/database/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/rows"
@@ -61,13 +62,21 @@ func UpsertOrganization(ctx context.Context, org model.Organization) error {
 	return nil
 }
 
-// GetOrganizationById returns the organization, or nil when it is not stored.
+// GetOrganizationById returns the organization, or nil when it is not stored or organization
+// management is disabled.
 func GetOrganizationById(ctx context.Context, orgId string) (*model.Organization, error) {
+	if !config.OrganizationManagementEnabled() {
+		return nil, nil
+	}
 	return getOne(ctx, scripts.GetOrganizationById, orgId)
 }
 
-// GetOrganizationByHandle returns the organization, or nil when it is not stored.
+// GetOrganizationByHandle returns the organization, or nil when it is not stored or organization
+// management is disabled.
 func GetOrganizationByHandle(ctx context.Context, orgHandle string) (*model.Organization, error) {
+	if !config.OrganizationManagementEnabled() {
+		return nil, nil
+	}
 	return getOne(ctx, scripts.GetOrganizationByHandle, orgHandle)
 }
 
@@ -126,7 +135,12 @@ func GetOrganizationsByIds(ctx context.Context, orgIds []string) ([]model.Organi
 }
 
 // GetOrganizationChain returns the organization and its ancestors, the primary organization first.
+// The chain is empty when organization management is disabled.
 func GetOrganizationChain(ctx context.Context, orgId string) ([]model.Organization, error) {
+
+	if !config.OrganizationManagementEnabled() {
+		return nil, nil
+	}
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	if err != nil {

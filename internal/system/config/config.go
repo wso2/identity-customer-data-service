@@ -158,12 +158,21 @@ type Config struct {
 	Shutdown     ShutdownConfig     `yaml:"shutdown"`
 	// ApplicationIdentifierType selects how applications are identified: "client_id" (default) or "app_id".
 	ApplicationIdentifierType string `yaml:"application_identifier_type"`
+	// OrganizationManagement enables the organization tree, sub organization paths, and sharing.
+	OrganizationManagement OrganizationManagementConfig `yaml:"organization_management"`
 }
 
 // IdPConfig selects the identity provider of the deployment.
 type IdPConfig struct {
 	// Type is "wso2is", the default when it is empty.
 	Type string `yaml:"type"`
+}
+
+// OrganizationManagementConfig enables organization management. The organization tables must exist
+// before it is enabled.
+type OrganizationManagementConfig struct {
+	// Enabled is false by default.
+	Enabled bool `yaml:"enabled"`
 }
 
 // ShutdownConfig bounds the graceful shutdown of the whole process. Zero, which

@@ -38,6 +38,7 @@ func setUp(t *testing.T) context.Context {
 	if err := log.Init("ERROR"); err != nil {
 		t.Fatalf("failed to set up the logger: %v", err)
 	}
+	setup.EnableOrganizationManagement()
 	testDB, err := setup.SetupTestSQLite()
 	if err != nil {
 		t.Fatalf("failed to set up the test database: %v", err)

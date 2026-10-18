@@ -158,6 +158,9 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 	if err := store.UpdateAdminConfig(ctx, updatedConfig, orgHandle); err != nil {
 		return err
 	}
+	if !sysconfig.OrganizationManagementEnabled() {
+		return nil
+	}
 
 	// Disabling CDS resets the organization tree sync.
 	if isCDSEnabledInitialState && !updatedConfig.CDSEnabled {

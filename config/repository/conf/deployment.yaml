@@ -28,6 +28,11 @@ server_url: "https://localhost:8900" # Public-facing base URL used for construct
 idp:
   type: "wso2is"
 
+# Organization management: the organization tree, sub organization paths, and sharing with child
+# organizations. Create the organization tables before you enable it.
+organization_management:
+  enabled: false
+
 auth_server:
   host: "localhost"
   port : 9443
