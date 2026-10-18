@@ -51,9 +51,11 @@ func CompleteStatement(name, statement string) string {
 		return statement + "attribute_name = $1 WHERE org_handle = $2 AND attribute_id = $3"
 	case "UpsertIdentityClaimsForProfileSchema":
 		return fmt.Sprintf(statement, QueryPlaceholders(13))
+	case "InsertSharePolicyTargets":
+		return fmt.Sprintf(statement, QueryPlaceholders(3))
 	case "DeleteStaleIdentityClaimsForProfileSchema":
 		return fmt.Sprintf(statement, "$2")
-	case "GetAppDataByProfileIds", "GetConsentCategoryAttributesByCategoryIds":
+	case "GetAppDataByProfileIds", "GetConsentCategoryAttributesByCategoryIds", "GetOrganizationsByIds":
 		return fmt.Sprintf(statement, "$1")
 	default:
 		return statement

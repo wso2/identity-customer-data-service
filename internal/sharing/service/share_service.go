@@ -209,7 +209,7 @@ func CreatePolicy(ctx context.Context, resourceType, resourceId string, initiato
 		InitiatingOrgId: initiator.OrgId,
 		Targets:         targets,
 	}
-	if err := validateCandidate(ctx, initiator, candidate); err != nil {
+	if err := ValidateTargets(ctx, initiator, candidate); err != nil {
 		return nil, err
 	}
 	if err := store.CreatePolicy(ctx, candidate); err != nil {
@@ -263,7 +263,7 @@ func UpdatePolicy(ctx context.Context, resourceType, resourceId, policyId string
 		return nil, badRequest(errors2.SHARE_BAD_REQUEST, strings.Join(problems, "; "))
 	}
 	p.Targets = targets
-	if err := validateCandidate(ctx, initiator, *p); err != nil {
+	if err := ValidateTargets(ctx, initiator, *p); err != nil {
 		return nil, err
 	}
 	if err := store.ReplaceTargets(ctx, p.PolicyId, targets); err != nil {
@@ -308,95 +308,26 @@ func policyOf(ctx context.Context, resourceType, resourceId, policyId string,
 	return p, nil
 }
 
-// validateCandidate checks the targets of a policy against the tree. For a rule, it also checks
-// that the rule attribute is visible in each organization that the policy reaches.
-func validateCandidate(ctx context.Context, initiator orgModel.Organization, candidate model.Policy) error {
+// ValidateTargets checks the targets of the policy against the initiating organization and the
+// target organizations.
+func ValidateTargets(ctx context.Context, initiator orgModel.Organization, p model.Policy) error {
 
-	input, orgs, err := loadTree(ctx, initiator.PrimaryOrgId)
-	if err != nil {
-		return err
-	}
-	if problems := ValidatePolicy(input.Orgs, candidate); len(problems) > 0 {
-		return badRequest(errors2.SHARE_BAD_REQUEST, strings.Join(problems, "; "))
-	}
-	if candidate.ResourceType != model.ResourceUnificationRule {
-		return nil
-	}
-	replaced := false
-	for i, p := range input.Policies {
-		if p.PolicyId == candidate.PolicyId {
-			input.Policies[i] = candidate
-			replaced = true
+	orgs := []orgModel.Organization{initiator}
+	if !IsAllChildren(p.Targets) {
+		ids := make([]string, 0, len(p.Targets))
+		for _, t := range p.Targets {
+			ids = append(ids, t.OrgId)
 		}
-	}
-	if !replaced {
-		input.Policies = append(input.Policies, candidate)
-	}
-	var missing []string
-	for _, s := range Evaluate(input) {
-		if s.ResourceId == candidate.ResourceId && s.State == model.StateInactiveMissingAttribute {
-			missing = append(missing, handleOf(orgs, s.OrgId))
+		targets, err := orgStore.GetOrganizationsByIds(ctx, ids)
+		if err != nil {
+			return err
 		}
+		orgs = append(orgs, targets...)
 	}
-	if len(missing) > 0 {
-		return badRequest(errors2.SHARE_MISSING_ATTRIBUTE, fmt.Sprintf("No compatible attribute for the rule "+
-			"property is visible in these organizations: %s. Share the attribute first, or change the targets.",
-			strings.Join(missing, ", ")))
+	if problems := ValidatePolicy(treeOrgs(orgs), p); len(problems) > 0 {
+		return BadRequest(strings.Join(problems, "; "))
 	}
 	return nil
-}
-
-// loadTree loads the organizations, the resources, and the policies of an organization tree.
-func loadTree(ctx context.Context, primaryOrgId string) (EngineInput, []orgModel.Organization, error) {
-
-	orgs, err := orgStore.GetOrganizationsByPrimaryOrg(ctx, primaryOrgId)
-	if err != nil {
-		return EngineInput{}, nil, err
-	}
-	attrs, err := store.GetAttributesByPrimaryOrg(ctx, primaryOrgId)
-	if err != nil {
-		return EngineInput{}, nil, err
-	}
-	rules, err := store.GetRulesByPrimaryOrg(ctx, primaryOrgId)
-	if err != nil {
-		return EngineInput{}, nil, err
-	}
-	policies, err := store.GetPoliciesByPrimaryOrg(ctx, primaryOrgId)
-	if err != nil {
-		return EngineInput{}, nil, err
-	}
-
-	input := EngineInput{Orgs: treeOrgs(orgs), Policies: policies}
-	// All sub organizations of a tree share one identity attribute source.
-	for _, o := range orgs {
-		if !o.IsPrimary() {
-			input.IdentitySourceOrgId = identitySourceOrgId(ctx, orgs, o.OrgHandle)
-			break
-		}
-	}
-	access, err := store.GetPolicy(ctx, model.ResourceOrganizationAccess, model.OrganizationAccessResourceId,
-		primaryOrgId)
-	if err != nil {
-		return EngineInput{}, nil, err
-	}
-	enabled := map[string]bool{primaryOrgId: true}
-	if access != nil {
-		for _, id := range Reach(input.Orgs, *access) {
-			enabled[id] = true
-		}
-	}
-	for i := range input.Orgs {
-		input.Orgs[i].NotEnabled = !enabled[input.Orgs[i].Id]
-	}
-	for _, a := range attrs {
-		input.Attributes = append(input.Attributes, AttributeInfo{Id: a.Id, Name: a.Name, ValueType: a.ValueType,
-			OwnerOrgId: a.OrgId, AppId: appIdOf(a.Scope, a.ApplicationIdentifier)})
-	}
-	for _, r := range rules {
-		input.Rules = append(input.Rules, RuleInfo{Id: r.Id, PropertyName: r.PropertyName, PropertyId: r.PropertyId,
-			OwnerOrgId: r.OrgId})
-	}
-	return input, orgs, nil
 }
 
 // ToResponse maps a policy to the API.
@@ -485,14 +416,4 @@ func badRequest(msg errors2.ErrorMessage, description string) error {
 		Message:     msg.Message,
 		Description: description,
 	}, http.StatusBadRequest)
-}
-
-func handleOf(orgs []orgModel.Organization, orgId string) string {
-
-	for _, o := range orgs {
-		if o.OrgId == orgId {
-			return o.OrgHandle
-		}
-	}
-	return orgId
 }

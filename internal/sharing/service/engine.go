@@ -215,12 +215,6 @@ func ValidatePolicy(orgs []TreeOrg, p model.Policy) []string {
 	return problems
 }
 
-// Evaluate returns the state of every shared resource in every organization that its policy
-// reaches.
-func Evaluate(in EngineInput) []model.State {
-	return evaluate(in, "")
-}
-
 // EvaluateOrg returns the state of every shared resource that reaches the organization.
 func EvaluateOrg(in EngineInput, orgId string) []model.State {
 	return evaluate(in, orgId)

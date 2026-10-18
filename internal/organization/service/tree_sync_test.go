@@ -21,6 +21,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -452,6 +453,76 @@ func TestOrganizationAccessNeedsACompletedSync(t *testing.T) {
 	waitState(t, ctx, model.TreeSyncSynced)
 	if _, err := CreateOrgAccess(ctx, *primary, req); err != nil {
 		t.Fatalf("expected organization access after the sync, got %v", err)
+	}
+}
+
+func TestOrganizationAccessChecksTheSelectedOrganizations(t *testing.T) {
+
+	fake := &fakeIdP{orgs: tree()}
+	ctx := setUp(t, fake)
+	primary, err := EnsurePrimary(ctx, primaryHandle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := StartTreeSync(ctx, primaryHandle); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, ctx, model.TreeSyncSynced)
+	selected := func(ids ...string) shareModel.PolicyRequest {
+		req := shareModel.PolicyRequest{ChildOrgs: &shareModel.ChildOrgs{Mode: shareModel.ChildOrgsModeSelected}}
+		for _, id := range ids {
+			req.ChildOrgs.Orgs = append(req.ChildOrgs.Orgs, shareModel.ChildOrg{OrgId: id, Reach: shareModel.ReachOrg})
+		}
+		return req
+	}
+
+	for _, ids := range [][]string{{"teama"}, {"unknown"}, {"region1", "teama"}} {
+		if _, err := CreateOrgAccess(ctx, *primary, selected(ids...)); clientErrorCode(err) !=
+			errors2.SHARE_BAD_REQUEST.Code {
+			t.Fatalf("expected SHARE_BAD_REQUEST for %v, got %v", ids, err)
+		}
+	}
+	created, err := CreateOrgAccess(ctx, *primary, selected("region1", "region2"))
+	if err != nil {
+		t.Fatalf("expected organization access for the direct children, got %v", err)
+	}
+	if got := len(created.ChildOrgs.Orgs); got != 2 {
+		t.Fatalf("expected 2 selected organizations, got %d", got)
+	}
+}
+
+func TestOrganizationAccessStoresManySelectedOrganizations(t *testing.T) {
+
+	const count = 2500
+	var orgs []idp.Organization
+	req := shareModel.PolicyRequest{ChildOrgs: &shareModel.ChildOrgs{Mode: shareModel.ChildOrgsModeSelected}}
+	for i := 0; i < count; i++ {
+		id := fmt.Sprintf("child%04d", i)
+		orgs = append(orgs, idp.Organization{Id: id, Handle: id, Name: id, ParentId: primaryId,
+			Status: model.StatusActive})
+		req.ChildOrgs.Orgs = append(req.ChildOrgs.Orgs, shareModel.ChildOrg{OrgId: id, Reach: shareModel.ReachOrg})
+	}
+	fake := &fakeIdP{orgs: orgs}
+	ctx := setUp(t, fake)
+	primary, err := EnsurePrimary(ctx, primaryHandle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := StartTreeSync(ctx, primaryHandle); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, ctx, model.TreeSyncSynced)
+
+	created, err := CreateOrgAccess(ctx, *primary, req)
+	if err != nil {
+		t.Fatalf("expected organization access for %d organizations, got %v", count, err)
+	}
+	stored, err := GetOrgAccess(ctx, *primary, created.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(stored.ChildOrgs.Orgs); got != count {
+		t.Fatalf("expected %d stored organizations, got %d", count, got)
 	}
 }
 

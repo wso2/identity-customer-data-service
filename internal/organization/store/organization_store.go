@@ -21,6 +21,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
@@ -87,6 +88,39 @@ func GetOrganizationsByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]m
 	orgs := make([]model.Organization, 0, len(results))
 	for _, row := range results {
 		orgs = append(orgs, mapRow(row))
+	}
+	return orgs, nil
+}
+
+// idBatchSize is the maximum number of IDs in one IN list.
+const idBatchSize = 1000
+
+// GetOrganizationsByIds returns the stored organizations with the IDs.
+func GetOrganizationsByIds(ctx context.Context, orgIds []string) ([]model.Organization, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, serverError("Failed to get a database client to read organizations.", err)
+	}
+	defer dbClient.Close()
+
+	orgs := make([]model.Organization, 0, len(orgIds))
+	for start := 0; start < len(orgIds); start += idBatchSize {
+		batch := orgIds[start:min(start+idBatchSize, len(orgIds))]
+		placeholders := make([]string, len(batch))
+		args := make([]interface{}, len(batch))
+		for i, id := range batch {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = id
+		}
+		results, err := dbClient.ExecuteQueryContext(ctx,
+			scripts.GetOrganizationsByIds.Format(strings.Join(placeholders, ", ")), args...)
+		if err != nil {
+			return nil, serverError("Failed to read organizations by ID.", err)
+		}
+		for _, row := range results {
+			orgs = append(orgs, mapRow(row))
+		}
 	}
 	return orgs, nil
 }

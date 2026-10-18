@@ -63,6 +63,10 @@ var GetOrganizationChain = newQuery("CDS-ORG-07",
 	chainOf+`SELECT `+organizationColumnsOfO+` FROM organizations o JOIN chain c ON c.org_id = o.org_id
 	ORDER BY c.hops DESC`)
 
+// GetOrganizationsByIds returns the organizations with the IDs. The %s is the IN list.
+var GetOrganizationsByIds = newQuery("CDS-ORG-08",
+	`SELECT `+organizationColumns+` FROM organizations WHERE org_id IN (%s)`)
+
 var InsertSharePolicy = newQuery("CDS-SHR-01",
 	`INSERT INTO cds_share_policy (policy_id, resource_type, resource_id, owning_org_id, initiating_org_id)
 	VALUES ($1, $2, $3, $4, $5)`)
@@ -76,21 +80,12 @@ var GetSharePolicy = newQuery("CDS-SHR-03",
 	`SELECT `+sharePolicyColumns+` FROM cds_share_policy p
 	WHERE p.resource_type = $1 AND p.resource_id = $2 AND p.initiating_org_id = $3`)
 
-// GetSharePoliciesByPrimaryOrg returns the share policies of one organization tree.
-var GetSharePoliciesByPrimaryOrg = newQuery("CDS-SHR-04",
-	`SELECT `+sharePolicyColumns+` FROM cds_share_policy p JOIN organizations o ON o.org_id = p.owning_org_id
-	WHERE o.primary_org_id = $1 AND p.resource_type <> 'ORGANIZATION_ACCESS' ORDER BY p.policy_id`)
-
-var GetSharePolicyTargetsByPrimaryOrg = newQuery("CDS-SHR-05",
-	`SELECT t.policy_id, t.target_scope, t.target_org_id FROM cds_share_policy_target t
-	JOIN cds_share_policy p ON p.policy_id = t.policy_id JOIN organizations o ON o.org_id = p.owning_org_id
-	WHERE o.primary_org_id = $1 AND p.resource_type <> 'ORGANIZATION_ACCESS'`)
-
 var GetSharePolicyTargets = newQuery("CDS-SHR-06",
 	`SELECT t.policy_id, t.target_scope, t.target_org_id FROM cds_share_policy_target t WHERE t.policy_id = $1`)
 
-var InsertSharePolicyTarget = newQuery("CDS-SHR-07",
-	`INSERT INTO cds_share_policy_target (policy_id, target_scope, target_org_id) VALUES ($1, $2, $3)
+// InsertSharePolicyTargets stores the targets of a policy. The %s is the VALUES list.
+var InsertSharePolicyTargets = newQuery("CDS-SHR-07",
+	`INSERT INTO cds_share_policy_target (policy_id, target_scope, target_org_id) VALUES %s
 	ON CONFLICT DO NOTHING`)
 
 var DeleteSharePolicyTargets = newQuery("CDS-SHR-08",
@@ -138,15 +133,3 @@ var GetUnificationRulesOfChain = newQuery("CDS-SHR-16",
 	r.created_at, r.updated_at, o.org_id, c.hops AS owner_hops
 	FROM unification_rules r JOIN organizations o ON o.org_handle = r.org_handle
 	JOIN chain c ON c.org_id = o.org_id`)
-
-// GetSchemaAttributesByPrimaryOrg returns the attributes of all organizations of one organization
-// tree.
-var GetSchemaAttributesByPrimaryOrg = newQuery("CDS-SHR-17",
-	`SELECT ps.attribute_id, ps.attribute_name, ps.scope, ps.value_type, ps.application_identifier,
-	ps.org_handle, o.org_id
-	FROM profile_schema ps JOIN organizations o ON o.org_handle = ps.org_handle WHERE o.primary_org_id = $1`)
-
-// GetUnificationRulesByPrimaryOrg returns the rules of all organizations of one organization tree.
-var GetUnificationRulesByPrimaryOrg = newQuery("CDS-SHR-18",
-	`SELECT r.rule_id, r.property_name, r.property_id, r.org_handle, o.org_id
-	FROM unification_rules r JOIN organizations o ON o.org_handle = r.org_handle WHERE o.primary_org_id = $1`)

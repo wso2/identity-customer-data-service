@@ -419,11 +419,6 @@ var (
 		Message: "Name is used by a shared resource.",
 	}
 
-	SHARE_MISSING_ATTRIBUTE = ErrorMessage{
-		Code:    errorPrefix + "17005",
-		Message: "Rule attribute is not visible in a target organization.",
-	}
-
 	ORGANIZATION_NOT_FOUND = ErrorMessage{
 		Code:    errorPrefix + "17006",
 		Message: "Organization not found.",

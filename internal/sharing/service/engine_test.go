@@ -146,7 +146,7 @@ func TestEvaluateAttributeConflicts(t *testing.T) {
 			policy(model.ResourceSchemaAttribute, "a-tier", "A", allChildren("A")),
 		},
 	}
-	states := Evaluate(in)
+	states := evaluate(in, "")
 
 	primary := statesByOrg(states, "primary-tier")
 	if primary["A"].State != model.StateConflicted || primary["A"].Reason != model.ReasonLocalNameConflict ||
@@ -193,7 +193,7 @@ func TestEvaluateRuleDependencies(t *testing.T) {
 			policy(model.ResourceUnificationRule, "loyalty-rule", "R", all),
 		},
 	}
-	states := Evaluate(in)
+	states := evaluate(in, "")
 
 	email := statesByOrg(states, "email-rule")
 	if email["A"].State != model.StateActive {
@@ -218,7 +218,7 @@ func TestEvaluateRuleDependencies(t *testing.T) {
 	}
 }
 
-// EvaluateOrg must give the same result as Evaluate on the full tree.
+// EvaluateOrg on the ancestor chain must give the same result as an evaluation of the full tree.
 func TestEvaluateOrgMatchesTree(t *testing.T) {
 
 	attrs := []AttributeInfo{
@@ -230,7 +230,7 @@ func TestEvaluateOrgMatchesTree(t *testing.T) {
 		policy(model.ResourceSchemaAttribute, "primary-tier", "R", allChildren("R")),
 		policy(model.ResourceSchemaAttribute, "a-tier", "A", allChildren("A")),
 	}
-	full := Evaluate(EngineInput{Orgs: testTree(), Attributes: attrs, Policies: policies})
+	full := evaluate(EngineInput{Orgs: testTree(), Attributes: attrs, Policies: policies}, "")
 
 	chain := []TreeOrg{testTree()[0], testTree()[1], testTree()[3], testTree()[5]} // R, A, A1, A1x
 	chainAttrs := attrs[:2]                                                        // B is not in the chain
@@ -329,7 +329,7 @@ func TestEvaluateRuleFarthestOwnerWins(t *testing.T) {
 			policy(model.ResourceUnificationRule, "primary-rule", "R", allChildren("R")),
 		},
 	}
-	states := Evaluate(in)
+	states := evaluate(in, "")
 	if s := statesByOrg(states, "primary-rule")["A1"]; s.State != model.StateActive {
 		t.Errorf("expected the rule of the primary org to win in A1, got %+v", s)
 	}
@@ -406,7 +406,7 @@ func TestEvaluateAppDataFollowsThePolicyOnly(t *testing.T) {
 		},
 		Policies: []model.Policy{policy(model.ResourceSchemaAttribute, "cart", "R", allChildren("R"))},
 	}
-	states := statesByOrg(Evaluate(in), "cart")
+	states := statesByOrg(evaluate(in, ""), "cart")
 	for _, org := range []string{"A", "A1", "B", "A1x"} {
 		if states[org].State != model.StateActive {
 			t.Errorf("expected ACTIVE in %s, got %+v", org, states[org])
@@ -427,7 +427,7 @@ func TestEvaluateAppDataNamesAreScopedToTheApp(t *testing.T) {
 		},
 		Policies: []model.Policy{policy(model.ResourceSchemaAttribute, "shop-cart", "R", allChildren("R"))},
 	}
-	states := statesByOrg(Evaluate(in), "shop-cart")
+	states := statesByOrg(evaluate(in, ""), "shop-cart")
 	if states["A"].State != model.StateActive {
 		t.Errorf("expected ACTIVE in A, where the local attribute belongs to another app, got %+v", states["A"])
 	}
@@ -456,20 +456,20 @@ func TestEvaluateRuleOnInheritedIdentityAttribute(t *testing.T) {
 		},
 		IdentitySourceOrgId: "R",
 	}
-	for org, s := range statesByOrg(Evaluate(in), "email-rule") {
+	for org, s := range statesByOrg(evaluate(in, ""), "email-rule") {
 		if s.State != model.StateActive {
 			t.Errorf("expected ACTIVE in %s, which inherits the identity attribute, got %+v", org, s)
 		}
 	}
 	// Only identity attributes are inherited. A trait needs a share.
-	for org, s := range statesByOrg(Evaluate(in), "tier-rule") {
+	for org, s := range statesByOrg(evaluate(in, ""), "tier-rule") {
 		if s.State != model.StateInactiveMissingAttribute {
 			t.Errorf("expected INACTIVE_MISSING_ATTRIBUTE in %s for a trait that is not shared, got %+v", org, s)
 		}
 	}
 	// Without a source organization, the sub organizations see no identity attributes.
 	in.IdentitySourceOrgId = ""
-	for org, s := range statesByOrg(Evaluate(in), "email-rule") {
+	for org, s := range statesByOrg(evaluate(in, ""), "email-rule") {
 		if s.State != model.StateInactiveMissingAttribute {
 			t.Errorf("expected INACTIVE_MISSING_ATTRIBUTE in %s with no source org, got %+v", org, s)
 		}

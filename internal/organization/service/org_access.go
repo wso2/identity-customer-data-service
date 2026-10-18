@@ -73,7 +73,7 @@ func CreateOrgAccess(ctx context.Context, primary model.Organization,
 		InitiatingOrgId: primary.OrgId,
 		Targets:         targets,
 	}
-	if err := validateOrgAccess(ctx, primary, p); err != nil {
+	if err := sharingService.ValidateTargets(ctx, primary, p); err != nil {
 		return nil, err
 	}
 	if err := shareStore.CreatePolicy(ctx, p); err != nil {
@@ -135,7 +135,7 @@ func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId s
 			"then create a new one.")
 	}
 	p.Targets = targets
-	if err := validateOrgAccess(ctx, primary, *p); err != nil {
+	if err := sharingService.ValidateTargets(ctx, primary, *p); err != nil {
 		return nil, err
 	}
 	if err := shareStore.ReplaceTargets(ctx, p.PolicyId, targets); err != nil {
@@ -189,28 +189,6 @@ func orgAccessById(ctx context.Context, primary model.Organization, policyId str
 		return nil, sharingService.PolicyNotFoundError(policyId)
 	}
 	return p, nil
-}
-
-func validateOrgAccess(ctx context.Context, primary model.Organization, p shareModel.Policy) error {
-
-	orgs, err := store.GetOrganizationsByPrimaryOrg(ctx, primary.OrgId)
-	if err != nil {
-		return err
-	}
-	if problems := sharingService.ValidatePolicy(treeOf(orgs), p); len(problems) > 0 {
-		return sharingService.BadRequest(strings.Join(problems, "; "))
-	}
-	return nil
-}
-
-func treeOf(orgs []model.Organization) []sharingService.TreeOrg {
-
-	result := make([]sharingService.TreeOrg, 0, len(orgs))
-	for _, o := range orgs {
-		result = append(result, sharingService.TreeOrg{Id: o.OrgId, Handle: o.OrgHandle, ParentId: o.ParentOrgId,
-			Active: o.Status == model.StatusActive})
-	}
-	return result
 }
 
 func toOrgAccessResponse(p shareModel.Policy) shareModel.OrgAccessResponse {

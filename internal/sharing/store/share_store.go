@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
@@ -102,12 +103,22 @@ func ReplaceTargets(ctx context.Context, policyId string, targets []model.Target
 	})
 }
 
+// targetBatchSize is the maximum number of targets in one insert statement.
+const targetBatchSize = 1000
+
 func insertTargets(ctx context.Context, tx *dbmodel.Tx, policyId string, targets []model.Target) error {
 
-	for _, target := range targets {
-		if _, err := tx.ExecContext(ctx, scripts.InsertSharePolicyTarget, policyId, target.Scope,
-			target.OrgId); err != nil {
-			return serverError("Failed to store a share policy target.", err)
+	for start := 0; start < len(targets); start += targetBatchSize {
+		batch := targets[start:min(start+targetBatchSize, len(targets))]
+		values := make([]string, len(batch))
+		args := make([]interface{}, 0, 3*len(batch))
+		for i, target := range batch {
+			values[i] = fmt.Sprintf("($%d, $%d, $%d)", 3*i+1, 3*i+2, 3*i+3)
+			args = append(args, policyId, target.Scope, target.OrgId)
+		}
+		query := scripts.InsertSharePolicyTargets.Format(strings.Join(values, ", "))
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return serverError("Failed to store the share policy targets.", err)
 		}
 	}
 	return nil
@@ -162,31 +173,6 @@ func GetPolicy(ctx context.Context, resourceType, resourceId, initiatingOrgId st
 		return nil, err
 	}
 	return withTargets(ctx, results)
-}
-
-// GetPoliciesByPrimaryOrg returns the share policies of one organization tree with their targets.
-func GetPoliciesByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]model.Policy, error) {
-
-	policyRows, err := query(ctx, scripts.GetSharePoliciesByPrimaryOrg, primaryOrgId)
-	if err != nil {
-		return nil, err
-	}
-	targetRows, err := query(ctx, scripts.GetSharePolicyTargetsByPrimaryOrg, primaryOrgId)
-	if err != nil {
-		return nil, err
-	}
-	targets := map[string][]model.Target{}
-	for _, row := range targetRows {
-		id := rows.String(row, "policy_id")
-		targets[id] = append(targets[id], targetOf(row))
-	}
-	policies := make([]model.Policy, 0, len(policyRows))
-	for _, row := range policyRows {
-		p := policyOf(row)
-		p.Targets = targets[p.PolicyId]
-		policies = append(policies, p)
-	}
-	return policies, nil
 }
 
 // GetPoliciesReachingOrg returns the share policies whose targets reach the organization.
@@ -340,59 +326,6 @@ func GetRulesOfChain(ctx context.Context, orgId string) ([]ChainRule, error) {
 					UpdatedAt:    rows.Time(row, "updated_at"),
 				},
 			},
-		})
-	}
-	return result, nil
-}
-
-// TreeAttribute is an attribute of one organization of the tree, for the share evaluation.
-type TreeAttribute struct {
-	Id, Name, Scope, ValueType, ApplicationIdentifier, OrgHandle, OrgId string
-}
-
-// GetAttributesByPrimaryOrg returns the attributes of all organizations of one organization tree.
-func GetAttributesByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]TreeAttribute, error) {
-
-	results, err := query(ctx, scripts.GetSchemaAttributesByPrimaryOrg, primaryOrgId)
-	if err != nil {
-		return nil, err
-	}
-	attrs := make([]TreeAttribute, 0, len(results))
-	for _, row := range results {
-		attrs = append(attrs, TreeAttribute{
-			Id:        rows.String(row, "attribute_id"),
-			Name:      rows.String(row, "attribute_name"),
-			Scope:     rows.String(row, "scope"),
-			ValueType: rows.String(row, "value_type"),
-			OrgHandle: rows.String(row, "org_handle"),
-			OrgId:     rows.String(row, "org_id"),
-
-			ApplicationIdentifier: rows.String(row, "application_identifier"),
-		})
-	}
-	return attrs, nil
-}
-
-// TreeRule is a rule of one organization of the tree, for the share evaluation.
-type TreeRule struct {
-	Id, PropertyName, PropertyId, OrgHandle, OrgId string
-}
-
-// GetRulesByPrimaryOrg returns the rules of all organizations of one organization tree.
-func GetRulesByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]TreeRule, error) {
-
-	results, err := query(ctx, scripts.GetUnificationRulesByPrimaryOrg, primaryOrgId)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]TreeRule, 0, len(results))
-	for _, row := range results {
-		result = append(result, TreeRule{
-			Id:           rows.String(row, "rule_id"),
-			PropertyName: rows.String(row, "property_name"),
-			PropertyId:   rows.String(row, "property_id"),
-			OrgHandle:    rows.String(row, "org_handle"),
-			OrgId:        rows.String(row, "org_id"),
 		})
 	}
 	return result, nil
