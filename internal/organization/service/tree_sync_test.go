@@ -396,7 +396,7 @@ func TestEventsApplyAfterTheFirstSync(t *testing.T) {
 		t.Fatal("an event with a known parent must not read the tree")
 	}
 
-	// An unknown parent: the event starts a background sync.
+	// An unknown parent: the event is ignored, and no sync starts.
 	fake.mu.Lock()
 	fake.orgs = append(fake.orgs,
 		idp.Organization{Id: "region3", Handle: "region3", ParentId: primaryId, Status: model.StatusActive},
@@ -407,10 +407,29 @@ func TestEventsApplyAfterTheFirstSync(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitIdle(t)
+	if got := orgStatus(t, ctx, "teamc"); got != "" {
+		t.Fatalf("expected no row for teamc, got %q", got)
+	}
+	if list, _ := fake.calls(); list != listBefore {
+		t.Fatal("an event with an unknown parent must not read the tree")
+	}
+
+	// The next tree sync adds the organization.
+	if _, err := StartTreeSync(ctx, primaryHandle); err != nil {
+		t.Fatal(err)
+	}
 	waitState(t, ctx, model.TreeSyncSynced)
 	if got := orgStatus(t, ctx, "teamc"); got != model.StatusActive {
-		t.Fatalf("expected teamc ACTIVE after the background sync, got %q", got)
+		t.Fatalf("expected teamc ACTIVE after the tree sync, got %q", got)
 	}
+}
+
+// requestSyncAgain requests one more run of the running sync.
+func requestSyncAgain() {
+
+	treeSyncMu.Lock()
+	defer treeSyncMu.Unlock()
+	scheduleLocked(primaryHandle)
 }
 
 func TestATriggerDuringASyncRunsItAgain(t *testing.T) {
@@ -422,9 +441,7 @@ func TestATriggerDuringASyncRunsItAgain(t *testing.T) {
 	}
 	// Two triggers during the run ask for one more run.
 	for i := 0; i < 2; i++ {
-		if err := scheduleTreeSync(ctx, primaryHandle); err != nil {
-			t.Fatal(err)
-		}
+		requestSyncAgain()
 	}
 	close(fake.release)
 	waitIdle(t)
@@ -627,9 +644,7 @@ func TestASyncThatEndsAfterADisableStoresNoState(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A trigger during the run asks for one more run, but the disable cancels it.
-	if err := scheduleTreeSync(ctx, primaryHandle); err != nil {
-		t.Fatal(err)
-	}
+	requestSyncAgain()
 	setCDSEnabled(t, ctx, false)
 	if err := ResetTreeSync(ctx, primaryHandle); err != nil {
 		t.Fatal(err)

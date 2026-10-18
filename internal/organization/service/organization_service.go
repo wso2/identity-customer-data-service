@@ -146,23 +146,6 @@ func GetTreeSyncStatus(ctx context.Context, primaryHandle string) (*model.TreeSy
 	return store.GetTreeSyncStatus(ctx, primaryHandle)
 }
 
-// scheduleTreeSync starts a background sync of the organization tree. If a sync is running, it
-// requests one more run.
-func scheduleTreeSync(ctx context.Context, primaryHandle string) error {
-
-	treeSyncMu.Lock()
-	defer treeSyncMu.Unlock()
-	if run, running := treeSyncRuns[primaryHandle]; running {
-		run.again = true
-		return nil
-	}
-	if err := markSyncing(ctx, primaryHandle); err != nil {
-		return err
-	}
-	scheduleLocked(primaryHandle)
-	return nil
-}
-
 // scheduleLocked starts the sync goroutine. The caller holds treeSyncMu.
 func scheduleLocked(primaryHandle string) {
 
@@ -406,13 +389,10 @@ func HandleSyncEvent(ctx context.Context, pathHandle string, event model.SyncEve
 		if err != nil {
 			return err
 		}
-		previous, err := store.GetOrganizationById(ctx, info.Id)
-		if err != nil {
-			return err
-		}
-		// A new parent or a move needs a full tree sync.
-		if parent == nil || (previous != nil && previous.ParentOrgId != info.ParentId) {
-			return scheduleTreeSync(ctx, primaryHandle)
+		if parent == nil {
+			log.GetLogger().Info(fmt.Sprintf("Ignoring the organization event %s of '%s', because its parent "+
+				"'%s' is not stored.", event.Event, info.Id, info.ParentId))
+			return nil
 		}
 		status := model.StatusActive
 		if info.Status == model.StatusDisabled {
