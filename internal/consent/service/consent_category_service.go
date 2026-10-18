@@ -39,7 +39,7 @@ type ConsentCategoryServiceInterface interface {
 	GetConsentCategory(ctx context.Context, id string) (*model.ConsentCategory, error)
 	AddConsentCategory(ctx context.Context, category model.ConsentCategory) (*model.ConsentCategory, error)
 	UpdateConsentCategory(ctx context.Context, category model.ConsentCategory) error
-	DeleteConsentCategory(ctx context.Context, id string) error
+	DeleteConsentCategory(ctx context.Context, id, orgHandle string) error
 	SeedDefaultConsentCategory(ctx context.Context, orgHandle string) error
 }
 
@@ -244,22 +244,16 @@ func (cs *ConsentCategoryService) UpdateConsentCategory(ctx context.Context, cat
 }
 
 // DeleteConsentCategory deletes an existing category.
-func (cs *ConsentCategoryService) DeleteConsentCategory(ctx context.Context, categoryId string) error {
+func (cs *ConsentCategoryService) DeleteConsentCategory(ctx context.Context, categoryId, orgHandle string) error {
+	if err := suborg.RejectWrite(ctx, orgHandle); err != nil {
+		return err
+	}
 	if categoryId == "" {
 		return errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.BAD_REQUEST.Code,
 			Message:     errors2.BAD_REQUEST.Message,
 			Description: "Consent category Id is required for update.",
 		}, http.StatusBadRequest)
-	}
-	cat, err := store.GetConsentCategoryByID(ctx, categoryId)
-	if err != nil {
-		return err
-	}
-	if cat != nil {
-		if err := suborg.RejectWrite(ctx, cat.OrgHandle); err != nil {
-			return err
-		}
 	}
 	if err := guardMandatoryCategory(ctx, categoryId); err != nil {
 		return err

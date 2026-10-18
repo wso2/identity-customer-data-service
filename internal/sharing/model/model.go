@@ -22,24 +22,23 @@ package model
 const (
 	ResourceSchemaAttribute = "SCHEMA_ATTRIBUTE"
 	ResourceUnificationRule = "UNIFICATION_RULE"
-	// ResourceOrganizationAccess is the policy that selects the sub orgs of a primary org that can
-	// use CDS. Its resource ID is always OrganizationAccessResourceId.
+	// ResourceOrganizationAccess is the policy that selects the sub organizations that can use CDS.
 	ResourceOrganizationAccess   = "ORGANIZATION_ACCESS"
 	OrganizationAccessResourceId = "CDS"
 )
 
 // Stored target scopes.
 const (
-	// ScopeAllChildren reaches all current and future orgs below the initiating org. The target
-	// row stores the initiating org.
+	// ScopeAllChildren reaches all current and future organizations below the initiating
+	// organization. The target row stores the initiating organization.
 	ScopeAllChildren = "ALL_CHILDREN"
-	// ScopeOrg reaches one direct child of the initiating org.
+	// ScopeOrg reaches one direct child of the initiating organization.
 	ScopeOrg = "ORG"
-	// ScopeOrgSubtree reaches one direct child and all current and future orgs below it.
+	// ScopeOrgSubtree reaches one direct child and all current and future organizations below it.
 	ScopeOrgSubtree = "ORG_SUBTREE"
 )
 
-// Share states of a resource in one org.
+// Share states of a resource in one organization.
 const (
 	StateActive                   = "ACTIVE"
 	StateConflicted               = "CONFLICTED"
@@ -53,11 +52,11 @@ const (
 	ReasonMissingAttribute   = "MISSING_ATTRIBUTE"
 )
 
-// Origin of a resource in the view of an org.
+// Origin of a resource in the view of an organization.
 const (
 	OriginOwned  = "OWNED"
 	OriginShared = "SHARED"
-	// OriginInherited is an identity attribute that a sub org inherits from its primary org.
+	// OriginInherited is an identity attribute that a sub organization inherits.
 	OriginInherited = "INHERITED"
 )
 
@@ -67,8 +66,8 @@ type Target struct {
 	OrgId string
 }
 
-// Policy says which orgs can see one resource. There is one policy for each resource and
-// initiating org.
+// Policy defines which organizations can see one resource. There is one policy for each resource
+// and initiating organization.
 type Policy struct {
 	PolicyId        string
 	ResourceType    string
@@ -78,7 +77,7 @@ type Policy struct {
 	Targets         []Target
 }
 
-// State is the result of the policies for one resource in one org.
+// State is the result of the policies for one resource in one organization.
 type State struct {
 	ResourceType          string `json:"-"`
 	ResourceId            string `json:"-"`
@@ -91,28 +90,30 @@ type State struct {
 
 // Modes of child_orgs.
 const (
-	// ChildOrgsModeAll reaches all current and future orgs below the initiating org.
+	// ChildOrgsModeAll reaches all current and future organizations below the initiating
+	// organization.
 	ChildOrgsModeAll = "all"
-	// ChildOrgsModeSelected reaches the orgs that orgs names.
+	// ChildOrgsModeSelected reaches the organizations that `orgs` names.
 	ChildOrgsModeSelected = "selected"
 )
 
-// Reaches of a selected org.
+// Reaches of a selected organization.
 const (
-	// ReachOrg reaches the selected org only.
+	// ReachOrg reaches the selected organization only.
 	ReachOrg = "org"
-	// ReachSubtree reaches the selected org and all current and future orgs below it.
+	// ReachSubtree reaches the selected organization and all current and future organizations below
+	// it.
 	ReachSubtree = "subtree"
 )
 
-// ChildOrg is one selected org of child_orgs, with its reach.
+// ChildOrg is one selected organization of child_orgs, with its reach.
 type ChildOrg struct {
 	OrgId string `json:"org_id"`
 	Reach string `json:"reach"`
 }
 
-// ChildOrgs is the reach of a policy in the API. Mode states the decision: all orgs below the
-// initiating org, or the selected orgs.
+// ChildOrgs is the reach of a policy in the API. Mode is all organizations below the initiating
+// organization, or the selected organizations.
 type ChildOrgs struct {
 	Mode string     `json:"mode"`
 	Orgs []ChildOrg `json:"orgs,omitempty"`
@@ -139,7 +140,7 @@ type PolicyList struct {
 	Policies     []PolicyResponse `json:"policies"`
 }
 
-// OrgAccessResponse is the organization access policy of a primary org in the API.
+// OrgAccessResponse is the organization access policy of a primary organization in the API.
 type OrgAccessResponse struct {
 	Id              string    `json:"id"`
 	OwningOrgId     string    `json:"owning_org_id"`
@@ -147,7 +148,7 @@ type OrgAccessResponse struct {
 	ChildOrgs       ChildOrgs `json:"child_orgs"`
 }
 
-// OrgAccessList is the list of the organization access policies of a primary org.
+// OrgAccessList is the list of the organization access policies of a primary organization.
 type OrgAccessList struct {
 	TotalResults int                 `json:"total_results"`
 	Policies     []OrgAccessResponse `json:"policies"`

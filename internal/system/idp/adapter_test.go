@@ -23,8 +23,7 @@ import (
 	"testing"
 )
 
-// The WSO2 IS adapter needs the runtime configuration, so this test checks only the types that
-// CDS refuses at start.
+// An unsupported adapter type is refused.
 func TestNewAdapterRefusesOtherTypes(t *testing.T) {
 
 	cases := map[string]string{

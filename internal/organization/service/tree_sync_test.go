@@ -42,8 +42,7 @@ const (
 	primaryId     = "primary-id"
 )
 
-// fakeIdP is an identity provider with a fixed tree. onList runs inside ListDescendants, before it
-// returns, so that a test can act during a sync.
+// fakeIdP is an identity provider with a fixed tree. onList runs during ListDescendants.
 type fakeIdP struct {
 	mu        sync.Mutex
 	orgs      []idp.Organization
@@ -101,7 +100,8 @@ func (f *fakeIdP) calls() (int, int) {
 	return f.listCalls, f.getCalls
 }
 
-// setUp gives each test an empty SQLite database, a primary org that enabled CDS, and the fake IdP.
+// setUp prepares an empty database, a primary organization with CDS enabled, and the fake
+// identity provider.
 func setUp(t *testing.T, fake *fakeIdP) context.Context {
 
 	t.Helper()
@@ -234,7 +234,7 @@ func TestStartTreeSyncStoresTheTreeInTheBackground(t *testing.T) {
 	close(fake.release)
 
 	status = waitState(t, ctx, model.TreeSyncSynced)
-	if status.LastSyncedAt == nil || status.FinishedAt == nil || status.OrgCount == nil || *status.OrgCount != 4 {
+	if status.LastSyncedAt == nil || status.FinishedAt == nil {
 		t.Fatalf("unexpected end state: %+v", status)
 	}
 	for _, id := range []string{"region1", "teama", "region2"} {
@@ -243,7 +243,7 @@ func TestStartTreeSyncStoresTheTreeInTheBackground(t *testing.T) {
 		}
 	}
 
-	// A re-sync is allowed after a completed sync.
+	// A new sync can start after a sync completes.
 	waitIdle(t)
 	if _, err := StartTreeSync(ctx, primaryHandle); err != nil {
 		t.Fatalf("a re-sync failed: %v", err)
@@ -312,8 +312,8 @@ func TestSyncDoesNotDeleteOrgsThatAnEventChanged(t *testing.T) {
 	if _, err := syncTree(ctx, primaryHandle); err != nil {
 		t.Fatal(err)
 	}
-	// The IdP list of the next sync does not have region2 or the new teamb. During the list read,
-	// an event stores teamb and updates region2.
+	// The source tree of the next sync has no region2 and no teamb. During the sync, an event
+	// stores teamb and updates region2.
 	fake.mu.Lock()
 	fake.orgs = fake.orgs[:2]
 	fake.onList = func() {
@@ -378,7 +378,7 @@ func TestEventsApplyAfterTheFirstSync(t *testing.T) {
 	waitState(t, ctx, model.TreeSyncSynced)
 	waitIdle(t)
 
-	// A known parent: CDS stores the org from one read.
+	// A known parent: the event stores the organization.
 	fake.mu.Lock()
 	fake.orgs = append(fake.orgs, idp.Organization{Id: "teamb", Handle: "teamb", ParentId: "region1",
 		Status: model.StatusActive})
@@ -395,7 +395,7 @@ func TestEventsApplyAfterTheFirstSync(t *testing.T) {
 		t.Fatal("an event with a known parent must not read the tree")
 	}
 
-	// An unknown parent: CDS starts the background sync and returns at once.
+	// An unknown parent: the event starts a background sync.
 	fake.mu.Lock()
 	fake.orgs = append(fake.orgs,
 		idp.Organization{Id: "region3", Handle: "region3", ParentId: primaryId, Status: model.StatusActive},
@@ -477,7 +477,7 @@ func TestUnknownOrgsAreNotLookedUp(t *testing.T) {
 	}
 }
 
-// setCDSEnabled changes the CDS enable flag of the primary org in the config store.
+// setCDSEnabled sets the CDS enabled flag of the primary organization.
 func setCDSEnabled(t *testing.T, ctx context.Context, enabled bool) {
 
 	t.Helper()
@@ -509,11 +509,11 @@ func TestResetTreeSyncNeedsANewSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.State != model.TreeSyncNotSynced || status.LastSyncedAt != nil || status.OrgCount != nil ||
+	if status.State != model.TreeSyncNotSynced || status.LastSyncedAt != nil ||
 		status.StartedAt != nil || status.FinishedAt != nil || status.Error != "" {
 		t.Fatalf("expected a cleared sync state, got %+v", status)
 	}
-	// The stored orgs stay. The next sync updates them.
+	// The stored organizations stay. The next sync updates them.
 	if got := orgStatus(t, ctx, "region1"); got != model.StatusActive {
 		t.Fatalf("expected region1 to stay ACTIVE, got %q", got)
 	}
@@ -527,7 +527,7 @@ func TestResetTreeSyncNeedsANewSync(t *testing.T) {
 	if _, err := CreateOrgAccess(ctx, *primary, req); clientErrorCode(err) != errors2.ORGANIZATIONS_NOT_SYNCED.Code {
 		t.Fatalf("expected ORGANIZATIONS_NOT_SYNCED after the enable, got %v", err)
 	}
-	// Org events are ignored until the next sync.
+	// Organization events are ignored until the next sync.
 	fake.mu.Lock()
 	fake.orgs = append(fake.orgs, idp.Organization{Id: "region3", Handle: "region3", Name: "Region3",
 		ParentId: primaryId, Status: model.StatusActive})

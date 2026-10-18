@@ -157,7 +157,7 @@ func TestEvaluateAttributeConflicts(t *testing.T) {
 		t.Errorf("expected a local conflict in B, got %+v", primary["B"])
 	}
 	// The nearest owner wins: in A1 and A1x, the attribute of A wins over the attribute of the
-	// primary org.
+	// primary organization.
 	if primary["A1"].State != model.StateConflicted || primary["A1"].Reason != model.ReasonSharedNameConflict ||
 		primary["A1"].ConflictingResourceId != "a-tier" {
 		t.Errorf("expected the attribute of the primary org to lose to the nearer owner in A1, got %+v", primary["A1"])
@@ -218,8 +218,7 @@ func TestEvaluateRuleDependencies(t *testing.T) {
 	}
 }
 
-// The read for one org loads only its ancestor chain, its own resources, and the resources of the
-// policies that reach it. The result must be the same as for the full tree.
+// EvaluateOrg must give the same result as Evaluate on the full tree.
 func TestEvaluateOrgMatchesTree(t *testing.T) {
 
 	attrs := []AttributeInfo{
@@ -340,7 +339,8 @@ func TestEvaluateRuleFarthestOwnerWins(t *testing.T) {
 	}
 }
 
-// A share applies only in enabled orgs, and passes down through an org that is not enabled.
+// A share applies only in enabled organizations, and passes down through an organization that is
+// not enabled.
 func TestReachSkipsOrgsThatAreNotEnabled(t *testing.T) {
 
 	orgs := testTree()
@@ -355,7 +355,8 @@ func TestReachSkipsOrgsThatAreNotEnabled(t *testing.T) {
 	}
 }
 
-// Organization access names direct children of the primary org, the same as a share policy.
+// Organization access names direct children of the primary organization, the same as a share
+// policy.
 func TestValidateOrgAccess(t *testing.T) {
 
 	access := func(targets ...model.Target) model.Policy {
@@ -395,7 +396,7 @@ func TestValidateOrgAccess(t *testing.T) {
 	}
 }
 
-// An application data attribute is active in each org that its policy reaches.
+// An application data attribute is active in each organization that its policy reaches.
 func TestEvaluateAppDataFollowsThePolicyOnly(t *testing.T) {
 
 	in := EngineInput{
@@ -413,7 +414,8 @@ func TestEvaluateAppDataFollowsThePolicyOnly(t *testing.T) {
 	}
 }
 
-// Two apps can use the same application data attribute name. A name conflicts only in one app.
+// Two applications can use the same application data attribute name. A name conflicts only in one
+// application.
 func TestEvaluateAppDataNamesAreScopedToTheApp(t *testing.T) {
 
 	in := EngineInput{
@@ -435,8 +437,7 @@ func TestEvaluateAppDataNamesAreScopedToTheApp(t *testing.T) {
 	}
 }
 
-// A sub org inherits the identity attributes of the primary org, so a shared rule on an identity
-// attribute is active in the sub orgs, which store no identity attributes.
+// A shared rule on an inherited identity attribute is active in the sub organizations.
 func TestEvaluateRuleOnInheritedIdentityAttribute(t *testing.T) {
 
 	in := EngineInput{
@@ -466,7 +467,7 @@ func TestEvaluateRuleOnInheritedIdentityAttribute(t *testing.T) {
 			t.Errorf("expected INACTIVE_MISSING_ATTRIBUTE in %s for a trait that is not shared, got %+v", org, s)
 		}
 	}
-	// Without a source org, the sub orgs see no identity attributes.
+	// Without a source organization, the sub organizations see no identity attributes.
 	in.IdentitySourceOrgId = ""
 	for org, s := range statesByOrg(Evaluate(in), "email-rule") {
 		if s.State != model.StateInactiveMissingAttribute {

@@ -85,9 +85,7 @@ func validateAdminCredentials(token string) (bool, error) {
 }
 
 // AuthnAndAuthz performs authentication and authorization for the given HTTP request and operation.
-// The operation is selected from the org context of the request: the operation itself in a primary
-// org, and its org form (org:<operation>) in a sub org. Only the scopes of that operation authorize
-// it.
+// In a sub organization, the `org:` form of the operation is authorized.
 func AuthnAndAuthz(r *http.Request, operation string) error {
 
 	claims, err := authenticate(r)
@@ -97,10 +95,8 @@ func AuthnAndAuthz(r *http.Request, operation string) error {
 	return authorize(r, claims, operation)
 }
 
-// AuthnAndAuthzPrimary performs authentication and authorization for an operation that only a
-// primary organization runs. Such an operation has no org form. On the path of a sub org, the
-// request is authenticated and then refused with SUB_ORG_CONFIG_NOT_ALLOWED, and no scope is
-// checked.
+// AuthnAndAuthzPrimary authenticates the request and authorizes an operation that only a primary
+// organization can run. A request in a sub organization is refused.
 func AuthnAndAuthzPrimary(r *http.Request, operation string) error {
 
 	claims, err := authenticate(r)
@@ -110,7 +106,7 @@ func AuthnAndAuthzPrimary(r *http.Request, operation string) error {
 	return authorizePrimary(r, claims, operation)
 }
 
-// authenticate validates the bearer token for the org of the path and returns its claims.
+// authenticate validates the bearer token for the organization of the path and returns its claims.
 func authenticate(r *http.Request) (map[string]interface{}, error) {
 
 	authHeader := r.Header.Get("Authorization")
@@ -140,7 +136,7 @@ func authenticate(r *http.Request) (map[string]interface{}, error) {
 	return claims, nil
 }
 
-// authorize checks the scopes of the claims against the operation of the org context of the request.
+// authorize checks the scopes of the claims against the operation.
 func authorize(r *http.Request, claims map[string]interface{}, operation string) error {
 
 	//  Validate authorization
@@ -165,8 +161,8 @@ func authorize(r *http.Request, claims map[string]interface{}, operation string)
 	return nil
 }
 
-// authorizePrimary refuses an operation of the primary org in a sub org, and checks the operation
-// in a primary org.
+// authorizePrimary refuses the operation in a sub organization, and authorizes it in a primary
+// organization.
 func authorizePrimary(r *http.Request, claims map[string]interface{}, operation string) error {
 
 	if pathOrgIdOf(r) != "" {
@@ -179,8 +175,8 @@ func authorizePrimary(r *http.Request, claims map[string]interface{}, operation 
 	return authorize(r, claims, operation)
 }
 
-// pathOrgIdOf returns the org ID of the path of a sub org, /t/{primary_handle}/o/{org_id}/..., that
-// the tenant dispatcher resolved. It is empty on the path of a primary org.
+// pathOrgIdOf returns the organization ID of a sub organization path, or empty for a primary
+// organization path.
 func pathOrgIdOf(r *http.Request) string {
 
 	pathOrgId, _ := r.Context().Value(constants.OrgIdContextKey).(string)

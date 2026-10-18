@@ -30,8 +30,8 @@ import (
 	error2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
-// serve sends a request through the tenant dispatcher and returns the status, the org handle
-// and the path that the handler got.
+// serve sends a request through the tenant dispatcher and returns the status, the organization
+// handle and the path that the handler got.
 func serve(t *testing.T, path string) (int, string, string) {
 	t.Helper()
 	rec, gotOrg, gotPath := serveRecorded(t, path)
@@ -125,7 +125,7 @@ func TestTenantDispatcherSubOrgHandleOnPrimaryOrgPath(t *testing.T) {
 		}
 	}
 
-	// A handle that is not a known sub org is not refused by the dispatcher.
+	// The dispatcher accepts a handle that is not a stored sub organization.
 	if code, org, _ := serve(t, "/t/unknown.org/cds/api/v1/config"); code != http.StatusOK || org != "unknown.org" {
 		t.Errorf("unknown handle: got %d %q", code, org)
 	}

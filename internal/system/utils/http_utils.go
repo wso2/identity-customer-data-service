@@ -119,8 +119,7 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, orgHandle)
 		if strings.HasPrefix(remainingPath, "/o/") {
-			// Organization management: /t/{primary_handle}/o/{org_id}/... is the path of a sub org. The
-			// path names the org. The auth layer checks that the org_id claim of the token is equal to it.
+			// /t/{primary_handle}/o/{org_id}/... is the path of a sub organization.
 			segments := strings.SplitN(strings.TrimPrefix(remainingPath, "/o/"), "/", 2)
 			if len(segments) != 2 || segments[0] == "" || SubOrgResolver == nil {
 				http.NotFound(w, r)
@@ -150,12 +149,10 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 	})
 }
 
-// SubOrgResolver returns the handle of the sub org of the path /t/{primary_handle}/o/{org_id}/...,
-// after it checks that the org is in the tree of the primary org. The organization service sets it.
+// SubOrgResolver returns the handle of the sub organization of a sub organization path.
 var SubOrgResolver func(ctx context.Context, primaryHandle, orgId string) (string, error)
 
-// IsSubOrgHandle reports whether a handle names a sub org, which must use the path of a sub org.
-// The organization service sets it.
+// IsSubOrgHandle reports whether the handle belongs to a sub organization.
 var IsSubOrgHandle func(ctx context.Context, orgHandle string) bool
 
 // RespondJSON sends a JSON response with the given status code and payload

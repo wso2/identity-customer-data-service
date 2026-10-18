@@ -16,9 +16,8 @@
  * under the License.
  */
 
-// Package suborg holds the write rule of a sub organization. A sub org writes profiles only. It
-// reads the profile schema, the unification rules, the consent categories, the sharing policies,
-// and the CDS configuration, and it cannot change them.
+// Package suborg holds the write rule of a sub organization. A sub organization can write profiles
+// only.
 package suborg
 
 import (
@@ -29,8 +28,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
-// RejectWrite returns WriteNotAllowed when the org of the handle is a sub org. A primary org, and
-// an org that CDS does not know, can write.
+// RejectWrite returns WriteNotAllowed when the handle belongs to a sub organization.
 func RejectWrite(ctx context.Context, orgHandle string) error {
 
 	org, err := orgStore.GetOrganizationByHandle(ctx, orgHandle)
@@ -43,7 +41,7 @@ func RejectWrite(ctx context.Context, orgHandle string) error {
 	return WriteNotAllowed()
 }
 
-// WriteNotAllowed is the error of a write in a sub org.
+// WriteNotAllowed returns the error for a write in a sub organization.
 func WriteNotAllowed() error {
 
 	return errors.NewClientError(errors.ErrorMessage{

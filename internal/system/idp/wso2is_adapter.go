@@ -27,7 +27,7 @@ import (
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
-// WSO2ISAdapter reads the org tree from the WSO2 IS organization management API.
+// WSO2ISAdapter reads the organization tree from the WSO2 IS organization management API.
 type WSO2ISAdapter struct {
 	client *client.IdentityClient
 }
@@ -61,7 +61,7 @@ func (a *WSO2ISAdapter) ListDescendants(_ context.Context, primaryHandle string)
 	}
 	result := make([]Organization, 0, len(listed))
 	for _, item := range listed {
-		// The list API does not return the parent. Read each org to get it.
+		// The list API does not return the parent. Read each organization to get it.
 		org, found, err := a.client.GetOrganization(primaryHandle, item.Id)
 		if err != nil {
 			return nil, err
@@ -84,8 +84,8 @@ func (a *WSO2ISAdapter) GetOrganization(_ context.Context, primaryHandle, orgId 
 	return &result, nil
 }
 
-// IdentityAttributeSourceHandle returns the handle of the primary org. In IS, a sub org inherits
-// the claims of its primary org and cannot change them.
+// IdentityAttributeSourceHandle returns the handle of the primary organization. In IS, a sub
+// organization inherits the claims of its primary organization.
 func (a *WSO2ISAdapter) IdentityAttributeSourceHandle(_ string, primaryHandle string) string {
 	return primaryHandle
 }

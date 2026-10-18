@@ -26,7 +26,6 @@ import (
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	orgModel "github.com/wso2/identity-customer-data-service/internal/organization/model"
 	orgService "github.com/wso2/identity-customer-data-service/internal/organization/service"
-	orgStore "github.com/wso2/identity-customer-data-service/internal/organization/store"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/service"
@@ -45,8 +44,8 @@ func NewShareHandler() *ShareHandler {
 	return &ShareHandler{}
 }
 
-// resourceOf checks the resource of the request and returns its type and ID. The org must own
-// the resource, and the resource must be shareable.
+// resourceOf checks the resource of the request and returns its type and ID. The organization must
+// own the resource, and the resource must be shareable.
 type resourceOf func(r *http.Request, orgHandle string) (resourceType, resourceId string, err error)
 
 func schemaAttributeOf(r *http.Request, orgHandle string) (string, string, error) {
@@ -186,7 +185,7 @@ func (h *ShareHandler) delete(w http.ResponseWriter, r *http.Request, operation 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// DecodePolicyRequest reads the body of a POST or a PUT on a policy.
+// DecodePolicyRequest decodes the body of a policy request.
 func DecodePolicyRequest(w http.ResponseWriter, r *http.Request) (model.PolicyRequest, bool) {
 
 	var req model.PolicyRequest
@@ -203,7 +202,8 @@ func DecodePolicyRequest(w http.ResponseWriter, r *http.Request) (model.PolicyRe
 	return req, true
 }
 
-// prepare authenticates the request, resolves the org of the path, and checks the resource.
+// prepare authenticates the request, resolves the organization of the path, and checks the
+// resource.
 func (h *ShareHandler) prepare(w http.ResponseWriter, r *http.Request, operation string,
 	resolve resourceOf) (*orgModel.Organization, string, string, bool) {
 
@@ -233,15 +233,11 @@ func (h *ShareHandler) prepare(w http.ResponseWriter, r *http.Request, operation
 	return org, resourceType, resourceId, true
 }
 
-// knownOrg returns the org of the handle. When CDS does not have a primary org yet, it reads and
-// stores the primary org first.
+// knownOrg returns the stored organization of the handle. It stores the primary organization if it
+// is not stored yet.
 func knownOrg(ctx context.Context, orgHandle string) (*orgModel.Organization, error) {
 
-	org, err := orgStore.GetOrganizationByHandle(ctx, orgHandle)
-	if err != nil || org != nil {
-		return org, err
-	}
-	org, err = orgService.EnsurePrimary(ctx, orgHandle)
+	org, err := orgService.GetOrStoreOrganization(ctx, orgHandle)
 	if err != nil {
 		return nil, err
 	}

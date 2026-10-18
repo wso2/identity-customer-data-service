@@ -16,9 +16,8 @@
  * under the License.
  */
 
-// Package identitysource finds the org that stores the identity attributes of an org. A sub org
-// inherits the identity attributes of its source org on read and stores none. Every reader of
-// identity attributes uses this package, so that the source org is decided in one place.
+// Package identitysource resolves the organization that holds the identity attributes of an
+// organization. A sub organization uses the identity attributes of its source organization.
 package identitysource
 
 import (
@@ -28,9 +27,8 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/idp"
 )
 
-// HandleOf returns the handle of the org that stores the identity attributes of the org. It is the
-// org itself for a primary org, and for an org that is not in an organization tree. When the org
-// tree cannot be read, it returns the org itself, so a reader finds no attributes and fails closed.
+// HandleOf returns the handle of the organization that holds the identity attributes of the given
+// organization.
 func HandleOf(ctx context.Context, orgHandle string) string {
 
 	org, err := orgStore.GetOrganizationByHandle(ctx, orgHandle)
@@ -44,7 +42,8 @@ func HandleOf(ctx context.Context, orgHandle string) string {
 	return idp.GetAdapter().IdentityAttributeSourceHandle(orgHandle, primary.OrgHandle)
 }
 
-// IsInherited reports whether the org inherits its identity attributes, and returns the source org.
+// IsInherited reports whether the organization inherits its identity attributes, and returns the
+// source organization.
 func IsInherited(ctx context.Context, orgHandle string) (string, bool) {
 
 	source := HandleOf(ctx, orgHandle)

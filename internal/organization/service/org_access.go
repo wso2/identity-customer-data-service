@@ -35,13 +35,11 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
-// The organization access of a primary org selects the sub orgs that can use CDS. It is a policy
-// with resource type ORGANIZATION_ACCESS and resource ID CDS, and a primary org has a maximum of
-// one. Without it, no sub org can use CDS. child_orgs.orgs names direct children of the primary
-// org.
+// The organization access of a primary organization selects the sub organizations that can use CDS.
+// A primary organization has at most one organization access policy.
 
-// IsSubOrgEnabled reports whether the organization access of the primary org of the org reaches it.
-// The caller checks the enablement of the primary org.
+// IsSubOrgEnabled reports whether the organization access of the primary organization includes the
+// organization.
 func IsSubOrgEnabled(ctx context.Context, orgHandle string) bool {
 
 	org, err := store.GetOrganizationByHandle(ctx, orgHandle)
@@ -52,7 +50,7 @@ func IsSubOrgEnabled(ctx context.Context, orgHandle string) bool {
 	return err == nil && enabled
 }
 
-// CreateOrgAccess creates the organization access of the primary org.
+// CreateOrgAccess creates the organization access of the primary organization.
 func CreateOrgAccess(ctx context.Context, primary model.Organization,
 	req shareModel.PolicyRequest) (*shareModel.OrgAccessResponse, error) {
 
@@ -90,8 +88,7 @@ func CreateOrgAccess(ctx context.Context, primary model.Organization,
 	return &resp, nil
 }
 
-// ListOrgAccess returns the organization access policies of the primary org. The list has a maximum
-// of one policy.
+// ListOrgAccess returns the organization access policies of the primary organization.
 func ListOrgAccess(ctx context.Context, primary model.Organization) (*shareModel.OrgAccessList, error) {
 
 	list := &shareModel.OrgAccessList{Policies: []shareModel.OrgAccessResponse{}}
@@ -106,7 +103,7 @@ func ListOrgAccess(ctx context.Context, primary model.Organization) (*shareModel
 	return list, nil
 }
 
-// GetOrgAccess returns the organization access policy of the path.
+// GetOrgAccess returns an organization access policy of the primary organization.
 func GetOrgAccess(ctx context.Context, primary model.Organization,
 	policyId string) (*shareModel.OrgAccessResponse, error) {
 
@@ -118,7 +115,7 @@ func GetOrgAccess(ctx context.Context, primary model.Organization,
 	return &resp, nil
 }
 
-// UpdateOrgAccess replaces the selected orgs. An update cannot change the mode of child_orgs.
+// UpdateOrgAccess replaces the selected organizations of an organization access policy.
 func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId string,
 	req shareModel.PolicyRequest) (*shareModel.OrgAccessResponse, error) {
 
@@ -133,12 +130,12 @@ func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId s
 	if len(problems) > 0 {
 		return nil, sharingService.BadRequest(strings.Join(problems, "; "))
 	}
-	wasBlanket, isBlanket := sharingService.IsBlanket(p.Targets), sharingService.IsBlanket(targets)
+	wasAll, isAll := sharingService.IsAllChildren(p.Targets), sharingService.IsAllChildren(targets)
 	switch {
-	case wasBlanket && isBlanket:
+	case wasAll && isAll:
 		resp := toOrgAccessResponse(*p)
 		return &resp, nil
-	case wasBlanket != isBlanket:
+	case wasAll != isAll:
 		return nil, sharingService.BadRequest("An update cannot change child_orgs.mode. Delete the policy, and " +
 			"then create a new one.")
 	}
@@ -155,8 +152,7 @@ func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId s
 	return &resp, nil
 }
 
-// DeleteOrgAccess deletes the organization access of the primary org. No sub org can use CDS after
-// it. CDS keeps the data of the sub orgs.
+// DeleteOrgAccess deletes the organization access of the primary organization.
 func DeleteOrgAccess(ctx context.Context, primary model.Organization, policyId string) error {
 
 	p, err := orgAccessById(ctx, primary, policyId)
@@ -166,9 +162,7 @@ func DeleteOrgAccess(ctx context.Context, primary model.Organization, policyId s
 	return shareStore.DeletePolicy(ctx, p.PolicyId)
 }
 
-// requireSyncedTree returns ORGANIZATIONS_NOT_SYNCED until a tree sync of the primary org completes
-// once. A later sync that runs or fails does not block, because the tree of the last completed sync
-// stays.
+// requireSyncedTree returns an error until the organization tree is synced at least once.
 func requireSyncedTree(ctx context.Context, primary model.Organization) error {
 
 	status, err := store.GetTreeSyncStatus(ctx, primary.OrgHandle)
@@ -190,8 +184,8 @@ func orgAccessOf(ctx context.Context, primary model.Organization) (*shareModel.P
 		primary.OrgId)
 }
 
-// orgAccessById returns the organization access policy of the primary org. A policy of another
-// primary org, or a share policy, is not found.
+// orgAccessById returns the organization access policy with the ID when it belongs to the primary
+// organization.
 func orgAccessById(ctx context.Context, primary model.Organization, policyId string) (*shareModel.Policy, error) {
 
 	p, err := shareStore.GetPolicyById(ctx, policyId)
@@ -217,8 +211,7 @@ func validateOrgAccess(ctx context.Context, primary model.Organization,
 	return orgs, nil
 }
 
-// initializeSelected initializes each org that the selection reaches and that is not initialized
-// yet.
+// initializeSelected initializes the selected organizations that are not initialized yet.
 func initializeSelected(ctx context.Context, orgs []model.Organization, p shareModel.Policy) {
 
 	byId := map[string]model.Organization{}

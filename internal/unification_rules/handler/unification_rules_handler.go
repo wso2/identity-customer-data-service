@@ -298,8 +298,7 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	// Delete only a rule that the org owns. A rule of another org is not visible, so the delete is a
-	// no-op for it.
+	// Delete only a rule that the organization owns.
 	if _, err := ruleService.GetOwnedUnificationRule(ctx, ruleId, orgHandle); err != nil {
 		if clientErr, ok := err.(*errors2.ClientError); ok && clientErr.StatusCode == http.StatusNotFound {
 			w.WriteHeader(http.StatusNoContent)

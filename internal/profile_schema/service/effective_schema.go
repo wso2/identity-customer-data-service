@@ -34,11 +34,10 @@ import (
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
-// The effective schema of an org is the set of attributes that CDS uses to validate, return, and
-// unify the profiles of the org: the attributes that the org owns, the identity attributes that a
-// sub org inherits from its source org, and the shared attributes that are ACTIVE in the org.
+// The effective schema of an organization contains the attributes that it owns, the identity
+// attributes that it inherits, and the shared attributes that are active in it.
 
-// GetEffectiveProfileSchemaAttributes returns the effective schema of the org.
+// GetEffectiveProfileSchemaAttributes returns the effective schema of the organization.
 func GetEffectiveProfileSchemaAttributes(ctx context.Context,
 	orgHandle string) ([]model.ProfileSchemaAttribute, error) {
 
@@ -49,9 +48,8 @@ func GetEffectiveProfileSchemaAttributes(ctx context.Context,
 	return withVisibleAttributes(ctx, orgHandle, owned, "")
 }
 
-// withVisibleAttributes adds the inherited identity attributes and the active shared attributes of
-// the org to the owned attributes. When scope is not empty, it adds only the attributes of that
-// scope. The origin fields are set only for an org of an organization tree.
+// withVisibleAttributes adds the inherited and the active shared attributes to the owned
+// attributes. A non-empty scope limits the result to that scope.
 func withVisibleAttributes(ctx context.Context, orgHandle string, owned []model.ProfileSchemaAttribute,
 	scope string) ([]model.ProfileSchemaAttribute, error) {
 
@@ -95,7 +93,8 @@ func withVisibleAttributes(ctx context.Context, orgHandle string, owned []model.
 	return result, nil
 }
 
-// getVisibleSharedAttribute returns the shared attribute when it is ACTIVE in the org, or nil.
+// getVisibleSharedAttribute returns the shared attribute when it is active in the organization, or
+// nil.
 func getVisibleSharedAttribute(ctx context.Context, orgHandle,
 	attributeId string) (*model.ProfileSchemaAttribute, error) {
 
@@ -114,8 +113,8 @@ func getVisibleSharedAttribute(ctx context.Context, orgHandle,
 	return nil, nil
 }
 
-// checkSharedNameConflict refuses a local attribute name that an active shared attribute of the
-// org uses. An application data attribute conflicts only with an attribute of the same app.
+// checkSharedNameConflict rejects a local attribute name that an active shared attribute uses.
+// Application data attribute names are scoped to their application.
 func checkSharedNameConflict(ctx context.Context, orgHandle, attributeName, applicationIdentifier string) error {
 
 	shared, err := sharingService.ActiveSharedAttributes(ctx, orgHandle)
@@ -132,7 +131,7 @@ func checkSharedNameConflict(ctx context.Context, orgHandle, attributeName, appl
 	return nil
 }
 
-// inheritedAttributes returns the identity attributes of the source org, as a sub org sees them.
+// inheritedAttributes returns the identity attributes of the source organization.
 func inheritedAttributes(ctx context.Context, sourceHandle string) ([]model.ProfileSchemaAttribute, error) {
 
 	attrs, err := psstr.GetProfileSchemaAttributesByScope(ctx, sourceHandle, constants.IdentityAttributes)
@@ -146,8 +145,7 @@ func inheritedAttributes(ctx context.Context, sourceHandle string) ([]model.Prof
 	return attrs, nil
 }
 
-// getInheritedAttribute returns the identity attribute of the source org when the org inherits it,
-// or nil.
+// getInheritedAttribute returns the inherited identity attribute with the ID, or nil.
 func getInheritedAttribute(ctx context.Context, orgHandle,
 	attributeId string) (*model.ProfileSchemaAttribute, error) {
 
@@ -170,8 +168,7 @@ func getInheritedAttribute(ctx context.Context, orgHandle,
 	return &attr, nil
 }
 
-// getInheritedAttributeByName returns the identity attribute of the source org with the name when
-// the org inherits it, or nil.
+// getInheritedAttributeByName returns the inherited identity attribute with the name, or nil.
 func getInheritedAttributeByName(ctx context.Context, orgHandle,
 	attributeName string) (*model.ProfileSchemaAttribute, error) {
 
@@ -201,8 +198,7 @@ func inheritedReadOnlyError() error {
 	}, http.StatusForbidden)
 }
 
-// identityAttributeNotDeletableError is the error for a delete of an identity attribute in the org
-// that stores it. The IdP controls the identity attributes, and the next sync adds them again.
+// identityAttributeNotDeletableError is the error for a delete of an identity attribute.
 func identityAttributeNotDeletableError() error {
 
 	return errors2.NewClientError(errors2.ErrorMessage{
@@ -212,8 +208,8 @@ func identityAttributeNotDeletableError() error {
 	}, http.StatusBadRequest)
 }
 
-// keepIdentityAttributeIds gives each synced attribute the ID that the org already stores for the
-// same name, so that a sync keeps the attribute and the unification rules that use it.
+// keepIdentityAttributeIds keeps the stored ID of each synced identity attribute, so that the
+// unification rules that use it stay valid.
 func keepIdentityAttributeIds(ctx context.Context, orgHandle string, incoming []model.ProfileSchemaAttribute) (
 	[]model.ProfileSchemaAttribute, error) {
 
@@ -243,8 +239,8 @@ func keepIdentityAttributeIds(ctx context.Context, orgHandle string, incoming []
 	return incoming, nil
 }
 
-// isShareableAttribute checks that the org can share the attribute. Only the primary org can share
-// an application data attribute.
+// isShareableAttribute checks that the organization can share the attribute. Only a primary
+// organization can share an application data attribute.
 func isShareableAttribute(ctx context.Context, orgHandle string, attr model.ProfileSchemaAttribute) error {
 
 	reject := func(description string) error {
@@ -270,7 +266,7 @@ func isShareableAttribute(ctx context.Context, orgHandle string, attr model.Prof
 	return nil
 }
 
-// isPrimaryOrg reports whether the org of the handle is a primary org, or an org that is not in an
+// isPrimaryOrg reports whether the organization is a primary organization or is not in an
 // organization tree.
 func isPrimaryOrg(ctx context.Context, orgHandle string) bool {
 

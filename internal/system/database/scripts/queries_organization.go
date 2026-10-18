@@ -49,15 +49,16 @@ var GetOrganizationsByPrimaryOrg = newQuery("CDS-ORG-04",
 var UpdateOrganizationStatus = newQuery("CDS-ORG-05",
 	`UPDATE organizations SET status = $1, updated_at = $2 WHERE org_id = $3`)
 
-// chainOf is the ancestor chain of the org $1, the org included. hops is 0 for the org, 1 for its
-// parent, and so on. CDS stores no depth: the position in the chain gives the order.
+// chainOf is the ancestor chain of the organization $1, the organization included. hops is the
+// distance from the organization.
 const chainOf = `WITH RECURSIVE chain (org_id, parent_org_id, hops) AS (
 	SELECT org_id, parent_org_id, 0 FROM organizations WHERE org_id = $1
 	UNION ALL
 	SELECT o.org_id, o.parent_org_id, c.hops + 1 FROM organizations o JOIN chain c ON o.org_id = c.parent_org_id)
 	`
 
-// GetOrganizationChain returns the org $1 and its ancestors, the primary org first.
+// GetOrganizationChain returns the organization $1 and its ancestors, the primary organization
+// first.
 var GetOrganizationChain = newQuery("CDS-ORG-07",
 	chainOf+`SELECT `+organizationColumnsOfO+` FROM organizations o JOIN chain c ON c.org_id = o.org_id
 	ORDER BY c.hops DESC`)
@@ -75,7 +76,7 @@ var GetSharePolicy = newQuery("CDS-SHR-03",
 	`SELECT `+sharePolicyColumns+` FROM cds_share_policy p
 	WHERE p.resource_type = $1 AND p.resource_id = $2 AND p.initiating_org_id = $3`)
 
-// GetSharePoliciesByPrimaryOrg returns the share policies of one customer tree.
+// GetSharePoliciesByPrimaryOrg returns the share policies of one organization tree.
 var GetSharePoliciesByPrimaryOrg = newQuery("CDS-SHR-04",
 	`SELECT `+sharePolicyColumns+` FROM cds_share_policy p JOIN organizations o ON o.org_id = p.owning_org_id
 	WHERE o.primary_org_id = $1 AND p.resource_type <> 'ORGANIZATION_ACCESS' ORDER BY p.policy_id`)
@@ -101,8 +102,7 @@ var DeleteSharePolicy = newQuery("CDS-SHR-09",
 var GetSharePolicyIdsByResource = newQuery("CDS-SHR-10",
 	`SELECT policy_id FROM cds_share_policy WHERE resource_type = $1 AND resource_id = $2`)
 
-// reachingOrg selects the targets that reach the org $1: an ORG target names the org, an
-// ORG_SUBTREE target names the org or an ancestor, and an ALL_CHILDREN target names an ancestor.
+// reachingOrg selects the targets that reach the organization $1.
 const reachingOrg = chainOf + `SELECT ` + sharePolicyColumns + `, t.target_scope, t.target_org_id
 	FROM cds_share_policy_target t
 	JOIN chain c ON c.org_id = t.target_org_id
@@ -111,13 +111,13 @@ const reachingOrg = chainOf + `SELECT ` + sharePolicyColumns + `, t.target_scope
 		OR t.target_scope = 'ORG_SUBTREE'
 		OR (t.target_scope = 'ALL_CHILDREN' AND t.target_org_id <> $1))`
 
-// GetSharePoliciesReachingOrg returns the share policies whose targets reach the org $1, with the
-// targets that reach it.
+// GetSharePoliciesReachingOrg returns the share policies whose targets reach the organization $1,
+// with the targets that reach it.
 var GetSharePoliciesReachingOrg = newQuery("CDS-SHR-11",
 	reachingOrg+` AND p.resource_type <> 'ORGANIZATION_ACCESS' ORDER BY p.policy_id`)
 
 // GetOrgAccessPoliciesReachingOrg returns the organization access policies whose targets reach
-// the org $1.
+// the organization $1.
 var GetOrgAccessPoliciesReachingOrg = newQuery("CDS-SHR-12",
 	reachingOrg+` AND p.resource_type = 'ORGANIZATION_ACCESS'`)
 
@@ -126,29 +126,27 @@ const attributeColumns = `ps.attribute_id, ps.attribute_name, ps.scope, ps.displ
 	CAST(ps.sub_attributes AS TEXT) AS sub_attributes, CAST(ps.canonical_values AS TEXT) AS canonical_values,
 	ps.org_handle, o.org_id, c.hops AS owner_hops`
 
-// GetSchemaAttributesOfChain returns the attributes of the org $1 and of its ancestors. The read
-// for one org needs them: the local attributes, and the attributes that the ancestors share.
+// GetSchemaAttributesOfChain returns the attributes of the organization $1 and of its ancestors.
 var GetSchemaAttributesOfChain = newQuery("CDS-SHR-15",
 	chainOf+`SELECT `+attributeColumns+` FROM profile_schema ps JOIN organizations o ON o.org_handle = ps.org_handle
 	JOIN chain c ON c.org_id = o.org_id`)
 
-// GetUnificationRulesOfChain returns the rules of the org $1 and of its ancestors, with the number
-// of levels from the org to the owner.
+// GetUnificationRulesOfChain returns the rules of the organization $1 and of its ancestors, with
+// the number of levels from the organization to the owner.
 var GetUnificationRulesOfChain = newQuery("CDS-SHR-16",
 	chainOf+`SELECT r.rule_id, r.org_handle, r.rule_name, r.property_name, r.property_id, r.priority, r.is_active,
 	r.created_at, r.updated_at, o.org_id, c.hops AS owner_hops
 	FROM unification_rules r JOIN organizations o ON o.org_handle = r.org_handle
 	JOIN chain c ON c.org_id = o.org_id`)
 
-// GetSchemaAttributesByPrimaryOrg returns the attributes of all orgs of one customer tree, for the
-// share-time check.
+// GetSchemaAttributesByPrimaryOrg returns the attributes of all organizations of one organization
+// tree.
 var GetSchemaAttributesByPrimaryOrg = newQuery("CDS-SHR-17",
 	`SELECT ps.attribute_id, ps.attribute_name, ps.scope, ps.value_type, ps.application_identifier,
 	ps.org_handle, o.org_id
 	FROM profile_schema ps JOIN organizations o ON o.org_handle = ps.org_handle WHERE o.primary_org_id = $1`)
 
-// GetUnificationRulesByPrimaryOrg returns the rules of all orgs of one customer tree, for the share-time
-// check.
+// GetUnificationRulesByPrimaryOrg returns the rules of all organizations of one organization tree.
 var GetUnificationRulesByPrimaryOrg = newQuery("CDS-SHR-18",
 	`SELECT r.rule_id, r.property_name, r.property_id, r.org_handle, o.org_id
 	FROM unification_rules r JOIN organizations o ON o.org_handle = r.org_handle WHERE o.primary_org_id = $1`)

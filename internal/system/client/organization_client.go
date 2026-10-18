@@ -60,8 +60,8 @@ func (c *IdentityClient) GetSelfOrganization(orgHandle string) (ISOrganization, 
 	return org, err
 }
 
-// GetOrganization returns a descendant organization of the primary organization that primaryHandle
-// names. The bool is false when IS does not know the organization.
+// GetOrganization returns a descendant organization of the primary organization. The bool is false
+// when the organization does not exist.
 func (c *IdentityClient) GetOrganization(primaryHandle, orgId string) (ISOrganization, bool, error) {
 
 	var org ISOrganization
@@ -77,9 +77,7 @@ func (c *IdentityClient) GetOrganization(primaryHandle, orgId string) (ISOrganiz
 	return org, true, nil
 }
 
-// ListDescendantOrganizations returns all organizations below the primary organization that
-// primaryHandle names. It reads all pages, and returns an error when a page fails. The list API
-// does not return the parent, so the caller reads each organization for it.
+// ListDescendantOrganizations returns all organizations below the primary organization.
 func (c *IdentityClient) ListDescendantOrganizations(primaryHandle string) ([]ISOrganization, error) {
 
 	next := fmt.Sprintf("https://%s/t/%s/api/server/v1/organizations?recursive=true&limit=100", c.BaseURL,
@@ -108,8 +106,8 @@ func (c *IdentityClient) ListDescendantOrganizations(primaryHandle string) ([]IS
 	return all, nil
 }
 
-// getJSON sends a GET request with a token for the org, and decodes a 200 response into out. It
-// returns the HTTP status.
+// getJSON sends a GET request with a token for the organization, and decodes a 200 response into
+// out. It returns the HTTP status.
 func (c *IdentityClient) getJSON(endpoint, orgHandle string, out interface{}) (int, error) {
 
 	failed := func(desc string, cause error) error {

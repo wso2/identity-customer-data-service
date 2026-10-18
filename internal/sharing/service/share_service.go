@@ -36,24 +36,16 @@ import (
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
-// CDS does not store the share state. A write stores only the policy and its targets. A read for
-// one org resolves the state of each shared resource from the ancestor chain of the org, the
-// local resources of the org, and the policies that reach it.
+// The share state is not stored. It is computed on each read.
 
-// ResolveOrg returns the org that CDS knows for the handle, or nil.
-func ResolveOrg(ctx context.Context, orgHandle string) (*orgModel.Organization, error) {
-	return orgStore.GetOrganizationByHandle(ctx, orgHandle)
-}
-
-// orgView is the result of the read for one org.
+// orgView is the result of the read for one organization.
 type orgView struct {
 	states     []model.State
 	attributes map[string]store.ChainAttribute
 	rules      map[string]store.ChainRule
 }
 
-// resolveOrg computes the state of each shared resource that reaches the org. A share applies only
-// in an enabled org.
+// resolveOrg computes the state of each shared resource that reaches the organization.
 func resolveOrg(ctx context.Context, org orgModel.Organization) (*orgView, error) {
 
 	view := &orgView{attributes: map[string]store.ChainAttribute{}, rules: map[string]store.ChainRule{}}
@@ -94,8 +86,7 @@ func resolveOrg(ctx context.Context, org orgModel.Organization) (*orgView, error
 	return view, nil
 }
 
-// appIdOf returns the application identifier of an application data attribute, and empty for the
-// other scopes.
+// appIdOf returns the application identifier of an application data attribute, or empty.
 func appIdOf(scope, applicationIdentifier string) string {
 
 	if scope != constants.ApplicationData {
@@ -104,8 +95,8 @@ func appIdOf(scope, applicationIdentifier string) string {
 	return applicationIdentifier
 }
 
-// identitySourceOrgId returns the ID of the org that stores the identity attributes of the org,
-// from the orgs that the engine reads.
+// identitySourceOrgId returns the ID of the organization that holds the identity attributes of the
+// organization.
 func identitySourceOrgId(ctx context.Context, orgs []orgModel.Organization, orgHandle string) string {
 
 	source := identitysource.HandleOf(ctx, orgHandle)
@@ -136,7 +127,8 @@ func viewOfHandle(ctx context.Context, orgHandle string) (*orgView, error) {
 	return resolveOrg(ctx, *org)
 }
 
-// ActiveSharedAttributes returns the shared attributes that are active in the org of the handle.
+// ActiveSharedAttributes returns the shared attributes that are active in the organization of the
+// handle.
 func ActiveSharedAttributes(ctx context.Context, orgHandle string) ([]store.SharedAttribute, error) {
 
 	view, err := viewOfHandle(ctx, orgHandle)
@@ -152,8 +144,7 @@ func ActiveSharedAttributes(ctx context.Context, orgHandle string) ([]store.Shar
 	return result, nil
 }
 
-// ActiveSharedRules returns the shared rules that are active in the org of the handle, in the
-// evaluation order: the group of the farthest owner first, and the owner priority in each group.
+// ActiveSharedRules returns the active shared rules of the organization in evaluation order.
 func ActiveSharedRules(ctx context.Context, orgHandle string) ([]store.SharedRule, error) {
 
 	view, err := viewOfHandle(ctx, orgHandle)
@@ -175,7 +166,8 @@ func ActiveSharedRules(ctx context.Context, orgHandle string) ([]store.SharedRul
 	return rules, nil
 }
 
-// StatesForOrg returns the states of the shared resources of one type in the org of the handle.
+// StatesForOrg returns the states of the shared resources of one type in the organization of the
+// handle.
 func StatesForOrg(ctx context.Context, resourceType, orgHandle string) (map[string]model.State, error) {
 
 	result := map[string]model.State{}
@@ -191,8 +183,7 @@ func StatesForOrg(ctx context.Context, resourceType, orgHandle string) (map[stri
 	return result, nil
 }
 
-// CreatePolicy creates the policy of the initiating org for a resource that it owns. The caller
-// checks that the resource exists, that the initiating org owns it, and that it can be shared.
+// CreatePolicy creates the policy of the initiating organization for a resource that it owns.
 func CreatePolicy(ctx context.Context, resourceType, resourceId string, initiator orgModel.Organization,
 	req model.PolicyRequest) (*model.PolicyResponse, error) {
 
@@ -228,8 +219,7 @@ func CreatePolicy(ctx context.Context, resourceType, resourceId string, initiato
 	return &resp, nil
 }
 
-// ListPolicies returns the policies of the initiating org for the resource. The list has a maximum
-// of one policy.
+// ListPolicies returns the policies of the initiating organization for the resource.
 func ListPolicies(ctx context.Context, resourceType, resourceId string,
 	initiator orgModel.Organization) (*model.PolicyList, error) {
 
@@ -257,7 +247,7 @@ func GetPolicy(ctx context.Context, resourceType, resourceId, policyId string,
 	return &resp, nil
 }
 
-// UpdatePolicy replaces the targets of the policy. The last PUT wins.
+// UpdatePolicy replaces the targets of the policy.
 func UpdatePolicy(ctx context.Context, resourceType, resourceId, policyId string, initiator orgModel.Organization,
 	req model.PolicyRequest) (*model.PolicyResponse, error) {
 
@@ -297,13 +287,13 @@ func DeletePolicy(ctx context.Context, resourceType, resourceId, policyId string
 	return store.DeletePolicy(ctx, p.PolicyId)
 }
 
-// DeletePoliciesOfResource deletes all policies of a resource that its owner deletes.
+// DeletePoliciesOfResource deletes all policies of the resource.
 func DeletePoliciesOfResource(ctx context.Context, resourceType, resourceId string) error {
 	return store.DeletePoliciesOfResource(ctx, resourceType, resourceId)
 }
 
-// policyOf returns the policy of the path. A policy of another resource, or of another
-// initiating org, is not found.
+// policyOf returns the policy with the ID when it belongs to the resource and the initiating
+// organization.
 func policyOf(ctx context.Context, resourceType, resourceId, policyId string,
 	initiator orgModel.Organization) (*model.Policy, error) {
 
@@ -318,8 +308,8 @@ func policyOf(ctx context.Context, resourceType, resourceId, policyId string,
 	return p, nil
 }
 
-// validateCandidate checks the targets against the tree. For a rule, it also checks that the
-// attribute of the rule is visible in each org that the policy reaches.
+// validateCandidate checks the targets of a policy against the tree. For a rule, it also checks
+// that the rule attribute is visible in each organization that the policy reaches.
 func validateCandidate(ctx context.Context, initiator orgModel.Organization, candidate model.Policy) error {
 
 	input, orgs, err := loadTree(ctx, initiator.PrimaryOrgId)
@@ -356,9 +346,7 @@ func validateCandidate(ctx context.Context, initiator orgModel.Organization, can
 	return nil
 }
 
-// loadTree loads the orgs, the resources, and the share policies of one customer tree, for the
-// checks at share time. An org that the organization access does not reach is marked NotEnabled,
-// so that the checks skip it.
+// loadTree loads the organizations, the resources, and the policies of an organization tree.
 func loadTree(ctx context.Context, primaryOrgId string) (EngineInput, []orgModel.Organization, error) {
 
 	orgs, err := orgStore.GetOrganizationsByPrimaryOrg(ctx, primaryOrgId)
@@ -379,8 +367,7 @@ func loadTree(ctx context.Context, primaryOrgId string) (EngineInput, []orgModel
 	}
 
 	input := EngineInput{Orgs: treeOrgs(orgs), Policies: policies}
-	// The sub orgs of one tree inherit the identity attributes of the same source org. Any sub org
-	// gives it; the primary org gives itself.
+	// All sub organizations of a tree share one identity attribute source.
 	for _, o := range orgs {
 		if !o.IsPrimary() {
 			input.IdentitySourceOrgId = identitySourceOrgId(ctx, orgs, o.OrgHandle)
@@ -424,8 +411,7 @@ func ToResponse(p model.Policy) model.PolicyResponse {
 	}
 }
 
-// IsOrgEnabled reports whether the organization access policy of the primary org reaches the sub
-// org. The caller checks the enablement of the primary org.
+// IsOrgEnabled reports whether the organization access includes the sub organization.
 func IsOrgEnabled(ctx context.Context, org orgModel.Organization) (bool, error) {
 
 	if org.IsPrimary() {
@@ -450,7 +436,7 @@ func IsOrgEnabled(ctx context.Context, org orgModel.Organization) (bool, error) 
 	return false, nil
 }
 
-// PolicyExistsError is the error for a second POST from the same org.
+// PolicyExistsError is the error for a second policy of the same organization.
 func PolicyExistsError(policyId string) error {
 	return errors2.NewClientError(errors2.ErrorMessage{
 		Code:    errors2.SHARE_POLICY_EXISTS.Code,
@@ -460,7 +446,7 @@ func PolicyExistsError(policyId string) error {
 	}, http.StatusConflict)
 }
 
-// PolicyNotFoundError is the error for a policy ID that is not a policy of the path.
+// PolicyNotFoundError is the error for an unknown policy ID.
 func PolicyNotFoundError(policyId string) error {
 	return errors2.NewClientError(errors2.ErrorMessage{
 		Code:        errors2.SHARE_POLICY_NOT_FOUND.Code,
@@ -479,7 +465,7 @@ func ConflictError(description string) error {
 	}, http.StatusConflict)
 }
 
-// ReadOnlyError is the error for a write to a shared resource from a target org.
+// ReadOnlyError is the error for a write to a shared resource from a target organization.
 func ReadOnlyError() error {
 	return errors2.NewClientError(errors2.ErrorMessage{
 		Code:        errors2.SHARED_RESOURCE_READ_ONLY.Code,

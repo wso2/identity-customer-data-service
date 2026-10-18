@@ -47,15 +47,14 @@ func setUp(t *testing.T) {
 	}}})
 }
 
-// primaryOrgRequest is a request that the tenant dispatcher resolved to the primary org
-// carbon.super.
+// primaryOrgRequest returns a request for the primary organization carbon.super.
 func primaryOrgRequest() *http.Request {
 
 	r := httptest.NewRequest(http.MethodPost, "/t/carbon.super/cds/api/v1/profiles", nil)
 	return r.WithContext(context.WithValue(r.Context(), constants.TenantContextKey, "carbon.super"))
 }
 
-// subOrgRequest is a request that the tenant dispatcher resolved to a sub org of carbon.super.
+// subOrgRequest returns a request for a sub organization of carbon.super.
 func subOrgRequest() *http.Request {
 
 	r := httptest.NewRequest(http.MethodPost, "/t/carbon.super/o/"+subOrgId+"/cds/api/v1/profiles", nil)

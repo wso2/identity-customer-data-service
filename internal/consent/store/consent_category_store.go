@@ -431,7 +431,7 @@ func SeedDefaultIdentityDataCategory(ctx context.Context, orgHandle string) erro
 func resolveMandatoryAttributes(ctx context.Context, dbClient client.DBClientInterface, orgHandle string) (
 	[]model.ConsentAttribute, error) {
 	query := scripts.GetProfileSchemaAttributeByScope
-	// A sub org inherits the identity attributes of its source org.
+	// Identity attributes are read from the source organization.
 	rows, err := dbClient.ExecuteQueryContext(ctx, query, identitysource.HandleOf(ctx, orgHandle),
 		constants.IdentityAttributes)
 	if err != nil {
@@ -561,7 +561,7 @@ func GetConsentedCategoryAttributesByProfileId(ctx context.Context,
 	// category covers — no reseeding or migration needed.
 	if len(mandatoryIds) > 0 {
 		schemaQuery := scripts.GetProfileSchemaAttributeByScope
-		// A sub org inherits the identity attributes of its source org.
+		// Identity attributes are read from the source organization.
 		schemaResults, err := dbClient.ExecuteQueryContext(ctx, schemaQuery, identitysource.HandleOf(ctx, orgHandle),
 			constants.IdentityAttributes)
 		if err != nil {

@@ -80,7 +80,8 @@ func TestValidatePermission_sameScopeForBothOperations(t *testing.T) {
 
 func TestValidatePermission_noOrgOperation(t *testing.T) {
 
-	// An operation of the primary org only has no org form. No scope authorizes it in a sub org.
+	// An operation of the primary organization only has no `org:` form. No scope authorizes it in a
+	// sub organization.
 	setScopes(t, map[string][]string{"admin_config:update": {"internal_cds_admin_config_update"}})
 
 	assert.False(t, ValidatePermission("internal_cds_admin_config_update internal_org_cds_admin_config_update",

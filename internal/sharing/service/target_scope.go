@@ -25,8 +25,8 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
 )
 
-// ToTargets maps the child_orgs of a request to the stored targets. It returns the problems of
-// the request, which are empty when the request is valid.
+// ToTargets maps the child_orgs of a request to stored targets, and returns the problems of the
+// request.
 func ToTargets(childOrgs *model.ChildOrgs, initiatingOrgId string) ([]model.Target, []string) {
 
 	if childOrgs == nil {
@@ -90,7 +90,7 @@ func ToTargets(childOrgs *model.ChildOrgs, initiatingOrgId string) ([]model.Targ
 // ToChildOrgs maps the stored targets to the child_orgs of a response.
 func ToChildOrgs(targets []model.Target) model.ChildOrgs {
 
-	if IsBlanket(targets) {
+	if IsAllChildren(targets) {
 		return model.ChildOrgs{Mode: model.ChildOrgsModeAll}
 	}
 	childOrgs := model.ChildOrgs{Mode: model.ChildOrgsModeSelected}
@@ -105,8 +105,8 @@ func ToChildOrgs(targets []model.Target) model.ChildOrgs {
 	return childOrgs
 }
 
-// IsBlanket reports whether the targets are the all mode of child_orgs.
-func IsBlanket(targets []model.Target) bool {
+// IsAllChildren reports whether the targets have the ALL_CHILDREN scope.
+func IsAllChildren(targets []model.Target) bool {
 
 	for _, t := range targets {
 		if t.Scope == model.ScopeAllChildren {

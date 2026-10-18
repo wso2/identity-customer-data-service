@@ -26,7 +26,6 @@ subscriptions = ["POST_LOCAL_CLAIM_ADD", "POST_UPDATE_LOCAL_CLAIM", "POST_DELETE
 name = "cds.authentication.listener"
 subscriptions = ["SESSION_TERMINATE", "AUTHENTICATION_SUCCESS"]
 
-# Organization management: org lifecycle events, so that CDS provisions new sub organizations.
 [[event_handler]]
 name = "cds.organization.event.handler"
 subscriptions = ["POST_ADD_ORGANIZATION", "POST_UPDATE_ORGANIZATION", "POST_PATCH_ORGANIZATION", "POST_DELETE_ORGANIZATION"]
@@ -54,7 +53,6 @@ name = "console:customerData_edit"
 displayName = "Customer Data Service Edit Feature"
 description = "Edit Customer Data Service from the Console"
 
-# Organization management: the Console in a sub organization asks for console:org:* feature scopes.
 [[api_resources]]
 name = "Customer Data Service Organization Feature"
 identifier = "console:org:customerData"
@@ -135,7 +133,6 @@ name = "internal_cds_profile_schema_delete"
 displayName = "Profile schema attribute delete"
 description = "Delete profile schema attribute(s)"
 
-# Organization management: share a schema attribute with child organizations.
 [[api_resources.scopes]]
 name = "internal_cds_profile_schema_share"
 displayName = "Profile schema attribute share"
@@ -168,7 +165,6 @@ name = "internal_cds_unification_rule_delete"
 displayName = "Profile unification rule delete"
 description = "Delete unification rule"
 
-# Organization management: share a unification rule with child organizations.
 [[api_resources.scopes]]
 name = "internal_cds_unification_rule_share"
 displayName = "Profile unification rule share"
@@ -191,8 +187,6 @@ name = "internal_cds_admin_config_update"
 displayName = "Customer data service configuration update"
 description = "Update customer data service configurations"
 
-# Organization management: the organization sync and the organization access of the primary
-# organization.
 [[api_resources]]
 name = "Customer Data Service organization management API"
 identifier = "/cds/api/v1/organizations"
@@ -238,10 +232,7 @@ displayName = "Consent category delete"
 description = "Delete consent category"
 
 # --- CDS API resources for sub organizations -------------------------------- #
-# An org-switched token carries only scopes of ORGANIZATION API resources. CDS
-# accepts internal_org_cds_* only for the org:<operation> entries of
-# auth_server.required_scopes, on the path of a sub organization. A sub
-# organization writes profiles only, so the other resources have a view scope.
+# Only the profile resource has write scopes.
 [[api_resources]]
 name = "Customer Data Service profile management API (organization)"
 identifier = "/o/cds/api/v1/profiles"
@@ -390,7 +381,6 @@ name = "internal_cds_unification_rule_delete"
 [[api_resource_collections.scopes.delete]]
 name = "internal_cds_consent_category_delete"
 
-# Organization management: the same grouping for the Console in a sub organization.
 [[api_resource_collections]]
 name = "org_customerData"
 displayName = "Customer Data Service"
@@ -457,12 +447,8 @@ exposed_headers = ["Location"]
 [console.extensions]
 cds_host = "${CDS_BASE}"
 cds_application_identifier_type = "app_id"
-# Organization management: the unified Customer Data page has the enable toggle and the
-# organization box.
 cdsUnifiedProfileView = true
 
-# Organization management: show the Customer Data pages in sub organizations too. IS lists the
-# routes of a sub organization here, and this list replaces the list in the Console code.
 [console.ui.routes.organizationEnabledRoutes]
 customerDataService = "v0.0.0"
 customerDataProfiles = "v0.0.0"

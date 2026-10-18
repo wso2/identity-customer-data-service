@@ -367,8 +367,8 @@ func (s *ProfileSchemaService) GetProfileSchemaAttributeById(ctx context.Context
 	return attr, err
 }
 
-// getOwnedAttribute returns the attribute when the org owns it. A write to a shared attribute
-// from a target org, or to an inherited identity attribute from a sub org, returns 403.
+// getOwnedAttribute returns the attribute when the organization owns it. Shared and inherited
+// attributes are read-only.
 func getOwnedAttribute(ctx context.Context, orgId, attributeId string) (model.ProfileSchemaAttribute, error) {
 
 	attr, err := psstr.GetProfileSchemaAttributeById(ctx, orgId, attributeId)
@@ -391,7 +391,7 @@ func getOwnedAttribute(ctx context.Context, orgId, attributeId string) (model.Pr
 	return attr, err
 }
 
-// GetOwnedShareableAttribute returns the attribute when the org owns it and can share it.
+// GetOwnedShareableAttribute returns the attribute when the organization owns it and can share it.
 func GetOwnedShareableAttribute(ctx context.Context, orgId, scope,
 	attributeId string) (model.ProfileSchemaAttribute, error) {
 
@@ -409,8 +409,8 @@ func GetOwnedShareableAttribute(ctx context.Context, orgId, scope,
 	return attr, isShareableAttribute(ctx, orgId, attr)
 }
 
-// GetProfileSchemaAttributeByName returns the attribute of the org with the name. In a sub org, an
-// identity attribute comes from the source org.
+// GetProfileSchemaAttributeByName returns the attribute of the organization with the name. In a sub
+// organization, an identity attribute comes from the source organization.
 func (s *ProfileSchemaService) GetProfileSchemaAttributeByName(ctx context.Context,
 	attributeName, orgId string) (*model.ProfileSchemaAttribute, error) {
 
@@ -650,8 +650,7 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(ctx context.Cont
 	if err := psstr.DeleteProfileSchemaAttributeById(ctx, orgId, attributeId); err != nil {
 		return err
 	}
-	// The owner deletes the attribute, so CDS deletes all its policies. The values in the target
-	// orgs stay stored but hidden.
+	// Deleting the attribute deletes its sharing policies.
 	return sharingService.DeletePoliciesOfResource(ctx, shareModel.ResourceSchemaAttribute, attributeId)
 }
 
@@ -690,7 +689,7 @@ func (s *ProfileSchemaService) GetProfileSchema(ctx context.Context, orgId strin
 	// Add meta to the profileSchema
 	profileSchema["meta"] = meta
 
-	// Step 2: Fetch the effective schema attributes: owned, and shared attributes that are active
+	// Step 2: Fetch the effective schema attributes.
 	schemaAttributes, err := GetEffectiveProfileSchemaAttributes(ctx, orgId)
 	if err != nil {
 		errMsg := fmt.Sprintf("Error retrieving profile schema attributes for organization: %s", orgId)

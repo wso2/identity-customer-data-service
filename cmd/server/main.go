@@ -93,7 +93,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Select the adapter of the identity provider of this deployment.
+	// Create the adapter of the identity provider.
 	adapter, err := idp.NewAdapter(cdsConfig.IdP.Type)
 	if err != nil {
 		log.GetLogger().Error("Invalid identity provider configuration.", log.Error(err))

@@ -55,7 +55,7 @@ type contextKey string
 
 const TenantContextKey contextKey = "org_handle"
 
-// OrgIdContextKey holds the org ID of the path of a sub org, /t/{primary_handle}/o/{org_id}/...
+// OrgIdContextKey holds the organization ID of a sub organization path.
 const OrgIdContextKey contextKey = "org_id"
 
 const (

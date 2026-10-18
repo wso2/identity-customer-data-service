@@ -42,9 +42,10 @@ type UnificationRuleServiceInterface interface {
 	AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgHandle string) error
 	GetUnificationRules(ctx context.Context, orgHandle string) ([]model.UnificationRule, error)
 	GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationRule, error)
-	// GetUnificationRuleForOrg returns the rule when the org owns it or a shared rule reaches it.
+	// GetUnificationRuleForOrg returns the rule when the organization owns it or a shared rule
+	// reaches it.
 	GetUnificationRuleForOrg(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error)
-	// GetOwnedUnificationRule returns the rule when the org owns it. It returns 403 for a shared rule.
+	// GetOwnedUnificationRule returns the rule when the organization owns it.
 	GetOwnedUnificationRule(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error)
 	PatchUnificationRule(ctx context.Context, ruleId, orgHandle string, updatedRule model.UnificationRule) error
 	DeleteUnificationRule(ctx context.Context, ruleId string) error
@@ -113,7 +114,7 @@ func (urs *UnificationRuleService) AddUnificationRule(ctx context.Context,
 		}, http.StatusBadRequest)
 	}
 
-	// A local rule cannot use a property that an active shared rule of the org uses.
+	// A local rule cannot use a property that an active shared rule of the organization uses.
 	sharedRules, err := sharingService.ActiveSharedRules(ctx, orgHandle)
 	if err != nil {
 		return err
@@ -153,10 +154,8 @@ func (urs *UnificationRuleService) AddUnificationRule(ctx context.Context,
 	return nil
 }
 
-// GetUnificationRules returns the rules of the org in the evaluation order. For an org in an
-// organization tree, the shared rules that are active in the org come first (the group of the
-// farthest ancestor first, and the owner priority in each group), and then the rules that the org
-// owns, in their priority order.
+// GetUnificationRules returns the rules of the organization in evaluation order: the active shared
+// rules first, then the owned rules by priority.
 func (urs *UnificationRuleService) GetUnificationRules(ctx context.Context,
 	orgHandle string) ([]model.UnificationRule, error) {
 
@@ -193,8 +192,7 @@ func (urs *UnificationRuleService) GetUnificationRules(ctx context.Context,
 	for _, rule := range owned {
 		rule.Origin = shareModel.OriginOwned
 		rule.State = shareModel.StateActive
-		// A local rule can use a shared attribute. When the attribute stops being visible, the
-		// rule does not run.
+		// A rule whose attribute is not visible does not run.
 		if !effectiveNames[rule.PropertyName] {
 			rule.State = shareModel.StateInactiveMissingAttribute
 		}
@@ -206,7 +204,8 @@ func (urs *UnificationRuleService) GetUnificationRules(ctx context.Context,
 	return result, nil
 }
 
-// GetUnificationRuleForOrg returns the rule when the org owns it or a shared rule reaches it.
+// GetUnificationRuleForOrg returns the rule when the organization owns it or a shared rule reaches
+// it.
 func (urs *UnificationRuleService) GetUnificationRuleForOrg(ctx context.Context,
 	ruleId, orgHandle string) (*model.UnificationRule, error) {
 
@@ -232,7 +231,7 @@ func (urs *UnificationRuleService) GetUnificationRuleForOrg(ctx context.Context,
 	return nil, ruleNotFound(ruleId)
 }
 
-// GetOwnedUnificationRule returns the rule when the org owns it. It returns 403 for a shared rule.
+// GetOwnedUnificationRule returns the rule when the organization owns it.
 func (urs *UnificationRuleService) GetOwnedUnificationRule(ctx context.Context,
 	ruleId, orgHandle string) (*model.UnificationRule, error) {
 
@@ -307,8 +306,7 @@ func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
 	return nil
 }
 
-// DeleteUnificationRule Removes a unification rule. When the rule is shared, CDS deletes all its
-// policies.
+// DeleteUnificationRule deletes a unification rule and its sharing policies.
 func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId string) error {
 
 	rule, err := store.GetUnificationRule(ctx, ruleId)
@@ -329,8 +327,8 @@ func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ru
 	return sharingService.DeletePoliciesOfResource(ctx, shareModel.ResourceUnificationRule, ruleId)
 }
 
-// findEffectiveAttribute returns the attribute with the name from the effective schema of the org:
-// an attribute that the org owns, or a shared attribute that is active in the org.
+// findEffectiveAttribute returns the attribute with the name from the effective schema of the
+// organization.
 func findEffectiveAttribute(ctx context.Context, attributeName,
 	orgHandle string) (*schemaModel.ProfileSchemaAttribute, error) {
 
@@ -360,7 +358,7 @@ func effectiveAttributeNames(ctx context.Context, orgHandle string) (map[string]
 	return names, nil
 }
 
-// ValidateShareableRule returns the rule when the org owns it, so that the org can share it.
+// ValidateShareableRule returns the rule when the organization owns it and can share it.
 func ValidateShareableRule(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error) {
 	return GetUnificationRuleService().GetOwnedUnificationRule(ctx, ruleId, orgHandle)
 }

@@ -79,8 +79,7 @@ func inTx(ctx context.Context, description string, fn func(tx *dbmodel.Tx) error
 	return nil
 }
 
-// CreatePolicy stores a new policy with its targets. The unique key on the resource and the
-// initiating org refuses a second policy; the service checks it first.
+// CreatePolicy stores a new policy with its targets.
 func CreatePolicy(ctx context.Context, p model.Policy) error {
 
 	return inTx(ctx, "create a share policy", func(tx *dbmodel.Tx) error {
@@ -154,7 +153,8 @@ func GetPolicyById(ctx context.Context, policyId string) (*model.Policy, error) 
 	return withTargets(ctx, results)
 }
 
-// GetPolicy returns the policy of the initiating org for the resource, with its targets, or nil.
+// GetPolicy returns the policy of the initiating organization for the resource, with its targets,
+// or nil.
 func GetPolicy(ctx context.Context, resourceType, resourceId, initiatingOrgId string) (*model.Policy, error) {
 
 	results, err := query(ctx, scripts.GetSharePolicy, resourceType, resourceId, initiatingOrgId)
@@ -164,7 +164,7 @@ func GetPolicy(ctx context.Context, resourceType, resourceId, initiatingOrgId st
 	return withTargets(ctx, results)
 }
 
-// GetPoliciesByPrimaryOrg returns the share policies of one customer tree with their targets.
+// GetPoliciesByPrimaryOrg returns the share policies of one organization tree with their targets.
 func GetPoliciesByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]model.Policy, error) {
 
 	policyRows, err := query(ctx, scripts.GetSharePoliciesByPrimaryOrg, primaryOrgId)
@@ -189,14 +189,14 @@ func GetPoliciesByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]model.
 	return policies, nil
 }
 
-// GetPoliciesReachingOrg returns the share policies whose targets reach the org.
-// Each policy has only the targets that reach the org.
+// GetPoliciesReachingOrg returns the share policies whose targets reach the organization.
+// Each policy has only the targets that reach the organization.
 func GetPoliciesReachingOrg(ctx context.Context, orgId string) ([]model.Policy, error) {
 	return reachingPolicies(ctx, scripts.GetSharePoliciesReachingOrg, orgId)
 }
 
 // GetOrgAccessPoliciesReachingOrg returns the organization access policies whose targets reach
-// the org.
+// the organization.
 func GetOrgAccessPoliciesReachingOrg(ctx context.Context, orgId string) ([]model.Policy, error) {
 	return reachingPolicies(ctx, scripts.GetOrgAccessPoliciesReachingOrg, orgId)
 }
@@ -248,19 +248,20 @@ func DeletePoliciesOfResource(ctx context.Context, resourceType, resourceId stri
 	return nil
 }
 
-// SharedAttribute is a schema attribute that another org shares, with its owner.
+// SharedAttribute is a schema attribute that another organization shares, with its owner.
 type SharedAttribute struct {
 	Attribute      schemaModel.ProfileSchemaAttribute
 	OwnerOrgHandle string
 }
 
-// ChainAttribute is an attribute of an org of the ancestor chain, with the ID of the owner org.
+// ChainAttribute is an attribute of an organization of the ancestor chain, with the ID of the owner
+// organization.
 type ChainAttribute struct {
 	SharedAttribute
 	OwnerOrgId string
 }
 
-// GetAttributesOfChain returns the attributes of the org and of its ancestors.
+// GetAttributesOfChain returns the attributes of the organization and of its ancestors.
 func GetAttributesOfChain(ctx context.Context, orgId string) ([]ChainAttribute, error) {
 
 	results, err := query(ctx, scripts.GetSchemaAttributesOfChain, orgId)
@@ -300,20 +301,21 @@ func GetAttributesOfChain(ctx context.Context, orgId string) ([]ChainAttribute, 
 	return attrs, nil
 }
 
-// SharedRule is a unification rule that another org shares. OwnerHops is the number of levels from
-// the org up to the owner: a larger value is a farther owner.
+// SharedRule is a unification rule that another organization shares. OwnerHops is the number of
+// levels from the organization up to the owner.
 type SharedRule struct {
 	Rule      ruleModel.UnificationRule
 	OwnerHops int
 }
 
-// ChainRule is a rule of an org of the ancestor chain, with the ID of the owner org.
+// ChainRule is a rule of an organization of the ancestor chain, with the ID of the owner
+// organization.
 type ChainRule struct {
 	SharedRule
 	OwnerOrgId string
 }
 
-// GetRulesOfChain returns the rules of the org and of its ancestors.
+// GetRulesOfChain returns the rules of the organization and of its ancestors.
 func GetRulesOfChain(ctx context.Context, orgId string) ([]ChainRule, error) {
 
 	results, err := query(ctx, scripts.GetUnificationRulesOfChain, orgId)
@@ -343,12 +345,12 @@ func GetRulesOfChain(ctx context.Context, orgId string) ([]ChainRule, error) {
 	return result, nil
 }
 
-// TreeAttribute is an attribute of one org of the tree, for the share evaluation.
+// TreeAttribute is an attribute of one organization of the tree, for the share evaluation.
 type TreeAttribute struct {
 	Id, Name, Scope, ValueType, ApplicationIdentifier, OrgHandle, OrgId string
 }
 
-// GetAttributesByPrimaryOrg returns the attributes of all orgs of one customer tree.
+// GetAttributesByPrimaryOrg returns the attributes of all organizations of one organization tree.
 func GetAttributesByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]TreeAttribute, error) {
 
 	results, err := query(ctx, scripts.GetSchemaAttributesByPrimaryOrg, primaryOrgId)
@@ -371,12 +373,12 @@ func GetAttributesByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]Tree
 	return attrs, nil
 }
 
-// TreeRule is a rule of one org of the tree, for the share evaluation.
+// TreeRule is a rule of one organization of the tree, for the share evaluation.
 type TreeRule struct {
 	Id, PropertyName, PropertyId, OrgHandle, OrgId string
 }
 
-// GetRulesByPrimaryOrg returns the rules of all orgs of one customer tree.
+// GetRulesByPrimaryOrg returns the rules of all organizations of one organization tree.
 func GetRulesByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]TreeRule, error) {
 
 	results, err := query(ctx, scripts.GetUnificationRulesByPrimaryOrg, primaryOrgId)

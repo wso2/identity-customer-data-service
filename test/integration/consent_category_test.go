@@ -213,7 +213,7 @@ func Test_Consent(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, mandatoryIds)
 
-		err = svc.DeleteConsentCategory(context.Background(), mandatoryIds[0])
+		err = svc.DeleteConsentCategory(context.Background(), mandatoryIds[0], org)
 		assert.Error(t, err, "should reject deletion of mandatory category")
 	})
 
@@ -232,7 +232,7 @@ func Test_Consent(t *testing.T) {
 		assert.Len(t, created.Attributes, 1)
 		assert.Equal(t, testAppId, created.Attributes[0].ApplicationIdentifier)
 		// Cleanup
-		_ = svc.DeleteConsentCategory(context.Background(), created.CategoryIdentifier)
+		_ = svc.DeleteConsentCategory(context.Background(), created.CategoryIdentifier, org)
 	})
 
 	t.Run("Reject_applicationData_attribute_with_missing_application_identifier", func(t *testing.T) {
@@ -262,7 +262,7 @@ func Test_Consent(t *testing.T) {
 	})
 
 	t.Run("Delete_consent_category", func(t *testing.T) {
-		err := svc.DeleteConsentCategory(context.Background(), categoryId)
+		err := svc.DeleteConsentCategory(context.Background(), categoryId, org)
 		require.NoError(t, err)
 
 		deleted, _ := svc.GetConsentCategory(context.Background(), categoryId)

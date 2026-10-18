@@ -40,10 +40,9 @@ func ValidateAuthenticationAndReturnClaims(token, orgHandle string) (map[string]
 	return ValidateTokenForOrg(token, orgHandle, "")
 }
 
-// ValidateTokenForOrg validates the token for the org of the path. On the path of a sub org,
-// /t/{primary_handle}/o/{org_id}/..., pathOrgId is the org ID of the path, and the org_id claim of
-// the token must be equal to it. On the path of a primary org, pathOrgId is empty, and the
-// org_handle claim must be equal to the handle of the path. CDS does not take the org from a claim.
+// ValidateTokenForOrg validates the token for the organization of the path. For a sub organization,
+// the org_id claim must match pathOrgId. For a primary organization, the org_handle claim must
+// match the path handle.
 func ValidateTokenForOrg(token, orgHandle, pathOrgId string) (map[string]interface{}, error) {
 
 	logger := log.GetLogger()
@@ -102,9 +101,7 @@ func ValidateTokenForOrg(token, orgHandle, pathOrgId string) (map[string]interfa
 		return nil, unauthorizedError()
 	}
 
-	// Organization management: on the path of a sub org, the org_id claim must be the org of the
-	// path. On the path of a primary org, an org-switched token names another org and does not
-	// match.
+	// The token must be issued for the organization of the path.
 	if pathOrgId != "" {
 		if tokenOrgId, _ := introspectionClaims[constants.OrgIdClaim].(string); tokenOrgId != pathOrgId {
 			logger.Debug(fmt.Sprintf("Opaque token is for organization '%s', not for '%s'", tokenOrgId, pathOrgId))
@@ -157,9 +154,7 @@ func ParseJWTClaims(tokenString string) (map[string]interface{}, error) {
 	return claims, nil
 }
 
-// validateClaims ensures the token has the org of the path, an expiry in the future, and the
-// expected audience. On the path of a sub org, the org_id claim must be equal to pathOrgId. On the
-// path of a primary org, the org_handle claim must be equal to orgHandle.
+// validateClaims checks the organization, the expiry, and the audience of the token.
 func validateClaims(orgHandle, pathOrgId string, claims map[string]interface{}) bool {
 
 	logger := log.GetLogger()

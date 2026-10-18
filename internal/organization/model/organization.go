@@ -27,8 +27,7 @@ const (
 	StatusDeleted  = "DELETED"
 )
 
-// Organization is the CDS view of one org of the identity provider. CDS keys an org by the
-// stable org ID of the identity provider. The handle is an alias for routing.
+// Organization holds the details of an organization.
 type Organization struct {
 	OrgId        string    `json:"org_id"`
 	OrgHandle    string    `json:"org_handle"`
@@ -40,29 +39,25 @@ type Organization struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// IsPrimary reports whether the org is the primary org of its organization tree.
+// IsPrimary reports whether the organization is a primary organization.
 func (o Organization) IsPrimary() bool {
 	return o.OrgId == o.PrimaryOrgId
 }
 
-// SyncEvent is an org lifecycle event that the identity provider pushes to CDS.
+// SyncEvent is an organization lifecycle event.
 type SyncEvent struct {
-	Event       string `json:"event"`
-	OrgId       string `json:"org_id"`
-	ParentOrgId string `json:"parent_org_id,omitempty"`
-	OrgHandle   string `json:"org_handle,omitempty"`
-	OrgName     string `json:"org_name,omitempty"`
+	Event string `json:"event"`
+	OrgId string `json:"org_id"`
 }
 
-// Org lifecycle event names that CDS accepts. They are neutral to the identity provider. The IS
-// extension maps the IS event names to them.
+// Organization lifecycle event types.
 const (
 	EventOrgCreated = "ORG_CREATED"
 	EventOrgUpdated = "ORG_UPDATED"
 	EventOrgDeleted = "ORG_DELETED"
 )
 
-// Tree sync states of a primary org. NOT_SYNCED means that no tree sync started yet.
+// Tree sync states. NOT_SYNCED means that no tree sync has started.
 const (
 	TreeSyncNotSynced = "NOT_SYNCED"
 	TreeSyncSyncing   = "SYNCING"
@@ -70,23 +65,21 @@ const (
 	TreeSyncFailed    = "FAILED"
 )
 
-// The cds_config keys of the primary org that hold the tree sync state.
+// Configuration keys that hold the tree sync state.
 const (
 	ConfigTreeSyncState      = "tree_sync_state"
 	ConfigTreeSyncStartedAt  = "tree_sync_started_at"
 	ConfigTreeSyncFinishedAt = "tree_sync_finished_at"
 	ConfigTreeSyncedAt       = "tree_synced_at"
-	ConfigTreeSyncOrgCount   = "tree_sync_org_count"
 	ConfigTreeSyncError      = "tree_sync_error"
 )
 
-// TreeSyncStatus is the state of the tree sync of a primary org. LastSyncedAt is the end of the
-// last sync that completed. Organization access needs it.
+// TreeSyncStatus is the state of the organization tree sync. LastSyncedAt is the end time of the
+// last completed sync.
 type TreeSyncStatus struct {
 	State        string     `json:"state"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
-	OrgCount     *int       `json:"org_count,omitempty"`
 	Error        string     `json:"error,omitempty"`
 }

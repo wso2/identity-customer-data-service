@@ -160,8 +160,7 @@ type Config struct {
 	ApplicationIdentifierType string `yaml:"application_identifier_type"`
 }
 
-// IdPConfig selects the identity provider of the deployment. One CDS deployment works with one
-// identity provider.
+// IdPConfig selects the identity provider of the deployment.
 type IdPConfig struct {
 	// Type is "wso2is", the default when it is empty.
 	Type string `yaml:"type"`

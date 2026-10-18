@@ -444,10 +444,8 @@ func persistMergedProfileData(ctx context.Context, masterProfile profileModel.Pr
 	}
 }
 
-// filterActiveRulesAndSortByPriority keeps the rules that run, in the evaluation order. For an org
-// in an organization tree, the rule service sets the rank (shared rules first), and a rule with a
-// share state other than ACTIVE does not run. For other orgs, the rank is zero and the priority
-// decides.
+// filterActiveRulesAndSortByPriority returns the rules that run, in evaluation order. Rules with a
+// share state other than ACTIVE do not run.
 func filterActiveRulesAndSortByPriority(rules []model.UnificationRule) []model.UnificationRule {
 	activeRules := make([]model.UnificationRule, 0, len(rules))
 	for _, r := range rules {

@@ -21,7 +21,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
@@ -40,7 +39,7 @@ func serverError(description string, err error) error {
 	}, err)
 }
 
-// UpsertOrganization inserts the org, or updates it when it exists.
+// UpsertOrganization inserts the organization, or updates it when it exists.
 func UpsertOrganization(ctx context.Context, org model.Organization) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -61,17 +60,17 @@ func UpsertOrganization(ctx context.Context, org model.Organization) error {
 	return nil
 }
 
-// GetOrganizationById returns the org, or nil when CDS does not know it.
+// GetOrganizationById returns the organization, or nil when it is not stored.
 func GetOrganizationById(ctx context.Context, orgId string) (*model.Organization, error) {
 	return getOne(ctx, scripts.GetOrganizationById, orgId)
 }
 
-// GetOrganizationByHandle returns the org, or nil when CDS does not know it.
+// GetOrganizationByHandle returns the organization, or nil when it is not stored.
 func GetOrganizationByHandle(ctx context.Context, orgHandle string) (*model.Organization, error) {
 	return getOne(ctx, scripts.GetOrganizationByHandle, orgHandle)
 }
 
-// GetOrganizationsByPrimaryOrg returns all orgs of one customer tree, ordered by org_id.
+// GetOrganizationsByPrimaryOrg returns all organizations of an organization tree.
 func GetOrganizationsByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]model.Organization, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -92,7 +91,7 @@ func GetOrganizationsByPrimaryOrg(ctx context.Context, primaryOrgId string) ([]m
 	return orgs, nil
 }
 
-// GetOrganizationChain returns the org and its ancestors, the primary org first.
+// GetOrganizationChain returns the organization and its ancestors, the primary organization first.
 func GetOrganizationChain(ctx context.Context, orgId string) ([]model.Organization, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -112,7 +111,7 @@ func GetOrganizationChain(ctx context.Context, orgId string) ([]model.Organizati
 	return orgs, nil
 }
 
-// UpdateOrganizationStatus sets the status of the org.
+// UpdateOrganizationStatus sets the status of the organization.
 func UpdateOrganizationStatus(ctx context.Context, orgId, status string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -128,8 +127,7 @@ func UpdateOrganizationStatus(ctx context.Context, orgId, status string) error {
 	return nil
 }
 
-// GetTreeSyncStatus returns the tree sync state of the primary org, from its cds_config keys. A
-// primary org without the keys is NOT_SYNCED.
+// GetTreeSyncStatus returns the tree sync state of the primary organization.
 func GetTreeSyncStatus(ctx context.Context, primaryHandle string) (*model.TreeSyncStatus, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -156,10 +154,6 @@ func GetTreeSyncStatus(ctx context.Context, primaryHandle string) (*model.TreeSy
 			status.FinishedAt = parseTime(value)
 		case model.ConfigTreeSyncedAt:
 			status.LastSyncedAt = parseTime(value)
-		case model.ConfigTreeSyncOrgCount:
-			if count, err := strconv.Atoi(value); err == nil {
-				status.OrgCount = &count
-			}
 		case model.ConfigTreeSyncError:
 			status.Error = value
 		}
@@ -167,8 +161,8 @@ func GetTreeSyncStatus(ctx context.Context, primaryHandle string) (*model.TreeSy
 	return status, nil
 }
 
-// SetTreeSyncValues writes cds_config keys of the primary org in one transaction. An empty value
-// clears the key.
+// SetTreeSyncValues writes the tree sync keys of the primary organization in one transaction. An
+// empty value clears the key.
 func SetTreeSyncValues(ctx context.Context, primaryHandle string, values map[string]string) error {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()

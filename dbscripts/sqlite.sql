@@ -196,11 +196,6 @@ CREATE INDEX IF NOT EXISTS idx_unification_rules_org_active_priority
 CREATE INDEX IF NOT EXISTS idx_unification_rules_property_id
     ON unification_rules (property_id);
 
--- ================================
--- ORGANIZATION MANAGEMENT: ORGANIZATIONS AND SHARING
--- ================================
-
--- The org tree that CDS learns from the identity provider.
 CREATE TABLE IF NOT EXISTS organizations
 (
     org_id         VARCHAR(255) PRIMARY KEY,
@@ -219,8 +214,6 @@ CREATE INDEX IF NOT EXISTS idx_organizations_parent
 CREATE INDEX IF NOT EXISTS idx_organizations_primary
     ON organizations (primary_org_id);
 
--- One policy for each resource and initiating org. The organization access of a primary org is a
--- policy with resource_type ORGANIZATION_ACCESS and resource_id CDS.
 CREATE TABLE IF NOT EXISTS cds_share_policy
 (
     policy_id         VARCHAR(255) PRIMARY KEY,
@@ -234,7 +227,6 @@ CREATE TABLE IF NOT EXISTS cds_share_policy
 CREATE INDEX IF NOT EXISTS idx_share_policy_initiating
     ON cds_share_policy (initiating_org_id, resource_type);
 
--- ALL_CHILDREN stores the initiating org as target_org_id.
 CREATE TABLE IF NOT EXISTS cds_share_policy_target
 (
     policy_id     VARCHAR(255) NOT NULL REFERENCES cds_share_policy (policy_id) ON DELETE CASCADE,

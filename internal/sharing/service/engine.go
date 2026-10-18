@@ -27,25 +27,21 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
-// The engine computes the share state of a shared resource in an org. It is pure: the service
-// loads the orgs, the resources, and the policies. CDS does not store the result. The read for
-// one org loads only the ancestor chain of the org, the local resources of the org, and the
-// policies that reach it, and calls EvaluateOrg.
+// The engine computes the share state of shared resources in an organization tree. It has no side
+// effects.
 
-// TreeOrg is an org of the tree, as the engine needs it. CDS stores no depth: the engine computes
-// the level of each org from the parent links.
+// TreeOrg is an organization in the tree. The engine computes levels from the parent links.
 type TreeOrg struct {
 	Id       string
 	Handle   string
 	ParentId string
 	Active   bool
-	// NotEnabled is true when the organization access of the primary org does not reach the org. A
-	// share does not apply in such an org, but it passes down to the orgs below it.
+	// NotEnabled is true when the organization access does not include the organization. A share
+	// does not apply in such an organization, but it applies to the organizations below it.
 	NotEnabled bool
 }
 
-// AttributeInfo is a profile schema attribute, as the engine needs it. AppId is the application
-// identifier of an application data attribute, and empty for the other scopes.
+// AttributeInfo is a profile schema attribute. AppId is set only for application data attributes.
 type AttributeInfo struct {
 	Id         string
 	Name       string
@@ -54,8 +50,8 @@ type AttributeInfo struct {
 	AppId      string
 }
 
-// nameKey is the key of the attribute for name conflicts. Application data attributes are scoped
-// to their app, so two apps can use the same attribute name.
+// nameKey returns the key for name conflicts. Application data attribute names are scoped to their
+// application.
 func (a AttributeInfo) nameKey() string {
 
 	if a.AppId == "" {
@@ -64,7 +60,7 @@ func (a AttributeInfo) nameKey() string {
 	return a.AppId + "\x00" + a.Name
 }
 
-// RuleInfo is a unification rule, as the engine needs it.
+// RuleInfo is a unification rule.
 type RuleInfo struct {
 	Id           string
 	PropertyName string
@@ -72,9 +68,9 @@ type RuleInfo struct {
 	OwnerOrgId   string
 }
 
-// EngineInput is everything the engine reads for one tree. IdentitySourceOrgId is the org whose
-// identity attributes the other orgs of the tree inherit. When it is empty, each org sees only its
-// own.
+// EngineInput is the input of the engine for one tree. IdentitySourceOrgId is the organization
+// whose identity attributes the other organizations inherit. When it is empty, no attributes are
+// inherited.
 type EngineInput struct {
 	Orgs                []TreeOrg
 	Attributes          []AttributeInfo
@@ -88,7 +84,7 @@ type tree struct {
 	children map[string][]string
 }
 
-// level returns the number of parents of the org that the tree has.
+// level returns the depth of the organization in the tree.
 func (t tree) level(orgId string) int {
 
 	level := 0
@@ -101,8 +97,7 @@ func (t tree) level(orgId string) int {
 	return level
 }
 
-// isTargetOf reports whether a named target can be reached by the policy. A policy names only
-// direct children of the initiating org.
+// isTargetOf reports whether the policy reaches the organization through a named target.
 func (t tree) isTargetOf(orgId string, p model.Policy) bool {
 	return t.byId[orgId].ParentId == p.InitiatingOrgId
 }
@@ -124,7 +119,7 @@ func newTree(orgs []TreeOrg) tree {
 	return t
 }
 
-// subtree returns the org and all orgs below it.
+// subtree returns the organization and all organizations below it.
 func (t tree) subtree(orgId string) []string {
 
 	result := []string{orgId}
@@ -134,12 +129,12 @@ func (t tree) subtree(orgId string) []string {
 	return result
 }
 
-// descendants returns all orgs below the org.
+// descendants returns all organizations below the organization.
 func (t tree) descendants(orgId string) []string {
 	return t.subtree(orgId)[1:]
 }
 
-// Reach returns the active, enabled orgs that a policy reaches, sorted by level and then ID.
+// Reach returns the active, enabled organizations that the policy reaches, sorted by level and ID.
 func Reach(orgs []TreeOrg, p model.Policy) []string {
 	return reach(newTree(orgs), p)
 }
@@ -181,9 +176,8 @@ func reach(t tree, p model.Policy) []string {
 	return result
 }
 
-// ValidatePolicy checks a policy against the tree. It returns a list of problems, which is
-// empty when the policy is valid. A request for more than the initiator can give is refused,
-// and not trimmed.
+// ValidatePolicy checks a policy against the tree and returns the problems. The result is empty
+// when the policy is valid.
 func ValidatePolicy(orgs []TreeOrg, p model.Policy) []string {
 
 	t := newTree(orgs)
@@ -221,15 +215,13 @@ func ValidatePolicy(orgs []TreeOrg, p model.Policy) []string {
 	return problems
 }
 
-// Evaluate returns the state of every shared resource in every org that its policy reaches. The
-// share-time check of a rule uses it for the orgs of the tree.
+// Evaluate returns the state of every shared resource in every organization that its policy
+// reaches.
 func Evaluate(in EngineInput) []model.State {
 	return evaluate(in, "")
 }
 
-// EvaluateOrg returns the state of every shared resource that reaches the org. The input needs
-// only the ancestor chain of the org, the local resources of the org, and the policies that reach
-// it, with their resources.
+// EvaluateOrg returns the state of every shared resource that reaches the organization.
 func EvaluateOrg(in EngineInput, orgId string) []model.State {
 	return evaluate(in, orgId)
 }
@@ -264,9 +256,8 @@ func evaluate(in EngineInput, only string) []model.State {
 
 	var states []model.State
 
-	// Precedence. For attributes, the local attribute of the org wins, and then the shared
-	// attribute of the nearest owner: the policies of deeper owners come first. For rules, the
-	// local rule wins, and then the shared rule of the farthest owner, which is also the run order.
+	// Precedence. For attributes, a local attribute wins, then the shared attribute of the nearest
+	// owner. For rules, a local rule wins, then the shared rule of the farthest owner.
 	policies := append([]model.Policy(nil), in.Policies...)
 	sort.SliceStable(policies, func(i, j int) bool {
 		pi, pj := policies[i], policies[j]
@@ -283,7 +274,7 @@ func evaluate(in EngineInput, only string) []model.State {
 		return pi.PolicyId < pj.PolicyId
 	})
 
-	// Attributes first, because the rule states depend on the effective schema of each org.
+	// Attributes first, because rule states depend on the effective schema.
 	activeShared := map[string]map[string]AttributeInfo{} // org -> name key -> active shared attribute
 	for _, p := range policies {
 		if p.ResourceType != model.ResourceSchemaAttribute {
@@ -316,7 +307,6 @@ func evaluate(in EngineInput, only string) []model.State {
 		}
 	}
 
-	// Rules.
 	activeSharedRules := map[string]map[string]RuleInfo{} // org -> property name -> active shared rule
 	for _, p := range policies {
 		if p.ResourceType != model.ResourceUnificationRule {
@@ -353,9 +343,8 @@ func evaluate(in EngineInput, only string) []model.State {
 	return states
 }
 
-// hasCompatibleAttribute reports whether the org sees an attribute with the name of the rule
-// property and the same value type as the attribute of the rule in its owner org. The org sees its
-// local attributes, the inherited identity attributes, and its active shared attributes.
+// hasCompatibleAttribute reports whether the organization sees an attribute with the name and the
+// value type of the rule property.
 func hasCompatibleAttribute(rule RuleInfo, attributesById map[string]AttributeInfo,
 	local, inherited, shared map[string]AttributeInfo) bool {
 

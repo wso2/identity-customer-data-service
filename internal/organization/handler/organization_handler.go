@@ -25,7 +25,6 @@ import (
 	adminConfigService "github.com/wso2/identity-customer-data-service/internal/admin_config/service"
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
 	"github.com/wso2/identity-customer-data-service/internal/organization/service"
-	"github.com/wso2/identity-customer-data-service/internal/organization/store"
 	shareHandler "github.com/wso2/identity-customer-data-service/internal/sharing/handler"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -38,15 +37,14 @@ const (
 	treeSyncResource  = "organization sync"
 )
 
-// OrganizationHandler serves the CDS view of the org tree.
+// OrganizationHandler handles the organization endpoints.
 type OrganizationHandler struct{}
 
 func NewOrganizationHandler() *OrganizationHandler {
 	return &OrganizationHandler{}
 }
 
-// SyncOrganization handles POST /organizations/event-sync. The identity provider pushes org lifecycle
-// events here with the admin credentials, like the other sync endpoints.
+// SyncOrganization applies an organization lifecycle event.
 func (h *OrganizationHandler) SyncOrganization(w http.ResponseWriter, r *http.Request) {
 
 	if err := security.AuthnWithAdminCredentials(r); err != nil {
@@ -72,8 +70,7 @@ func (h *OrganizationHandler) SyncOrganization(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// StartTreeSync handles POST /organizations/sync. It starts the background sync of the org
-// tree of the primary org and returns 202 with the state.
+// StartTreeSync starts a background sync of the organization tree.
 func (h *OrganizationHandler) StartTreeSync(w http.ResponseWriter, r *http.Request) {
 
 	primary, ok := primaryOf(w, r, "organization:update")
@@ -88,8 +85,7 @@ func (h *OrganizationHandler) StartTreeSync(w http.ResponseWriter, r *http.Reque
 	utils.RespondJSON(w, http.StatusAccepted, status, treeSyncResource)
 }
 
-// GetTreeSync handles GET /organizations/sync-status. It returns the state of the tree sync of the
-// primary org.
+// GetTreeSync returns the state of the organization tree sync.
 func (h *OrganizationHandler) GetTreeSync(w http.ResponseWriter, r *http.Request) {
 
 	primary, ok := primaryOf(w, r, "organization:view")
@@ -104,7 +100,7 @@ func (h *OrganizationHandler) GetTreeSync(w http.ResponseWriter, r *http.Request
 	utils.RespondJSON(w, http.StatusOK, status, treeSyncResource)
 }
 
-// The organization access endpoints. Only a primary org that enabled CDS calls them.
+// Organization access endpoints.
 
 func (h *OrganizationHandler) CreateOrgAccess(w http.ResponseWriter, r *http.Request) {
 
@@ -183,8 +179,8 @@ func (h *OrganizationHandler) DeleteOrgAccess(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// primaryOf authenticates the request and returns the primary org of the path. A sub org gets 400,
-// and a primary org that did not enable CDS gets CDS_NOT_ENABLED.
+// primaryOf authenticates the request and returns the primary organization of the path. It writes
+// an error response when the organization is not a primary organization with CDS enabled.
 func primaryOf(w http.ResponseWriter, r *http.Request, operation string) (*model.Organization, bool) {
 
 	if err := security.AuthnAndAuthzPrimary(r, operation); err != nil {
@@ -196,11 +192,7 @@ func primaryOf(w http.ResponseWriter, r *http.Request, operation string) (*model
 		utils.HandleError(w, notEnabled())
 		return nil, false
 	}
-	org, err := store.GetOrganizationByHandle(r.Context(), orgHandle)
-	if err == nil && org == nil {
-		// Store the primary org when CDS does not have it yet.
-		org, err = service.EnsurePrimary(r.Context(), orgHandle)
-	}
+	org, err := service.GetOrStoreOrganization(r.Context(), orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return nil, false

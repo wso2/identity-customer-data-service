@@ -379,7 +379,7 @@ var (
 		Description: "Customer data service is not enabled for the organization",
 	}
 
-	// Organization management: organizations and sharing.
+	// Organizations and sharing.
 	//   156xx - Server errors
 	//   17xxx - Client errors
 

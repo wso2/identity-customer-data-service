@@ -47,9 +47,8 @@ type AdminConfigServiceInterface interface {
 // AdminConfigService is the default implementation.
 type AdminConfigService struct{}
 
-// IsCDSEnabled reports whether CDS is enabled for the org. A sub org is enabled when its primary
-// org enabled CDS and the organization access of the primary org reaches the sub org. An org that
-// CDS does not know is not enabled.
+// IsCDSEnabled reports whether CDS is enabled for the organization. A sub organization is enabled
+// when its primary organization is enabled and the organization access includes it.
 func (a AdminConfigService) IsCDSEnabled(ctx context.Context, orgHandle string) bool {
 	config, err := store.GetAdminConfig(ctx, orgHandle)
 	if err == nil && config != nil && config.CDSEnabled {
@@ -105,7 +104,7 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 	if config == nil {
 		config = &defaultConfig
 	}
-	// A sub org shows the enablement of its primary org.
+	// A sub organization uses the enablement of its primary organization.
 	if !config.CDSEnabled {
 		config.CDSEnabled = a.IsCDSEnabled(ctx, orgHandle)
 	}
@@ -114,7 +113,7 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 
 func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 	updatedConfig model.AdminConfig, orgHandle string) error {
-	// A sub org inherits the configuration of its primary org and cannot change it.
+	// A sub organization cannot change the configuration.
 	if err := suborg.RejectWrite(ctx, orgHandle); err != nil {
 		return err
 	}
@@ -160,16 +159,14 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 		return err
 	}
 
-	// When a primary org disables CDS, the org events stop. The org tree is synced again after the
-	// next enable.
+	// Disabling CDS resets the organization tree sync.
 	if isCDSEnabledInitialState && !updatedConfig.CDSEnabled {
 		if err := orgService.ResetTreeSync(ctx, orgHandle); err != nil {
 			return err
 		}
 	}
 
-	// When a primary org enables CDS, CDS stores the primary org. The sub orgs are stored when the
-	// primary org syncs its org tree.
+	// Enabling CDS stores the primary organization.
 	if !isCDSEnabledInitialState && updatedConfig.CDSEnabled {
 		if _, err := orgService.EnsurePrimary(ctx, orgHandle); err != nil {
 			return err

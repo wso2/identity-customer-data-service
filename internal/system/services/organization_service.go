@@ -43,8 +43,7 @@ func NewOrganizationService(mux *http.ServeMux) *OrganizationService {
 		mux:           mux,
 	}
 
-	// The path of a sub org is /t/{primary_handle}/o/{org_id}/... A sub org handle is not valid in
-	// /t/{handle}/...
+	// Sub organization paths are /t/{primary_handle}/o/{org_id}/...
 	utils.SubOrgResolver = orgService.SubOrgHandleOf
 	utils.IsSubOrgHandle = orgService.IsSubOrgHandle
 

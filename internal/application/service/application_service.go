@@ -77,9 +77,8 @@ func (as *ApplicationService) ResolveAndRegisterApplication(ctx context.Context,
 
 // ResolveAppIdentifierByClientID resolves an OAuth clientId to the app ID via the local store. A missing mapping
 // returns an empty string with a nil error; a store failure is returned so callers can distinguish the two.
-// In a sub org, the token of a shared app carries the clientId of the main app, and CDS keys the
-// data by the main app. So a clientId that the sub org does not have is looked up in each parent
-// org up to the primary org.
+// If a sub organization has no mapping for the client ID, the ancestor organizations are checked,
+// nearest first.
 func (as *ApplicationService) ResolveAppIdentifierByClientID(ctx context.Context,
 	orgHandle, clientID string) (string, error) {
 
@@ -96,8 +95,7 @@ func (as *ApplicationService) ResolveAppIdentifierByClientID(ctx context.Context
 	return "", nil
 }
 
-// orgChain returns the handles of the org and its parent orgs up to the primary org, nearest first.
-// An org that is not in an organization tree is its own chain.
+// orgChain returns the handles of the organization and its ancestors, nearest first.
 func orgChain(ctx context.Context, orgHandle string) ([]string, error) {
 
 	org, err := orgStore.GetOrganizationByHandle(ctx, orgHandle)

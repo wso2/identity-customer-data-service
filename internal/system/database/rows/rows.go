@@ -16,9 +16,8 @@
  * under the License.
  */
 
-// Package rows reads typed values from the rows that the DB client returns. The two dialects
-// return different Go types for the same column (for example, a boolean from a join in SQLite
-// can arrive as an int64), so the readers accept each form.
+// Package rows reads typed values from database rows. Each dialect can return a different Go type
+// for the same column.
 package rows
 
 import (
