@@ -394,22 +394,7 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 	}
 	done("all %d CDS API resources are registered", len(cdsAPIResources))
 
-	// 2. The claim that links an IS user to a CDS profile.
-	created, err := api.ensureLocalClaim(cdsProfileClaim, "CDS Profile",
-		"Customer Data Service profile identifier", cdsProfileAttribute)
-	if err != nil {
-		return err
-	}
-	reportEnsured(created, "local claim "+cdsProfileClaim)
-
-	created, err = api.ensureDialectClaim(scimDialectURI, cdsProfileSCIMClaim, cdsProfileClaim)
-	if err != nil {
-		warn("could not map %s: %v", cdsProfileSCIMClaim, err)
-	} else {
-		reportEnsured(created, "SCIM2 claim "+cdsProfileSCIMClaim)
-	}
-
-	// 3-4. The application CDS authenticates as, and the IS APIs it may call.
+	// 2-3. The application CDS authenticates as, and the IS APIs it may call.
 	systemID, err := ensureApplication(api, systemAppName, "Used by the Customer Data Service to call Identity Server APIs")
 	if err != nil {
 		return err
@@ -426,7 +411,7 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 		return err
 	}
 
-	// 5. A client application for calling the CDS APIs.
+	// 4. A client application for calling the CDS APIs.
 	clientID, err := ensureApplication(api, clientAppName, "Calls the Customer Data Service APIs")
 	if err != nil {
 		return err
@@ -444,7 +429,7 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 		return err
 	}
 
-	// 6. The Console, and the administrator role that uses it.
+	// 5. The Console, and the administrator role that uses it.
 	provisionConsole(api)
 
 	// The runtime authenticates as the system application and introspects the
@@ -462,7 +447,7 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 	}
 	done("recorded the client credentials in %s", secretsFile)
 
-	// 7. Organization enablement, which is a CDS API call and so needs a
+	// 6. Organization enablement, which is a CDS API call and so needs a
 	// running CDS. Starting CDS is an explicit lifecycle operation, so this
 	// step reports what remains rather than starting the process itself; a
 	// later `wso2cds enable` picks it up once CDS is running.
@@ -530,22 +515,35 @@ func ensureApplication(api *isAPI, name, description string) (string, error) {
 func authorizeCDSAPIs(api *isAPI, appID string) error {
 
 	for _, identifier := range cdsAPIResources {
-		resourceID, err := api.apiResourceID(identifier)
+		scopes, err := scopesOf(api, identifier)
 		if err != nil {
 			return err
-		}
-		scopes, err := api.apiResourceScopes(resourceID)
-		if err != nil {
-			return err
-		}
-		if len(scopes) == 0 {
-			return fmt.Errorf("the API resource %s has no scopes", identifier)
 		}
 		if err := api.authorizeAPI(appID, identifier, scopes); err != nil {
 			return fmt.Errorf("could not authorize %s: %w", identifier, err)
 		}
 	}
 	return nil
+}
+
+// scopesOf reads back every scope an API resource declares.
+func scopesOf(api *isAPI, identifier string) ([]string, error) {
+
+	resourceID, err := api.apiResourceID(identifier)
+	if err != nil {
+		return nil, err
+	}
+	if resourceID == "" {
+		return nil, fmt.Errorf("the Identity Server has no API resource %s", identifier)
+	}
+	scopes, err := api.apiResourceScopes(resourceID)
+	if err != nil {
+		return nil, err
+	}
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("the API resource %s has no scopes", identifier)
+	}
+	return scopes, nil
 }
 
 // provisionConsole authorizes the Console and the administrator role.
@@ -574,22 +572,44 @@ func provisionConsole(api *isAPI) {
 		}
 	}
 
-	if err := authorizeCDSAPIs(api, consoleID); err != nil {
-		warn("could not authorize the Console for the CDS APIs: %v", err)
-	} else {
-		done("the Console application is authorized for the CDS APIs")
+	// The Identity Server owns the Console's authorised APIs and refuses to
+	// patch them, so an authorisation that is already there is left alone.
+	// What the Console can reach is declared in the api_resource_collections
+	// and console.customer_data_* sections written into deployment.toml.
+	added, held := 0, 0
+	for _, identifier := range cdsAPIResources {
+		scopes, err := scopesOf(api, identifier)
+		if err != nil {
+			warn("could not read the scopes of %s: %v", identifier, err)
+			continue
+		}
+		created, err := api.authorizeAPIIfAbsent(consoleID, identifier, scopes)
+		switch {
+		case err != nil:
+			warn("could not authorize the Console for %s: %v", identifier, err)
+		case created:
+			added++
+		default:
+			held++
+		}
+	}
+	switch {
+	case added > 0:
+		done("authorized the Console for %d CDS API resource(s)", added)
+	case held == len(cdsAPIResources):
+		info("the Console already reaches all %d CDS API resources", held)
 	}
 
 	permissions := append(append([]string{}, consoleFeatureScopes...), cdsScopes(api)...)
-	added, err := api.grantRolePermissions("admin", permissions)
+	granted, err := api.grantRolePermissions("admin", permissions)
 	switch {
 	case err != nil:
 		warn("could not grant the CDS scopes to the 'admin' role: %v", err)
 		warn("grant the Customer Data scopes from the Console if its pages come up empty")
-	case added == 0:
+	case granted == 0:
 		done("the 'admin' role already holds every CDS scope")
 	default:
-		done("granted %d scope(s) to the 'admin' role", added)
+		done("granted %d scope(s) to the 'admin' role", granted)
 	}
 }
 
@@ -611,14 +631,6 @@ func cdsScopes(api *isAPI) []string {
 		all = append(all, scopes...)
 	}
 	return all
-}
-
-func reportEnsured(created bool, what string) {
-	if created {
-		done("created the %s", what)
-		return
-	}
-	info("the %s is already present", what)
 }
 
 func reportRestartRequired(is *isInstall) {

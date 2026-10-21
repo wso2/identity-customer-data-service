@@ -103,13 +103,16 @@ restarting it is your decision:
 **After the restart**, over the Identity Server's management APIs:
 
 1. verify the CDS API resources and scopes were registered
-2. create the `http://wso2.org/claims/cdsProfile` claim and its SCIM2 mapping
-3. create or reuse the application CDS authenticates as, and authorise it for
+2. create or reuse the application CDS authenticates as, and authorise it for
    the Identity Server APIs it calls
-4. create or reuse the CDS API client application, with the `iam-cds` audience
+3. create or reuse the CDS API client application, with the `iam-cds` audience
    and the CDS scopes
-5. authorise the Console application and the administrator role
-6. enable CDS for the organization
+4. authorise the Console application and the administrator role
+5. enable CDS for the organization
+
+The profile claim the CDS extension bundles use is not created here. It
+belongs to those bundles, which is where it is declared and consumed; CDS
+itself never reads it.
 
 Run the same command again to reach this phase:
 

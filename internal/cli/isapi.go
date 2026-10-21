@@ -320,6 +320,54 @@ func (api *isAPI) addTokenAudience(appID, audience string) (bool, error) {
 // adding the authorisation when it is absent and extending it when it is not.
 func (api *isAPI) authorizeAPI(appID, identifier string, scopes []string) error {
 
+	return api.authorize(appID, identifier, scopes, true)
+}
+
+// authorizeAPIIfAbsent grants the scopes only when the application has no
+// authorisation for that resource yet, and reports whether it added one.
+//
+// The Console is the reason this exists: the Identity Server owns its
+// authorised APIs and refuses to patch them — "Patching authorized APIs of the
+// console application is not allowed" — so an existing authorisation has to be
+// left exactly as it is rather than extended.
+func (api *isAPI) authorizeAPIIfAbsent(appID, identifier string, scopes []string) (bool, error) {
+
+	authorized, err := api.authorizedResources(appID)
+	if err != nil {
+		return false, err
+	}
+	resourceID, err := api.apiResourceID(identifier)
+	if err != nil {
+		return false, err
+	}
+	if resourceID == "" {
+		return false, fmt.Errorf("the Identity Server has no API resource %s", identifier)
+	}
+	if authorized[resourceID] {
+		return false, nil
+	}
+	return true, api.authorize(appID, identifier, scopes, false)
+}
+
+func (api *isAPI) authorizedResources(appID string) (map[string]bool, error) {
+
+	var authorized []struct {
+		ID string `json:"id"`
+	}
+	if err := api.call(http.MethodGet, mgmtAPI+"/applications/"+appID+"/authorized-apis", nil, &authorized); err != nil {
+		return nil, err
+	}
+	held := make(map[string]bool, len(authorized))
+	for _, entry := range authorized {
+		held[entry.ID] = true
+	}
+	return held, nil
+}
+
+// authorize adds or, when extend is set and an authorisation already exists,
+// extends the scopes an application holds on one API resource.
+func (api *isAPI) authorize(appID, identifier string, scopes []string, extend bool) error {
+
 	resourceID, err := api.apiResourceID(identifier)
 	if err != nil {
 		return err
@@ -328,15 +376,13 @@ func (api *isAPI) authorizeAPI(appID, identifier string, scopes []string) error 
 		return fmt.Errorf("the Identity Server has no API resource %s", identifier)
 	}
 
-	var authorized []struct {
-		ID string `json:"id"`
-	}
-	if err := api.call(http.MethodGet, mgmtAPI+"/applications/"+appID+"/authorized-apis", nil, &authorized); err != nil {
+	authorized, err := api.authorizedResources(appID)
+	if err != nil {
 		return err
 	}
-	for _, existing := range authorized {
-		if existing.ID != resourceID {
-			continue
+	if authorized[resourceID] {
+		if !extend {
+			return nil
 		}
 		return api.call(http.MethodPatch,
 			mgmtAPI+"/applications/"+appID+"/authorized-apis/"+resourceID,
@@ -345,109 +391,6 @@ func (api *isAPI) authorizeAPI(appID, identifier string, scopes []string) error 
 
 	return api.call(http.MethodPost, mgmtAPI+"/applications/"+appID+"/authorized-apis",
 		map[string]any{"id": resourceID, "policyIdentifier": "RBAC", "scopes": scopes}, nil)
-}
-
-// ---------------------------------------------------------------------------
-// Claims
-// ---------------------------------------------------------------------------
-
-type claim struct {
-	ID       string `json:"id"`
-	ClaimURI string `json:"claimURI"`
-}
-
-// ensureLocalClaim creates the CDS profile claim when it is absent, reporting
-// whether it had to.
-func (api *isAPI) ensureLocalClaim(claimURI, displayName, description, attribute string) (bool, error) {
-
-	var claims []claim
-	if err := api.call(http.MethodGet, mgmtAPI+"/claim-dialects/local/claims", nil, &claims); err != nil {
-		return false, err
-	}
-	for _, existing := range claims {
-		if existing.ClaimURI == claimURI {
-			return false, nil
-		}
-	}
-
-	body := map[string]any{
-		"claimURI":           claimURI,
-		"description":        description,
-		"displayName":        displayName,
-		"displayOrder":       0,
-		"readOnly":           false,
-		"required":           false,
-		"supportedByDefault": false,
-		"attributeMapping": []map[string]string{
-			{"mappedAttribute": attribute, "userstore": "PRIMARY"},
-		},
-		"properties": []any{},
-	}
-	if err := api.call(http.MethodPost, mgmtAPI+"/claim-dialects/local/claims", body, nil); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// ensureDialectClaim maps an external claim onto a local one, so the attribute
-// is reachable through that dialect's API — SCIM2 /Users, in the CDS case.
-func (api *isAPI) ensureDialectClaim(dialectURI, claimURI, localClaimURI string) (bool, error) {
-
-	dialectID, err := api.dialectID(dialectURI)
-	if err != nil {
-		return false, err
-	}
-	if dialectID == "" {
-		return false, fmt.Errorf("the Identity Server has no %s claim dialect", dialectURI)
-	}
-
-	var claims []claim
-	if err := api.call(http.MethodGet, mgmtAPI+"/claim-dialects/"+dialectID+"/claims", nil, &claims); err != nil {
-		return false, err
-	}
-	for _, existing := range claims {
-		if existing.ClaimURI == claimURI {
-			return false, nil
-		}
-	}
-
-	body := map[string]string{"claimURI": claimURI, "mappedLocalClaimURI": localClaimURI}
-	if err := api.call(http.MethodPost, mgmtAPI+"/claim-dialects/"+dialectID+"/claims", body, nil); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func (api *isAPI) dialectID(dialectURI string) (string, error) {
-
-	// The endpoint answers with a bare array on some releases and with a
-	// paged object on others, so both shapes are accepted.
-	raw := json.RawMessage{}
-	if err := api.call(http.MethodGet, mgmtAPI+"/claim-dialects", nil, &raw); err != nil {
-		return "", err
-	}
-
-	type dialect struct {
-		ID         string `json:"id"`
-		DialectURI string `json:"dialectURI"`
-	}
-	var dialects []dialect
-	if err := json.Unmarshal(raw, &dialects); err != nil {
-		var paged struct {
-			Dialects []dialect `json:"dialects"`
-		}
-		if err := json.Unmarshal(raw, &paged); err != nil {
-			return "", fmt.Errorf("could not read the claim dialects: %w", err)
-		}
-		dialects = paged.Dialects
-	}
-
-	for _, candidate := range dialects {
-		if candidate.DialectURI == dialectURI {
-			return candidate.ID, nil
-		}
-	}
-	return "", nil
 }
 
 // ---------------------------------------------------------------------------

@@ -157,7 +157,11 @@ func verifyExtensionState(results *checks, cdsHome string, state *integration) {
 			"so extension %s is installed but not active", state.ExtensionVersion)
 		return
 	}
-	results.pass("extension baseline %s is active", orNone(state.ActiveExtensionVersion))
+	if state.ActiveExtensionVersion == "" {
+		results.pass("the extension bundles are active (this build declares no baseline to check them against)")
+		return
+	}
+	results.pass("extension baseline %s is active", state.ActiveExtensionVersion)
 }
 
 // verifyTokenAudience confirms the token CDS will accept carries the audience

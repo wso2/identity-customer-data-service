@@ -42,11 +42,6 @@ const (
 	// application and there is no reason for CDS to differ.
 	tokenExpirySeconds = 3600
 
-	// cdsProfileClaim links an Identity Server user to their CDS profile.
-	cdsProfileClaim          = "http://wso2.org/claims/cdsProfile"
-	cdsProfileAttribute      = "cdsProfile"
-	scimDialectURI           = "urn:scim:wso2:schema"
-	cdsProfileSCIMClaim      = "urn:scim:wso2:schema:cdsProfile"
 	defaultOrganization      = "carbon.super"
 	defaultISManagementURL   = "https://localhost:9443"
 	defaultISAdminUser       = "admin"
