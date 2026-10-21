@@ -21,9 +21,9 @@ and because it is the only part that writes into `IS_HOME`.
 
 ---
 
-## Installing
+## Path A — CDS first
 
-A release publishes one pack per supported platform:
+Use this when you start from the CDS download page.
 
 ```bash
 unzip wso2cds-linux-amd64-1.2.0.zip -d /opt
@@ -37,6 +37,26 @@ cp server.crt server.key repository/resources/security/
 
 ./bin/wso2cds enable --is-home /opt/wso2is
 ```
+
+## Path B — Identity Server first
+
+Use this when the Identity Server is already installed and CDS is being added.
+The CDS executable does not exist yet, so acquisition starts from a bootstrap
+installer:
+
+```bash
+./install_cds.sh --is-home /opt/wso2is
+```
+
+It reads the installed Identity Server version, resolves a CDS release that
+declares support for it, detects the platform, downloads and verifies the
+matching zip, presents the licence, extracts it, and hands over to
+`wso2cds enable --is-home`.
+
+Both paths end at the same `CDS_HOME` and the same enable flow, so there is
+one implementation of the configuration logic rather than two.
+
+---
 
 ## What enablement does
 
@@ -235,7 +255,8 @@ over it.
 ```
 <CDS_HOME>/
 ├── bin/
-│   └── wso2cds                     the lifecycle command and the runtime
+│   ├── wso2cds                     the lifecycle command and the runtime
+│   └── update_tool_setup.sh        resolves the update tool for this platform
 ├── repository/
 │   ├── conf/
 │   │   ├── deployment.yaml         the runtime configuration
@@ -248,13 +269,14 @@ over it.
 ├── extensions/                     the bundles enable installs into the IS
 ├── logs/
 ├── updates/
+│   └── product.txt                 the update-service identity of this pack
 ├── version.txt
 ├── LICENSE.txt
 └── README.md
 ```
 
-`bin/` and `updates/` stay siblings at the pack root, which is what the update
-tooling a release adds to the pack expects.
+`bin/` and `updates/` have to stay siblings at the pack root: the update tool
+setup script resolves `../updates/product.txt` relative to itself.
 
 ---
 
@@ -274,3 +296,13 @@ them instead:
 
 or by placing the jars in `<CDS_HOME>/extensions/` before enabling. Local
 bundles are always preferred over the network.
+
+The bootstrap installer takes the same kind of override. Point it at an
+internal mirror of the releases, laid out as the releases are — `<tag>/<file>`:
+
+```bash
+./install_cds.sh --is-home /opt/wso2is --mirror https://mirror.example.com/cds
+```
+
+It resolves the release, verifies the checksum and hands off exactly as it
+does against the public releases; only where the bytes come from changes.
