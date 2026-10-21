@@ -1,0 +1,114 @@
+# -------------------------------------------------------------------------------------
+#
+# Copyright (c) 2026, WSO2 LLC. (https://www.wso2.com).
+#
+# WSO2 LLC. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# --------------------------------------------------------------------------------------
+
+# Prepares a published release for the update service.
+#
+# The product build stages updates/product.txt and nothing else, because the
+# update tool setup script is published by the Updates team rather than built
+# from this source — the same split product-is uses. This workflow is where the
+# two meet: it takes the packs of a published release, attaches the setup
+# script, and republishes them with rewritten checksums.
+#
+# It is deliberately separate from the release builder. The release has to be
+# reproducible from a public checkout, and it stays so when the one step that
+# needs an artifact from another team is the one step that is run on demand.
+
+name: 🔄 Attach Update Tool
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag whose packs to prepare (e.g. v0.4.1)'
+        required: true
+        type: string
+      publish:
+        description: 'Replace the release assets with the prepared packs'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ✅ Check the update tool setup artifact is available
+        env:
+          SETUP_URL: ${{ secrets.U2_UPDATE_TOOL_SETUP_URL }}
+        run: |
+          if [ -z "$SETUP_URL" ]; then
+            echo "❌ The U2_UPDATE_TOOL_SETUP_URL secret is not set."
+            echo "❌ It must point at the update_tool_setup.zip published by the Updates team."
+            echo "❌ See distribution/u2-onboarding/README.md"
+            exit 1
+          fi
+
+      - name: ⬇️ Download the release packs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist \
+            --pattern 'wso2cds-*.zip' --pattern 'wso2cds-*.sha256' --pattern 'wso2cds-*.md5'
+          ls -la dist
+
+      - name: ⬇️ Download the update tool setup artifact
+        env:
+          SETUP_URL: ${{ secrets.U2_UPDATE_TOOL_SETUP_URL }}
+        run: curl -fsSL -o update_tool_setup.zip "$SETUP_URL"
+
+      - name: 🔧 Attach the setup script to every pack
+        run: distribution/u2-onboarding/attach-update-tool.sh dist update_tool_setup.zip
+
+      - name: 🔍 Check the prepared packs
+        run: |
+          distribution/check-pack.sh dist
+          for zip in dist/*.zip; do
+            pack="$(basename "$zip" .zip)"
+            unzip -Z1 "$zip" | grep -qx "$pack/bin/update_tool_setup.sh" \
+              || { echo "❌ $pack lost bin/update_tool_setup.sh"; exit 1; }
+          done
+          echo "✅ every pack carries the update tool setup script"
+
+      # Uploaded whether or not they are published, so the executable attached
+      # to each update entry can be taken from here.
+      - name: 📤 Upload the prepared packs
+        uses: actions/upload-artifact@v4
+        with:
+          name: cds-packs-${{ inputs.tag }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: 🚀 Replace the release assets
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*
+          echo "✅ replaced the assets of $TAG"
