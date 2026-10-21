@@ -39,6 +39,26 @@ auth_server:
   isSystemAppGrantEnabled: false
   introspection_client_id : "cds_introspection_client"
   introspection_client_secret: "${INTROSPECTION_CLIENT_SECRET}"
+  # The Identity Server application CDS calls the management APIs with.
+  #
+  # client_id/client_secret above belong to one tenant and can only authenticate at
+  # that tenant's token endpoint, so they serve a deployment whose application is
+  # provisioned for it. Turn auto_provision on where CDS has to serve more than one
+  # organisation: it then creates one application per organisation as that
+  # organisation enables CDS, subscribes it to the management APIs CDS needs, and
+  # holds the credentials in its own database.
+  #
+  # Provisioning runs as admin_username/admin_password, since an organisation has no
+  # application to get a token with until it has run.
+  #
+  # encryption_key seals the provisioned client secrets at rest and is required when
+  # auto_provision is on - the server refuses to start without it. Generate one with
+  # `openssl rand -base64 32`. The secret cannot be hashed instead: CDS presents it to
+  # the token endpoint on every token request, and a hash cannot be presented.
+  system_application:
+    auto_provision: false
+    name_prefix: "CDS System App"
+    encryption_key: "${SYSTEM_APP_ENCRYPTION_KEY}"
   required_scopes:
     profile:create:
       - "internal_cds_profile_create"

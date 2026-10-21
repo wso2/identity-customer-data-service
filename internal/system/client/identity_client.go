@@ -19,6 +19,7 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -41,6 +42,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
+	"github.com/wso2/identity-customer-data-service/internal/system/systemapp"
 )
 
 type IdentityClient struct {
@@ -192,13 +194,32 @@ func (c *IdentityClient) fetchOrganizationToken(
 }
 
 // fetchClientCredentialsToken obtains an organization-scoped token directly using client_credentials grant.
+//
+// The credentials are the organisation's own wherever one has been provisioned for
+// it. They have to be: the endpoint is that organisation's token endpoint, and an
+// Identity Server client belongs to one tenant and can only authenticate at the
+// token endpoint of that tenant. A deployment that has its application provisioned
+// for it records none and uses the configured pair, exactly as before.
 func (c *IdentityClient) fetchClientCredentialsToken(orgId string, authCfg config.AuthServerConfig, scope string) (string, error) {
+
+	clientID, clientSecret := authCfg.ClientID, authCfg.ClientSecret
+	if authCfg.SystemApplication.AutoProvision {
+		// FetchToken carries no context of its own, and this is a primary-key read that
+		// the token request around it dwarfs.
+		creds, found, err := systemapp.Get(context.Background(), orgId)
+		if err != nil {
+			return "", err
+		}
+		if found {
+			clientID, clientSecret = creds.ClientID, creds.ClientSecret
+		}
+	}
 
 	endpoint := c.buildTokenEndpoint(orgId, authCfg.TokenEndpoint)
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Set("scope", scope)
-	return c.requestToken(endpoint, authCfg.ClientID, authCfg.ClientSecret, form, orgId)
+	return c.requestToken(endpoint, clientID, clientSecret, form, orgId)
 }
 
 // requestToken performs the actual HTTP POST and extracts access_token from JSON.
