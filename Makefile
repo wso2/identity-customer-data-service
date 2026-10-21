@@ -20,8 +20,6 @@ PRODUCT_NAME ?= wso2cds
 
 # Variable constants.
 VERSION=$(shell cat $(VERSION_FILE))
-# ZIP_FILE_NAME=${BINARY_NAME_PREFIX}-$(VERSION)
-PRODUCT_FOLDER=$(BINARY_NAME)-$(VERSION)
 # Pack and product names carry no leading "v", so strip it.
 PACK_VERSION=$(VERSION:v%=%)
 
@@ -42,8 +40,12 @@ all: clean lint build integration-test
 clean:
 	rm -rf $(OUTPUT_DIR)
 
-# Build project and package it.
-build: _build _package
+# Compile the binary for the host platform.
+#
+# Packaging is `dist`, which produces the release packs. This target is the
+# fast compile check, and is what the container image builds: it copies
+# $(BUILD_DIR)/$(BINARY_NAME) rather than unpacking a zip.
+build: _build
 
 lint: golangci-lint
 	cd . && $(GOLANGCI_LINT) run ./...
@@ -144,22 +146,11 @@ _dist_metadata:
 clean-dist:
 	rm -rf $(DIST_DIR)
 
-# Package the binary and repository directory into a zip file.
-_package:
-	mkdir -p $(OUTPUT_DIR)/$(PRODUCT_FOLDER) && \
-	cp $(BUILD_DIR)/$(BINARY_NAME) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
-	cp -r $(REPOSITORY_DIR) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
-	cp $(VERSION_FILE) $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
-	cp -r dbscripts $(OUTPUT_DIR)/$(PRODUCT_FOLDER)/ && \
-	cd $(OUTPUT_DIR) && zip -r $(PRODUCT_FOLDER).zip $(PRODUCT_FOLDER) && \
-	rm -rf $(PRODUCT_FOLDER) && \
-	rm -rf $(BUILD_DIR)
-
 help:
 	@echo "Makefile targets:"
 	@echo "  all                        - Clean, build, and test the project."
 	@echo "  clean                      - Remove build artifacts."
-	@echo "  build                      - Build the Go project."
+	@echo "  build                      - Compile the binary for the host platform."
 	@echo "  dist                       - Build the Linux release packs into $(DIST_DIR)."
 	@echo "  clean-dist                 - Remove the staged distributions and their zips."
 	@echo "  integration-test           - Run integration tests against PostgreSQL (use test=TestName to filter)."

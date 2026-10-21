@@ -23,6 +23,12 @@ carries no leading `v`.
 `make dist` builds them, cross-compiling with `CGO_ENABLED=0` — every
 dependency is pure Go, so no per-platform build host is needed.
 
+`make build` compiles for the host and packages nothing: it is the fast
+compile check, and what the container image uses. `make all` is the developer
+loop — clean, lint, build, integration tests — and does not package either, so
+a local run does not compile every platform. Packaging is `dist`, and the
+release workflow calls it directly.
+
 Three checks run over the result, on every pull request and again before a
 release publishes:
 
