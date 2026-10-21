@@ -45,6 +45,15 @@ for zip in "$DIST_DIR"/*.zip; do
     fi
   done
 
+  # A pack is extracted onto a machine where nothing else is installed, so a
+  # datasource pointing at a database that is not there means it cannot start
+  # at all. pack-config.sh sets this; assert it survived.
+  if ! unzip -p "$zip" "$pack/repository/conf/deployment.yaml" 2>/dev/null \
+      | grep -qE '^[[:space:]]+type:[[:space:]]*"sqlite"'; then
+    echo "  x $pack does not default to the inbuilt database" >&2
+    failures=$((failures + 1))
+  fi
+
   # The product identity has to name the pack it sits in, or the update
   # service resolves updates for a different platform.
   identity="$(unzip -p "$zip" "$pack/updates/product.txt" 2>/dev/null | tr -d '[:space:]')"
