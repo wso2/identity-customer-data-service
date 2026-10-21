@@ -14,6 +14,7 @@
 
 | Document | Description |
 |---|---|
+| [On-Prem Installation](guides/on-prem-installation.md) | Installing, enabling, running and verifying CDS beside an Identity Server |
 | [Local Development Setup](guides/local-development.md) | Running CDS with an Identity Server locally |
 | [IS Sync](guides/is-sync.md) | Identity Server event integration — user lifecycle and session events |
 | [Schema Sync](guides/schema-sync.md) | Keeping CDS schema aligned with IS claim changes |
