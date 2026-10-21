@@ -342,6 +342,18 @@ func reportBundledVersion(filename, baseline string) bool {
 // restart still being owed.
 func provisioningClient(options *enableOptions, isBase, trustPEM string) (*isAPI, bool, error) {
 
+	// Whether the server is up is settled before anything is asked of the
+	// operator: a password taken here and then discarded is worse than no
+	// prompt at all.
+	probe, err := newISAPI(isBase, "", "", trustPEM, options.insecure)
+	if err != nil {
+		return nil, false, err
+	}
+	if !probe.reachable() {
+		info("the Identity Server at %s is not answering, so provisioning waits.", isBase)
+		return nil, false, nil
+	}
+
 	password, err := adminPassword(options)
 	if err != nil {
 		return nil, false, err
@@ -354,10 +366,12 @@ func provisioningClient(options *enableOptions, isBase, trustPEM string) (*isAPI
 
 	resourceID, err := api.apiResourceID(cdsAPIResources[0])
 	if err != nil {
-		info("the Identity Server at %s is not answering yet: %v", isBase, err)
+		info("the Identity Server at %s could not be queried: %v", isBase, err)
 		return nil, false, nil
 	}
 	if resourceID == "" {
+		info("the Identity Server is running but has not registered the CDS API")
+		info("resources, so it has not yet read the configuration staged above.")
 		return nil, false, nil
 	}
 	return api, true, nil

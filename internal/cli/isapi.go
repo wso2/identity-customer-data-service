@@ -48,6 +48,10 @@ type isAPI struct {
 
 const mgmtAPI = "/api/server/v1"
 
+// isHealthEndpoint answers without credentials, which is what makes it usable
+// to tell "the server is not up" from "the server is up and says no".
+const isHealthEndpoint = "/api/health-check/v1.0/health"
+
 // newISAPI builds a client for the Identity Server at base.
 //
 // The IS certificate is verified against trustPEM when one was exported during
@@ -81,6 +85,28 @@ func newISAPI(base, user, password, trustPEM string, insecure bool) (*isAPI, err
 			Transport: &http.Transport{TLSClientConfig: tlsConfig},
 		},
 	}, nil
+}
+
+// reachable reports whether the Identity Server is answering at all.
+//
+// Asked before anything needs credentials, so that an operator is not prompted
+// for a password that cannot be used — a server that is down cannot be
+// provisioned, and the password would be taken only to throw away.
+func (api *isAPI) reachable() bool {
+
+	request, err := http.NewRequest(http.MethodGet, api.base+isHealthEndpoint, nil)
+	if err != nil {
+		return false
+	}
+	response, err := api.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	// Any answer at all is enough: this asks whether something is listening
+	// and speaking HTTPS, not whether it is healthy.
+	return true
 }
 
 // call performs one request and decodes a JSON response into out, which may be
