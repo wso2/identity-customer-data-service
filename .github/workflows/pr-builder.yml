@@ -77,6 +77,19 @@ jobs:
         if: always()
         run: distribution/artifact-summary.sh target/dist >> "$GITHUB_STEP_SUMMARY"
 
+      # Rendered here so a change to the release body is reviewed with the
+      # change that caused it, and so a broken generator fails on the pull
+      # request rather than halfway through a release.
+      - name: Preview the release notes
+        run: |
+          {
+            echo "<details><summary>Release notes preview</summary>"
+            echo
+            distribution/release-notes.sh target/dist
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   lint:
     runs-on: ubuntu-latest
 
