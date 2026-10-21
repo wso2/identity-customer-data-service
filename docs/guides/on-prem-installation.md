@@ -32,9 +32,6 @@ cd /opt/wso2cds-linux-amd64-1.2.0
 # Review the licence and required notices.
 less LICENSE.txt
 
-# Install the TLS certificate and key — see repository/resources/security/README.md.
-cp server.crt server.key repository/resources/security/
-
 ./bin/wso2cds enable --is-home /opt/wso2is
 ```
 
@@ -44,9 +41,24 @@ Switch `datasource` in `repository/conf/deployment.yaml` to PostgreSQL for a
 production deployment — see the [README](../../README.md#-database) for which
 to choose.
 
-The certificate and key are the one thing the pack cannot supply: CDS serves
-HTTPS only and will not start without them. A start that is missing anything
-says which file it was looking for.
+### The certificate the pack ships with
+
+A pack carries a default `server.crt` and `server.key`, generated when it was
+built, so a fresh installation starts and enables in one pass rather than
+needing `openssl` first. It is a convenience for getting started.
+
+**Every download of a release carries the same private key.** Anyone holding it
+can present themselves as that CDS to an Identity Server that trusted it during
+`enable`. Replace both files with a certificate issued for the host in
+`server_url`, then run `wso2cds enable` again so the Identity Server trusts the
+new one.
+
+`wso2cds status` reports which is in use, and `wso2cds verify` counts the
+default as a failed check:
+
+```
+  TLS Certificate     the default shipped with the pack — replace it for production
+```
 
 ## Path B — Identity Server first
 

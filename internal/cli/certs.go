@@ -19,6 +19,8 @@
 package cli
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
@@ -39,7 +41,41 @@ const (
 	isTruststore  = isSecurity + "/client-truststore.p12"
 	isStoreType   = "PKCS12"
 	cdsTrustStore = "trust_store.pem"
+
+	// defaultCertificateOU marks the key pair a pack ships with. It is set by
+	// distribution/default-cert.sh; changing one without the other leaves the
+	// runtime unable to tell a default certificate from a real one.
+	defaultCertificateOU = "Customer Data Service Default"
 )
+
+// usingDefaultCertificate reports whether the certificate at path is the one
+// the pack shipped with.
+//
+// That certificate is a convenience for getting started and nothing more:
+// every download of a release carries the same private key, so anyone holding
+// it can present themselves as this service. An operator has to be able to
+// see that it is still in use, which is the only reason the pack marks it.
+func usingDefaultCertificate(path string) bool {
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		return false
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false
+	}
+	for _, unit := range certificate.Subject.OrganizationalUnit {
+		if unit == defaultCertificateOU {
+			return true
+		}
+	}
+	return false
+}
 
 // findKeytool locates the keytool binary, or reports that it is absent.
 func findKeytool() (string, error) {

@@ -23,6 +23,8 @@ repository/conf/compatibility.yaml
 repository/dbscripts/postgres.sql
 repository/dbscripts/sqlite.sql
 repository/resources/security/README.md
+repository/resources/security/server.crt
+repository/resources/security/server.key
 updates/product.txt
 version.txt
 LICENSE.txt

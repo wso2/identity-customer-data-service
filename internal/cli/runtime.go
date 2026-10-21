@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -41,7 +42,11 @@ type runtimeConfig struct {
 		Host string `yaml:"host"`
 		Port int    `yaml:"port"`
 	} `yaml:"addr"`
-	ServerURL  string `yaml:"server_url"`
+	ServerURL string `yaml:"server_url"`
+	TLS       struct {
+		CertDir    string `yaml:"cert_dir"`
+		ServerCert string `yaml:"server_cert"`
+	} `yaml:"tls"`
 	AuthServer struct {
 		Host string `yaml:"host"`
 		Port int    `yaml:"port"`
@@ -72,6 +77,24 @@ func readRuntimeConfig(cdsHome string) (*runtimeConfig, error) {
 // bind address rather than server_url, because server_url is the public name
 // an operator may have pointed at a load balancer — a liveness check has to
 // reach this process, not the deployment.
+// serverCertificate is the path of the certificate CDS presents, as the
+// configuration names it.
+func (c *runtimeConfig) serverCertificate(cdsHome string) string {
+
+	dir := c.TLS.CertDir
+	if dir == "" {
+		dir = path(cdsHome, certsDirInPak)
+	}
+	name := c.TLS.ServerCert
+	if name == "" {
+		name = "server.crt"
+	}
+	if filepath.IsAbs(dir) {
+		return filepath.Join(dir, name)
+	}
+	return filepath.Join(cdsHome, dir, name)
+}
+
 func (c *runtimeConfig) localBase() string {
 
 	host := c.Addr.Host
