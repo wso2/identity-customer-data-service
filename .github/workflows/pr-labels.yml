@@ -1,0 +1,160 @@
+# -------------------------------------------------------------------------------------
+#
+# Copyright (c) 2026, WSO2 LLC. (https://www.wso2.com).
+#
+# WSO2 LLC. licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# --------------------------------------------------------------------------------------
+
+# Gives every pull request a type label, which is what a release's change list
+# is grouped by.
+#
+# Two steps, in order. The first copies the type from the issue the pull
+# request closes, so the common case needs nobody to do anything. The second
+# asks for one when that left the pull request without a type — at which point
+# the author is the only one who knows which it is.
+#
+# It runs on pull_request_target so that a pull request from a fork gets a
+# token that can label it. Nothing here checks out or runs the pull request's
+# code; it reads the API and writes labels, which is what makes that safe.
+
+name: 🏷️ PR Labels
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize, labeled, unlabeled, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: pr-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # The labels a release groups its change list by, plus the one that says a
+  # change does not belong in that list at all. Kept in step with the
+  # categories in .github/release.yml.
+  TYPE_LABELS: |
+    Type/New Feature
+    Type/Improvement
+    Type/UX
+    Type/Bug
+    Type/Docs
+    Type/Task
+  ESCAPE_LABEL: skip-changelog
+
+jobs:
+  sync:
+    name: Copy the type from the linked issue
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    outputs:
+      labels: ${{ steps.copy.outputs.labels }}
+
+    steps:
+      - name: 🏷️ Copy type labels from the issues this closes
+        id: copy
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const allowed = process.env.TYPE_LABELS.split('\n')
+              .map(l => l.trim()).filter(Boolean)
+              .concat(['breaking change']);
+
+            const pr = context.payload.pull_request;
+            const onPR = new Set(pr.labels.map(l => l.name));
+
+            // closingIssuesReferences covers both the "Fixes #123" keywords in
+            // the body and an issue linked by hand from the sidebar, which is
+            // the whole set of ways a pull request says what it closes.
+            const result = await github.graphql(`
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 10) {
+                      nodes { number labels(first: 20) { nodes { name } } }
+                    }
+                  }
+                }
+              }`,
+              { owner: context.repo.owner, repo: context.repo.repo, number: pr.number }
+            );
+
+            const issues = result.repository.pullRequest.closingIssuesReferences.nodes;
+            if (issues.length === 0) {
+              core.info('This pull request closes no issue, so there is no type to copy.');
+              core.setOutput('labels', '');
+              return;
+            }
+
+            const wanted = new Set();
+            for (const issue of issues) {
+              for (const label of issue.labels.nodes.map(l => l.name)) {
+                if (allowed.includes(label) && !onPR.has(label)) {
+                  wanted.add(label);
+                }
+              }
+            }
+
+            if (wanted.size === 0) {
+              core.info(`Closes #${issues.map(i => i.number).join(', #')}, which carry no type label to copy.`);
+              core.setOutput('labels', '');
+              return;
+            }
+
+            const labels = [...wanted];
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels,
+            });
+            core.info(`Copied from #${issues.map(i => i.number).join(', #')}: ${labels.join(', ')}`);
+            core.setOutput('labels', labels.join(','));
+
+  check:
+    name: Check the pull request has a type
+    runs-on: ubuntu-latest
+    needs: sync
+
+    steps:
+      - name: 🔎 Require a type label
+        uses: actions/github-script@v7
+        env:
+          COPIED: ${{ needs.sync.outputs.labels }}
+        with:
+          script: |
+            const accepted = process.env.TYPE_LABELS.split('\n')
+              .map(l => l.trim()).filter(Boolean)
+              .concat([process.env.ESCAPE_LABEL]);
+
+            // The payload predates the copy step, so anything it just added is
+            // taken from its output rather than read again.
+            const copied = (process.env.COPIED || '').split(',').filter(Boolean);
+            const onPR = context.payload.pull_request.labels.map(l => l.name).concat(copied);
+
+            const held = onPR.filter(label => accepted.includes(label));
+            if (held.length > 0) {
+              core.info(`This pull request is a ${held.join(', ')}.`);
+              return;
+            }
+
+            core.setFailed(
+              'This pull request has no type, so a release would not know where to list it.\n\n' +
+              'Add one of these labels:\n' +
+              accepted.map(l => `  - ${l}`).join('\n') +
+              '\n\nOr link the issue it closes ("Fixes #123") and this will copy the type from it.'
+            );
