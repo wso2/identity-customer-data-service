@@ -167,11 +167,24 @@ func exchangeCertificates(cdsHome string, is *isInstall, config *runtimeConfig, 
 		return "", err
 	}
 
-	cdsCert := filepath.Join(certDir, "server.crt")
+	// Looked for where enablement puts certificates, not where the
+	// configuration currently points: on a first run the shipped cert_dir is
+	// still the container's path, and it is this function's own step that
+	// the configuration is about to be pointed at.
+	name := config.TLS.ServerCert
+	if name == "" {
+		name = "server.crt"
+	}
+	cdsCert := filepath.Join(certDir, name)
 	if _, err := os.Stat(cdsCert); err != nil {
 		warn("no CDS certificate at %s, so the Identity Server cannot verify CDS yet", cdsCert)
 		warn("install the CDS certificate and key, then run `wso2cds enable` again")
 		return trustPEM, nil
+	}
+	if usingDefaultCertificate(cdsCert) {
+		warn("this is the default certificate the pack shipped with — every download of")
+		warn("this release carries the same private key, so replace it with one issued")
+		warn("for %s before this deployment carries real traffic", hostOf(config.ServerURL))
 	}
 
 	alias := "cds-" + hostOf(config.ServerURL)

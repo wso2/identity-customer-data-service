@@ -19,10 +19,17 @@
 package cli
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // deployment.toml belongs to the operator. Enablement owns the lines between
@@ -197,5 +204,66 @@ func TestBundlesInDropinsWithoutADropinsDirectory(t *testing.T) {
 	}
 	if len(found) != 0 {
 		t.Errorf("expected no bundles, got %v", found)
+	}
+}
+
+// The pack ships a key pair so that a fresh installation starts and enables in
+// one pass. Every download of a release carries the same private key, so the
+// runtime has to be able to say it is still in use — which depends on the
+// marker that distribution/default-cert.sh writes.
+func TestUsingDefaultCertificate(t *testing.T) {
+
+	dir := t.TempDir()
+
+	shipped := filepath.Join(dir, "default.crt")
+	writeTestCertificate(t, shipped, []string{defaultCertificateOU})
+	if !usingDefaultCertificate(shipped) {
+		t.Error("the certificate the pack ships was not recognised as the default")
+	}
+
+	operators := filepath.Join(dir, "operator.crt")
+	writeTestCertificate(t, operators, []string{"Platform Engineering"})
+	if usingDefaultCertificate(operators) {
+		t.Error("a certificate issued for the deployment was reported as the default")
+	}
+
+	// A path with nothing at it, and a file that is not a certificate, are
+	// both "not the default" rather than errors: the caller is deciding
+	// whether to warn, not whether CDS can start.
+	if usingDefaultCertificate(filepath.Join(dir, "absent.crt")) {
+		t.Error("a missing certificate was reported as the default")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "junk.crt"), []byte("not a certificate"), 0o644); err != nil {
+		t.Fatalf("could not stage the file: %v", err)
+	}
+	if usingDefaultCertificate(filepath.Join(dir, "junk.crt")) {
+		t.Error("an unreadable file was reported as the default")
+	}
+}
+
+func writeTestCertificate(t *testing.T, path string, orgUnit []string) {
+
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("could not generate a key: %v", err)
+	}
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:         "localhost",
+			Organization:       []string{"WSO2"},
+			OrganizationalUnit: orgUnit,
+		},
+		NotBefore: time.Now().Add(-time.Hour),
+		NotAfter:  time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("could not create the certificate: %v", err)
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatalf("could not write the certificate: %v", err)
 	}
 }

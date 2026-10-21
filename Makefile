@@ -125,6 +125,7 @@ _dist_one:
 	$(DISTRIBUTION_SRC)/pack-config.sh $$stage/repository/conf/deployment.yaml; \
 	cp dbscripts/*.sql $$stage/repository/dbscripts/; \
 	cp $(DISTRIBUTION_SRC)/pack/security-README.md $$stage/repository/resources/security/README.md; \
+	$(DISTRIBUTION_SRC)/default-cert.sh $$stage/repository/resources/security; \
 	cp LICENSE.txt README.md $(VERSION_FILE) $$stage/; \
 	printf '%s\n' "$$pack" > $$stage/updates/product.txt; \
 	find $$stage -name '.DS_Store' -delete; \

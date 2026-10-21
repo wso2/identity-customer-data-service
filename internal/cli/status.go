@@ -74,6 +74,10 @@ func runStatus(args []string) error {
 		add("CDS Process", "Stopped")
 	}
 
+	if cfg, err := readRuntimeConfig(cdsHome); err == nil {
+		add("TLS Certificate", certificateOrigin(cfg.serverCertificate(cdsHome)))
+	}
+
 	state, err := loadIntegration(cdsHome)
 	switch {
 	case errors.Is(err, errNotEnabled):
@@ -139,6 +143,19 @@ func readiness(base string) string {
 		return "Ready"
 	}
 	return fmt.Sprintf("Not ready (HTTP %d)", status)
+}
+
+// certificateOrigin says whether the deployment is still presenting the key
+// pair the pack shipped with, which is shared by every download of a release.
+func certificateOrigin(path string) string {
+
+	if _, err := os.Stat(path); err != nil {
+		return "none installed at " + path
+	}
+	if usingDefaultCertificate(path) {
+		return "the default shipped with the pack — replace it for production"
+	}
+	return "supplied for this deployment"
 }
 
 // bundleSources says where the extension bundles came from, because the

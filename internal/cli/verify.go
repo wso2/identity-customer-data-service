@@ -98,6 +98,7 @@ func runVerify(args []string) error {
 		trustPEM = ""
 	}
 
+	verifyCertificate(results, cdsHome, config)
 	verifyExtensionState(results, cdsHome, state)
 
 	// The integration's own application, as enablement recorded it: the id in
@@ -288,4 +289,28 @@ func summarise(results *checks) error {
 		return nil
 	}
 	return fmt.Errorf("%d of %d checks failed", results.failed, results.run)
+}
+
+// verifyCertificate reports whether the deployment still presents the key pair
+// the pack shipped with. It is a valid certificate, so this is not a failure —
+// but every download of a release carries the same private key, which an
+// operator running a real deployment needs told rather than discovered.
+func verifyCertificate(results *checks, cdsHome string, config *runtimeConfig) {
+
+	certificate := config.serverCertificate(cdsHome)
+	switch {
+	case !fileExists(certificate):
+		results.fail("no TLS certificate at %s", certificate)
+	case usingDefaultCertificate(certificate):
+		results.fail("CDS is presenting the default certificate the pack shipped with; " +
+			"every download of this release carries its private key, so replace it " +
+			"with one issued for this deployment")
+	default:
+		results.pass("the TLS certificate was issued for this deployment")
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
