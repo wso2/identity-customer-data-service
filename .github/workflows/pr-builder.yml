@@ -52,10 +52,30 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Install system deps
-        run: sudo apt-get install -y make zip
+        run: sudo apt-get install -y make zip unzip
 
       - name: Build
         run: make build
+
+      # Cross-compilation and packaging are exercised only here, so a
+      # dependency that stops building for one platform, or a pack that loses
+      # a file it is meant to ship, is caught on the pull request rather than
+      # during a release.
+      - name: Build distributions
+        run: make dist
+
+      - name: Check the pack contents
+        run: distribution/check-pack.sh target/dist
+
+      # The Identity-Server-first path is the first thing a customer runs, and
+      # nothing else exercises it. This stands a release up locally and drives
+      # the real installer against the packs this run just built.
+      - name: Verify the bootstrap installation
+        run: distribution/verify-install.sh target/dist
+
+      - name: Summarise the artifacts
+        if: always()
+        run: distribution/artifact-summary.sh target/dist >> "$GITHUB_STEP_SUMMARY"
 
   lint:
     runs-on: ubuntu-latest
