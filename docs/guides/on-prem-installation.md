@@ -38,6 +38,16 @@ cp server.crt server.key repository/resources/security/
 ./bin/wso2cds enable --is-home /opt/wso2is
 ```
 
+A pack is extracted onto a machine where nothing else has been installed, so
+it defaults to the inbuilt database and needs no database server to start.
+Switch `datasource` in `repository/conf/deployment.yaml` to PostgreSQL for a
+production deployment — see the [README](../../README.md#-database) for which
+to choose.
+
+The certificate and key are the one thing the pack cannot supply: CDS serves
+HTTPS only and will not start without them. A start that is missing anything
+says which file it was looking for.
+
 ## Path B — Identity Server first
 
 Use this when the Identity Server is already installed and CDS is being added.
