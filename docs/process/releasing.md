@@ -37,6 +37,7 @@ release publishes:
 | `distribution/check-pack.sh` | every pack carries the files an installation needs, and a product identity naming itself |
 | `distribution/verify-install.sh` | the Identity-Server-first path really installs: a release is served locally and the real `install_cds.sh` is driven against it, through resolution, checksum, extraction and the hand-off to `wso2cds enable` |
 | `distribution/artifact-summary.sh` | writes the artifacts and their SHA-256 digests into the run summary |
+| `distribution/release-notes.sh` | builds the release body — downloads, digests, compatibility and both install paths |
 
 So a dependency that stops cross-compiling, a pack that loses a file, or a
 broken acquisition path is caught on the change that caused it rather than by
@@ -48,6 +49,18 @@ checksums, and the compatibility the pack itself declares in
 [bootstrap installer](../guides/on-prem-installation.md#path-b--identity-server-first)
 reads to resolve a CDS release for an installed Identity Server version
 without downloading a pack first.
+
+### The release body
+
+What the release page says is generated from the artifacts, never from a list
+kept by hand: the download table with a digest per platform, how to verify a
+download, the compatibility the metadata declares, and both install paths.
+GitHub's generated change list is appended below it.
+
+So a platform added or removed, or a compatibility statement changed, shows up
+on the release page because the build produced it — there is no second place
+to remember to update. The pull request builder renders the same body into its
+run summary, so a change to it is reviewed alongside the change that caused it.
 
 ### Filling in the compatibility metadata
 

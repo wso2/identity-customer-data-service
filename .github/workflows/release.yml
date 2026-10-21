@@ -234,13 +234,41 @@ jobs:
           git push origin "$VERSION"
           echo "✅ Tagged $VERSION"
 
+      # GitHub groups the merged pull requests by the categories in
+      # .github/release.yml. Asking for it here, rather than letting the
+      # release action append it, is what lets the change list sit between the
+      # installation instructions and the licence instead of at the end.
+      - name: 📝 Generate the change list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+               -f tag_name="${{ steps.version.outputs.version }}" \
+               --jq .body > target/changelog.md 2>/dev/null; then
+            echo "✅ Generated the change list"
+          else
+            : > target/changelog.md
+            echo "⚠️ Could not generate the change list; the release body will omit it"
+          fi
+
+      # Built from the artifacts themselves, so what the page says a release
+      # contains cannot drift from what it contains.
+      - name: 📝 Write the release notes
+        run: |
+          distribution/release-notes.sh target/dist "${{ steps.version.outputs.version }}" \
+            --changelog target/changelog.md > target/release-notes.md
+          cat target/release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: "CDS ${{ steps.version.outputs.version }}"
           prerelease: ${{ github.event.inputs.prerelease }}
-          generate_release_notes: true
+          # The body already carries the change list, generated above and
+          # placed deliberately, so the action must not append a second one.
+          body_path: target/release-notes.md
+          generate_release_notes: false
           # The zips, their checksums, and the compatibility metadata the
           # bootstrap installer reads to resolve a release for an Identity
           # Server version.
