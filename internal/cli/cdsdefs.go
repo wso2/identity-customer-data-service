@@ -27,12 +27,15 @@ package cli
 // Changing one of them here without changing its counterpart breaks
 // authorisation at runtime rather than at enablement.
 const (
-	// systemAppName is the application CDS authenticates as when it calls the
-	// Identity Server's own management APIs.
+	// systemAppName is the application the CDS integration authenticates as:
+	// CDS presents it when calling the Identity Server's management APIs, and
+	// enablement presents it when calling CDS's own configuration API.
+	//
+	// An application for an operator's own API consumers is deliberately not
+	// created. Which clients may call CDS, and with which scopes, is theirs
+	// to decide; enablement establishes the relationship between CDS and one
+	// Identity Server and nothing beyond it.
 	systemAppName = "Customer Data Service"
-	// clientAppName is the application an operator's own clients can use to
-	// call the CDS APIs.
-	clientAppName = "Customer Data Service Client"
 
 	// cdsAudience is the audience CDS requires in the tokens it accepts.
 	cdsAudience = "iam-cds"

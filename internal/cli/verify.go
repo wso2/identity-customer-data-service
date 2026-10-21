@@ -100,10 +100,13 @@ func runVerify(args []string) error {
 
 	verifyExtensionState(results, cdsHome, state)
 
-	token, err := cdsToken(isBase, secrets["CDS_CLIENT_ID"], secrets["CDS_CLIENT_SECRET"],
+	// The integration's own application, as enablement recorded it: the id in
+	// the configuration an operator can read, the secret in the protected
+	// file beside it.
+	token, err := cdsToken(isBase, config.AuthServer.ClientID, secrets["AUTH_SERVER_CLIENT_SECRET"],
 		cdsAPIScopesFor(state), trustPEM, *insecure)
 	if err != nil {
-		results.fail("could not obtain a CDS client token: %v", err)
+		results.fail("could not obtain a token for %q: %v", systemAppName, err)
 		return summarise(results)
 	}
 	verifyTokenAudience(results, token)

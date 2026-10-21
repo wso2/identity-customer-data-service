@@ -394,8 +394,10 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 	}
 	done("all %d CDS API resources are registered", len(cdsAPIResources))
 
-	// 2-3. The application CDS authenticates as, and the IS APIs it may call.
-	systemID, err := ensureApplication(api, systemAppName, "Used by the Customer Data Service to call Identity Server APIs")
+	// 2. The one application the integration uses: CDS presents it to the
+	// Identity Server, and enablement presents it to CDS.
+	systemID, err := ensureApplication(api, systemAppName,
+		"Used by the Customer Data Service integration with this Identity Server")
 	if err != nil {
 		return err
 	}
@@ -406,30 +408,22 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 	}
 	done("%q is authorized for the Identity Server APIs CDS calls", systemAppName)
 
+	// 3. The same application calls the CDS APIs, which is how the
+	// organization is enabled below and how `verify` checks the deployment.
+	if _, err := api.addTokenAudience(systemID, cdsAudience); err != nil {
+		return fmt.Errorf("could not set the %q token audience on %q: %w", cdsAudience, systemAppName, err)
+	}
+	if err := authorizeCDSAPIs(api, systemID); err != nil {
+		return err
+	}
+	done("%q is authorized for the CDS APIs, audience %q", systemAppName, cdsAudience)
+
 	systemOIDC, _, err := api.oidcConfig(systemID)
 	if err != nil {
 		return err
 	}
 
-	// 4. A client application for calling the CDS APIs.
-	clientID, err := ensureApplication(api, clientAppName, "Calls the Customer Data Service APIs")
-	if err != nil {
-		return err
-	}
-	if _, err := api.addTokenAudience(clientID, cdsAudience); err != nil {
-		return fmt.Errorf("could not set the %q token audience on %q: %w", cdsAudience, clientAppName, err)
-	}
-	if err := authorizeCDSAPIs(api, clientID); err != nil {
-		return err
-	}
-	done("%q is authorized for the CDS APIs, audience %q", clientAppName, cdsAudience)
-
-	clientOIDC, _, err := api.oidcConfig(clientID)
-	if err != nil {
-		return err
-	}
-
-	// 5. The Console, and the administrator role that uses it.
+	// 4. The Console, and the administrator role that uses it.
 	provisionConsole(api)
 
 	// The runtime authenticates as the system application and introspects the
@@ -437,8 +431,6 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 	if err := saveSecrets(cdsHome, map[string]string{
 		"AUTH_SERVER_CLIENT_SECRET":   systemOIDC.ClientSecret,
 		"INTROSPECTION_CLIENT_SECRET": systemOIDC.ClientSecret,
-		"CDS_CLIENT_ID":               clientOIDC.ClientID,
-		"CDS_CLIENT_SECRET":           clientOIDC.ClientSecret,
 	}); err != nil {
 		return err
 	}
@@ -447,17 +439,17 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 	}
 	done("recorded the client credentials in %s", secretsFile)
 
-	// 6. Organization enablement, which is a CDS API call and so needs a
+	// 5. Organization enablement, which is a CDS API call and so needs a
 	// running CDS. Starting CDS is an explicit lifecycle operation, so this
 	// step reports what remains rather than starting the process itself; a
 	// later `wso2cds enable` picks it up once CDS is running.
-	return enableOrganizationStep(api, options, cdsBase, isBase, trustPEM, clientOIDC)
+	return enableOrganizationStep(api, options, cdsBase, isBase, trustPEM, systemOIDC)
 }
 
 // enableOrganizationStep turns CDS on for the organization, when CDS is
 // running to be asked.
 func enableOrganizationStep(api *isAPI, options enableOptions, cdsBase, isBase, trustPEM string,
-	clientOIDC *oidcConfig) error {
+	app *oidcConfig) error {
 
 	step("Enabling CDS for %q", options.organization)
 
@@ -467,14 +459,14 @@ func enableOrganizationStep(api *isAPI, options enableOptions, cdsBase, isBase, 
 		return nil
 	}
 
-	token, err := cdsToken(isBase, clientOIDC.ClientID, clientOIDC.ClientSecret,
+	token, err := cdsToken(isBase, app.ClientID, app.ClientSecret,
 		cdsScopes(api), trustPEM, options.insecure)
 	if err != nil {
 		return err
 	}
 
 	client := &cdsClient{base: cdsBase, organization: options.organization, token: token}
-	changed, err := enableOrganization(client, []string{"CONSOLE", clientOIDC.ClientID})
+	changed, err := enableOrganization(client, []string{"CONSOLE", app.ClientID})
 	if err != nil {
 		return err
 	}

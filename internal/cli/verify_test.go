@@ -83,7 +83,7 @@ func TestSecretsRoundTrip(t *testing.T) {
 	}
 	// A second save adds without dropping what the first wrote, which is what
 	// lets the two phases of enablement each contribute their own secrets.
-	if err := saveSecrets(cdsHome, map[string]string{"CDS_CLIENT_SECRET": "second"}); err != nil {
+	if err := saveSecrets(cdsHome, map[string]string{"INTROSPECTION_CLIENT_SECRET": "second"}); err != nil {
 		t.Fatalf("saveSecrets: %v", err)
 	}
 
@@ -94,8 +94,8 @@ func TestSecretsRoundTrip(t *testing.T) {
 	if secrets["AUTH_SERVER_CLIENT_SECRET"] != "first" {
 		t.Errorf("the first secret was lost: %q", secrets["AUTH_SERVER_CLIENT_SECRET"])
 	}
-	if secrets["CDS_CLIENT_SECRET"] != "second" {
-		t.Errorf("the second secret was not stored: %q", secrets["CDS_CLIENT_SECRET"])
+	if secrets["INTROSPECTION_CLIENT_SECRET"] != "second" {
+		t.Errorf("the second secret was not stored: %q", secrets["INTROSPECTION_CLIENT_SECRET"])
 	}
 
 	// Credentials on disk are readable by the account that runs CDS, nobody else.

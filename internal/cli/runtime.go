@@ -43,8 +43,9 @@ type runtimeConfig struct {
 	} `yaml:"addr"`
 	ServerURL  string `yaml:"server_url"`
 	AuthServer struct {
-		Host string `yaml:"host"`
-		Port int    `yaml:"port"`
+		Host     string `yaml:"host"`
+		Port     int    `yaml:"port"`
+		ClientID string `yaml:"client_id"`
 	} `yaml:"auth_server"`
 }
 

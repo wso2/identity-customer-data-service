@@ -103,12 +103,15 @@ restarting it is your decision:
 **After the restart**, over the Identity Server's management APIs:
 
 1. verify the CDS API resources and scopes were registered
-2. create or reuse the application CDS authenticates as, and authorise it for
-   the Identity Server APIs it calls
-3. create or reuse the CDS API client application, with the `iam-cds` audience
-   and the CDS scopes
-4. authorise the Console application and the administrator role
-5. enable CDS for the organization
+2. create or reuse the one application the integration uses, authorise it for
+   the Identity Server APIs CDS calls and for the CDS APIs, and give it the
+   `iam-cds` audience
+3. authorise the Console application and the administrator role
+4. enable CDS for the organization
+
+No application is created for your own API consumers. Which clients may call
+CDS, and with which scopes, is yours to decide — enablement establishes the
+relationship between CDS and one Identity Server and goes no further.
 
 The profile claim the CDS extension bundles use is not created here. It
 belongs to those bundles, which is where it is declared and consumed; CDS
