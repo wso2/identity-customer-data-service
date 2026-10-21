@@ -135,22 +135,47 @@ func runStart(args []string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("could not start the CDS runtime: %w", err)
 	}
-	// The child is detached, so nothing here will wait on it. Releasing it
-	// makes that explicit and keeps no zombie behind when this process exits.
-	if err := cmd.Process.Release(); err != nil {
-		warn("could not detach from the started process: %v", err)
-	}
 
-	if err := writePID(cdsHome, cmd.Process.Pid); err != nil {
+	// Read the pid before anything releases the handle: Release sets it to
+	// -1, and a pid file saying -1 is one stop and status can never act on.
+	pid := cmd.Process.Pid
+	if err := writePID(cdsHome, pid); err != nil {
 		return err
 	}
-	info("pid %d, logging to %s", cmd.Process.Pid, runtimeLog)
+	info("pid %d, logging to %s", pid, runtimeLog)
 
-	if err := waitReady(cfg.localBase(), *timeout); err != nil {
-		return fmt.Errorf("%w\nThe process is still running; see %s or run `wso2cds stop`", err, runtimeLog)
+	// Wait on the child while it starts, so an exit is observed rather than
+	// inferred. Signalling the pid is not enough: an exited child that has
+	// not been reaped is a zombie, and signal 0 to a zombie succeeds — so a
+	// runtime that died would look alive for as long as this process ran.
+	//
+	// Once start returns, the goroutine is abandoned and the child is
+	// reparented, which is what detaching means.
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+
+	if err := waitReady(cfg.localBase(), exited, *timeout); err != nil {
+		return fmt.Errorf("%w\n\n%s", err, logTail(cdsHome, 15))
 	}
 	done("CDS is ready at %s", cfg.localBase())
 	return nil
+}
+
+// logTail quotes the end of the runtime log, so a failed start explains itself
+// where the operator is looking rather than asking them to go and find it.
+func logTail(cdsHome string, lines int) string {
+
+	file, err := os.Open(path(cdsHome, runtimeLog))
+	if err != nil {
+		return "See " + runtimeLog + "."
+	}
+	defer func() { _ = file.Close() }()
+
+	tail, _, err := tailLines(file, lines)
+	if err != nil || strings.TrimSpace(tail) == "" {
+		return "See " + runtimeLog + "."
+	}
+	return "The last lines of " + runtimeLog + ":\n\n" + tail
 }
 
 // runStop stops the CDS runtime, giving it the chance to shut down on its own
@@ -233,6 +258,18 @@ func runForeground(args []string) error {
 	return nil
 }
 
+// runtimeDefaults are values the packed configuration expands from the
+// environment but that an installed pack has no other source for.
+//
+// Only what stops the runtime starting is defaulted here: an unset log level
+// is not an empty log level, it is a parse failure that ends the process
+// before it writes a line saying so. Anything an operator is expected to
+// decide — the datasource, the certificate — is left to them and reported
+// when it is missing.
+var runtimeDefaults = map[string]string{
+	"LOG_LEVEL": "INFO",
+}
+
 // applySecrets puts the stored credentials into the environment, which is
 // where the ${...} placeholders in deployment.yaml are expanded from. A
 // variable already set in the environment wins, so a deployment supplying its
@@ -245,6 +282,15 @@ func applySecrets(cdsHome string) error {
 	}
 	for _, entry := range environment(secrets) {
 		key, value, _ := strings.Cut(entry, "=")
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("could not set %s: %w", key, err)
+		}
+	}
+
+	for key, value := range runtimeDefaults {
+		if _, set := os.LookupEnv(key); set {
+			continue
+		}
 		if err := os.Setenv(key, value); err != nil {
 			return fmt.Errorf("could not set %s: %w", key, err)
 		}

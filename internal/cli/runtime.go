@@ -115,11 +115,25 @@ func probe(base, endpoint string, timeout time.Duration) (int, string, error) {
 // deadline passes. Readiness rather than health is the signal, because a
 // process that is listening but cannot reach its datastore has not finished
 // starting from an operator's point of view.
-func waitReady(base string, within time.Duration) error {
+//
+// The started process is watched as well as the endpoint. A port is not proof
+// of anything on its own: if the runtime exits — a configuration it cannot
+// read, a port already taken — something else answering on that address would
+// otherwise be reported as this installation having started.
+func waitReady(base string, exited <-chan error, within time.Duration) error {
 
 	deadline := time.Now().Add(within)
 	var last error
 	for time.Now().Before(deadline) {
+		select {
+		case err := <-exited:
+			if err != nil {
+				return fmt.Errorf("the CDS runtime exited during start-up: %w", err)
+			}
+			return fmt.Errorf("the CDS runtime exited during start-up")
+		default:
+		}
+
 		status, _, err := probe(base, "/cds/api/v1/ready", 5*time.Second)
 		switch {
 		case err != nil:

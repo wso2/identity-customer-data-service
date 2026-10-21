@@ -103,9 +103,23 @@ func runLogs(args []string) error {
 // up to, so a follow continues from exactly there.
 func printTail(file *os.File, n int) (int64, error) {
 
+	tail, offset, err := tailLines(file, n)
+	if err != nil {
+		return 0, err
+	}
+	fmt.Print(tail)
+	if len(tail) > 0 && !strings.HasSuffix(tail, "\n") {
+		fmt.Println()
+	}
+	return offset, nil
+}
+
+// tailLines returns the last n lines of the file and the offset it read up to.
+func tailLines(file *os.File, n int) (string, int64, error) {
+
 	info, err := file.Stat()
 	if err != nil {
-		return 0, fmt.Errorf("could not stat the log: %w", err)
+		return "", 0, fmt.Errorf("could not stat the log: %w", err)
 	}
 	size := info.Size()
 
@@ -124,7 +138,7 @@ func printTail(file *os.File, n int) (int64, error) {
 		}
 		count, err := file.ReadAt(buf[:start-readAt], readAt)
 		if err != nil && err != io.EOF {
-			return 0, fmt.Errorf("could not read the log: %w", err)
+			return "", 0, fmt.Errorf("could not read the log: %w", err)
 		}
 		chunk := buf[:count]
 		for i := len(chunk) - 1; i >= 0; i-- {
@@ -144,15 +158,11 @@ func printTail(file *os.File, n int) (int64, error) {
 	}
 
 	if _, err := file.Seek(start, io.SeekStart); err != nil {
-		return 0, fmt.Errorf("could not seek the log: %w", err)
+		return "", 0, fmt.Errorf("could not seek the log: %w", err)
 	}
 	tail, err := io.ReadAll(file)
 	if err != nil {
-		return 0, fmt.Errorf("could not read the log: %w", err)
+		return "", 0, fmt.Errorf("could not read the log: %w", err)
 	}
-	fmt.Print(string(tail))
-	if len(tail) > 0 && !strings.HasSuffix(string(tail), "\n") {
-		fmt.Println()
-	}
-	return size, nil
+	return string(tail), size, nil
 }
