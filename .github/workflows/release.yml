@@ -172,7 +172,7 @@ jobs:
 
           echo "✅ Version '$VERSION' is valid and unreleased"
 
-      # Always written so `make build` names the distribution after the release
+      # Always written so `make dist` names the packs after the release
       # version; only committed when the release is meant to move the branch.
       - name: 🏷️ Set product version
         run: |
