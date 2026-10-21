@@ -185,21 +185,44 @@ datasource:
 
 ## 🏗 Build and Run
 
-### 🛠 Step 1: Build the Product
+### 🛠 Step 1: Build the distribution
 
 ```bash
-make all
+make dist
 ```
+
+This produces one pack per supported platform in `target/dist/`, with their
+checksums and the release compatibility metadata:
+
+```
+wso2cds-linux-amd64-<version>.zip
+wso2cds-linux-arm64-<version>.zip
+```
+
+`make build` compiles the binary for the host platform alone, which is faster
+when all you want is a compile check.
 
 ---
 
-### ▶️ Step 2: Run the Product
+### ▶️ Step 2: Install and run
 
 ```bash
-cd target
-unzip cds-1.0.0-m1-SNAPSHOT.zip
-cd cds-1.0.0-m1-SNAPSHOT
-./cds
+unzip target/dist/wso2cds-linux-amd64-<version>.zip -d /opt
+cd /opt/wso2cds-linux-amd64-<version>
+
+./bin/wso2cds enable --is-home /opt/wso2is
+./bin/wso2cds start
+./bin/wso2cds verify
 ```
+
+`wso2cds enable` does the Identity Server configuration this README's
+[Configuration Steps](#-configuration-steps) describe by hand — the
+applications, the API resources and scopes, the claim, the extension bundles
+and the certificate exchange. The manual steps are still worth reading to
+understand what it sets up, and are the way to adjust any of it afterwards.
+
+See [On-Prem Installation](docs/guides/on-prem-installation.md) for the full
+lifecycle: both onboarding paths, what enablement does on each side of the
+Identity Server restart, the status model, and disabling.
 
 ---

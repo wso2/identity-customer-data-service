@@ -24,7 +24,7 @@
 
 | Document | Description |
 |---|---|
-| [Releasing CDS](process/releasing.md) | Running a release, versioning, maintenance releases, verifying a release |
+| [Releasing CDS](process/releasing.md) | What a release produces, running one, versioning, update-service onboarding |
 
 ## Issues / RFCs
 
