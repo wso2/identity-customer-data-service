@@ -510,3 +510,23 @@ func IsSubOrgHandle(ctx context.Context, orgHandle string) (bool, error) {
 	}
 	return org != nil && !org.IsPrimary(), nil
 }
+
+// GetOrganizationByHandle returns the stored organization of the handle, or nil.
+func GetOrganizationByHandle(ctx context.Context, orgHandle string) (*model.Organization, error) {
+	return store.GetOrganizationByHandle(ctx, orgHandle)
+}
+
+// GetOrganizationsByIds returns the stored organizations with the IDs.
+func GetOrganizationsByIds(ctx context.Context, orgIds []string) ([]model.Organization, error) {
+	return store.GetOrganizationsByIds(ctx, orgIds)
+}
+
+// GetAncestors returns the ancestors of the organization, the parent first. The result is empty
+// for a primary organization.
+func GetAncestors(ctx context.Context, org model.Organization) ([]model.Ancestor, error) {
+
+	if org.IsPrimary() {
+		return nil, nil
+	}
+	return store.GetAncestors(ctx, org.OrgId)
+}

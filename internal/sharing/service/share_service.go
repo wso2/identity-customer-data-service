@@ -27,160 +27,87 @@ import (
 
 	"github.com/google/uuid"
 	orgModel "github.com/wso2/identity-customer-data-service/internal/organization/model"
-	orgStore "github.com/wso2/identity-customer-data-service/internal/organization/store"
+	orgService "github.com/wso2/identity-customer-data-service/internal/organization/service"
 	"github.com/wso2/identity-customer-data-service/internal/organization/suborg"
-	"github.com/wso2/identity-customer-data-service/internal/profile_schema/identitysource"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/store"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
-	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
-// The share state is not stored. It is computed on each read.
+// GetSharedResources returns the resources of the type that the ancestors of the organization
+// share with it, the nearest owner first. The result does not include the resources that the
+// organization owns.
+func GetSharedResources(ctx context.Context, resourceType string,
+	org orgModel.Organization) ([]model.SharedResource, error) {
 
-// orgView is the result of the read for one organization.
-type orgView struct {
-	states     []model.State
-	attributes map[string]store.ChainAttribute
-	rules      map[string]store.ChainRule
+	if org.IsPrimary() || !org.IsActive() {
+		return nil, nil
+	}
+	ancestors, err := orgService.GetAncestors(ctx, org)
+	if err != nil || len(ancestors) == 0 {
+		return nil, err
+	}
+	enabled, err := isOrgEnabled(ctx, org, ancestors)
+	if err != nil || !enabled {
+		return nil, err
+	}
+	return sharedResources(ctx, resourceType, org, ancestors)
 }
 
-// resolveOrg computes the state of each shared resource that reaches the organization.
-func resolveOrg(ctx context.Context, org orgModel.Organization) (*orgView, error) {
+// GetSharedResource returns the resource when an ancestor of the organization shares it with the
+// organization, or nil.
+func GetSharedResource(ctx context.Context, resourceType, resourceId string,
+	org orgModel.Organization) (*model.SharedResource, error) {
 
-	view := &orgView{attributes: map[string]store.ChainAttribute{}, rules: map[string]store.ChainRule{}}
-	if enabled, err := IsOrgEnabled(ctx, org); err != nil || !enabled {
-		return view, err
-	}
-	policies, err := store.GetPoliciesReachingOrg(ctx, org.OrgId)
-	if err != nil || len(policies) == 0 {
-		return view, err
-	}
-	chain, err := orgStore.GetOrganizationChain(ctx, org.OrgId)
+	shared, err := GetSharedResources(ctx, resourceType, org)
 	if err != nil {
 		return nil, err
 	}
-	attrs, err := store.GetAttributesOfChain(ctx, org.OrgId)
+	for _, r := range shared {
+		if r.ResourceId == resourceId {
+			return &r, nil
+		}
+	}
+	return nil, nil
+}
+
+// sharedResources returns the resources of the type that the policies of the ancestors share
+// with the organization.
+func sharedResources(ctx context.Context, resourceType string, org orgModel.Organization,
+	ancestors []orgModel.Ancestor) ([]model.SharedResource, error) {
+
+	ownerIds := make([]string, 0, len(ancestors))
+	byId := make(map[string]orgModel.Ancestor, len(ancestors))
+	for _, a := range ancestors {
+		ownerIds = append(ownerIds, a.OrgId)
+		byId[a.OrgId] = a
+	}
+	policies, err := store.GetPoliciesByOwners(ctx, resourceType, ownerIds)
 	if err != nil {
 		return nil, err
 	}
-	rules, err := store.GetRulesOfChain(ctx, org.OrgId)
-	if err != nil {
-		return nil, err
-	}
-
-	input := EngineInput{Orgs: treeOrgs(chain), Policies: policies,
-		IdentitySourceOrgId: identitySourceOrgId(ctx, chain, org.OrgHandle)}
-	for _, a := range attrs {
-		view.attributes[a.Attribute.AttributeId] = a
-		input.Attributes = append(input.Attributes, AttributeInfo{Id: a.Attribute.AttributeId,
-			Name: a.Attribute.AttributeName, ValueType: a.Attribute.ValueType, OwnerOrgId: a.OwnerOrgId,
-			AppId: appIdOf(a.Attribute.Scope, a.Attribute.ApplicationIdentifier)})
-	}
-	for _, r := range rules {
-		view.rules[r.Rule.RuleId] = r
-		input.Rules = append(input.Rules, RuleInfo{Id: r.Rule.RuleId, PropertyName: r.Rule.PropertyName,
-			PropertyId: r.Rule.PropertyId, OwnerOrgId: r.OwnerOrgId})
-	}
-	view.states = EvaluateOrg(input, org.OrgId)
-	return view, nil
-}
-
-// appIdOf returns the application identifier of an application data attribute, or empty.
-func appIdOf(scope, applicationIdentifier string) string {
-
-	if scope != constants.ApplicationData {
-		return ""
-	}
-	return applicationIdentifier
-}
-
-// identitySourceOrgId returns the ID of the organization that holds the identity attributes of the
-// organization.
-func identitySourceOrgId(ctx context.Context, orgs []orgModel.Organization, orgHandle string) string {
-
-	source := identitysource.HandleOf(ctx, orgHandle)
-	for _, o := range orgs {
-		if o.OrgHandle == source {
-			return o.OrgId
+	var result []model.SharedResource
+	seen := map[string]bool{}
+	for _, p := range policies {
+		if seen[p.ResourceId] || !policyReachesOrg(p, org, ancestors) {
+			continue
 		}
+		seen[p.ResourceId] = true
+		owner := byId[p.OwningOrgId]
+		result = append(result, model.SharedResource{
+			ResourceId:     p.ResourceId,
+			OwnerOrgId:     owner.OrgId,
+			OwnerOrgHandle: owner.OrgHandle,
+			OwnerDepth:     owner.Depth,
+		})
 	}
-	return ""
-}
-
-func treeOrgs(orgs []orgModel.Organization) []TreeOrg {
-
-	result := make([]TreeOrg, 0, len(orgs))
-	for _, o := range orgs {
-		result = append(result, TreeOrg{Id: o.OrgId, Handle: o.OrgHandle, ParentId: o.ParentOrgId,
-			Active: o.Status == orgModel.StatusActive})
-	}
-	return result
-}
-
-func viewOfHandle(ctx context.Context, orgHandle string) (*orgView, error) {
-
-	org, err := orgStore.GetOrganizationByHandle(ctx, orgHandle)
-	if err != nil || org == nil {
-		return nil, err
-	}
-	return resolveOrg(ctx, *org)
-}
-
-// ActiveSharedAttributes returns the shared attributes that are active in the organization of the
-// handle.
-func ActiveSharedAttributes(ctx context.Context, orgHandle string) ([]store.SharedAttribute, error) {
-
-	view, err := viewOfHandle(ctx, orgHandle)
-	if err != nil || view == nil {
-		return nil, err
-	}
-	var result []store.SharedAttribute
-	for _, s := range view.states {
-		if s.ResourceType == model.ResourceSchemaAttribute && s.State == model.StateActive {
-			result = append(result, view.attributes[s.ResourceId].SharedAttribute)
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].OwnerDepth != result[j].OwnerDepth {
+			return result[i].OwnerDepth < result[j].OwnerDepth
 		}
-	}
-	return result, nil
-}
-
-// ActiveSharedRules returns the active shared rules of the organization in evaluation order.
-func ActiveSharedRules(ctx context.Context, orgHandle string) ([]store.SharedRule, error) {
-
-	view, err := viewOfHandle(ctx, orgHandle)
-	if err != nil || view == nil {
-		return nil, err
-	}
-	var rules []store.SharedRule
-	for _, s := range view.states {
-		if s.ResourceType == model.ResourceUnificationRule && s.State == model.StateActive {
-			rules = append(rules, view.rules[s.ResourceId].SharedRule)
-		}
-	}
-	sort.SliceStable(rules, func(i, j int) bool {
-		if rules[i].OwnerHops != rules[j].OwnerHops {
-			return rules[i].OwnerHops > rules[j].OwnerHops
-		}
-		return rules[i].Rule.Priority < rules[j].Rule.Priority
+		return result[i].ResourceId < result[j].ResourceId
 	})
-	return rules, nil
-}
-
-// StatesForOrg returns the states of the shared resources of one type in the organization of the
-// handle.
-func StatesForOrg(ctx context.Context, resourceType, orgHandle string) (map[string]model.State, error) {
-
-	result := map[string]model.State{}
-	view, err := viewOfHandle(ctx, orgHandle)
-	if err != nil || view == nil {
-		return result, err
-	}
-	for _, s := range view.states {
-		if s.ResourceType == resourceType {
-			result[s.ResourceId] = s
-		}
-	}
 	return result, nil
 }
 
@@ -317,22 +244,113 @@ func policyOf(ctx context.Context, resourceType, resourceId, policyId string,
 // target organizations.
 func ValidateTargets(ctx context.Context, initiator orgModel.Organization, p model.Policy) error {
 
-	orgs := []orgModel.Organization{initiator}
+	var targetOrgs []orgModel.Organization
 	if !IsAllChildren(p.Targets) {
 		ids := make([]string, 0, len(p.Targets))
 		for _, t := range p.Targets {
 			ids = append(ids, t.OrgId)
 		}
-		targets, err := orgStore.GetOrganizationsByIds(ctx, ids)
+		orgs, err := orgService.GetOrganizationsByIds(ctx, ids)
 		if err != nil {
 			return err
 		}
-		orgs = append(orgs, targets...)
+		targetOrgs = orgs
 	}
-	if problems := ValidatePolicy(treeOrgs(orgs), p); len(problems) > 0 {
+	if problems := targetProblems(initiator, targetOrgs, p.Targets); len(problems) > 0 {
 		return BadRequest(strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+// ToTargets maps the child_orgs of a request to stored targets, and returns the problems of the
+// request.
+func ToTargets(childOrgs *model.ChildOrgs, initiatingOrgId string) ([]model.Target, []string) {
+
+	if childOrgs == nil {
+		return nil, []string{"child_orgs is required"}
+	}
+	switch childOrgs.Mode {
+	case "":
+		return nil, []string{"child_orgs.mode is required"}
+	case model.ChildOrgsModeAll:
+		if len(childOrgs.Orgs) > 0 {
+			return nil, []string{"child_orgs.orgs must be empty when child_orgs.mode is all"}
+		}
+		return []model.Target{{Scope: model.ScopeAllChildren, OrgId: initiatingOrgId}}, nil
+	case model.ChildOrgsModeSelected:
+		if len(childOrgs.Orgs) == 0 {
+			return nil, []string{"child_orgs.orgs must have at least one organization when child_orgs.mode is " +
+				"selected"}
+		}
+	default:
+		return nil, []string{fmt.Sprintf("child_orgs.mode '%s' is not valid. Use all or selected",
+			childOrgs.Mode)}
+	}
+
+	var problems []string
+	seen := map[string]bool{}
+	targets := make([]model.Target, 0, len(childOrgs.Orgs))
+	for _, child := range childOrgs.Orgs {
+		orgId := strings.TrimSpace(child.OrgId)
+		if orgId == "" {
+			problems = append(problems, "each child_orgs.orgs entry requires an org_id")
+			continue
+		}
+		if seen[orgId] {
+			problems = append(problems, fmt.Sprintf("the organization '%s' is in child_orgs.orgs more than once",
+				orgId))
+			continue
+		}
+		seen[orgId] = true
+		var scope string
+		switch child.Reach {
+		case model.ReachOrg:
+			scope = model.ScopeOrg
+		case model.ReachSubtree:
+			scope = model.ScopeOrgSubtree
+		case "":
+			problems = append(problems, fmt.Sprintf("the organization '%s' requires a reach", orgId))
+			continue
+		default:
+			problems = append(problems, fmt.Sprintf("the reach '%s' of the organization '%s' is not valid. "+
+				"Use org or subtree", child.Reach, orgId))
+			continue
+		}
+		targets = append(targets, model.Target{Scope: scope, OrgId: orgId})
+	}
+	if len(problems) > 0 {
+		return nil, problems
+	}
+	return targets, nil
+}
+
+// ToChildOrgs maps the stored targets to the child_orgs of a response.
+func ToChildOrgs(targets []model.Target) model.ChildOrgs {
+
+	if IsAllChildren(targets) {
+		return model.ChildOrgs{Mode: model.ChildOrgsModeAll}
+	}
+	childOrgs := model.ChildOrgs{Mode: model.ChildOrgsModeSelected}
+	for _, t := range targets {
+		switch t.Scope {
+		case model.ScopeOrg:
+			childOrgs.Orgs = append(childOrgs.Orgs, model.ChildOrg{OrgId: t.OrgId, Reach: model.ReachOrg})
+		case model.ScopeOrgSubtree:
+			childOrgs.Orgs = append(childOrgs.Orgs, model.ChildOrg{OrgId: t.OrgId, Reach: model.ReachSubtree})
+		}
+	}
+	return childOrgs
+}
+
+// IsAllChildren reports whether the targets have the ALL_CHILDREN scope.
+func IsAllChildren(targets []model.Target) bool {
+
+	for _, t := range targets {
+		if t.Scope == model.ScopeAllChildren {
+			return true
+		}
+	}
+	return false
 }
 
 // ToResponse maps a policy to the API.
@@ -345,31 +363,6 @@ func ToResponse(p model.Policy) model.PolicyResponse {
 		InitiatingOrgId: p.InitiatingOrgId,
 		ChildOrgs:       ToChildOrgs(p.Targets),
 	}
-}
-
-// IsOrgEnabled reports whether the organization access includes the sub organization.
-func IsOrgEnabled(ctx context.Context, org orgModel.Organization) (bool, error) {
-
-	if org.IsPrimary() {
-		return true, nil
-	}
-	policies, err := store.GetOrgAccessPoliciesReachingOrg(ctx, org.OrgId)
-	if err != nil || len(policies) == 0 {
-		return false, err
-	}
-	chain, err := orgStore.GetOrganizationChain(ctx, org.OrgId)
-	if err != nil {
-		return false, err
-	}
-	orgs := treeOrgs(chain)
-	for _, p := range policies {
-		for _, id := range Reach(orgs, p) {
-			if id == org.OrgId {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
 }
 
 // PolicyExistsError is the error for a second policy of the same organization.

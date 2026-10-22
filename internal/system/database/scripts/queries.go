@@ -50,6 +50,13 @@ var GetProfileSchemaByOrg = newQuery("CDS-SCH-02",
        multi_valued, CAST(sub_attributes AS TEXT) AS sub_attributes, CAST(canonical_values AS TEXT) AS canonical_values
        FROM profile_schema WHERE org_handle = $1`)
 
+// GetProfileSchemaAttributesByIds returns the attributes with the IDs. The %s is the IN list of
+// attribute IDs.
+var GetProfileSchemaAttributesByIds = newQuery("CDS-SCH-16",
+	`SELECT attribute_id, attribute_name, scope, display_name, value_type, merge_strategy, mutability,
+	application_identifier, multi_valued, CAST(sub_attributes AS TEXT) AS sub_attributes,
+	CAST(canonical_values AS TEXT) AS canonical_values, org_handle FROM profile_schema WHERE attribute_id IN (%s)`)
+
 var DeleteIdentityClaimsOfProfileSchema = newQuery("CDS-SCH-03",
 	`DELETE FROM profile_schema WHERE org_handle = $1 AND scope = 'identity_attributes'`)
 
@@ -145,6 +152,11 @@ var UpdateProfileSchemaAttributeFields = newQuery("CDS-SCH-15",
 var GetUnificationRules = newQuery("CDS-UNR-01",
 	`SELECT rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, created_at, updated_at 
 FROM unification_rules WHERE org_handle = $1`)
+
+// GetUnificationRulesByIds returns the rules with the IDs. The %s is the IN list of rule IDs.
+var GetUnificationRulesByIds = newQuery("CDS-UNR-06",
+	`SELECT rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, created_at, updated_at
+	FROM unification_rules WHERE rule_id IN (%s)`)
 
 var GetUnificationRule = newQuery("CDS-UNR-02",
 	`SELECT rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, created_at, updated_at FROM unification_rules WHERE rule_id = $1`)

@@ -22,7 +22,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -51,7 +50,7 @@ func TestDeletePoliciesOfResourceReadsNoTableWhenOrganizationManagementIsDisable
 		}
 	}
 
-	if err := DeletePoliciesOfResource(context.Background(), model.ResourceSchemaAttribute, "attr-1"); err != nil {
+	if err := DeletePoliciesOfResource(context.Background(), "TEST_RESOURCE", "attr-1"); err != nil {
 		t.Errorf("want no error, got %v", err)
 	}
 }

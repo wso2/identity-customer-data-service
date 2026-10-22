@@ -30,6 +30,7 @@ import (
 	orgService "github.com/wso2/identity-customer-data-service/internal/organization/service"
 	"github.com/wso2/identity-customer-data-service/internal/organization/suborg"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
 	sysconfig "github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
@@ -62,7 +63,7 @@ func (a AdminConfigService) IsCDSEnabled(ctx context.Context, orgHandle string) 
 	if err != nil || primaryConfig == nil || !primaryConfig.CDSEnabled {
 		return false
 	}
-	return orgService.IsSubOrgEnabled(ctx, orgHandle)
+	return sharingService.IsSubOrgEnabled(ctx, orgHandle)
 }
 
 func (a AdminConfigService) IsInitialSchemaSyncDone(ctx context.Context, orgHandle string) bool {

@@ -26,6 +26,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
 	"github.com/wso2/identity-customer-data-service/internal/organization/service"
 	shareHandler "github.com/wso2/identity-customer-data-service/internal/sharing/handler"
+	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
@@ -112,7 +113,7 @@ func (h *OrganizationHandler) CreateOrgAccess(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	resp, err := service.CreateOrgAccess(r.Context(), *primary, req)
+	resp, err := sharingService.CreateOrgAccess(r.Context(), *primary, req)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -126,7 +127,7 @@ func (h *OrganizationHandler) ListOrgAccess(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	resp, err := service.ListOrgAccess(r.Context(), *primary)
+	resp, err := sharingService.ListOrgAccess(r.Context(), *primary)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -140,7 +141,7 @@ func (h *OrganizationHandler) GetOrgAccess(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	resp, err := service.GetOrgAccess(r.Context(), *primary, r.PathValue("orgPolicyId"))
+	resp, err := sharingService.GetOrgAccess(r.Context(), *primary, r.PathValue("orgPolicyId"))
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -158,7 +159,7 @@ func (h *OrganizationHandler) UpdateOrgAccess(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	resp, err := service.UpdateOrgAccess(r.Context(), *primary, r.PathValue("orgPolicyId"), req)
+	resp, err := sharingService.UpdateOrgAccess(r.Context(), *primary, r.PathValue("orgPolicyId"), req)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -172,7 +173,7 @@ func (h *OrganizationHandler) DeleteOrgAccess(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	if err := service.DeleteOrgAccess(r.Context(), *primary, r.PathValue("orgPolicyId")); err != nil {
+	if err := sharingService.DeleteOrgAccess(r.Context(), *primary, r.PathValue("orgPolicyId")); err != nil {
 		utils.HandleError(w, err)
 		return
 	}

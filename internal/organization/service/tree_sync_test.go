@@ -21,7 +21,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"sync"
 	"testing"
@@ -30,7 +29,6 @@ import (
 	adminConfigStore "github.com/wso2/identity-customer-data-service/internal/admin_config/store"
 	"github.com/wso2/identity-customer-data-service/internal/organization/model"
 	"github.com/wso2/identity-customer-data-service/internal/organization/store"
-	shareModel "github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -489,98 +487,6 @@ func TestATriggerDuringASyncRunsItAgain(t *testing.T) {
 	waitState(t, ctx, model.TreeSyncSynced)
 }
 
-func TestOrganizationAccessNeedsACompletedSync(t *testing.T) {
-
-	fake := &fakeIdP{orgs: tree()}
-	ctx := setUp(t, fake)
-	primary, err := EnsurePrimary(ctx, primaryHandle)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := shareModel.PolicyRequest{ChildOrgs: &shareModel.ChildOrgs{Mode: shareModel.ChildOrgsModeAll}}
-
-	if _, err := CreateOrgAccess(ctx, *primary, req); clientErrorCode(err) != errors2.ORGANIZATIONS_NOT_SYNCED.Code {
-		t.Fatalf("expected ORGANIZATIONS_NOT_SYNCED, got %v", err)
-	}
-	if _, err := StartTreeSync(ctx, primaryHandle); err != nil {
-		t.Fatal(err)
-	}
-	waitState(t, ctx, model.TreeSyncSynced)
-	if _, err := CreateOrgAccess(ctx, *primary, req); err != nil {
-		t.Fatalf("expected organization access after the sync, got %v", err)
-	}
-}
-
-func TestOrganizationAccessChecksTheSelectedOrganizations(t *testing.T) {
-
-	fake := &fakeIdP{orgs: tree()}
-	ctx := setUp(t, fake)
-	primary, err := EnsurePrimary(ctx, primaryHandle)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := StartTreeSync(ctx, primaryHandle); err != nil {
-		t.Fatal(err)
-	}
-	waitState(t, ctx, model.TreeSyncSynced)
-	selected := func(ids ...string) shareModel.PolicyRequest {
-		req := shareModel.PolicyRequest{ChildOrgs: &shareModel.ChildOrgs{Mode: shareModel.ChildOrgsModeSelected}}
-		for _, id := range ids {
-			req.ChildOrgs.Orgs = append(req.ChildOrgs.Orgs, shareModel.ChildOrg{OrgId: id, Reach: shareModel.ReachOrg})
-		}
-		return req
-	}
-
-	for _, ids := range [][]string{{"teama"}, {"unknown"}, {"region1", "teama"}} {
-		if _, err := CreateOrgAccess(ctx, *primary, selected(ids...)); clientErrorCode(err) !=
-			errors2.SHARE_BAD_REQUEST.Code {
-			t.Fatalf("expected SHARE_BAD_REQUEST for %v, got %v", ids, err)
-		}
-	}
-	created, err := CreateOrgAccess(ctx, *primary, selected("region1", "region2"))
-	if err != nil {
-		t.Fatalf("expected organization access for the direct children, got %v", err)
-	}
-	if got := len(created.ChildOrgs.Orgs); got != 2 {
-		t.Fatalf("expected 2 selected organizations, got %d", got)
-	}
-}
-
-func TestOrganizationAccessStoresManySelectedOrganizations(t *testing.T) {
-
-	const count = 2500
-	var orgs []idp.Organization
-	req := shareModel.PolicyRequest{ChildOrgs: &shareModel.ChildOrgs{Mode: shareModel.ChildOrgsModeSelected}}
-	for i := 0; i < count; i++ {
-		id := fmt.Sprintf("child%04d", i)
-		orgs = append(orgs, idp.Organization{Id: id, Handle: id, Name: id, ParentId: primaryId,
-			Status: model.StatusActive})
-		req.ChildOrgs.Orgs = append(req.ChildOrgs.Orgs, shareModel.ChildOrg{OrgId: id, Reach: shareModel.ReachOrg})
-	}
-	fake := &fakeIdP{orgs: orgs}
-	ctx := setUp(t, fake)
-	primary, err := EnsurePrimary(ctx, primaryHandle)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := StartTreeSync(ctx, primaryHandle); err != nil {
-		t.Fatal(err)
-	}
-	waitState(t, ctx, model.TreeSyncSynced)
-
-	created, err := CreateOrgAccess(ctx, *primary, req)
-	if err != nil {
-		t.Fatalf("expected organization access for %d organizations, got %v", count, err)
-	}
-	stored, err := GetOrgAccess(ctx, *primary, created.Id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := len(stored.ChildOrgs.Orgs); got != count {
-		t.Fatalf("expected %d stored organizations, got %d", count, got)
-	}
-}
-
 func TestUnknownOrgsAreNotLookedUp(t *testing.T) {
 
 	fake := &fakeIdP{orgs: tree()}
@@ -647,14 +553,6 @@ func TestResetTreeSyncNeedsANewSync(t *testing.T) {
 	}
 
 	setCDSEnabled(t, ctx, true)
-	primary, err := store.GetOrganizationByHandle(ctx, primaryHandle)
-	if err != nil || primary == nil {
-		t.Fatalf("failed to read the primary org: %v", err)
-	}
-	req := shareModel.PolicyRequest{ChildOrgs: &shareModel.ChildOrgs{Mode: shareModel.ChildOrgsModeAll}}
-	if _, err := CreateOrgAccess(ctx, *primary, req); clientErrorCode(err) != errors2.ORGANIZATIONS_NOT_SYNCED.Code {
-		t.Fatalf("expected ORGANIZATIONS_NOT_SYNCED after the enable, got %v", err)
-	}
 	// Organization events are ignored until the next sync.
 	fake.mu.Lock()
 	fake.orgs = append(fake.orgs, idp.Organization{Id: "region3", Handle: "region3", Name: "Region3",

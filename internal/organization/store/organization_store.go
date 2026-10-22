@@ -159,6 +159,26 @@ func GetOrganizationChain(ctx context.Context, orgId string) ([]model.Organizati
 	return orgs, nil
 }
 
+// GetAncestors returns the ancestors of the organization, the parent first.
+func GetAncestors(ctx context.Context, orgId string) ([]model.Ancestor, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, serverError("Failed to get a database client to read organizations.", err)
+	}
+	defer dbClient.Close()
+
+	results, err := dbClient.ExecuteQueryContext(ctx, scripts.GetOrganizationAncestors, orgId)
+	if err != nil {
+		return nil, serverError(fmt.Sprintf("Failed to read the ancestors of organization: %s", orgId), err)
+	}
+	ancestors := make([]model.Ancestor, 0, len(results))
+	for _, row := range results {
+		ancestors = append(ancestors, model.Ancestor{Organization: mapRow(row), Depth: rows.Int(row, "hops")})
+	}
+	return ancestors, nil
+}
+
 // UpdateOrganizationStatus sets the status of the organization.
 func UpdateOrganizationStatus(ctx context.Context, orgId, status string) error {
 

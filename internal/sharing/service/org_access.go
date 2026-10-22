@@ -24,11 +24,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/wso2/identity-customer-data-service/internal/organization/model"
-	"github.com/wso2/identity-customer-data-service/internal/organization/store"
-	shareModel "github.com/wso2/identity-customer-data-service/internal/sharing/model"
-	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
-	shareStore "github.com/wso2/identity-customer-data-service/internal/sharing/store"
+	orgModel "github.com/wso2/identity-customer-data-service/internal/organization/model"
+	orgService "github.com/wso2/identity-customer-data-service/internal/organization/service"
+	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
+	"github.com/wso2/identity-customer-data-service/internal/sharing/store"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
@@ -39,17 +38,45 @@ import (
 // organization.
 func IsSubOrgEnabled(ctx context.Context, orgHandle string) bool {
 
-	org, err := store.GetOrganizationByHandle(ctx, orgHandle)
+	org, err := orgService.GetOrganizationByHandle(ctx, orgHandle)
 	if err != nil || org == nil {
 		return false
 	}
-	enabled, err := sharingService.IsOrgEnabled(ctx, *org)
+	enabled, err := IsOrgEnabled(ctx, *org)
 	return err == nil && enabled
 }
 
+// IsOrgEnabled reports whether the organization access includes the organization. A primary
+// organization is always enabled.
+func IsOrgEnabled(ctx context.Context, org orgModel.Organization) (bool, error) {
+
+	if org.IsPrimary() {
+		return true, nil
+	}
+	ancestors, err := orgService.GetAncestors(ctx, org)
+	if err != nil {
+		return false, err
+	}
+	return isOrgEnabled(ctx, org, ancestors)
+}
+
+// isOrgEnabled reports whether an organization access policy of an ancestor reaches the active
+// organization.
+func isOrgEnabled(ctx context.Context, org orgModel.Organization, ancestors []orgModel.Ancestor) (bool, error) {
+
+	if !org.IsActive() || len(ancestors) == 0 {
+		return false, nil
+	}
+	access, err := sharedResources(ctx, model.ResourceOrganizationAccess, org, ancestors)
+	if err != nil {
+		return false, err
+	}
+	return len(access) > 0, nil
+}
+
 // CreateOrgAccess creates the organization access of the primary organization.
-func CreateOrgAccess(ctx context.Context, primary model.Organization,
-	req shareModel.PolicyRequest) (*shareModel.OrgAccessResponse, error) {
+func CreateOrgAccess(ctx context.Context, primary orgModel.Organization,
+	req model.PolicyRequest) (*model.OrgAccessResponse, error) {
 
 	if err := requireSyncedTree(ctx, primary); err != nil {
 		return nil, err
@@ -59,24 +86,24 @@ func CreateOrgAccess(ctx context.Context, primary model.Organization,
 		return nil, err
 	}
 	if existing != nil {
-		return nil, sharingService.PolicyExistsError(existing.PolicyId)
+		return nil, PolicyExistsError(existing.PolicyId)
 	}
-	targets, problems := sharingService.ToTargets(req.ChildOrgs, primary.OrgId)
+	targets, problems := ToTargets(req.ChildOrgs, primary.OrgId)
 	if len(problems) > 0 {
-		return nil, sharingService.BadRequest(strings.Join(problems, "; "))
+		return nil, BadRequest(strings.Join(problems, "; "))
 	}
-	p := shareModel.Policy{
+	p := model.Policy{
 		PolicyId:        uuid.New().String(),
-		ResourceType:    shareModel.ResourceOrganizationAccess,
-		ResourceId:      shareModel.OrganizationAccessResourceId,
+		ResourceType:    model.ResourceOrganizationAccess,
+		ResourceId:      model.OrganizationAccessResourceId,
 		OwningOrgId:     primary.OrgId,
 		InitiatingOrgId: primary.OrgId,
 		Targets:         targets,
 	}
-	if err := sharingService.ValidateTargets(ctx, primary, p); err != nil {
+	if err := ValidateTargets(ctx, primary, p); err != nil {
 		return nil, err
 	}
-	if err := shareStore.CreatePolicy(ctx, p); err != nil {
+	if err := store.CreatePolicy(ctx, p); err != nil {
 		return nil, err
 	}
 	resp := toOrgAccessResponse(p)
@@ -84,9 +111,9 @@ func CreateOrgAccess(ctx context.Context, primary model.Organization,
 }
 
 // ListOrgAccess returns the organization access policies of the primary organization.
-func ListOrgAccess(ctx context.Context, primary model.Organization) (*shareModel.OrgAccessList, error) {
+func ListOrgAccess(ctx context.Context, primary orgModel.Organization) (*model.OrgAccessList, error) {
 
-	list := &shareModel.OrgAccessList{Policies: []shareModel.OrgAccessResponse{}}
+	list := &model.OrgAccessList{Policies: []model.OrgAccessResponse{}}
 	p, err := orgAccessOf(ctx, primary)
 	if err != nil {
 		return nil, err
@@ -99,8 +126,8 @@ func ListOrgAccess(ctx context.Context, primary model.Organization) (*shareModel
 }
 
 // GetOrgAccess returns an organization access policy of the primary organization.
-func GetOrgAccess(ctx context.Context, primary model.Organization,
-	policyId string) (*shareModel.OrgAccessResponse, error) {
+func GetOrgAccess(ctx context.Context, primary orgModel.Organization,
+	policyId string) (*model.OrgAccessResponse, error) {
 
 	p, err := orgAccessById(ctx, primary, policyId)
 	if err != nil {
@@ -111,8 +138,8 @@ func GetOrgAccess(ctx context.Context, primary model.Organization,
 }
 
 // UpdateOrgAccess replaces the selected organizations of an organization access policy.
-func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId string,
-	req shareModel.PolicyRequest) (*shareModel.OrgAccessResponse, error) {
+func UpdateOrgAccess(ctx context.Context, primary orgModel.Organization, policyId string,
+	req model.PolicyRequest) (*model.OrgAccessResponse, error) {
 
 	if err := requireSyncedTree(ctx, primary); err != nil {
 		return nil, err
@@ -121,24 +148,24 @@ func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId s
 	if err != nil {
 		return nil, err
 	}
-	targets, problems := sharingService.ToTargets(req.ChildOrgs, primary.OrgId)
+	targets, problems := ToTargets(req.ChildOrgs, primary.OrgId)
 	if len(problems) > 0 {
-		return nil, sharingService.BadRequest(strings.Join(problems, "; "))
+		return nil, BadRequest(strings.Join(problems, "; "))
 	}
-	wasAll, isAll := sharingService.IsAllChildren(p.Targets), sharingService.IsAllChildren(targets)
+	wasAll, isAll := IsAllChildren(p.Targets), IsAllChildren(targets)
 	switch {
 	case wasAll && isAll:
 		resp := toOrgAccessResponse(*p)
 		return &resp, nil
 	case wasAll != isAll:
-		return nil, sharingService.BadRequest("An update cannot change child_orgs.mode. Delete the policy, and " +
+		return nil, BadRequest("An update cannot change child_orgs.mode. Delete the policy, and " +
 			"then create a new one.")
 	}
 	p.Targets = targets
-	if err := sharingService.ValidateTargets(ctx, primary, *p); err != nil {
+	if err := ValidateTargets(ctx, primary, *p); err != nil {
 		return nil, err
 	}
-	if err := shareStore.ReplaceTargets(ctx, p.PolicyId, targets); err != nil {
+	if err := store.ReplaceTargets(ctx, p.PolicyId, targets); err != nil {
 		return nil, err
 	}
 	resp := toOrgAccessResponse(*p)
@@ -146,19 +173,19 @@ func UpdateOrgAccess(ctx context.Context, primary model.Organization, policyId s
 }
 
 // DeleteOrgAccess deletes the organization access of the primary organization.
-func DeleteOrgAccess(ctx context.Context, primary model.Organization, policyId string) error {
+func DeleteOrgAccess(ctx context.Context, primary orgModel.Organization, policyId string) error {
 
 	p, err := orgAccessById(ctx, primary, policyId)
 	if err != nil {
 		return err
 	}
-	return shareStore.DeletePolicy(ctx, p.PolicyId)
+	return store.DeletePolicy(ctx, p.PolicyId)
 }
 
 // requireSyncedTree returns an error until the organization tree is synced at least once.
-func requireSyncedTree(ctx context.Context, primary model.Organization) error {
+func requireSyncedTree(ctx context.Context, primary orgModel.Organization) error {
 
-	status, err := store.GetTreeSyncStatus(ctx, primary.OrgHandle)
+	status, err := orgService.GetTreeSyncStatus(ctx, primary.OrgHandle)
 	if err != nil {
 		return err
 	}
@@ -172,30 +199,30 @@ func requireSyncedTree(ctx context.Context, primary model.Organization) error {
 	return nil
 }
 
-func orgAccessOf(ctx context.Context, primary model.Organization) (*shareModel.Policy, error) {
-	return shareStore.GetPolicy(ctx, shareModel.ResourceOrganizationAccess, shareModel.OrganizationAccessResourceId,
+func orgAccessOf(ctx context.Context, primary orgModel.Organization) (*model.Policy, error) {
+	return store.GetPolicy(ctx, model.ResourceOrganizationAccess, model.OrganizationAccessResourceId,
 		primary.OrgId)
 }
 
 // orgAccessById returns the organization access policy with the ID when it belongs to the primary
 // organization.
-func orgAccessById(ctx context.Context, primary model.Organization, policyId string) (*shareModel.Policy, error) {
+func orgAccessById(ctx context.Context, primary orgModel.Organization, policyId string) (*model.Policy, error) {
 
-	p, err := shareStore.GetPolicyById(ctx, policyId)
+	p, err := store.GetPolicyById(ctx, policyId)
 	if err != nil {
 		return nil, err
 	}
-	if p == nil || p.ResourceType != shareModel.ResourceOrganizationAccess || p.InitiatingOrgId != primary.OrgId {
-		return nil, sharingService.PolicyNotFoundError(policyId)
+	if p == nil || p.ResourceType != model.ResourceOrganizationAccess || p.InitiatingOrgId != primary.OrgId {
+		return nil, PolicyNotFoundError(policyId)
 	}
 	return p, nil
 }
 
-func toOrgAccessResponse(p shareModel.Policy) shareModel.OrgAccessResponse {
-	return shareModel.OrgAccessResponse{
+func toOrgAccessResponse(p model.Policy) model.OrgAccessResponse {
+	return model.OrgAccessResponse{
 		Id:              p.PolicyId,
 		OwningOrgId:     p.OwningOrgId,
 		InitiatingOrgId: p.InitiatingOrgId,
-		ChildOrgs:       sharingService.ToChildOrgs(p.Targets),
+		ChildOrgs:       ToChildOrgs(p.Targets),
 	}
 }

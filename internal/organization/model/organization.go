@@ -44,6 +44,18 @@ func (o Organization) IsPrimary() bool {
 	return o.OrgId == o.PrimaryOrgId
 }
 
+// IsActive reports whether the organization is active.
+func (o Organization) IsActive() bool {
+	return o.Status == StatusActive
+}
+
+// Ancestor is an organization above another organization. Depth is the number of levels between
+// them. The parent has the depth 1.
+type Ancestor struct {
+	Organization
+	Depth int
+}
+
 // SyncEvent is an organization lifecycle event.
 type SyncEvent struct {
 	Event string `json:"event"`

@@ -23,15 +23,13 @@ import (
 
 	orgHandler "github.com/wso2/identity-customer-data-service/internal/organization/handler"
 	orgService "github.com/wso2/identity-customer-data-service/internal/organization/service"
-	shareHandler "github.com/wso2/identity-customer-data-service/internal/sharing/handler"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
-// OrganizationService registers the organization and sharing endpoints.
+// OrganizationService registers the organization endpoints.
 type OrganizationService struct {
 	organizations *orgHandler.OrganizationHandler
-	shares        *shareHandler.ShareHandler
 	mux           *http.ServeMux
 }
 
@@ -39,7 +37,6 @@ func NewOrganizationService(mux *http.ServeMux) *OrganizationService {
 
 	s := &OrganizationService{
 		organizations: orgHandler.NewOrganizationHandler(),
-		shares:        shareHandler.NewShareHandler(),
 		mux:           mux,
 	}
 
@@ -59,18 +56,5 @@ func NewOrganizationService(mux *http.ServeMux) *OrganizationService {
 	s.mux.HandleFunc("PUT "+orgAccess+"/{orgPolicyId}", s.organizations.UpdateOrgAccess)
 	s.mux.HandleFunc("DELETE "+orgAccess+"/{orgPolicyId}", s.organizations.DeleteOrgAccess)
 
-	const attrPolicies = base + "/profile-schema/{scope}/{attrID}/sharing-policies"
-	s.mux.HandleFunc("POST "+attrPolicies, s.shares.CreateSchemaAttributePolicy)
-	s.mux.HandleFunc("GET "+attrPolicies, s.shares.ListSchemaAttributePolicies)
-	s.mux.HandleFunc("GET "+attrPolicies+"/{policyId}", s.shares.GetSchemaAttributePolicy)
-	s.mux.HandleFunc("PUT "+attrPolicies+"/{policyId}", s.shares.UpdateSchemaAttributePolicy)
-	s.mux.HandleFunc("DELETE "+attrPolicies+"/{policyId}", s.shares.DeleteSchemaAttributePolicy)
-
-	const rulePolicies = base + "/unification-rules/{ruleId}/sharing-policies"
-	s.mux.HandleFunc("POST "+rulePolicies, s.shares.CreateUnificationRulePolicy)
-	s.mux.HandleFunc("GET "+rulePolicies, s.shares.ListUnificationRulePolicies)
-	s.mux.HandleFunc("GET "+rulePolicies+"/{policyId}", s.shares.GetUnificationRulePolicy)
-	s.mux.HandleFunc("PUT "+rulePolicies+"/{policyId}", s.shares.UpdateUnificationRulePolicy)
-	s.mux.HandleFunc("DELETE "+rulePolicies+"/{policyId}", s.shares.DeleteUnificationRulePolicy)
 	return s
 }

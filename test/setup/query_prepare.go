@@ -53,9 +53,10 @@ func CompleteStatement(name, statement string) string {
 		return fmt.Sprintf(statement, QueryPlaceholders(13))
 	case "InsertSharePolicyTargets":
 		return fmt.Sprintf(statement, QueryPlaceholders(3))
-	case "DeleteStaleIdentityClaimsForProfileSchema":
+	case "DeleteStaleIdentityClaimsForProfileSchema", "GetSharePoliciesByOwners":
 		return fmt.Sprintf(statement, "$2")
-	case "GetAppDataByProfileIds", "GetConsentCategoryAttributesByCategoryIds", "GetOrganizationsByIds":
+	case "GetAppDataByProfileIds", "GetConsentCategoryAttributesByCategoryIds", "GetOrganizationsByIds",
+		"GetProfileSchemaAttributesByIds", "GetUnificationRulesByIds":
 		return fmt.Sprintf(statement, "$1")
 	default:
 		return statement

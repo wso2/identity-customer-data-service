@@ -20,18 +20,15 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
-	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	dbmodel "github.com/wso2/identity-customer-data-service/internal/system/database/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/rows"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-	ruleModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 )
 
 func serverError(description string, err error) error {
@@ -175,21 +172,21 @@ func GetPolicy(ctx context.Context, resourceType, resourceId, initiatingOrgId st
 	return withTargets(ctx, results)
 }
 
-// GetPoliciesReachingOrg returns the share policies whose targets reach the organization.
-// Each policy has only the targets that reach the organization.
-func GetPoliciesReachingOrg(ctx context.Context, orgId string) ([]model.Policy, error) {
-	return reachingPolicies(ctx, scripts.GetSharePoliciesReachingOrg, orgId)
-}
+// GetPoliciesByOwners returns the policies of the resource type that the organizations own, with
+// their targets.
+func GetPoliciesByOwners(ctx context.Context, resourceType string, ownerOrgIds []string) ([]model.Policy, error) {
 
-// GetOrgAccessPoliciesReachingOrg returns the organization access policies whose targets reach
-// the organization.
-func GetOrgAccessPoliciesReachingOrg(ctx context.Context, orgId string) ([]model.Policy, error) {
-	return reachingPolicies(ctx, scripts.GetOrgAccessPoliciesReachingOrg, orgId)
-}
-
-func reachingPolicies(ctx context.Context, q dbmodel.DBQuery, orgId string) ([]model.Policy, error) {
-
-	results, err := query(ctx, q, orgId)
+	if len(ownerOrgIds) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(ownerOrgIds))
+	args := make([]interface{}, 0, len(ownerOrgIds)+1)
+	args = append(args, resourceType)
+	for i, id := range ownerOrgIds {
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		args = append(args, id)
+	}
+	results, err := query(ctx, scripts.GetSharePoliciesByOwners.Format(strings.Join(placeholders, ", ")), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -241,101 +238,4 @@ func deletePolicy(ctx context.Context, tx *dbmodel.Tx, policyId string) error {
 		}
 	}
 	return nil
-}
-
-// SharedAttribute is a schema attribute that another organization shares, with its owner.
-type SharedAttribute struct {
-	Attribute      schemaModel.ProfileSchemaAttribute
-	OwnerOrgHandle string
-}
-
-// ChainAttribute is an attribute of an organization of the ancestor chain, with the ID of the owner
-// organization.
-type ChainAttribute struct {
-	SharedAttribute
-	OwnerOrgId string
-}
-
-// GetAttributesOfChain returns the attributes of the organization and of its ancestors.
-func GetAttributesOfChain(ctx context.Context, orgId string) ([]ChainAttribute, error) {
-
-	results, err := query(ctx, scripts.GetSchemaAttributesOfChain, orgId)
-	if err != nil {
-		return nil, err
-	}
-	attrs := make([]ChainAttribute, 0, len(results))
-	for _, row := range results {
-		var subAttrs []schemaModel.SubAttribute
-		if raw := rows.String(row, "sub_attributes"); raw != "" {
-			_ = json.Unmarshal([]byte(raw), &subAttrs)
-		}
-		var canonical []schemaModel.CanonicalValue
-		if raw := rows.String(row, "canonical_values"); raw != "" {
-			_ = json.Unmarshal([]byte(raw), &canonical)
-		}
-		attrs = append(attrs, ChainAttribute{
-			OwnerOrgId: rows.String(row, "org_id"),
-			SharedAttribute: SharedAttribute{
-				OwnerOrgHandle: rows.String(row, "org_handle"),
-				Attribute: schemaModel.ProfileSchemaAttribute{
-					AttributeId:           rows.String(row, "attribute_id"),
-					AttributeName:         rows.String(row, "attribute_name"),
-					Scope:                 rows.String(row, "scope"),
-					DisplayName:           rows.String(row, "display_name"),
-					ValueType:             rows.String(row, "value_type"),
-					MergeStrategy:         rows.String(row, "merge_strategy"),
-					Mutability:            rows.String(row, "mutability"),
-					ApplicationIdentifier: rows.String(row, "application_identifier"),
-					MultiValued:           rows.Bool(row, "multi_valued"),
-					SubAttributes:         subAttrs,
-					CanonicalValues:       canonical,
-				},
-			},
-		})
-	}
-	return attrs, nil
-}
-
-// SharedRule is a unification rule that another organization shares. OwnerHops is the number of
-// levels from the organization up to the owner.
-type SharedRule struct {
-	Rule      ruleModel.UnificationRule
-	OwnerHops int
-}
-
-// ChainRule is a rule of an organization of the ancestor chain, with the ID of the owner
-// organization.
-type ChainRule struct {
-	SharedRule
-	OwnerOrgId string
-}
-
-// GetRulesOfChain returns the rules of the organization and of its ancestors.
-func GetRulesOfChain(ctx context.Context, orgId string) ([]ChainRule, error) {
-
-	results, err := query(ctx, scripts.GetUnificationRulesOfChain, orgId)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]ChainRule, 0, len(results))
-	for _, row := range results {
-		result = append(result, ChainRule{
-			OwnerOrgId: rows.String(row, "org_id"),
-			SharedRule: SharedRule{
-				OwnerHops: rows.Int(row, "owner_hops"),
-				Rule: ruleModel.UnificationRule{
-					RuleId:       rows.String(row, "rule_id"),
-					OrgHandle:    rows.String(row, "org_handle"),
-					RuleName:     rows.String(row, "rule_name"),
-					PropertyName: rows.String(row, "property_name"),
-					PropertyId:   rows.String(row, "property_id"),
-					Priority:     rows.Int(row, "priority"),
-					IsActive:     rows.Bool(row, "is_active"),
-					CreatedAt:    rows.Time(row, "created_at"),
-					UpdatedAt:    rows.Time(row, "updated_at"),
-				},
-			},
-		})
-	}
-	return result, nil
 }

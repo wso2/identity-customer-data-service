@@ -18,11 +18,9 @@
 
 package model
 
-// Resource types of a policy.
+// The organization access policy selects the sub organizations that can use CDS. Each shareable
+// resource defines its own resource type.
 const (
-	ResourceSchemaAttribute = "SCHEMA_ATTRIBUTE"
-	ResourceUnificationRule = "UNIFICATION_RULE"
-	// ResourceOrganizationAccess is the policy that selects the sub organizations that can use CDS.
 	ResourceOrganizationAccess   = "ORGANIZATION_ACCESS"
 	OrganizationAccessResourceId = "CDS"
 )
@@ -38,26 +36,16 @@ const (
 	ScopeOrgSubtree = "ORG_SUBTREE"
 )
 
-// Share states of a resource in one organization.
+// Share states of a resource in one organization. A resource can add other states.
 const (
-	StateActive                   = "ACTIVE"
-	StateConflicted               = "CONFLICTED"
-	StateInactiveMissingAttribute = "INACTIVE_MISSING_ATTRIBUTE"
-)
-
-// Reasons for a state that is not ACTIVE.
-const (
-	ReasonLocalNameConflict  = "LOCAL_NAME_CONFLICT"
-	ReasonSharedNameConflict = "SHARED_NAME_CONFLICT"
-	ReasonMissingAttribute   = "MISSING_ATTRIBUTE"
+	StateActive     = "ACTIVE"
+	StateConflicted = "CONFLICTED"
 )
 
 // Origin of a resource in the view of an organization.
 const (
 	OriginOwned  = "OWNED"
 	OriginShared = "SHARED"
-	// OriginInherited is an identity attribute that a sub organization inherits.
-	OriginInherited = "INHERITED"
 )
 
 // Target is one stored target of a policy.
@@ -77,15 +65,13 @@ type Policy struct {
 	Targets         []Target
 }
 
-// State is the result of the policies for one resource in one organization.
-type State struct {
-	ResourceType          string `json:"-"`
-	ResourceId            string `json:"-"`
-	OrgId                 string `json:"org_id"`
-	OrgHandle             string `json:"org_handle,omitempty"`
-	State                 string `json:"state"`
-	Reason                string `json:"reason,omitempty"`
-	ConflictingResourceId string `json:"conflicting_resource_id,omitempty"`
+// SharedResource is a resource that an ancestor shares with an organization. OwnerDepth is the
+// number of levels from the organization up to the owner. The parent has the depth 1.
+type SharedResource struct {
+	ResourceId     string
+	OwnerOrgId     string
+	OwnerOrgHandle string
+	OwnerDepth     int
 }
 
 // Modes of child_orgs.

@@ -86,3 +86,9 @@ var CoreSchema = map[string]map[string]string{
 		"mutability": constants.MutabilityReadOnly,
 	},
 }
+
+// SharingResourceType is the resource type of a schema attribute in a sharing policy.
+const SharingResourceType = "SCHEMA_ATTRIBUTE"
+
+// OriginInherited is the origin of an identity attribute that a sub organization inherits.
+const OriginInherited = "INHERITED"

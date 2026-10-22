@@ -37,3 +37,10 @@ type UnificationRule struct {
 	State          string `json:"state,omitempty" bson:"-"`            // ACTIVE, or why the rule does not run
 	Rank           int    `json:"-" bson:"-"`                          // Position in the evaluation order
 }
+
+// SharingResourceType is the resource type of a unification rule in a sharing policy.
+const SharingResourceType = "UNIFICATION_RULE"
+
+// StateInactiveMissingAttribute is the state of a rule whose organization does not see a compatible
+// attribute for the property of the rule.
+const StateInactiveMissingAttribute = "INACTIVE_MISSING_ATTRIBUTE"
