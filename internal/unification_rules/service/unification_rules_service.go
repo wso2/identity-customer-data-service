@@ -43,8 +43,8 @@ type UnificationRuleServiceInterface interface {
 	AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgHandle string) error
 	GetUnificationRules(ctx context.Context, orgHandle string) ([]model.UnificationRule, error)
 	GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationRule, error)
-	// GetUnificationRuleForOrg returns the rule when the organization owns it or a shared rule
-	// reaches it.
+	// GetUnificationRuleForOrg returns the rule when the organization owns it or when it is an
+	// active shared rule in the organization.
 	GetUnificationRuleForOrg(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error)
 	// GetOwnedUnificationRule returns the rule when the organization owns it.
 	GetOwnedUnificationRule(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error)
@@ -213,8 +213,8 @@ func (urs *UnificationRuleService) GetUnificationRules(ctx context.Context,
 	return result, nil
 }
 
-// GetUnificationRuleForOrg returns the rule when the organization owns it or a shared rule reaches
-// it.
+// GetUnificationRuleForOrg returns the rule when the organization owns it or when it is an active
+// shared rule in the organization.
 func (urs *UnificationRuleService) GetUnificationRuleForOrg(ctx context.Context,
 	ruleId, orgHandle string) (*model.UnificationRule, error) {
 
@@ -237,7 +237,7 @@ func (urs *UnificationRuleService) GetUnificationRuleForOrg(ctx context.Context,
 			}
 		}
 		for _, s := range shared {
-			if s.Rule.RuleId == ruleId {
+			if s.Rule.RuleId == ruleId && s.State == shareModel.StateActive {
 				rule.Origin = shareModel.OriginShared
 				rule.OwnerOrgHandle = rule.OrgHandle
 				rule.State = s.State

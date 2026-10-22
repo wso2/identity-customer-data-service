@@ -33,7 +33,6 @@ type UnificationRuleAPIResponse struct {
 	IsActive       bool   `json:"is_active" bson:"is_active" binding:"required"`
 	Origin         string `json:"origin,omitempty" bson:"-"`
 	OwnerOrgHandle string `json:"owner_org_handle,omitempty" bson:"-"`
-	State          string `json:"state,omitempty" bson:"-"`
 }
 
 // ToAPIResponse converts a rule to its API response.
@@ -46,7 +45,6 @@ func ToAPIResponse(rule UnificationRule) UnificationRuleAPIResponse {
 		IsActive:       rule.IsActive,
 		Origin:         rule.Origin,
 		OwnerOrgHandle: rule.OwnerOrgHandle,
-		State:          rule.State,
 	}
 }
 

@@ -444,14 +444,13 @@ var (
 		Code:    errorPrefix + "17013",
 		Message: "Child organization is read-only.",
 		Description: "A child organization cannot change the profile schema, the unification rules, the consent " +
-			"categories, the sharing policies, or the configuration. It can write profiles.",
+			"categories, the sharing policies, or the configuration.",
 	}
 
 	INHERITED_ATTRIBUTE_READ_ONLY = ErrorMessage{
-		Code:    errorPrefix + "17010",
-		Message: "Inherited attribute is read-only.",
-		Description: "A child organization inherits the identity attributes from its primary organization. " +
-			"The identity provider controls them.",
+		Code:        errorPrefix + "17010",
+		Message:     "Inherited attribute is read-only.",
+		Description: "A child organization only inherits the identity attributes from its primary organization.",
 	}
 
 	ORGANIZATIONS_NOT_SYNCED = ErrorMessage{

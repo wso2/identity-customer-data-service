@@ -385,10 +385,6 @@ func getOwnedAttribute(ctx context.Context, orgId, attributeId string) (model.Pr
 
 	attr, err := psstr.GetProfileSchemaAttributeById(ctx, orgId, attributeId)
 	if err == nil {
-		if _, inherits := identitysource.IsInherited(ctx, orgId); inherits && attr.Scope == constants.IdentityAttributes {
-			// A stored copy of an inherited attribute is read-only.
-			return attr, inheritedReadOnlyError()
-		}
 		return attr, nil
 	}
 	if _, isClientError := err.(*errors2.ClientError); isClientError {
@@ -421,14 +417,8 @@ func getOwnedShareableAttribute(ctx context.Context, orgId, scope,
 	return attr, isShareableAttribute(ctx, orgId, attr)
 }
 
-// GetProfileSchemaAttributeByName returns the attribute of the organization with the name. In a sub
-// organization, an identity attribute comes from the source organization.
 func (s *ProfileSchemaService) GetProfileSchemaAttributeByName(ctx context.Context,
 	attributeName, orgId string) (*model.ProfileSchemaAttribute, error) {
-
-	if inherited, err := getInheritedAttributeByName(ctx, orgId, attributeName); err != nil || inherited != nil {
-		return inherited, err
-	}
 	return psstr.GetProfileSchemaAttributeByName(ctx, orgId, attributeName)
 }
 
@@ -478,9 +468,6 @@ func (s *ProfileSchemaService) UpdateProfileSchemaAttributeById(ctx context.Cont
 	attribute, err := getOwnedAttribute(ctx, orgId, attributeId)
 	if err != nil {
 		return err
-	}
-	if attribute.Scope == constants.IdentityAttributes {
-		return identityAttributeNotDeletableError()
 	}
 	if newName, ok := updates["attribute_name"].(string); ok && newName != attribute.AttributeName {
 		if err := checkSharedNameConflict(ctx, orgId, newName, attribute.ApplicationIdentifier); err != nil {
@@ -625,10 +612,6 @@ func (s *ProfileSchemaService) DeleteProfileSchemaAttributeById(ctx context.Cont
 			Message:     errors2.DELETE_PROFILE_SCHEMA.Message,
 			Description: errMsg,
 		}, err)
-	}
-
-	if attribute.Scope == constants.IdentityAttributes {
-		return identityAttributeNotDeletableError()
 	}
 
 	// If this attribute is referenced as a sub-attribute of a parent, block the deletion.
@@ -1072,10 +1055,6 @@ func withVisibleAttributes(ctx context.Context, orgHandle string, owned []model.
 	source, inherits := identitysource.IsInherited(ctx, orgHandle)
 	result := make([]model.ProfileSchemaAttribute, 0, len(owned))
 	for _, attr := range owned {
-		if inherits && attr.Scope == constants.IdentityAttributes {
-			// The inherited attribute replaces a stored copy.
-			continue
-		}
 		attr.Origin = shareModel.OriginOwned
 		result = append(result, attr)
 	}
@@ -1172,26 +1151,6 @@ func getInheritedAttribute(ctx context.Context, orgHandle,
 	return &attr, nil
 }
 
-// getInheritedAttributeByName returns the inherited identity attribute with the name, or nil.
-func getInheritedAttributeByName(ctx context.Context, orgHandle,
-	attributeName string) (*model.ProfileSchemaAttribute, error) {
-
-	if !strings.HasPrefix(attributeName, constants.IdentityAttributes+".") {
-		return nil, nil
-	}
-	source, inherits := identitysource.IsInherited(ctx, orgHandle)
-	if !inherits {
-		return nil, nil
-	}
-	attr, err := psstr.GetProfileSchemaAttributeByName(ctx, source, attributeName)
-	if err != nil || attr == nil {
-		return nil, err
-	}
-	attr.Origin = model.OriginInherited
-	attr.OwnerOrgHandle = source
-	return attr, nil
-}
-
 // inheritedReadOnlyError is the error for a write to an inherited identity attribute.
 func inheritedReadOnlyError() error {
 
@@ -1200,16 +1159,6 @@ func inheritedReadOnlyError() error {
 		Message:     errors2.INHERITED_ATTRIBUTE_READ_ONLY.Message,
 		Description: errors2.INHERITED_ATTRIBUTE_READ_ONLY.Description,
 	}, http.StatusForbidden)
-}
-
-// identityAttributeNotDeletableError is the error for a delete of an identity attribute.
-func identityAttributeNotDeletableError() error {
-
-	return errors2.NewClientError(errors2.ErrorMessage{
-		Code:        errors2.ATTRIBUTE_UPATE_NOT_SUPPORTED.Code,
-		Message:     errors2.ATTRIBUTE_UPATE_NOT_SUPPORTED.Message,
-		Description: "Identity attributes cannot be deleted or modified. Please update through the Identity Provider.",
-	}, http.StatusBadRequest)
 }
 
 // keepIdentityAttributeIds keeps the stored ID of each synced identity attribute, so that the

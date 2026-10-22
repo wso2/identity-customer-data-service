@@ -1156,14 +1156,6 @@ components:
           type: string
           readOnly: true
           description: The organization that owns a shared rule.
-        state:
-          type: string
-          readOnly: true
-          enum: [ACTIVE, CONFLICTED, INACTIVE_MISSING_ATTRIBUTE]
-          description: >-
-            Whether the rule runs in this organization. CONFLICTED: an owned rule or a shared rule
-            with a higher precedence uses the same property. INACTIVE_MISSING_ATTRIBUTE: the
-            organization has no visible attribute with the property name and value type.
 
     UnificationRulePatch:
       type: object
