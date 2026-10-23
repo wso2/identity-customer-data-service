@@ -23,6 +23,9 @@
 # the dispatch inputs, commits it to the release branch, builds from it and tags that
 # commit. A scheduled release is a `minor` bump off main; a maintenance release is
 # a `patch` bump off the relevant release branch.
+#
+# One revision produces every supported platform pack, so a release and the
+# updates later published from it carry executables built from the same code.
 
 name: 🚀 CDS Release Builder
 
@@ -169,7 +172,7 @@ jobs:
 
           echo "✅ Version '$VERSION' is valid and unreleased"
 
-      # Always written so `make build` names the distribution after the release
+      # Always written so `make dist` names the packs after the release
       # version; only committed when the release is meant to move the branch.
       - name: 🏷️ Set product version
         run: |
@@ -197,13 +200,27 @@ jobs:
           go-version: '1.26.9'
 
       - name: Build
-        run: make build
+        run: make dist
 
-      - name: Upload Package
+      - name: Check the pack contents
+        run: distribution/check-pack.sh target/dist
+
+      # The last point at which a broken acquisition path can be caught, and
+      # it is caught by driving the real installer against the artifacts this
+      # run is about to publish.
+      - name: Verify the bootstrap installation
+        run: distribution/verify-install.sh target/dist
+
+      - name: Summarise the artifacts
+        run: distribution/artifact-summary.sh target/dist >> "$GITHUB_STEP_SUMMARY"
+
+      # Retained so the executable of each platform pack can be taken from the
+      # same revision when the release is onboarded to the update service.
+      - name: Upload Packages
         uses: actions/upload-artifact@v4
         with:
-          name: cds-package
-          path: target/cds-*.zip
+          name: cds-packages
+          path: target/dist/*
           if-no-files-found: error
 
       # Tag HEAD explicitly so the tag lands on the version bump commit rather
@@ -217,13 +234,48 @@ jobs:
           git push origin "$VERSION"
           echo "✅ Tagged $VERSION"
 
+      # GitHub groups the merged pull requests by the categories in
+      # .github/release.yml. Asking for it here, rather than letting the
+      # release action append it, is what lets the change list sit between the
+      # installation instructions and the licence instead of at the end.
+      - name: 📝 Generate the change list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+               -f tag_name="${{ steps.version.outputs.version }}" \
+               --jq .body > target/changelog.md 2>/dev/null; then
+            echo "✅ Generated the change list"
+          else
+            : > target/changelog.md
+            echo "⚠️ Could not generate the change list; the release body will omit it"
+          fi
+
+      # Built from the artifacts themselves, so what the page says a release
+      # contains cannot drift from what it contains.
+      - name: 📝 Write the release notes
+        run: |
+          distribution/release-notes.sh target/dist "${{ steps.version.outputs.version }}" \
+            --changelog target/changelog.md > target/release-notes.md
+          cat target/release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: "CDS ${{ steps.version.outputs.version }}"
           prerelease: ${{ github.event.inputs.prerelease }}
-          generate_release_notes: true
-          files: target/cds-*.zip
+          # The body already carries the change list, generated above and
+          # placed deliberately, so the action must not append a second one.
+          body_path: target/release-notes.md
+          generate_release_notes: false
+          # The zips, their checksums, and the compatibility metadata the
+          # bootstrap installer reads to resolve a release for an Identity
+          # Server version.
+          files: |
+            target/dist/*.zip
+            target/dist/*.sha256
+            target/dist/*.md5
+            target/dist/*-release-metadata.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

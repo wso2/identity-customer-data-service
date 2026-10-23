@@ -1,0 +1,38 @@
+# Release compatibility metadata.
+#
+# One file, two readers. `wso2cds enable` consults it to refuse an unsupported
+# Identity Server and to resolve the extension bundles it installs into that
+# server's dropins; the release publishes it beside the distribution zips so
+# installation tooling can select the right artifacts without running the
+# product. Keeping one source is what stops the two from drifting apart.
+#
+# The release fills in the version-bearing fields below. A development build
+# leaves them empty, and `wso2cds enable` then warns that the baseline is
+# unverified rather than claiming a compatibility nobody has tested.
+
+product: wso2cds
+
+identity_server:
+  # The Identity Server releases this CDS release has been verified against.
+  # The Customer Data section of the Console and the CDS extension bundles
+  # ship with the Identity Server, so this is a statement about one tested
+  # combination rather than a version floor.
+  supported: []
+
+extensions:
+  # The CDS extension bundles are deployed into the Identity Server rather
+  # than into CDS, and are versioned and delivered on their own line. See
+  # docs/process/releasing.md.
+  version: ""
+  repository: "https://maven.wso2.org/nexus/content/groups/public"
+  group: "org.wso2.identity.customer.data.service"
+  bundles:
+    - org.wso2.identity.customer.data.service.client
+    - org.wso2.identity.customer.data.service.event.handler
+    - org.wso2.identity.customer.data.service.auth.listener
+    - org.wso2.identity.customer.data.service.auth.handler
+
+console:
+  # The identity-apps release line carrying the matching CDS Console. The
+  # Console is delivered with the Identity Server, not with CDS.
+  release_line: ""

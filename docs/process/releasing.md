@@ -4,6 +4,121 @@
 
 ---
 
+## What a release produces
+
+One source revision produces every supported platform pack, so a release — and
+the updates later published from it — carry executables built from the same
+code. CDS is released for Linux only:
+
+```
+cds-linux-amd64-<version>.zip   + .sha256 + .md5
+cds-linux-arm64-<version>.zip   + .sha256 + .md5
+cds-<version>-release-metadata.yaml
+```
+
+The pack directory, its zip and its update-service product identity are all
+the same string, which is why each platform is a separate product. `<version>`
+carries no leading `v`.
+
+`make dist` builds them, cross-compiling with `CGO_ENABLED=0` — every
+dependency is pure Go, so no per-platform build host is needed.
+
+`make build` compiles for the host and packages nothing: it is the fast
+compile check, and what the container image uses. `make all` is the developer
+loop — clean, lint, build, integration tests — and does not package either, so
+a local run does not compile every platform. Packaging is `dist`, and the
+release workflow calls it directly.
+
+Three checks run over the result, on every pull request and again before a
+release publishes:
+
+| | |
+|---|---|
+| `distribution/check-pack.sh` | every pack carries the files an installation needs, and a product identity naming itself |
+| `distribution/verify-install.sh` | the Identity-Server-first path really installs: a release is served locally and the real `install_cds.sh` is driven against it, through resolution, checksum, extraction and the hand-off to `cds enable` |
+| `distribution/artifact-summary.sh` | writes the artifacts and their SHA-256 digests into the run summary |
+| `distribution/release-notes.sh` | builds the release body — downloads, digests, compatibility and both install paths |
+
+So a dependency that stops cross-compiling, a pack that loses a file, or a
+broken acquisition path is caught on the change that caused it rather than by
+the first customer to download it.
+
+The release metadata names the product, the platform artifacts with their
+checksums, and the compatibility the pack itself declares in
+`repository/conf/compatibility.yaml`. It is what the
+[bootstrap installer](../guides/on-prem-installation.md#path-b--identity-server-first)
+reads to resolve a CDS release for an installed Identity Server version
+without downloading a pack first.
+
+### The release body
+
+What the release page says is generated from the artifacts, never from a list
+kept by hand: the download table with a digest per platform, how to verify a
+download, the compatibility the metadata declares, and both install paths.
+GitHub's generated change list is appended below it.
+
+So a platform added or removed, or a compatibility statement changed, shows up
+on the release page because the build produced it — there is no second place
+to remember to update. The pull request builder renders the same body into its
+run summary, so a change to it is reviewed alongside the change that caused it.
+
+### Filling in the compatibility metadata
+
+`config/repository/conf/compatibility.yaml` carries empty version fields on
+`main`, and the release fills them in:
+
+| Field | Set to |
+|---|---|
+| `identity_server.supported` | the Identity Server releases this release was verified against |
+| `extensions.version` | the published CDS extension baseline for those releases |
+| `console.release_line` | the identity-apps line carrying the matching CDS Console |
+
+A build that leaves them empty is not broken: `cds enable` warns that the
+baseline is unverified and continues, rather than claiming a compatibility
+nobody has tested.
+
+---
+
+## Onboarding a release to the update service
+
+The product build stages `updates/product.txt` and nothing else. The update
+tool setup script is published by the Updates team rather than built from this
+source, which is the same split `product-is` uses — `updates/product.txt` is
+in its source tree and packed by its build, and the setup script appears in
+nothing it builds.
+
+So attaching it is a separate, on-demand step: Actions → **🔄 Attach Update
+Tool**, with the tag of a published release. It downloads that release's
+packs, installs `bin/update_tool_setup.sh` into each, rewrites the checksums,
+and uploads the result — replacing the release assets when `publish` is set.
+It needs the `U2_UPDATE_TOOL_SETUP_URL` secret, pointing at the
+`update_tool_setup.zip` the Updates team publishes.
+
+To do the same locally, from an existing build:
+
+```bash
+make dist
+distribution/u2-onboarding/attach-update-tool.sh target/dist update_tool_setup.zip
+```
+
+Keeping this out of `make dist` means the product build has one behaviour for
+everyone: it never depends on a file that is not in the repository, and never
+silently produces packs that cannot be updated. See
+[distribution/u2-onboarding/](../../distribution/u2-onboarding/README.md).
+
+A CDS service fix is published as one update entry per platform product, all
+carrying the executable built from the same revision. The fix is not complete
+until every platform entry is published, because a customer on the other
+platform would otherwise not have it.
+
+The CDS extension bundles and the CDS Console are **not** published this way.
+They are deployed into the Identity Server, not into CDS, and are delivered
+through the WSO2 Identity Server's own update stream. A logical fix that
+changes both the CDS service and an Identity Server-resident artifact is two
+updates, under their two product identities.
+
+---
+
 ## The model
 
 A release run resolves the version to release from its dispatch inputs, commits it to the release branch, builds from it, and tags that commit.
@@ -17,7 +132,7 @@ dispatch release
   → refuse if that tag already exists
   → write version.txt
   → commit + push it to the release branch
-  → make build
+  → make dist
   → tag the bump commit, push the tag
   → create the GitHub release
 ```
@@ -112,7 +227,8 @@ Because the tag lands on the version bump commit created *during* the release, t
 |---|---|
 | Version bump commit | `Version bump: vX.Y.Z` on the release branch |
 | Tag | Points at that bump commit |
-| GitHub release | Tagged `vX.Y.Z`, carries `cds-vX.Y.Z.zip` |
+| GitHub release | Tagged `vX.Y.Z`, carries both platform zips, their checksums and the release metadata |
+| Pack contents | `distribution/check-pack.sh target/dist` passes |
 | Deployment repo | `CDS_APPLICATION_TAG` updated in `ci-pipelines/cds/setup-variables.yaml` |
 
 ---
