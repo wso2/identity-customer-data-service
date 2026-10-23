@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS unification_rules
     property_id   VARCHAR(255) REFERENCES profile_schema (attribute_id) ON DELETE CASCADE,
     priority      INT          NOT NULL,
     is_active     BOOLEAN      NOT NULL,
+    attribute_type     VARCHAR(255) NOT NULL DEFAULT 'PRIMITIVE_EXACT',
+    unification_method VARCHAR(255) NOT NULL DEFAULT 'deterministic',
+    -- NULL means "derive from attribute_type"; a value is an operator override. No column
+    -- default, deliberately — see docs/concepts/unification-rules.md.
+    match_strength     VARCHAR(20),
+    mismatch_strength  VARCHAR(20),
     created_at    TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00'),
     updated_at    TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00')
 );
@@ -150,7 +156,6 @@ CREATE INDEX IF NOT EXISTS idx_profiles_org_created_profile
 CREATE INDEX IF NOT EXISTS idx_profiles_org_user
     ON profiles (org_handle, user_id);
 
-
 -- ================================
 -- PROFILE_REFERENCE (Join + status filtering)
 -- ================================
@@ -165,7 +170,6 @@ CREATE INDEX IF NOT EXISTS idx_profile_reference_org_status_profile
 CREATE INDEX IF NOT EXISTS idx_profile_reference_reference_profile
     ON profile_reference (reference_profile_id);
 
-
 -- ================================
 -- APPLICATION_DATA (Joins + filtering)
 -- ================================
@@ -176,7 +180,6 @@ CREATE INDEX IF NOT EXISTS idx_application_data_profile_id
 CREATE INDEX IF NOT EXISTS idx_application_data_app_id
     ON application_data (app_id);
 
-
 -- ================================
 -- PROFILE_SCHEMA (Rare filtering, minimal indexes)
 -- ================================
@@ -186,7 +189,6 @@ CREATE INDEX IF NOT EXISTS idx_profile_schema_org_scope
 CREATE INDEX IF NOT EXISTS idx_profile_schema_org_attr_name
     ON profile_schema (org_handle, attribute_name);
 
-
 -- ================================
 -- UNIFICATION_RULES
 -- ================================
@@ -195,3 +197,58 @@ CREATE INDEX IF NOT EXISTS idx_unification_rules_org_active_priority
 
 CREATE INDEX IF NOT EXISTS idx_unification_rules_property_id
     ON unification_rules (property_id);
+
+-- Identity Resolution: the blocking index, review queue, rejections and merge audit.
+
+-- No surrogate key, and none of the PostgreSQL partitioning: SQLite has neither the feature
+-- nor the scale. See "How the index is stored" in docs/concepts/how-unification-works.md.
+CREATE TABLE IF NOT EXISTS blocking_keys
+(
+    profile_id     VARCHAR(255) NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
+    org_handle     VARCHAR(255) NOT NULL,
+    attribute_name VARCHAR(255) NOT NULL, -- Rule property name (e.g. "identity_attributes.emailaddress")
+    key_value      VARCHAR(512) NOT NULL, -- Normalized blocking key
+    PRIMARY KEY (org_handle, attribute_name, key_value, profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_blocking_keys_org_profile ON blocking_keys (org_handle, profile_id);
+
+CREATE TABLE IF NOT EXISTS review_tasks
+(
+    id                   VARCHAR(255) PRIMARY KEY,
+    org_handle           VARCHAR(255)  NOT NULL,
+    incoming_profile_id  VARCHAR(255)  NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
+    candidate_profile_id VARCHAR(255)  NOT NULL REFERENCES profiles (profile_id) ON DELETE CASCADE,
+    match_score          DECIMAL(5, 4) NOT NULL,
+    status               VARCHAR(50)   NOT NULL DEFAULT 'PENDING',
+    match_reason         TEXT,
+    score_breakdown      TEXT                   DEFAULT '{}',
+    created_at           TIMESTAMP     NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00'),
+    resolved_at          TIMESTAMP,
+    resolved_by          VARCHAR(255),
+    resolution_notes     TEXT,
+    CONSTRAINT uq_review_task_profiles UNIQUE (incoming_profile_id, candidate_profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_tasks_org_status ON review_tasks (org_handle, status);
+CREATE INDEX IF NOT EXISTS idx_review_tasks_created ON review_tasks (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_review_tasks_incoming ON review_tasks (incoming_profile_id, status);
+
+CREATE TABLE IF NOT EXISTS rejection_pairs
+(
+    id           VARCHAR(255) PRIMARY KEY,
+    org_handle   VARCHAR(255) NOT NULL,
+    -- Lower id first, so one row is one pair whichever way the review task ran.
+    profile_id_1 VARCHAR(255) NOT NULL,
+    profile_id_2 VARCHAR(255) NOT NULL,
+    -- The evidence the decision was made against; see the PostgreSQL schema for why.
+    match_score     DECIMAL(5, 4),
+    score_breakdown TEXT DEFAULT '{}',
+    rejected_by  VARCHAR(255),
+    rejected_at  TIMESTAMP    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now') || '+00:00'),
+    CONSTRAINT uq_rejection_pair UNIQUE (profile_id_1, profile_id_2)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p1 ON rejection_pairs (org_handle, profile_id_1);
+CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p2 ON rejection_pairs (org_handle, profile_id_2);
+

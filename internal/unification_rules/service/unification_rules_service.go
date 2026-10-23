@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -38,6 +39,8 @@ type UnificationRuleServiceInterface interface {
 	GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationRule, error)
 	PatchUnificationRule(ctx context.Context, ruleId, orgHandle string, updatedRule model.UnificationRule) error
 	DeleteUnificationRule(ctx context.Context, ruleId string) error
+	// GetUnificationOptions reads no data, so it takes no context.
+	GetUnificationOptions() model.UnificationOptionsResponse
 }
 
 // UnificationRuleService is the default implementation of the UnificationRuleServiceInterface.
@@ -183,4 +186,96 @@ func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
 func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId string) error {
 
 	return store.DeleteUnificationRule(ctx, ruleId)
+}
+
+// attributeTypeOptions is the ordered list of all supported attribute types and their allowed
+// matching methods, derived entirely from system constants — no database access required.
+var attributeTypeOptions = []model.AttributeTypeOption{
+	{
+		Value: constants.AttributeTypePrimitiveExact,
+		Label: constants.AttributeTypeLabelPrimitiveExact,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeFuzzyString,
+		Label: constants.AttributeTypeLabelFuzzyString,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypeName,
+		Label: constants.AttributeTypeLabelName,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyPhonetic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeEmail,
+		Label: constants.AttributeTypeLabelEmail,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypePhone,
+		Label: constants.AttributeTypeLabelPhone,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyFormat},
+		},
+	},
+	{
+		Value: constants.AttributeTypeLocation,
+		Label: constants.AttributeTypeLabelLocation,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypeDate,
+		Label: constants.AttributeTypeLabelDate,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeUniqueID,
+		Label: constants.AttributeTypeLabelUniqueID,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+}
+
+// GetUnificationOptions returns the supported attribute types and their allowed matching
+// methods.
+//
+// Where the server has tolerant matching switched off, fuzzy is not offered for any type.
+// This endpoint is what a client builds its method picker from, so it is the one place that
+// has to agree with what the create and patch handlers will accept.
+func (urs *UnificationRuleService) GetUnificationOptions() model.UnificationOptionsResponse {
+	if config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled {
+		return model.UnificationOptionsResponse{AttributeTypes: attributeTypeOptions}
+	}
+
+	exactOnly := make([]model.AttributeTypeOption, 0, len(attributeTypeOptions))
+	for _, option := range attributeTypeOptions {
+		methods := make([]model.MethodOption, 0, len(option.AllowedMethods))
+		for _, method := range option.AllowedMethods {
+			if method.Value != constants.UnificationMethodFuzzy {
+				methods = append(methods, method)
+			}
+		}
+		option.AllowedMethods = methods
+		exactOnly = append(exactOnly, option)
+	}
+
+	return model.UnificationOptionsResponse{AttributeTypes: exactOnly}
 }
