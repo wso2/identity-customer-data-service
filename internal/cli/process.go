@@ -257,17 +257,6 @@ func runStop(args []string) error {
 	return nil
 }
 
-// runRestart stops a running runtime and starts it again, passing its own
-// arguments on to start — so `restart --daemon` restarts a background
-// installation and `restart` alone returns to the foreground.
-func runRestart(args []string) error {
-
-	if err := runStop(nil); err != nil {
-		return err
-	}
-	return runStart(args)
-}
-
 // runForeground is the hidden `run` command: the runtime itself, in the
 // foreground, with no lifecycle handling around it.
 func runForeground(args []string) error {

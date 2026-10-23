@@ -216,7 +216,6 @@ happened, the profile, schema and rule endpoints refuse requests.
 | `wso2cds start --daemon` | `./start.sh --daemon` | runs it in the background and returns once it reports ready |
 | `wso2cds start --debug` | `./start.sh --debug` | foreground, logging at DEBUG |
 | `wso2cds stop` | `./start.sh --stop` | stops a runtime started with `--daemon` |
-| `wso2cds restart` | `./start.sh --restart` | stop, then start — pass `--daemon` to come back detached |
 | `wso2cds status` | `./start.sh --status` | product, platform, runtime and integration state |
 | `wso2cds logs -f` | `./start.sh --logs -f` | follows `logs/wso2cds.log`, which `--daemon` writes |
 | `wso2cds verify` | `./setup.sh --verify` | checks the deployment without changing it |
