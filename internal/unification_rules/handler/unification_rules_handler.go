@@ -34,6 +34,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 
 	"github.com/google/uuid"
+	shareHandler "github.com/wso2/identity-customer-data-service/internal/sharing/handler"
 )
 
 type UnificationRulesHandler struct {
@@ -148,14 +149,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	// Convert rules to API response format
 	rulesResponse := make([]model.UnificationRuleAPIResponse, 0, len(rules))
 	for _, rule := range rules {
-		tempRule := model.UnificationRuleAPIResponse{
-			RuleId:       rule.RuleId,
-			RuleName:     rule.RuleName,
-			PropertyName: rule.PropertyName,
-			Priority:     rule.Priority,
-			IsActive:     rule.IsActive,
-		}
-		rulesResponse = append(rulesResponse, tempRule)
+		rulesResponse = append(rulesResponse, model.ToAPIResponse(rule))
 	}
 	utils.RespondJSON(w, http.StatusOK, rulesResponse, constants.UnificationRuleResource)
 }
@@ -192,19 +186,12 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	rule, err := ruleService.GetUnificationRule(ctx, ruleId)
+	rule, err := ruleService.GetUnificationRuleForOrg(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
-	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:       rule.RuleId,
-		RuleName:     rule.RuleName,
-		PropertyName: rule.PropertyName,
-		Priority:     rule.Priority,
-		IsActive:     rule.IsActive,
-	}
-	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
+	utils.RespondJSON(w, http.StatusOK, model.ToAPIResponse(*rule), constants.UnificationRuleResource)
 }
 
 // PatchUnificationRule applies partial updates to a unification rule.
@@ -246,7 +233,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	updatedRule, err := ruleService.GetUnificationRule(ctx, ruleId)
+	updatedRule, err := ruleService.GetOwnedUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -312,6 +299,15 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
+	// Delete only a rule that the organization owns.
+	if _, err := ruleService.GetOwnedUnificationRule(ctx, ruleId, orgHandle); err != nil {
+		if clientErr, ok := err.(*errors2.ClientError); ok && clientErr.StatusCode == http.StatusNotFound {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		utils.HandleError(w, err)
+		return
+	}
 	err = ruleService.DeleteUnificationRule(ctx, ruleId)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -324,4 +320,99 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 // isCDSEnabled checks if CDS is enabled for the given tenant
 func isCDSEnabled(ctx context.Context, orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(ctx, orgHandle)
+}
+
+// CreateSharingPolicy shares a rule of the organization.
+func (h *UnificationRulesHandler) CreateSharingPolicy(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:share")
+	if !ok {
+		return
+	}
+	req, ok := shareHandler.DecodePolicyRequest(w, r)
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	resp, err := ruleService.CreateSharingPolicy(r.Context(), *org, r.PathValue("ruleId"), req)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusCreated, resp, shareHandler.PolicyResource)
+}
+
+// ListSharingPolicies returns the sharing policies of a rule of the organization.
+func (h *UnificationRulesHandler) ListSharingPolicies(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:view")
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	resp, err := ruleService.ListSharingPolicies(r.Context(), *org, r.PathValue("ruleId"))
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusOK, resp, shareHandler.PolicyResource)
+}
+
+// GetSharingPolicy returns a sharing policy of a rule of the organization.
+func (h *UnificationRulesHandler) GetSharingPolicy(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:view")
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	resp, err := ruleService.GetSharingPolicy(r.Context(), *org,
+		r.PathValue("ruleId"), r.PathValue("policyId"))
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusOK, resp, shareHandler.PolicyResource)
+}
+
+// UpdateSharingPolicy replaces a sharing policy of a rule of the organization.
+func (h *UnificationRulesHandler) UpdateSharingPolicy(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:share")
+	if !ok {
+		return
+	}
+	req, ok := shareHandler.DecodePolicyRequest(w, r)
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	resp, err := ruleService.UpdateSharingPolicy(r.Context(), *org,
+		r.PathValue("ruleId"), r.PathValue("policyId"), req)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusOK, resp, shareHandler.PolicyResource)
+}
+
+// DeleteSharingPolicy removes a sharing policy of a rule of the organization.
+func (h *UnificationRulesHandler) DeleteSharingPolicy(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:share")
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	if err := ruleService.DeleteSharingPolicy(r.Context(), *org,
+		r.PathValue("ruleId"), r.PathValue("policyId")); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

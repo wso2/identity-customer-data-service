@@ -23,9 +23,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/database/rows"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -102,6 +104,7 @@ func GetUnificationRules(ctx context.Context, orgHandle string) ([]model.Unifica
 	for _, row := range results {
 		var rule model.UnificationRule
 		rule.RuleId = row["rule_id"].(string)
+		rule.OrgHandle, _ = row["org_handle"].(string)
 		rule.RuleName = row["rule_name"].(string)
 		rule.PropertyName = row["property_name"].(string)
 		rule.PropertyId = row["property_id"].(string)
@@ -159,6 +162,7 @@ func GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationR
 	row := results[0]
 	var rule model.UnificationRule
 	rule.RuleId = row["rule_id"].(string)
+	rule.OrgHandle, _ = row["org_handle"].(string)
 	rule.RuleName = row["rule_name"].(string)
 	rule.PropertyName = row["property_name"].(string)
 	rule.PropertyId = row["property_id"].(string)
@@ -169,6 +173,53 @@ func GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationR
 
 	logger.Info("Successfully fetched unification rule for rule_id: " + ruleId)
 	return &rule, nil
+}
+
+// GetUnificationRulesByIds returns the rules with the IDs.
+func GetUnificationRulesByIds(ctx context.Context, ruleIds []string) ([]model.UnificationRule, error) {
+
+	if len(ruleIds) == 0 {
+		return nil, nil
+	}
+	serverError := func(description string, err error) error {
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_UNIFICATION_RULE.Code,
+			Message:     errors2.GET_UNIFICATION_RULE.Message,
+			Description: description,
+		}, err)
+	}
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	if err != nil {
+		return nil, serverError("Failed to get a database client to read rules by ID.", err)
+	}
+	defer dbClient.Close()
+
+	placeholders := make([]string, len(ruleIds))
+	args := make([]interface{}, len(ruleIds))
+	for i, id := range ruleIds {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	results, err := dbClient.ExecuteQueryContext(ctx,
+		scripts.GetUnificationRulesByIds.Format(strings.Join(placeholders, ", ")), args...)
+	if err != nil {
+		return nil, serverError("Failed to read rules by ID.", err)
+	}
+	rules := make([]model.UnificationRule, 0, len(results))
+	for _, row := range results {
+		rules = append(rules, model.UnificationRule{
+			RuleId:       rows.String(row, "rule_id"),
+			OrgHandle:    rows.String(row, "org_handle"),
+			RuleName:     rows.String(row, "rule_name"),
+			PropertyName: rows.String(row, "property_name"),
+			PropertyId:   rows.String(row, "property_id"),
+			Priority:     rows.Int(row, "priority"),
+			IsActive:     rows.Bool(row, "is_active"),
+			CreatedAt:    rows.Time(row, "created_at"),
+			UpdatedAt:    rows.Time(row, "updated_at"),
+		})
+	}
+	return rules, nil
 }
 
 // PatchUnificationRule applies partial updates to a unification rule.

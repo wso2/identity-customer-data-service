@@ -197,8 +197,9 @@ func (h *ConsentCategoryHandler) DeleteConsentCategory(w http.ResponseWriter, r 
 		return
 	}
 
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 	service := provider.NewConsentCategoryProvider().GetConsentCategoryService()
-	if err := service.DeleteConsentCategory(ctx, categoryId); err != nil {
+	if err := service.DeleteConsentCategory(ctx, categoryId, orgHandle); err != nil {
 		utils.HandleError(w, err)
 		return
 	}

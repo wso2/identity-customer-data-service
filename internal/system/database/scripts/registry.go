@@ -92,6 +92,22 @@ func AllQueries() map[string]model.DBQuery {
 		"UpdateInitialSchemaSyncDoneConfig":           UpdateInitialSchemaSyncDoneConfig,
 		"HealthCheckPing":                             HealthCheckPing,
 
+		// Organization management statements.
+		"UpsertOrganization":           UpsertOrganization,
+		"GetOrganizationById":          GetOrganizationById,
+		"GetOrganizationByHandle":      GetOrganizationByHandle,
+		"GetOrganizationsByPrimaryOrg": GetOrganizationsByPrimaryOrg,
+		"UpdateOrganizationStatus":     UpdateOrganizationStatus,
+		"GetOrganizationChain":         GetOrganizationChain,
+		"GetOrganizationAncestors":     GetOrganizationAncestors,
+		"InsertSharePolicy":            InsertSharePolicy,
+		"GetSharePolicyById":           GetSharePolicyById,
+		"GetSharePolicy":               GetSharePolicy,
+		"GetSharePolicyTargets":        GetSharePolicyTargets,
+		"DeleteSharePolicyTargets":     DeleteSharePolicyTargets,
+		"DeleteSharePolicy":            DeleteSharePolicy,
+		"GetSharePolicyIdsByResource":  GetSharePolicyIdsByResource,
+
 		// Templates the stores complete at runtime.
 		"InsertIdentityClaimsForProfileSchema":      InsertIdentityClaimsForProfileSchema,
 		"UpsertIdentityClaimsForProfileSchema":      UpsertIdentityClaimsForProfileSchema,
@@ -101,5 +117,10 @@ func AllQueries() map[string]model.DBQuery {
 		"GetAppDataByProfileIds":                    GetAppDataByProfileIds,
 		"GetConsentCategoryAttributesByCategoryIds": GetConsentCategoryAttributesByCategoryIds,
 		"DeleteInactiveCookies":                     DeleteInactiveCookies,
+		"GetOrganizationsByIds":                     GetOrganizationsByIds,
+		"InsertSharePolicyTargets":                  InsertSharePolicyTargets,
+		"GetSharePoliciesByOwners":                  GetSharePoliciesByOwners,
+		"GetProfileSchemaAttributesByIds":           GetProfileSchemaAttributesByIds,
+		"GetUnificationRulesByIds":                  GetUnificationRulesByIds,
 	}
 }

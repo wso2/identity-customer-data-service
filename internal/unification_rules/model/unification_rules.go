@@ -31,4 +31,16 @@ type UnificationRule struct {
 	IsActive     bool      `json:"is_active" bson:"is_active" binding:"required"`
 	CreatedAt    time.Time `json:"created_at" bson:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" bson:"updated_at"`
+	// Set only on reads of the effective rules.
+	Origin         string `json:"origin,omitempty" bson:"-"`           // OWNED or SHARED
+	OwnerOrgHandle string `json:"owner_org_handle,omitempty" bson:"-"` // The owner org of a shared rule
+	State          string `json:"state,omitempty" bson:"-"`            // ACTIVE, or why the rule does not run
+	Rank           int    `json:"-" bson:"-"`                          // Position in the evaluation order
 }
+
+// SharingResourceType is the resource type of a unification rule in a sharing policy.
+const SharingResourceType = "UNIFICATION_RULE"
+
+// StateInactiveMissingAttribute is the state of a rule whose organization does not see a compatible
+// attribute for the property of the rule.
+const StateInactiveMissingAttribute = "INACTIVE_MISSING_ATTRIBUTE"
