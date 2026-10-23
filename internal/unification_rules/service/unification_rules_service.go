@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -255,6 +256,26 @@ var attributeTypeOptions = []model.AttributeTypeOption{
 
 // GetUnificationOptions returns the supported attribute types and their allowed matching
 // methods.
+//
+// Where the server has tolerant matching switched off, fuzzy is not offered for any type.
+// This endpoint is what a client builds its method picker from, so it is the one place that
+// has to agree with what the create and patch handlers will accept.
 func (urs *UnificationRuleService) GetUnificationOptions() model.UnificationOptionsResponse {
-	return model.UnificationOptionsResponse{AttributeTypes: attributeTypeOptions}
+	if config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled() {
+		return model.UnificationOptionsResponse{AttributeTypes: attributeTypeOptions}
+	}
+
+	exactOnly := make([]model.AttributeTypeOption, 0, len(attributeTypeOptions))
+	for _, option := range attributeTypeOptions {
+		methods := make([]model.MethodOption, 0, len(option.AllowedMethods))
+		for _, method := range option.AllowedMethods {
+			if method.Value != constants.UnificationMethodFuzzy {
+				methods = append(methods, method)
+			}
+		}
+		option.AllowedMethods = methods
+		exactOnly = append(exactOnly, option)
+	}
+
+	return model.UnificationOptionsResponse{AttributeTypes: exactOnly}
 }

@@ -204,6 +204,9 @@ func (s *IdentityResolutionService) ResolveReviewTask(ctx context.Context, orgHa
 	// alone. Derived from the task's breakdown because its score was capped on the way to
 	// review and no longer equals any single rule's score.
 	mergeReason := constants.MergeReasonReviewMerge
+	// Not coerced by the server's fuzzy setting, unlike the evaluation path: these rules are
+	// read to name the rule that drove a match already made, and reading a fuzzy rule as
+	// exact here would attribute the merge to a different rule than the one responsible.
 	if rawRules, rulesErr := urStore.GetUnificationRules(ctx, task.OrgHandle); rulesErr == nil {
 		rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
 			constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,

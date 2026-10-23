@@ -139,6 +139,11 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		return
 	}
 
+	if ruleInRequest.UnificationMethod == constants.UnificationMethodFuzzy && !fuzzyMatchingAllowed() {
+		utils.WriteErrorResponse(w, refuseFuzzy())
+		return
+	}
+
 	// Reject fuzzy for attribute types that only support exact matching.
 	if ruleInRequest.UnificationMethod == constants.UnificationMethodFuzzy && !constants.FuzzyCapableAttributeTypes[ruleInRequest.AttributeType] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -396,6 +401,11 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		updatedRule.UnificationMethod = *ruleUpdateRequest.UnificationMethod
 	}
 
+	if updatedRule.UnificationMethod == constants.UnificationMethodFuzzy && !fuzzyMatchingAllowed() {
+		utils.WriteErrorResponse(w, refuseFuzzy())
+		return
+	}
+
 	// Cross-validate: reject fuzzy for attribute types that only support exact matching.
 	if updatedRule.UnificationMethod == constants.UnificationMethodFuzzy && !constants.FuzzyCapableAttributeTypes[updatedRule.AttributeType] {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
@@ -541,6 +551,24 @@ func (urh *UnificationRulesHandler) GetUnificationOptions(w http.ResponseWriter,
 // isCDSEnabled checks if CDS is enabled for the given tenant
 func isCDSEnabled(ctx context.Context, orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(ctx, orgHandle)
+}
+
+// fuzzyMatchingAllowed reports whether this server offers tolerant matching at all.
+func fuzzyMatchingAllowed() bool {
+	return config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled()
+}
+
+// refuseFuzzy is the error returned when a caller asks for tolerant matching on a server
+// where it is switched off. It is refused rather than quietly downgraded to an exact match:
+// a caller that believes a rule tolerates typos, and is overruled, would misread every
+// merge decision the rule takes part in.
+func refuseFuzzy() *errors2.ClientError {
+	return errors2.NewClientError(errors2.ErrorMessage{
+		Code:    errors2.BAD_REQUEST.Code,
+		Message: errors2.BAD_REQUEST.Message,
+		Description: "unification_method 'fuzzy' is not available on this server. Enable " +
+			"identity_resolution.fuzzy_matching_enabled to use tolerant matching.",
+	}, http.StatusBadRequest)
 }
 
 // resolveEvidenceStrength decides what to store for a rule's evidence strength.

@@ -93,6 +93,26 @@ func ActiveSortedByPriority(rules []UnificationRule, defaultAttributeType, defau
 	return active
 }
 
+// AsExactMatching returns the rules with every fuzzy method replaced by deterministic, for a
+// server where tolerant matching is switched off.
+//
+// The stored rule is left alone — only the reading of it changes — so switching the setting
+// back on restores what the operator configured rather than requiring the rules to be
+// written again.
+//
+// Applied where rules are read for evaluation, this covers scoring and indexing together:
+// the blocker decides whether to emit phonetic and LSH keys from the method it is handed, so
+// a coerced rule stops widening the index as well as stopping tolerating typos.
+func AsExactMatching(rules []UnificationRule) []UnificationRule {
+	exact := make([]UnificationRule, 0, len(rules))
+	for _, rule := range rules {
+		rule.UnificationMethod = constants.UnificationMethodDeterministic
+		exact = append(exact, rule)
+	}
+
+	return exact
+}
+
 // PrimaryRuleName returns the name of the rule that drove a match: the highest-priority rule
 // whose score reaches the agreement bar.
 //

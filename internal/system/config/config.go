@@ -172,6 +172,24 @@ type IdentityResolutionConfig struct {
 	// effect of a change before committing to it, the derived values are the safer contract
 	// and the fields are rejected rather than quietly ignored.
 	AllowEvidenceStrengthOverride bool `yaml:"allow_evidence_strength_override"`
+
+	// FuzzyMatching switches tolerant matching on or off for the whole server.
+	//
+	// Absent means on: the feature is the point of the build that carries it, and an
+	// upgrade should behave as designed rather than silently stop matching. Setting it to
+	// false is a kill switch — new fuzzy rules are refused, the options endpoint stops
+	// offering the method, and rules already stored as fuzzy are evaluated as exact.
+	//
+	// It does not undo anything: profiles already unified stay unified, review tasks a
+	// fuzzy rule raised stay in the queue to be answered, and blocking keys written for
+	// fuzzy matching remain until each profile is next re-indexed.
+	FuzzyMatching *bool `yaml:"fuzzy_matching_enabled"`
+}
+
+// FuzzyMatchingEnabled reports whether tolerant matching is available on this server.
+// An absent setting reads as enabled.
+func (c IdentityResolutionConfig) FuzzyMatchingEnabled() bool {
+	return c.FuzzyMatching == nil || *c.FuzzyMatching
 }
 
 // ShutdownConfig bounds the graceful shutdown of the whole process. Zero, which

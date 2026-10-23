@@ -29,6 +29,7 @@ import (
 	irStore "github.com/wso2/identity-customer-data-service/internal/identity_resolution/store"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
@@ -59,6 +60,9 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 	rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
 		constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
 		constants.DefaultMismatchStrength)
+	if !config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled() {
+		rules = urModel.AsExactMatching(rules)
+	}
 	if len(rules) == 0 {
 		return
 	}
@@ -398,6 +402,9 @@ func ReindexAfterMerge(ctx context.Context, masterProfileID, triggerProfileId, o
 	rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
 		constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
 		constants.DefaultMismatchStrength)
+	if !config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled() {
+		rules = urModel.AsExactMatching(rules)
+	}
 
 	newKeys := engine.GenerateBlockingKeysFromRules(flattenProfile(&mergedProfile), rules)
 	if len(newKeys) > 0 {

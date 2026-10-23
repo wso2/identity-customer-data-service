@@ -156,3 +156,7 @@ identity_resolution:
   # than taking the values derived from its attribute_type. Off until operators have a way
   # to preview what a change would do to existing profiles.
   allow_evidence_strength_override: false
+
+  # Tolerant matching, server-wide. Omitted, it is on. Set to false to refuse new fuzzy
+  # rules and evaluate existing ones as exact; nothing already unified is undone.
+  # fuzzy_matching_enabled: true
