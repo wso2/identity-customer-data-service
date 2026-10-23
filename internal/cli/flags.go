@@ -31,9 +31,9 @@ import (
 // rather than exiting, so Main decides the exit code in one place.
 func newFlagSet(name string) *flag.FlagSet {
 
-	flags := flag.NewFlagSet("wso2cds "+name, flag.ContinueOnError)
+	flags := flag.NewFlagSet("cds "+name, flag.ContinueOnError)
 	flags.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: wso2cds %s [options]\n\nOptions:\n", name)
+		fmt.Fprintf(os.Stderr, "Usage: cds %s [options]\n\nOptions:\n", name)
 		flags.PrintDefaults()
 	}
 	return flags

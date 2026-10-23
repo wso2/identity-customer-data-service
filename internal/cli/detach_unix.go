@@ -26,6 +26,6 @@ import (
 )
 
 // detach puts the started runtime in its own session, so it survives the
-// terminal that ran `wso2cds start` and does not receive that terminal's
+// terminal that ran `cds start` and does not receive that terminal's
 // signals.
 func detach(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }

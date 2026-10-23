@@ -25,10 +25,11 @@ import (
 	"strings"
 )
 
-// Paths inside an installed pack. The pack layout is fixed: bin/, repository/,
-// logs/ and updates/ are siblings under CDS_HOME, and the update tool resolves
-// ../updates/product.txt relative to bin/, so none of these may move
-// independently.
+// Paths inside an installed pack. The layout is fixed: the executable and the
+// entry-point scripts sit at CDS_HOME, with repository/, logs/ and updates/
+// beside them. bin/ holds only update_tool_setup.sh, which resolves
+// ../updates/product.txt relative to itself and so has to stay one level
+// below updates/.
 const (
 	binDir        = "bin"
 	confDir       = "repository/conf"
@@ -40,8 +41,8 @@ const (
 	stateFile     = "repository/conf/integration.yaml"
 	productFile   = "updates/product.txt"
 	versionFile   = "version.txt"
-	pidFile       = "wso2cds.pid"
-	runtimeLog    = "logs/wso2cds.log"
+	pidFile       = "cds.pid"
+	runtimeLog    = "logs/cds.log"
 	certsDirInPak = "repository/resources/security"
 )
 
@@ -63,16 +64,16 @@ func home() (string, error) {
 
 	exe, err := os.Executable()
 	if err != nil {
-		return "", fmt.Errorf("could not locate the wso2cds executable, so CDS_HOME is unknown: %w", err)
+		return "", fmt.Errorf("could not locate the cds executable, so CDS_HOME is unknown: %w", err)
 	}
-	// Resolve symlinks so that a wso2cds on PATH, linked into the pack, still
+	// Resolve symlinks so that a cds on PATH, linked into the pack, still
 	// resolves to the pack rather than to the link's directory.
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
 
-	// <CDS_HOME>/bin/wso2cds -> <CDS_HOME>
-	dir := filepath.Dir(filepath.Dir(exe))
+	// <CDS_HOME>/cds -> <CDS_HOME>
+	dir := filepath.Dir(exe)
 	if _, err := os.Stat(filepath.Join(dir, configFile)); err != nil {
 		cwd, wdErr := os.Getwd()
 		if wdErr == nil {
@@ -81,7 +82,7 @@ func home() (string, error) {
 			}
 		}
 		return "", fmt.Errorf("%s does not look like a CDS installation: %s is missing.\n"+
-			"Run wso2cds from the bin directory of an extracted pack, or set CDS_HOME", dir, configFile)
+			"Run cds from the root of an extracted pack, or set CDS_HOME", dir, configFile)
 	}
 	return dir, nil
 }
@@ -102,7 +103,7 @@ func productVersion(cdsHome string) (string, error) {
 }
 
 // u2Product reads the U2 product identity this pack was built as, for example
-// wso2cds-linux-amd64-1.2.0. It is absent from a pack that has not been
+// cds-linux-amd64-1.2.0. It is absent from a pack that has not been
 // onboarded to the update service, which is not an error.
 func u2Product(cdsHome string) string {
 

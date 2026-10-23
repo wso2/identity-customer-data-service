@@ -33,7 +33,7 @@ done
 [ -n "$VERSION" ] || VERSION="$(tr -d '[:space:]' < version.txt)"
 
 PACK_VERSION="${VERSION#v}"
-PRODUCT="wso2cds"
+PRODUCT="cds"
 REPO="${CDS_REPO:-wso2/identity-customer-data-service}"
 
 [ -d "$DIST_DIR" ] || { echo "release-notes: $DIST_DIR not found" >&2; exit 1; }
@@ -106,7 +106,7 @@ found=0
 for zip in "$DIST_DIR"/$PRODUCT-*-"$PACK_VERSION".zip; do
   [ -e "$zip" ] || continue
   name="$(basename "$zip")"
-  # wso2cds-<os>-<arch>-<version>.zip
+  # cds-<os>-<arch>-<version>.zip
   platform="$(echo "$name" | sed -E "s/^$PRODUCT-([a-z0-9]+)-([a-z0-9]+)-.*/\1\/\2/")"
   printf '| %s | [%s](https://github.com/%s/releases/download/%s/%s) | `%s` |\n' \
     "$platform" "$name" "$REPO" "$VERSION" "$name" "$(digest_of "$zip")"
@@ -133,7 +133,7 @@ if [ -n "$IS_SUPPORTED" ]; then
   echo "| Identity Server | $IS_SUPPORTED |"
   [ -n "$EXTENSION" ] && echo "| CDS extension baseline | $EXTENSION |"
 else
-  echo "This build declares no verified Identity Server baseline. \`wso2cds enable\`"
+  echo "This build declares no verified Identity Server baseline. \`cds enable\`"
   echo "says so and continues, rather than claiming a compatibility that has not"
   echo "been tested."
 fi
@@ -152,8 +152,8 @@ first:
 \`\`\`bash
 unzip $PRODUCT-linux-amd64-$PACK_VERSION.zip -d /opt
 cd /opt/$PRODUCT-linux-amd64-$PACK_VERSION
-./bin/$PRODUCT enable --is-home /opt/wso2is
-./bin/$PRODUCT start && ./bin/$PRODUCT verify
+./$PRODUCT enable --is-home /opt/wso2is
+./$PRODUCT start && ./$PRODUCT verify
 \`\`\`
 
 Starting from an Identity Server that is already installed, the bootstrap

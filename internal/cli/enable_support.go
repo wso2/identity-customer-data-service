@@ -178,7 +178,7 @@ func exchangeCertificates(cdsHome string, is *isInstall, config *runtimeConfig, 
 	cdsCert := filepath.Join(certDir, name)
 	if _, err := os.Stat(cdsCert); err != nil {
 		warn("no CDS certificate at %s, so the Identity Server cannot verify CDS yet", cdsCert)
-		warn("install the CDS certificate and key, then run `wso2cds enable` again")
+		warn("install the CDS certificate and key, then run `cds enable` again")
 		return trustPEM, nil
 	}
 	if usingDefaultCertificate(cdsCert) {

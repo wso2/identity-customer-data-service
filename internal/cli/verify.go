@@ -199,7 +199,7 @@ func verifyAPIAccess(results *checks, client *cdsClient) {
 		results.pass("an authorized GET /profiles succeeds for %q", client.organization)
 	case status == http.StatusBadRequest:
 		results.fail("GET /profiles returned HTTP 400, which is what CDS returns while the "+
-			"organization %q is not enabled — run `wso2cds enable` again", client.organization)
+			"organization %q is not enabled — run `cds enable` again", client.organization)
 	default:
 		results.fail("GET /profiles returned HTTP %d", status)
 	}

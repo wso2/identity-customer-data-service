@@ -74,7 +74,7 @@ jobs:
         run: |
           mkdir -p dist
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist \
-            --pattern 'wso2cds-*.zip' --pattern 'wso2cds-*.sha256' --pattern 'wso2cds-*.md5'
+            --pattern 'cds-*.zip' --pattern 'cds-*.sha256' --pattern 'cds-*.md5'
           ls -la dist
 
       - name: ⬇️ Download the update tool setup artifact

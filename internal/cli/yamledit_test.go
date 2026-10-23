@@ -53,8 +53,8 @@ func TestSetScalar(t *testing.T) {
 		{"a string is quoted", "auth_server", "host", "is.example.com", `  host: "is.example.com"`},
 		{"a number stays bare", "auth_server", "port", "9443", `  port: 9443`},
 		{"a top-level scalar", "", "server_url", "https://cds.example.com", `server_url: "https://cds.example.com"`},
-		{"an absolute path", "tls", "cert_dir", "/opt/wso2cds/repository/resources/security",
-			`  cert_dir: "/opt/wso2cds/repository/resources/security"`},
+		{"an absolute path", "tls", "cert_dir", "/opt/cds/repository/resources/security",
+			`  cert_dir: "/opt/cds/repository/resources/security"`},
 	}
 
 	for _, test := range cases {
@@ -115,7 +115,7 @@ func TestEditedConfigStillDecodes(t *testing.T) {
 	for _, edit := range []struct{ parent, key, value string }{
 		{"auth_server", "host", "is.example.com"},
 		{"auth_server", "port", "9443"},
-		{"tls", "cert_dir", "/opt/wso2cds/repository/resources/security"},
+		{"tls", "cert_dir", "/opt/cds/repository/resources/security"},
 		{"", "server_url", "https://cds.example.com"},
 	} {
 		content, err = setScalar(content, edit.parent, edit.key, edit.value)

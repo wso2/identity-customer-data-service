@@ -71,7 +71,7 @@ type integration struct {
 
 // errNotEnabled is returned when a command needs an established CDS-to-IS
 // relationship and there is none.
-var errNotEnabled = errors.New("CDS is not enabled. Run `wso2cds enable --is-home <IS_HOME>` first")
+var errNotEnabled = errors.New("CDS is not enabled. Run `cds enable --is-home <IS_HOME>` first")
 
 // loadIntegration reads the integration record. A missing record means the
 // installation was never enabled, which errNotEnabled reports distinctly so
@@ -107,7 +107,7 @@ func saveIntegration(cdsHome string, state *integration) error {
 		return fmt.Errorf("could not serialise the integration record: %w", err)
 	}
 
-	header := []byte("# Written by `wso2cds enable`. Records the Identity Server this installation\n" +
+	header := []byte("# Written by `cds enable`. Records the Identity Server this installation\n" +
 		"# is enabled against. Secrets are not kept here; see " + secretsFile + ".\n")
 
 	target := path(cdsHome, stateFile)

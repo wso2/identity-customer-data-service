@@ -195,8 +195,8 @@ This produces one pack per supported platform in `target/dist/`, with their
 checksums and the release compatibility metadata:
 
 ```
-wso2cds-linux-amd64-<version>.zip
-wso2cds-linux-arm64-<version>.zip
+cds-linux-amd64-<version>.zip
+cds-linux-arm64-<version>.zip
 ```
 
 `make build` compiles the binary for the host platform alone, which is faster
@@ -207,15 +207,15 @@ when all you want is a compile check.
 ### ▶️ Step 2: Install and run
 
 ```bash
-unzip target/dist/wso2cds-linux-amd64-<version>.zip -d /opt
-cd /opt/wso2cds-linux-amd64-<version>
+unzip target/dist/cds-linux-amd64-<version>.zip -d /opt
+cd /opt/cds-linux-amd64-<version>
 
-./bin/wso2cds enable --is-home /opt/wso2is
-./bin/wso2cds start
-./bin/wso2cds verify
+./cds enable --is-home /opt/wso2is
+./cds start
+./cds verify
 ```
 
-`wso2cds enable` does the Identity Server configuration this README's
+`cds enable` does the Identity Server configuration this README's
 [Configuration Steps](#-configuration-steps) describe by hand — the
 applications, the API resources and scopes, the claim, the extension bundles
 and the certificate exchange. The manual steps are still worth reading to

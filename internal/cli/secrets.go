@@ -35,10 +35,10 @@ import (
 // This file is the installation's own store for them, readable by the account
 // that runs CDS and nobody else. A deployment with an approved secret manager
 // supplies the same variables from there instead and can delete it.
-const secretsHeader = `# Written by ` + "`wso2cds enable`" + `. Holds the credentials the CDS runtime needs,
+const secretsHeader = `# Written by ` + "`cds enable`" + `. Holds the credentials the CDS runtime needs,
 # which the ${...} placeholders in repository/conf/deployment.yaml expand from.
 #
-# wso2cds start passes these to the runtime. A deployment that supplies them
+# cds start passes these to the runtime. A deployment that supplies them
 # from a secret manager can remove this file.
 `
 

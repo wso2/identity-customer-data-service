@@ -3,7 +3,7 @@
 # Establishes, checks or removes this installation's relationship with a WSO2
 # Identity Server.
 #
-# A thin entry point over bin/wso2cds, kept at the pack root so that the shape
+# A thin entry point over cds, kept at the pack root so that the shape
 # matches the other on-premises products. It holds no logic of its own: every
 # option below forwards to the command of the same name, and anything else on
 # the line is passed through untouched.
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CDS="$HERE/bin/wso2cds"
+CDS="$HERE/cds"
 
 [ -x "$CDS" ] || { echo "setup: $CDS is missing or not executable" >&2; exit 1; }
 

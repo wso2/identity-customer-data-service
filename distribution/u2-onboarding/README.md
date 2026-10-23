@@ -19,7 +19,7 @@ buildable from a public checkout with nothing else present.
 One line naming the pack to the update service:
 
 ```
-wso2cds-linux-amd64-1.2.0
+cds-linux-amd64-1.2.0
 ```
 
 The pack directory, its zip and this identity are all the same string, which

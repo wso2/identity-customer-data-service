@@ -14,9 +14,9 @@ DISTRIBUTION_SRC=distribution
 PLATFORMS ?= linux/amd64 linux/arm64
 
 # Product name as registered with the update service. It names the packed
-# binary (<PACK>/bin/$(PRODUCT_NAME)), the pack directory, its zip and the
-# product identity in <PACK>/updates/product.txt.
-PRODUCT_NAME ?= wso2cds
+# binary (<PACK>/$(PRODUCT_NAME)), the pack directory, its zip and the product
+# identity in <PACK>/updates/product.txt.
+PRODUCT_NAME ?= cds
 
 # Variable constants.
 VERSION=$(shell cat $(VERSION_FILE))
@@ -99,8 +99,8 @@ dist: clean-dist
 # Stage and zip one platform pack. Not meant to be called directly.
 #
 # Pack layout:
-#   setup.sh, start.sh               entry points over bin/$(PRODUCT_NAME)
-#   bin/$(PRODUCT_NAME)              the lifecycle command and the runtime
+#   $(PRODUCT_NAME)                  the lifecycle command and the runtime
+#   setup.sh, start.sh               entry points over it
 #   repository/conf/                 deployment.yaml and compatibility.yaml
 #   repository/database/             where the inbuilt database is created
 #   repository/dbscripts/            DDL for operators running an external database
@@ -109,9 +109,11 @@ dist: clean-dist
 #   updates/product.txt              the update-service product identity of this pack
 #   version.txt, LICENSE.txt, README.md
 #
-# bin/update_tool_setup.sh is not staged here. It is published by the Updates
-# team rather than built from this source, so it is attached to the released
-# packs instead - see $(DISTRIBUTION_SRC)/u2-onboarding/.
+# bin/ is not created here. It holds only update_tool_setup.sh, which is
+# published by the Updates team rather than built from this source and is
+# attached to the released packs - see $(DISTRIBUTION_SRC)/u2-onboarding/.
+# That script resolves ../updates/product.txt relative to itself, which is why
+# it sits one level below the pack root while the product binary does not.
 _dist_one:
 	@set -e; \
 	os=$(DIST_OS); arch=$(DIST_ARCH); \
@@ -119,9 +121,9 @@ _dist_one:
 	stage=$(DIST_DIR)/$$pack; \
 	echo "Building $$pack..."; \
 	rm -rf $$stage; \
-	mkdir -p $$stage/bin $$stage/logs $$stage/updates \
+	mkdir -p $$stage/logs $$stage/updates \
 		$$stage/repository/database $$stage/repository/dbscripts $$stage/repository/resources/security; \
-	CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -o $$stage/bin/$(PRODUCT_NAME) ./cmd/wso2cds; \
+	CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -o $$stage/$(PRODUCT_NAME) ./cmd/cds; \
 	cp -r $(REPOSITORY_DIR)/. $$stage/repository/; \
 	$(DISTRIBUTION_SRC)/pack-config.sh $$stage/repository/conf/deployment.yaml; \
 	cp dbscripts/*.sql $$stage/repository/dbscripts/; \

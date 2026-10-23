@@ -81,7 +81,7 @@ func runStatus(args []string) error {
 	state, err := loadIntegration(cdsHome)
 	switch {
 	case errors.Is(err, errNotEnabled):
-		add("Associated IS", "none — run `wso2cds enable --is-home <IS_HOME>`")
+		add("Associated IS", "none — run `cds enable --is-home <IS_HOME>`")
 	case err != nil:
 		add("Associated IS", "unreadable: "+err.Error())
 	default:

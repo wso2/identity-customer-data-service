@@ -6,13 +6,13 @@
 # Server and decides to add CDS, so the CDS executable does not exist yet and
 # something has to acquire it — that is all this script is. It resolves a CDS
 # release compatible with the installed Identity Server, downloads and extracts
-# the pack for this platform, and hands over to the packaged `wso2cds enable`.
+# the pack for this platform, and hands over to the packaged `cds enable`.
 #
 # Everything after the hand-off is the product's own command, so this script
-# and the CDS-first path (download the zip, extract it, run wso2cds enable)
+# and the CDS-first path (download the zip, extract it, run cds enable)
 # converge on one implementation rather than two.
 #
-#   ./install_cds.sh --is-home /opt/wso2is [--cds-home /opt/wso2cds]
+#   ./install_cds.sh --is-home /opt/wso2is [--cds-home /opt/cds]
 #
 # Needs: curl, unzip, and a writable CDS_HOME.
 
@@ -24,7 +24,7 @@ API="${CDS_API:-https://api.github.com}"
 # or one served from an internal mirror of the releases, points this at that
 # mirror; the layout it expects is the one the releases have, <tag>/<file>.
 DOWNLOAD_BASE="${CDS_DOWNLOAD_BASE:-https://github.com/$REPO/releases/download}"
-PRODUCT="wso2cds"
+PRODUCT="cds"
 
 IS_HOME=""
 CDS_HOME=""
@@ -57,7 +57,7 @@ Options:
   --mirror <url>      fetch the artifacts from this base URL instead of the
                       GitHub releases, laid out as <url>/<tag>/<file>
   --accept-license    accept LICENSE.txt without being asked
-  --no-enable         install only; do not run wso2cds enable
+  --no-enable         install only; do not run cds enable
   -h, --help          this message
 USAGE
 }
@@ -160,7 +160,7 @@ else
   if [ -z "$VERSION" ]; then
     VERSION="$(printf '%s\n' "$TAGS" | head -1)"
     warn "no published release declares support for Identity Server $IS_VERSION"
-    warn "installing the newest release, $VERSION; wso2cds enable will say so again"
+    warn "installing the newest release, $VERSION; cds enable will say so again"
   fi
 fi
 
@@ -177,7 +177,7 @@ fi
 step "Installing to $CDS_HOME"
 if [ -e "$CDS_HOME" ] && [ -n "$(ls -A "$CDS_HOME" 2>/dev/null)" ]; then
   die "$CDS_HOME exists and is not empty. Pass --cds-home <path> for a new installation,
-or run $CDS_HOME/bin/wso2cds enable to re-enable the one that is already there"
+or run $CDS_HOME/cds enable to re-enable the one that is already there"
 fi
 
 WORK="$(mktemp -d)"
@@ -225,7 +225,7 @@ mkdir -p "$CDS_HOME"
 # Move the pack's contents up, so CDS_HOME is the installation root rather
 # than its parent.
 (cd "$WORK/extracted/$PACK" && tar cf - .) | (cd "$CDS_HOME" && tar xf -)
-chmod +x "$CDS_HOME/bin/$PRODUCT"
+chmod +x "$CDS_HOME/$PRODUCT"
 ok "installed CDS $PACK_VERSION in $CDS_HOME"
 
 # --------------------------------------------------------------------------- #
@@ -235,9 +235,9 @@ if [ "$RUN_ENABLE" != "1" ]; then
   step "Installed"
   info "Enable CDS when you are ready:"
   info ""
-  info "    $CDS_HOME/bin/$PRODUCT enable --is-home $IS_HOME"
+  info "    $CDS_HOME/$PRODUCT enable --is-home $IS_HOME"
   exit 0
 fi
 
 step "Enabling CDS"
-exec "$CDS_HOME/bin/$PRODUCT" enable --is-home "$IS_HOME"
+exec "$CDS_HOME/$PRODUCT" enable --is-home "$IS_HOME"

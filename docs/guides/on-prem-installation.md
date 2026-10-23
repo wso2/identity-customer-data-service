@@ -5,15 +5,15 @@ separate installations with separate lifecycles: CDS never starts, stops or
 updates the Identity Server, and the Identity Server knows about CDS only
 through the configuration and extension bundles that enablement puts there.
 
-Everything below is done with `bin/wso2cds`, the single executable a pack
+Everything below is done with `cds`, the single executable a pack
 ships. A pack also carries `setup.sh` and `start.sh` at its root, which are
 the same commands under the entry points the other on-premises products use:
 
 ```bash
-./setup.sh --is-home /opt/wso2is     # bin/wso2cds enable --is-home /opt/wso2is
-./setup.sh --disable                 # bin/wso2cds disable
-./start.sh                           # bin/wso2cds start
-./start.sh --status                  # bin/wso2cds status
+./setup.sh --is-home /opt/wso2is     # cds enable --is-home /opt/wso2is
+./setup.sh --disable                 # cds disable
+./start.sh                           # cds start
+./start.sh --status                  # cds status
 ```
 
 They hold no logic of their own. The action is taken from the flag and
@@ -27,7 +27,7 @@ whichever command was resolved.
 
 **Installation** establishes `CDS_HOME`. For a direct download, extracting the
 zip *is* the installation — nothing has to be run to complete it, and there is
-no `wso2cds install`. The `setup.sh` in the pack is the enablement step below,
+no `cds install`. The `setup.sh` in the pack is the enablement step below,
 not an installer.
 
 **Enablement** establishes the relationship between that installation and one
@@ -41,13 +41,13 @@ and because it is the only part that writes into `IS_HOME`.
 Use this when you start from the CDS download page.
 
 ```bash
-unzip wso2cds-linux-amd64-1.2.0.zip -d /opt
-cd /opt/wso2cds-linux-amd64-1.2.0
+unzip cds-linux-amd64-1.2.0.zip -d /opt
+cd /opt/cds-linux-amd64-1.2.0
 
 # Review the licence and required notices.
 less LICENSE.txt
 
-./bin/wso2cds enable --is-home /opt/wso2is
+./cds enable --is-home /opt/wso2is
 ```
 
 A pack is extracted onto a machine where nothing else has been installed, so
@@ -65,10 +65,10 @@ needing `openssl` first. It is a convenience for getting started.
 **Every download of a release carries the same private key.** Anyone holding it
 can present themselves as that CDS to an Identity Server that trusted it during
 `enable`. Replace both files with a certificate issued for the host in
-`server_url`, then run `wso2cds enable` again so the Identity Server trusts the
+`server_url`, then run `cds enable` again so the Identity Server trusts the
 new one.
 
-`wso2cds status` reports which is in use, and `wso2cds verify` counts the
+`cds status` reports which is in use, and `cds verify` counts the
 default as a failed check:
 
 ```
@@ -88,7 +88,7 @@ installer:
 It reads the installed Identity Server version, resolves a CDS release that
 declares support for it, detects the platform, downloads and verifies the
 matching zip, presents the licence, extracts it, and hands over to
-`wso2cds enable --is-home`.
+`cds enable --is-home`.
 
 Both paths end at the same `CDS_HOME` and the same enable flow, so there is
 one implementation of the configuration logic rather than two.
@@ -112,7 +112,7 @@ them.
 | Certificates | exports the Identity Server certificate for CDS, and imports the CDS certificate into `client-truststore.p12` |
 
 The generated configuration goes into `repository/conf/deployment.toml`
-between `# BEGIN wso2cds` and `# END wso2cds` markers. Everything outside them
+between `# BEGIN cds` and `# END cds` markers. Everything outside them
 is preserved exactly, a backup is kept at `deployment.toml.cds-backup`, and
 re-enabling replaces the block rather than appending a second copy.
 
@@ -177,7 +177,7 @@ itself never reads it.
 Run the same command again to reach this phase:
 
 ```bash
-./bin/wso2cds enable
+./cds enable
 ```
 
 It needs an Identity Server administrator password, taken from
@@ -194,9 +194,9 @@ Starting CDS is an explicit lifecycle operation and enablement will not do it
 for you, so the sequence at the end is:
 
 ```bash
-./bin/wso2cds start --daemon
-./bin/wso2cds enable     # completes organization enablement
-./bin/wso2cds verify
+./cds start --daemon
+./cds enable     # completes organization enablement
+./cds verify
 ```
 
 `--daemon` here because the shell has to come back to run the next two
@@ -212,13 +212,13 @@ happened, the profile, schema and rule endpoints refuse requests.
 
 | Command | Through `start.sh` / `setup.sh` | What it does |
 |---|---|---|
-| `wso2cds start` | `./start.sh` | runs the runtime in the foreground; Ctrl+C stops it |
-| `wso2cds start --daemon` | `./start.sh --daemon` | runs it in the background and returns once it reports ready |
-| `wso2cds start --debug` | `./start.sh --debug` | foreground, logging at DEBUG |
-| `wso2cds stop` | `./start.sh --stop` | stops a runtime started with `--daemon` |
-| `wso2cds status` | `./start.sh --status` | product, platform, runtime and integration state |
-| `wso2cds logs -f` | `./start.sh --logs -f` | follows `logs/wso2cds.log`, which `--daemon` writes |
-| `wso2cds verify` | `./setup.sh --verify` | checks the deployment without changing it |
+| `cds start` | `./start.sh` | runs the runtime in the foreground; Ctrl+C stops it |
+| `cds start --daemon` | `./start.sh --daemon` | runs it in the background and returns once it reports ready |
+| `cds start --debug` | `./start.sh --debug` | foreground, logging at DEBUG |
+| `cds stop` | `./start.sh --stop` | stops a runtime started with `--daemon` |
+| `cds status` | `./start.sh --status` | product, platform, runtime and integration state |
+| `cds logs -f` | `./start.sh --logs -f` | follows `logs/cds.log`, which `--daemon` writes |
+| `cds verify` | `./setup.sh --verify` | checks the deployment without changing it |
 
 Starting in the foreground is the default because that is what a container, a
 unit file and a process supervisor all want: one process to watch, its logs on
@@ -236,11 +236,11 @@ that would fix it. Nothing is downloaded or configured on your behalf.
 ### Status
 
 ```
-$ ./bin/wso2cds status
+$ ./cds status
 
   CDS Version         1.2.0
-  CDS Home            /opt/wso2cds
-  CDS U2 Product      wso2cds-linux-amd64-1.2.0
+  CDS Home            /opt/cds
+  CDS U2 Product      cds-linux-amd64-1.2.0
   CDS U2 Level        0004
   Platform            linux/amd64
   CDS Process         Running (pid 24113)
@@ -263,7 +263,7 @@ installation look finished while a restart is still owed.
 
 ### Verification
 
-`wso2cds verify` is read-only. It checks readiness and the datastore, that the
+`cds verify` is read-only. It checks readiness and the datastore, that the
 extension bundles are installed and active, that a CDS client token carries
 the `iam-cds` audience, that an authorized `GET /profiles` succeeds for the
 organization, and that `GET /profile-schema` succeeds — which is the one check
@@ -274,7 +274,7 @@ that exercises the CDS-to-Identity-Server direction.
 ## Disabling
 
 ```bash
-./bin/wso2cds disable
+./cds disable
 ```
 
 This removes what enablement wrote into `IS_HOME`: the extension bundles **it
@@ -305,7 +305,7 @@ over it.
 ```
 <CDS_HOME>/
 ├── bin/
-│   ├── wso2cds                     the lifecycle command and the runtime
+│   ├── cds                     the lifecycle command and the runtime
 │   └── update_tool_setup.sh        resolves the update tool for this platform
 ├── repository/
 │   ├── conf/
@@ -341,7 +341,7 @@ Where bundles are missing and there is no access to that repository, supply
 them instead:
 
 ```bash
-./bin/wso2cds enable --is-home /opt/wso2is --extensions /media/bundles
+./cds enable --is-home /opt/wso2is --extensions /media/bundles
 ```
 
 or by placing the jars in `<CDS_HOME>/extensions/` before enabling. Local

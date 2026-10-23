@@ -138,7 +138,7 @@ func runStart(args []string) error {
 
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("could not locate the wso2cds executable: %w", err)
+		return fmt.Errorf("could not locate the cds executable: %w", err)
 	}
 
 	if err := os.MkdirAll(path(cdsHome, logsDir), 0o755); err != nil {
@@ -221,7 +221,7 @@ func runStop(args []string) error {
 	pid := readPID(cdsHome)
 	if pid == 0 {
 		info("CDS is not running in the background.")
-		info("A foreground `wso2cds start` is stopped with Ctrl+C in its own terminal.")
+		info("A foreground `cds start` is stopped with Ctrl+C in its own terminal.")
 		_ = os.Remove(path(cdsHome, pidFile))
 		return nil
 	}

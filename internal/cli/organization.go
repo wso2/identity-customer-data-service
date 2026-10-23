@@ -43,7 +43,7 @@ type cdsClient struct {
 func cdsToken(isBase, clientID, clientSecret string, scopes []string, trustPEM string, insecure bool) (string, error) {
 
 	if clientID == "" || clientSecret == "" {
-		return "", fmt.Errorf("no CDS client credentials recorded. Run `wso2cds enable` to provision them")
+		return "", fmt.Errorf("no CDS client credentials recorded. Run `cds enable` to provision them")
 	}
 
 	api, err := newISAPI(isBase, clientID, clientSecret, trustPEM, insecure)

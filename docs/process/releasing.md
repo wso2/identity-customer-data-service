@@ -11,9 +11,9 @@ the updates later published from it — carry executables built from the same
 code. CDS is released for Linux only:
 
 ```
-wso2cds-linux-amd64-<version>.zip   + .sha256 + .md5
-wso2cds-linux-arm64-<version>.zip   + .sha256 + .md5
-wso2cds-<version>-release-metadata.yaml
+cds-linux-amd64-<version>.zip   + .sha256 + .md5
+cds-linux-arm64-<version>.zip   + .sha256 + .md5
+cds-<version>-release-metadata.yaml
 ```
 
 The pack directory, its zip and its update-service product identity are all
@@ -35,7 +35,7 @@ release publishes:
 | | |
 |---|---|
 | `distribution/check-pack.sh` | every pack carries the files an installation needs, and a product identity naming itself |
-| `distribution/verify-install.sh` | the Identity-Server-first path really installs: a release is served locally and the real `install_cds.sh` is driven against it, through resolution, checksum, extraction and the hand-off to `wso2cds enable` |
+| `distribution/verify-install.sh` | the Identity-Server-first path really installs: a release is served locally and the real `install_cds.sh` is driven against it, through resolution, checksum, extraction and the hand-off to `cds enable` |
 | `distribution/artifact-summary.sh` | writes the artifacts and their SHA-256 digests into the run summary |
 | `distribution/release-notes.sh` | builds the release body — downloads, digests, compatibility and both install paths |
 
@@ -73,7 +73,7 @@ run summary, so a change to it is reviewed alongside the change that caused it.
 | `extensions.version` | the published CDS extension baseline for those releases |
 | `console.release_line` | the identity-apps line carrying the matching CDS Console |
 
-A build that leaves them empty is not broken: `wso2cds enable` warns that the
+A build that leaves them empty is not broken: `cds enable` warns that the
 baseline is unverified and continues, rather than claiming a compatibility
 nobody has tested.
 

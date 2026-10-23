@@ -6,7 +6,7 @@ key, so this directory holds them:
 ```
 server.crt      the CDS certificate, PEM
 server.key      its private key, PEM, mode 600
-trust_store.pem the Identity Server certificate, written by `wso2cds enable`
+trust_store.pem the Identity Server certificate, written by `cds enable`
 ```
 
 ## Replace the certificate this pack shipped with
@@ -17,23 +17,23 @@ They are a convenience for getting started and nothing else.
 
 **Every download of this release carries the same private key.** Anyone holding
 it can present themselves as this service to the Identity Server, which trusts
-the certificate after `wso2cds enable` imports it. Replace both files with a
-certificate issued for the name CDS is reached on, then run `wso2cds enable`
+the certificate after `cds enable` imports it. Replace both files with a
+certificate issued for the name CDS is reached on, then run `cds enable`
 again so the Identity Server trusts the new one.
 
-`wso2cds status` and `wso2cds verify` both report while the default is still in
+`cds status` and `cds verify` both report while the default is still in
 use, and `verify` counts it as a failed check — it is not something to leave in
 place on a deployment carrying real traffic.
 
 ## What enable does here
 
-`wso2cds enable` points `tls.cert_dir` in `repository/conf/deployment.yaml` at
+`cds enable` points `tls.cert_dir` in `repository/conf/deployment.yaml` at
 this directory, exports the Identity Server's certificate into
 `trust_store.pem` so CDS can verify the server it calls, and imports
 `server.crt` into the Identity Server's `client-truststore.p12` so that server
 can verify CDS when it calls the synchronisation endpoints.
 
-Replacing the certificate therefore means running `wso2cds enable` again: the
+Replacing the certificate therefore means running `cds enable` again: the
 Identity Server trusts whichever certificate was imported, not whichever one
 is on disk now.
 

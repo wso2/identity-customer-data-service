@@ -47,6 +47,8 @@ for zip in "$DIST_DIR"/*.zip; do
   [ -f "$WORK/pack/$pack/updates/product.txt" ] \
     || { echo "attach-update-tool: $pack carries no updates/product.txt" >&2; exit 1; }
 
+  # bin/ holds nothing else, so the pack does not ship it and it is made here.
+  mkdir -p "$WORK/pack/$pack/bin"
   install -m 755 "$SETUP_SH" "$WORK/pack/$pack/bin/update_tool_setup.sh"
 
   rm -f "$zip"

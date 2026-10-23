@@ -107,7 +107,7 @@ func enable(cdsHome string, options enableOptions) error {
 	}
 
 	// A previous enablement is the default answer to every question that was
-	// not asked again, which is what makes a bare `wso2cds enable` resume.
+	// not asked again, which is what makes a bare `cds enable` resume.
 	previous, err := loadIntegration(cdsHome)
 	if err != nil && !errors.Is(err, errNotEnabled) {
 		return err
@@ -243,7 +243,7 @@ func enable(cdsHome string, options enableOptions) error {
 
 	step("Enabled")
 	info("CDS %s is enabled against Identity Server %s", cdsVersion, is.version)
-	info("Next: wso2cds start, then wso2cds verify")
+	info("Next: cds start, then cds verify")
 	return nil
 }
 
@@ -442,7 +442,7 @@ func provision(cdsHome string, api *isAPI, options enableOptions, cdsBase, isBas
 	// 5. Organization enablement, which is a CDS API call and so needs a
 	// running CDS. Starting CDS is an explicit lifecycle operation, so this
 	// step reports what remains rather than starting the process itself; a
-	// later `wso2cds enable` picks it up once CDS is running.
+	// later `cds enable` picks it up once CDS is running.
 	return enableOrganizationStep(api, options, cdsBase, isBase, trustPEM, systemOIDC)
 }
 
@@ -455,7 +455,7 @@ func enableOrganizationStep(api *isAPI, options enableOptions, cdsBase, isBase, 
 
 	if status, _, err := probe(cdsBase, "/cds/api/v1/ready", 5*time.Second); err != nil || status != 200 {
 		info("CDS is not serving at %s yet, so the organization is not enabled.", cdsBase)
-		info("Run `wso2cds start`, then `wso2cds enable` again to finish.")
+		info("Run `cds start`, then `cds enable` again to finish.")
 		return nil
 	}
 
@@ -633,5 +633,5 @@ func reportRestartRequired(is *isInstall) {
 	info("")
 	info("    %s/bin/wso2server.sh restart", is.home)
 	info("")
-	info("Then run `wso2cds enable` again to finish provisioning.")
+	info("Then run `cds enable` again to finish provisioning.")
 }

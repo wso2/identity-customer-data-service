@@ -16,7 +16,7 @@
  * under the License.
  */
 
-// Command wso2cds is the executable an installed CDS pack ships in bin/.
+// Command cds is the executable an installed CDS pack ships at its root.
 //
 // It owns the whole on-premises lifecycle: enabling CDS against an Identity
 // Server, starting and stopping the runtime, and verifying the result. The

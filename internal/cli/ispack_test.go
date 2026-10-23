@@ -267,3 +267,34 @@ func writeTestCertificate(t *testing.T, path string, orgUnit []string) {
 		t.Fatalf("could not write the certificate: %v", err)
 	}
 }
+
+// The markers live in two places — the constants the code strips on, and the
+// template that writes them. They drifted apart once during a rename, and the
+// cost is not a failed check: enablement stops recognising its own section and
+// appends a second copy on every run.
+func TestTemplateCarriesTheMarkersTheCodeStripsOn(t *testing.T) {
+
+	if !strings.HasPrefix(isDeploymentSection, tomlBeginMark) {
+		t.Errorf("the template does not open with %q", tomlBeginMark)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(isDeploymentSection), tomlEndMark) {
+		t.Errorf("the template does not close with %q", tomlEndMark)
+	}
+
+	// And a section written from it is recognised and removed in full.
+	rendered, err := renderTOMLSection("https://cds.example.com", "https://is.example.com", "secret")
+	if err != nil {
+		t.Fatalf("renderTOMLSection: %v", err)
+	}
+	existing := "[server]\nhostname = \"localhost\"\n"
+	stripped, found := stripTOMLSection(existing + "\n" + rendered)
+	if !found {
+		t.Fatal("a freshly rendered section was not recognised")
+	}
+	if strings.Contains(stripped, "customer_data_service") {
+		t.Error("the rendered section was not removed in full")
+	}
+	if !strings.Contains(stripped, "hostname") {
+		t.Error("the operator's own configuration was removed with it")
+	}
+}

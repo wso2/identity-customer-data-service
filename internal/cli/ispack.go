@@ -42,8 +42,8 @@ const (
 	// instead of appending a second copy, and so `disable` removes exactly
 	// what was added. Both markers are matched on their prefix, so the text
 	// after them can change between versions without stranding an old block.
-	tomlBeginMark = "# BEGIN wso2cds"
-	tomlEndMark   = "# END wso2cds"
+	tomlBeginMark = "# BEGIN cds"
+	tomlEndMark   = "# END cds"
 )
 
 // isInstall is a validated Identity Server installation.

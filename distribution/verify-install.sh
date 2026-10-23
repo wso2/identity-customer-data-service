@@ -4,7 +4,7 @@
 #
 # install_cds.sh is the first thing a customer on the Identity-Server-first
 # path runs, and until this existed nothing exercised it: a change that broke
-# release resolution, the checksum check or the hand-off to `wso2cds enable`
+# release resolution, the checksum check or the hand-off to `cds enable`
 # would have been found by them rather than by us. So this stands a release up
 # locally — the artifacts served over HTTP, an Identity Server installation to
 # enable against — and runs the installer end to end against it.
@@ -18,7 +18,7 @@ set -euo pipefail
 
 DIST_DIR="${1:?usage: verify-install.sh <dist-dir>}"
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PRODUCT="wso2cds"
+PRODUCT="cds"
 
 # The release this fixture pretends to be. The Identity Server version is the
 # one the metadata will declare support for, so the positive branch of release
@@ -133,11 +133,11 @@ done
 #
 # Nothing is stubbed past this point. The installer resolves the release from
 # the metadata, verifies the checksum, extracts, and execs the packed
-# wso2cds enable, which reads the Identity Server and stages its configuration.
+# cds enable, which reads the Identity Server and stages its configuration.
 # Provisioning stops at the restart this fixture will never perform, which is
 # the correct outcome and the one an operator sees.
 # --------------------------------------------------------------------------- #
-CDS_HOME="$WORK/wso2cds"
+CDS_HOME="$WORK/cds"
 echo "verify-install: installing $PACK against Identity Server $IS_VERSION"
 
 CDS_API="http://127.0.0.1:$PORT" \
@@ -170,10 +170,10 @@ check "the release was resolved from its declared Identity Server support" \
   "grep -q 'declares support for Identity Server $IS_VERSION' '$WORK/install.log'"
 check "the download was checked against its published checksum" \
   "grep -q 'checksum verified' '$WORK/install.log'"
-check "CDS_HOME holds the pack" "[ -x '$CDS_HOME/bin/$PRODUCT' ]"
+check "CDS_HOME holds the pack" "[ -x '$CDS_HOME/$PRODUCT' ]"
 check "the installed executable reports the built version" \
-  "[ \"\$('$CDS_HOME/bin/$PRODUCT' version)\" = '$PACK_VERSION' ]"
-check "the installer handed off to wso2cds enable" \
+  "[ \"\$('$CDS_HOME/$PRODUCT' version)\" = '$PACK_VERSION' ]"
+check "the installer handed off to cds enable" \
   "grep -q 'Identity Server restart required' '$WORK/install.log'"
 check "enablement recorded the Identity Server" \
   "grep -q 'is_version: $IS_VERSION' '$CDS_HOME/repository/conf/integration.yaml'"
@@ -182,7 +182,7 @@ check "the bundles the Identity Server provides were left to it" \
 check "nothing was installed over them" \
   "[ \"\$(ls -1 '$IS_HOME/repository/components/dropins' | wc -l | tr -d '[:space:]')\" = '4' ]"
 check "the Identity Server configuration was staged" \
-  "grep -q '# BEGIN wso2cds' '$IS_HOME/repository/conf/deployment.toml'"
+  "grep -q '# BEGIN cds' '$IS_HOME/repository/conf/deployment.toml'"
 
 if [ "$failures" -gt 0 ]; then
   echo

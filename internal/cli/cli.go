@@ -16,7 +16,7 @@
  * under the License.
  */
 
-// Package cli implements bin/wso2cds, the command installed packs ship.
+// Package cli implements cds, the command installed packs ship.
 //
 // Installation and enablement are deliberately separate. Extracting the pack
 // establishes CDS_HOME; `enable` establishes the relationship between CDS and
@@ -32,10 +32,10 @@ import (
 	"strings"
 )
 
-// command is one subcommand of wso2cds.
+// command is one subcommand of cds.
 type command struct {
 	name string
-	// summary is the one-line description shown by `wso2cds help`.
+	// summary is the one-line description shown by `cds help`.
 	summary string
 	// run receives the arguments that follow the subcommand name.
 	run func(args []string) error
@@ -98,13 +98,13 @@ func Main(args []string) int {
 func usage(out *os.File) {
 
 	var b strings.Builder
-	b.WriteString("WSO2 Customer Data Service\n\nUsage:\n  wso2cds <command> [options]\n\nCommands:\n")
+	b.WriteString("Customer Data Service\n\nUsage:\n  cds <command> [options]\n\nCommands:\n")
 	for _, cmd := range commands() {
 		if cmd.hidden {
 			continue
 		}
 		fmt.Fprintf(&b, "  %-9s %s\n", cmd.name, cmd.summary)
 	}
-	b.WriteString("\nRun `wso2cds <command> --help` for the options of one command.\n")
+	b.WriteString("\nRun `cds <command> --help` for the options of one command.\n")
 	fmt.Fprint(out, b.String())
 }

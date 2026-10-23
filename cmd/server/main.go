@@ -20,7 +20,7 @@
 //
 // It is the entry point used by the container image, where the process is the
 // deployment and the orchestrator owns the lifecycle. Installed packs ship
-// bin/wso2cds instead, which adds the lifecycle and Identity Server
+// cds instead, which adds the lifecycle and Identity Server
 // integration commands around this same runtime.
 package main
 
