@@ -555,7 +555,7 @@ func isCDSEnabled(ctx context.Context, orgHandle string) bool {
 
 // fuzzyMatchingAllowed reports whether this server offers tolerant matching at all.
 func fuzzyMatchingAllowed() bool {
-	return config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled()
+	return config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled
 }
 
 // refuseFuzzy is the error returned when a caller asks for tolerant matching on a server

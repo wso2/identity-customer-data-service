@@ -261,7 +261,7 @@ var attributeTypeOptions = []model.AttributeTypeOption{
 // This endpoint is what a client builds its method picker from, so it is the one place that
 // has to agree with what the create and patch handlers will accept.
 func (urs *UnificationRuleService) GetUnificationOptions() model.UnificationOptionsResponse {
-	if config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled() {
+	if config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled {
 		return model.UnificationOptionsResponse{AttributeTypes: attributeTypeOptions}
 	}
 

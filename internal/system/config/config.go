@@ -173,23 +173,21 @@ type IdentityResolutionConfig struct {
 	// and the fields are rejected rather than quietly ignored.
 	AllowEvidenceStrengthOverride bool `yaml:"allow_evidence_strength_override"`
 
-	// FuzzyMatching switches tolerant matching on or off for the whole server.
+	// FuzzyMatchingEnabled switches tolerant matching on for the whole server.
 	//
-	// Absent means on: the feature is the point of the build that carries it, and an
-	// upgrade should behave as designed rather than silently stop matching. Setting it to
-	// false is a kill switch — new fuzzy rules are refused, the options endpoint stops
-	// offering the method, and rules already stored as fuzzy are evaluated as exact.
+	// Off by default, including for a deployment.yaml written before the key existed. An
+	// upgrade therefore keeps matching exactly as it did, and an operator turns tolerant
+	// matching on when the organisation is ready for it rather than finding that an
+	// upgrade changed which profiles get unified.
 	//
-	// It does not undo anything: profiles already unified stay unified, review tasks a
+	// While off, new fuzzy rules are refused, the options endpoint stops offering the
+	// method, and a rule already stored as fuzzy is evaluated as an exact match. Switching
+	// it back on restores that rule, because only the reading of it changes.
+	//
+	// Turning it off undoes nothing: profiles already unified stay unified, review tasks a
 	// fuzzy rule raised stay in the queue to be answered, and blocking keys written for
 	// fuzzy matching remain until each profile is next re-indexed.
-	FuzzyMatching *bool `yaml:"fuzzy_matching_enabled"`
-}
-
-// FuzzyMatchingEnabled reports whether tolerant matching is available on this server.
-// An absent setting reads as enabled.
-func (c IdentityResolutionConfig) FuzzyMatchingEnabled() bool {
-	return c.FuzzyMatching == nil || *c.FuzzyMatching
+	FuzzyMatchingEnabled bool `yaml:"fuzzy_matching_enabled"`
 }
 
 // ShutdownConfig bounds the graceful shutdown of the whole process. Zero, which

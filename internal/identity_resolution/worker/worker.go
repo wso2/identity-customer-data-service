@@ -60,7 +60,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 	rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
 		constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
 		constants.DefaultMismatchStrength)
-	if !config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled() {
+	if !config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled {
 		rules = urModel.AsExactMatching(rules)
 	}
 	if len(rules) == 0 {
@@ -402,7 +402,7 @@ func ReindexAfterMerge(ctx context.Context, masterProfileID, triggerProfileId, o
 	rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
 		constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
 		constants.DefaultMismatchStrength)
-	if !config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled() {
+	if !config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled {
 		rules = urModel.AsExactMatching(rules)
 	}
 

@@ -24,29 +24,28 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 )
 
-func withFuzzyMatching(t *testing.T, setting *bool) {
+func withFuzzyMatching(t *testing.T, enabled bool) {
 	t.Helper()
 
 	conf := config.Config{}
-	conf.IdentityResolution.FuzzyMatching = setting
+	conf.IdentityResolution.FuzzyMatchingEnabled = enabled
 	config.OverrideCDSRuntime(conf)
 }
 
-// TestFuzzyMatchingDefaultsToOn pins the upgrade behaviour. The setting is a kill switch on
-// a build that carries the feature, so a deployment.yaml that has never heard of it must
-// keep matching exactly as the release intends.
-func TestFuzzyMatchingDefaultsToOn(t *testing.T) {
-	withFuzzyMatching(t, nil)
+// TestFuzzyMatchingDefaultsToOff pins the upgrade behaviour. A deployment.yaml written
+// before this key existed must keep unifying profiles exactly as it did, so an upgrade
+// cannot change which profiles get merged until an operator asks for it.
+func TestFuzzyMatchingDefaultsToOff(t *testing.T) {
+	config.OverrideCDSRuntime(config.Config{})
 
-	if !fuzzyMatchingAllowed() {
-		t.Error("an absent fuzzy_matching_enabled must read as enabled")
+	if fuzzyMatchingAllowed() {
+		t.Error("an absent fuzzy_matching_enabled must read as disabled")
 	}
 }
 
 func TestFuzzyMatchingHonoursAnExplicitSetting(t *testing.T) {
 	for _, want := range []bool{true, false} {
-		setting := want
-		withFuzzyMatching(t, &setting)
+		withFuzzyMatching(t, want)
 
 		if got := fuzzyMatchingAllowed(); got != want {
 			t.Errorf("fuzzy_matching_enabled=%v read as %v", want, got)
@@ -58,8 +57,7 @@ func TestFuzzyMatchingHonoursAnExplicitSetting(t *testing.T) {
 // rule as exact: a caller that believes it configured a rule to tolerate typos, and is
 // overruled without being told, would misread every merge that rule takes part in.
 func TestFuzzyIsRefusedNotDowngraded(t *testing.T) {
-	off := false
-	withFuzzyMatching(t, &off)
+	withFuzzyMatching(t, false)
 
 	if err := refuseFuzzy(); err == nil {
 		t.Fatal("expected a refusal for fuzzy while the server has it switched off")
