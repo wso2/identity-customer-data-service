@@ -6,14 +6,29 @@ updates the Identity Server, and the Identity Server knows about CDS only
 through the configuration and extension bundles that enablement puts there.
 
 Everything below is done with `bin/wso2cds`, the single executable a pack
-ships.
+ships. A pack also carries `setup.sh` and `start.sh` at its root, which are
+the same commands under the entry points the other on-premises products use:
+
+```bash
+./setup.sh --is-home /opt/wso2is     # bin/wso2cds enable --is-home /opt/wso2is
+./setup.sh --disable                 # bin/wso2cds disable
+./start.sh                           # bin/wso2cds start
+./start.sh --status                  # bin/wso2cds status
+```
+
+They hold no logic of their own. The action is taken from the flag and
+everything else on the line is passed through, so `./setup.sh --is-home X
+--extensions Y` reaches `enable` unchanged, and `--help` shows the options of
+whichever command was resolved.
 
 ---
 
 ## The two steps that are not the same step
 
 **Installation** establishes `CDS_HOME`. For a direct download, extracting the
-zip *is* the installation — there is no `setup.sh` and no `wso2cds install`.
+zip *is* the installation — nothing has to be run to complete it, and there is
+no `wso2cds install`. The `setup.sh` in the pack is the enablement step below,
+not an installer.
 
 **Enablement** establishes the relationship between that installation and one
 Identity Server. It is a separate command because it is a separate decision,
@@ -195,16 +210,16 @@ happened, the profile, schema and rule endpoints refuse requests.
 
 ## Running CDS
 
-| Command | What it does |
-|---|---|
-| `wso2cds start` | runs the runtime in the foreground; Ctrl+C stops it |
-| `wso2cds start --daemon` | runs it in the background and returns once it reports ready |
-| `wso2cds start --debug` | foreground, logging at DEBUG |
-| `wso2cds stop` | stops a runtime started with `--daemon` |
-| `wso2cds restart` | stop, then start — pass `--daemon` to come back detached |
-| `wso2cds status` | product, platform, runtime and integration state |
-| `wso2cds logs -f` | follows `logs/wso2cds.log`, which `--daemon` writes |
-| `wso2cds verify` | checks the deployment without changing it |
+| Command | Through `start.sh` / `setup.sh` | What it does |
+|---|---|---|
+| `wso2cds start` | `./start.sh` | runs the runtime in the foreground; Ctrl+C stops it |
+| `wso2cds start --daemon` | `./start.sh --daemon` | runs it in the background and returns once it reports ready |
+| `wso2cds start --debug` | `./start.sh --debug` | foreground, logging at DEBUG |
+| `wso2cds stop` | `./start.sh --stop` | stops a runtime started with `--daemon` |
+| `wso2cds restart` | `./start.sh --restart` | stop, then start — pass `--daemon` to come back detached |
+| `wso2cds status` | `./start.sh --status` | product, platform, runtime and integration state |
+| `wso2cds logs -f` | `./start.sh --logs -f` | follows `logs/wso2cds.log`, which `--daemon` writes |
+| `wso2cds verify` | `./setup.sh --verify` | checks the deployment without changing it |
 
 Starting in the foreground is the default because that is what a container, a
 unit file and a process supervisor all want: one process to watch, its logs on

@@ -18,6 +18,8 @@ DIST_DIR="${1:?usage: check-pack.sh <dist-dir>}"
 # update service resolves the pack by.
 REQUIRED="
 bin/wso2cds
+setup.sh
+start.sh
 repository/conf/deployment.yaml
 repository/conf/compatibility.yaml
 repository/dbscripts/postgres.sql

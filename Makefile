@@ -99,6 +99,7 @@ dist: clean-dist
 # Stage and zip one platform pack. Not meant to be called directly.
 #
 # Pack layout:
+#   setup.sh, start.sh               entry points over bin/$(PRODUCT_NAME)
 #   bin/$(PRODUCT_NAME)              the lifecycle command and the runtime
 #   repository/conf/                 deployment.yaml and compatibility.yaml
 #   repository/database/             where the inbuilt database is created
@@ -127,6 +128,7 @@ _dist_one:
 	cp $(DISTRIBUTION_SRC)/pack/security-README.md $$stage/repository/resources/security/README.md; \
 	$(DISTRIBUTION_SRC)/default-cert.sh $$stage/repository/resources/security; \
 	cp LICENSE.txt README.md $(VERSION_FILE) $$stage/; \
+	install -m 755 $(DISTRIBUTION_SRC)/pack/setup.sh $(DISTRIBUTION_SRC)/pack/start.sh $$stage/; \
 	printf '%s\n' "$$pack" > $$stage/updates/product.txt; \
 	find $$stage -name '.DS_Store' -delete; \
 	cd $(DIST_DIR) && COPYFILE_DISABLE=1 zip -rq $$pack.zip $$pack -x '**/.DS_Store' -x '**/__MACOSX/**'; \
