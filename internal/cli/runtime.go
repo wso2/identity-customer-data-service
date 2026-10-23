@@ -105,6 +105,27 @@ func (c *runtimeConfig) localBase() string {
 	return "https://" + net.JoinHostPort(host, strconv.Itoa(c.Addr.Port))
 }
 
+// addressInUse reports whether something is already listening where CDS is
+// configured to listen.
+//
+// Checked before starting rather than left to the runtime, because the failure
+// is otherwise ambiguous in the worst way: the process that cannot bind exits,
+// while whatever already holds the port answers the readiness probe, and the
+// start looks like it worked.
+func (c *runtimeConfig) addressInUse() bool {
+
+	host := c.Addr.Host
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(c.Addr.Port)), 2*time.Second)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
 // localClient calls the CDS process over its own loopback address. CDS serves
 // HTTPS only, and packs are installed with a certificate issued for the
 // deployment's public name, which will not match 127.0.0.1. Verification is

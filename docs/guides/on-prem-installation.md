@@ -179,10 +179,13 @@ Starting CDS is an explicit lifecycle operation and enablement will not do it
 for you, so the sequence at the end is:
 
 ```bash
-./bin/wso2cds start
+./bin/wso2cds start --daemon
 ./bin/wso2cds enable     # completes organization enablement
 ./bin/wso2cds verify
 ```
+
+`--daemon` here because the shell has to come back to run the next two
+commands.
 
 Enabling the organization is also what runs the first profile-schema
 synchronisation and seeds the default consent categories. Until it has
@@ -194,13 +197,24 @@ happened, the profile, schema and rule endpoints refuse requests.
 
 | Command | What it does |
 |---|---|
-| `wso2cds start` | starts the runtime, detached, and waits for it to report ready |
-| `wso2cds start --debug` | runs it in the foreground, logging to the terminal |
-| `wso2cds stop` | stops it, allowing a graceful shutdown before killing it |
-| `wso2cds restart` | stop, then start |
+| `wso2cds start` | runs the runtime in the foreground; Ctrl+C stops it |
+| `wso2cds start --daemon` | runs it in the background and returns once it reports ready |
+| `wso2cds start --debug` | foreground, logging at DEBUG |
+| `wso2cds stop` | stops a runtime started with `--daemon` |
+| `wso2cds restart` | stop, then start — pass `--daemon` to come back detached |
 | `wso2cds status` | product, platform, runtime and integration state |
-| `wso2cds logs -f` | follows `logs/wso2cds.log` |
+| `wso2cds logs -f` | follows `logs/wso2cds.log`, which `--daemon` writes |
 | `wso2cds verify` | checks the deployment without changing it |
+
+Starting in the foreground is the default because that is what a container, a
+unit file and a process supervisor all want: one process to watch, its logs on
+standard output, and a signal to end it. `--daemon` is for an operator driving
+the installation by hand, and is what gives `stop` and `status` something to
+act on.
+
+A start whose address is already taken is refused outright rather than left to
+fail at bind time — otherwise the process exits while whatever holds the port
+answers the readiness check, and the start looks like it worked.
 
 Starting an installation that was never enabled is refused, with the command
 that would fix it. Nothing is downloaded or configured on your behalf.

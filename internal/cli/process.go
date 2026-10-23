@@ -70,11 +70,21 @@ func writePID(cdsHome string, pid int) error {
 }
 
 // runStart starts the CDS runtime.
+//
+// It runs in the foreground by default and stops on Ctrl-C, which is how the
+// rest of the product family is moving and what a container, a unit file or a
+// process supervisor all want: one process to watch, its logs on stdout, and a
+// signal to end it.
+//
+// --daemon is for an operator driving the installation by hand, where the
+// shell has to come back and `stop` and `status` have something to act on.
 func runStart(args []string) error {
 
 	flags := newFlagSet("start")
-	debug := flags.Bool("debug", false, "run in the foreground and log to the terminal")
-	timeout := flags.Duration("timeout", 2*time.Minute, "how long to wait for CDS to become ready")
+	daemon := flags.Bool("daemon", false, "run in the background and return once CDS is ready")
+	flags.BoolVar(daemon, "d", false, "shorthand for --daemon")
+	debug := flags.Bool("debug", false, "log at DEBUG level")
+	timeout := flags.Duration("timeout", 2*time.Minute, "how long to wait for CDS to become ready, with --daemon")
 	if err := parse(flags, args); err != nil {
 		return err
 	}
@@ -95,9 +105,28 @@ func runStart(args []string) error {
 		return nil
 	}
 
+	cfg, err := readRuntimeConfig(cdsHome)
+	if err != nil {
+		return err
+	}
+
 	if *debug {
-		step("Starting CDS in the foreground")
-		info("CDS_HOME %s", cdsHome)
+		// Set before the secrets are applied, so the file cannot override a
+		// level the operator asked for on the command line.
+		if err := os.Setenv("LOG_LEVEL", "DEBUG"); err != nil {
+			return fmt.Errorf("could not set LOG_LEVEL: %w", err)
+		}
+	}
+
+	if cfg.addressInUse() {
+		return fmt.Errorf("something is already listening on %s, so CDS cannot start there.\n"+
+			"Stop it, or change addr in %s", cfg.localBase(), configFile)
+	}
+
+	if !*daemon {
+		step("Starting CDS at %s", cfg.localBase())
+		info("Press Ctrl+C to stop.")
+		fmt.Println()
 		if err := applySecrets(cdsHome); err != nil {
 			return err
 		}
@@ -106,10 +135,6 @@ func runStart(args []string) error {
 	}
 
 	step("Starting CDS")
-	cfg, err := readRuntimeConfig(cdsHome)
-	if err != nil {
-		return err
-	}
 
 	exe, err := os.Executable()
 	if err != nil {
@@ -195,7 +220,8 @@ func runStop(args []string) error {
 
 	pid := readPID(cdsHome)
 	if pid == 0 {
-		info("CDS is not running")
+		info("CDS is not running in the background.")
+		info("A foreground `wso2cds start` is stopped with Ctrl+C in its own terminal.")
 		_ = os.Remove(path(cdsHome, pidFile))
 		return nil
 	}
@@ -231,6 +257,9 @@ func runStop(args []string) error {
 	return nil
 }
 
+// runRestart stops a running runtime and starts it again, passing its own
+// arguments on to start — so `restart --daemon` restarts a background
+// installation and `restart` alone returns to the foreground.
 func runRestart(args []string) error {
 
 	if err := runStop(nil); err != nil {

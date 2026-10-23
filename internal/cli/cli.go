@@ -52,8 +52,8 @@ func commands() []command {
 	return []command{
 		{name: "enable", summary: "Enable CDS against an Identity Server installation", run: runEnable},
 		{name: "disable", summary: "Remove the CDS integration from the associated Identity Server", run: runDisable},
-		{name: "start", summary: "Start the CDS runtime", run: runStart},
-		{name: "stop", summary: "Stop the CDS runtime", run: runStop},
+		{name: "start", summary: "Start the CDS runtime in the foreground (--daemon to detach)", run: runStart},
+		{name: "stop", summary: "Stop a CDS runtime started with --daemon", run: runStop},
 		{name: "restart", summary: "Restart the CDS runtime", run: runRestart},
 		{name: "status", summary: "Show product, platform, runtime and integration state", run: runStatus},
 		{name: "logs", summary: "Display or follow the CDS logs", run: runLogs},

@@ -20,6 +20,7 @@ package cli
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -84,5 +85,35 @@ func TestRuntimeDefaultsCoverTheLogLevel(t *testing.T) {
 
 	if runtimeDefaults["LOG_LEVEL"] == "" {
 		t.Error("LOG_LEVEL has no default, so a pack cannot start without one being supplied")
+	}
+}
+
+// A port that something else already holds is the case that made a failed
+// start look successful: the runtime exits unable to bind, and whatever owns
+// the port answers the readiness probe in its place.
+func TestAddressInUseIsDetected(t *testing.T) {
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("could not take a port: %v", err)
+	}
+	defer func() { _ = listener.Close() }()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	var config runtimeConfig
+	config.Addr.Host = "127.0.0.1"
+	config.Addr.Port = port
+	if !config.addressInUse() {
+		t.Error("a port held by another listener was reported as free")
+	}
+
+	// And the same address once it is released.
+	_ = listener.Close()
+	var freed runtimeConfig
+	freed.Addr.Host = "127.0.0.1"
+	freed.Addr.Port = port
+	if freed.addressInUse() {
+		t.Error("a released port was reported as in use")
 	}
 }
