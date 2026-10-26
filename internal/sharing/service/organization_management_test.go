@@ -44,7 +44,7 @@ func TestDeletePoliciesOfResourceReadsNoTableWhenOrganizationManagementIsDisable
 		provider.SetTestDB(nil, "")
 		testDB.Terminate()
 	})
-	for _, table := range []string{"cds_share_policy_target", "cds_share_policy"} {
+	for _, table := range []string{"resource_sharing_policy_target", "resource_sharing_policy"} {
 		if _, err := testDB.DB.Exec("DROP TABLE " + table); err != nil {
 			t.Fatalf("failed to drop %s: %v", table, err)
 		}

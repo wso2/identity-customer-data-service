@@ -52,7 +52,7 @@ func setUpDB(t *testing.T) *setup.SQLiteTestDB {
 func TestLookupsReadNoTableWhenOrganizationManagementIsDisabled(t *testing.T) {
 
 	testDB := setUpDB(t)
-	for _, table := range []string{"cds_share_policy_target", "cds_share_policy", "organizations"} {
+	for _, table := range []string{"resource_sharing_policy_target", "resource_sharing_policy", "organizations"} {
 		if _, err := testDB.DB.Exec("DROP TABLE " + table); err != nil {
 			t.Fatalf("failed to drop %s: %v", table, err)
 		}
