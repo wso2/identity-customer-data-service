@@ -27,6 +27,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/engine/algorithms"
 	irStore "github.com/wso2/identity-customer-data-service/internal/identity_resolution/store"
 	irWorker "github.com/wso2/identity-customer-data-service/internal/identity_resolution/worker"
+	profileService "github.com/wso2/identity-customer-data-service/internal/profile/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	dbmodel "github.com/wso2/identity-customer-data-service/internal/system/database/model"
@@ -136,6 +137,79 @@ func Test_FuzzyMatchingSwitch(t *testing.T) {
 		}
 		if findableUnder(t, org, "traits.name", phonetic, profile.ProfileId) {
 			t.Errorf("phonetic key %q written while tolerant matching is switched off", phonetic)
+		}
+	})
+}
+
+// Test_FuzzyMatchingSwitch_SearchPath covers the synchronous search, which reaches the same
+// engine through its own entry point rather than through the worker.
+//
+// Both subtests index while tolerant matching is ON, so the phonetic keys exist either way
+// and blocking finds the candidate in both. Only the search differs. That is deliberate: an
+// earlier version of this test indexed with the switch already off, found nothing, and
+// passed for the wrong reason — the candidate set was empty, so it proved the indexing gate
+// and said nothing about scoring. The gap this covers is a profile indexed before the
+// switch was flipped, which is also the realistic case.
+func Test_FuzzyMatchingSwitch_SearchPath(t *testing.T) {
+	const stored = "Jonathan Smith"
+	const typo = "Jonathon Smith"
+
+	fuzzyOn := func() {
+		conf := config.Config{}
+		conf.IdentityResolution.FuzzyMatchingEnabled = true
+		config.OverrideCDSRuntime(conf)
+	}
+
+	// indexWithFuzzyOn leaves the profile carrying phonetic and LSH keys whatever the
+	// search is later run under.
+	indexWithFuzzyOn := func(t *testing.T, org string) {
+		t.Helper()
+
+		fuzzyOn()
+		insertFuzzyNameRule(t, org)
+		profile := insertBareProfile(t, org, "", map[string]interface{}{"name": stored})
+		irWorker.ResolveProfileAsync(context.Background(), profile)
+
+		phonetic, _ := algorithms.DoubleMetaphonePhrase(stored)
+		if !findableUnder(t, org, "traits.name", phonetic, profile.ProfileId) {
+			t.Fatal("setup failed: the profile was not indexed for tolerant matching, " +
+				"so a search finding nothing below would prove nothing")
+		}
+	}
+
+	search := func(t *testing.T, org string) int {
+		t.Helper()
+
+		results, err := profileService.GetProfilesService().GetProfilesWithFuzzyResolution(
+			context.Background(), org, []string{"traits.name eq " + typo}, 0.5, 10)
+		if err != nil {
+			t.Fatalf("fuzzy search: %v", err)
+		}
+
+		return len(results)
+	}
+
+	t.Run("on — a near miss is found", func(t *testing.T) {
+		org := newOrg("fuzzy-search-on")
+		indexWithFuzzyOn(t, org)
+
+		if n := search(t, org); n == 0 {
+			t.Error("tolerant matching is on but the search found no near miss")
+		}
+	})
+
+	t.Run("off — the indexed candidate is no longer a tolerant match", func(t *testing.T) {
+		org := newOrg("fuzzy-search-off")
+		indexWithFuzzyOn(t, org)
+
+		conf := config.Config{}
+		conf.IdentityResolution.FuzzyMatchingEnabled = false
+		config.OverrideCDSRuntime(conf)
+
+		if n := search(t, org); n != 0 {
+			t.Errorf("search scored %d tolerant match(es) while the server has tolerant "+
+				"matching off; blocking still reaches the candidate, so the rule has to be "+
+				"read as exact", n)
 		}
 	})
 }

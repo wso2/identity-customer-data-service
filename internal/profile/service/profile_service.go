@@ -44,6 +44,7 @@ import (
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	UnificationModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
@@ -2093,20 +2094,22 @@ func flattenProfileAttrs(p profileModel.Profile) map[string]interface{} {
 	return flat
 }
 
-// filterActiveRules returns only active unification rules sorted by priority.
+// filterActiveRules returns the active rules in evaluation order for the synchronous search
+// path, with tolerant matching removed where the server has it switched off.
+//
+// It delegates rather than sorting and defaulting again: this used to be a second copy of
+// ActiveSortedByPriority, and a copy is how the search path came to keep matching tolerantly
+// after the server-wide switch was added to the worker. One implementation is what stops the
+// two disagreeing about what a rule means.
 func filterActiveRules(rules []UnificationModel.UnificationRule) []UnificationModel.UnificationRule {
-	active := make([]UnificationModel.UnificationRule, 0, len(rules))
-	for _, r := range rules {
-		if !r.IsActive {
-			continue
-		}
-		active = append(active, UnificationModel.ApplyDefaults(r, constants.AttributeTypePrimitiveExact,
-			constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
-			constants.DefaultMismatchStrength))
+	active := UnificationModel.ActiveSortedByPriority(rules, constants.AttributeTypePrimitiveExact,
+		constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
+		constants.DefaultMismatchStrength)
+
+	if !config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled {
+		active = UnificationModel.AsExactMatching(active)
 	}
-	sort.Slice(active, func(i, j int) bool {
-		return active[i].Priority < active[j].Priority
-	})
+
 	return active
 }
 

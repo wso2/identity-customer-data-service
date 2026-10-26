@@ -222,6 +222,25 @@ The same name evidence produced no action when the NICs contradicted, and an aut
 
 ---
 
+## Searching profiles by similarity
+
+Unification runs on a queue after a write. The same engine is also reachable synchronously, as a search: `GET /profiles?fuzzyFilter=traits.name eq Jonathan Smith` returns profiles *similar* to the values given rather than equal to them, each with the score it was given and the per-rule breakdown behind it.
+
+Two modes, chosen by what the request carries:
+
+| Request | Behaviour |
+|---|---|
+| `fuzzyFilter` alone | Candidates come from the blocking index, every one is scored, and those at or above `threshold` are returned highest first |
+| `fuzzyFilter` **and** `filter` | Hybrid: a profile is returned only where it is similar on the fuzzy values **and** exactly satisfies every deterministic condition |
+
+It is the same blocking index and the same comparators the worker uses, driven by the organisation's own unification rules — so an attribute is searchable this way only where a rule names it, and the rule's attribute type decides how two values are compared. A rule matched exactly contributes nothing a plain `filter` would not, which is why tolerant search needs at least one rule set to `fuzzy`.
+
+The decision thresholds do not apply here. A search reports scores and lets the caller decide; it never merges anything, and never raises a review task. The `threshold` parameter is a floor on what is returned, unrelated to the organisation's auto-merge and review settings.
+
+Both paths honour `identity_resolution.fuzzy_matching_enabled`. With it off a rule stored as fuzzy is read as exact everywhere, search included, so the endpoint keeps working and returns only exact matches. That is worth stating because the two halves fail differently: with the switch off no new tolerant blocking keys are written, but keys written earlier remain until each profile is next re-indexed — so blocking may still reach a candidate that scoring then declines to call a match.
+
+---
+
 ## Merge cases
 
 Once a match is found, the worker determines the master/child relationship based on whether each profile is *permanent* (has a `userId`) or *temporary* (anonymous, no `userId`).
