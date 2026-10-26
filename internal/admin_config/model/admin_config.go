@@ -23,14 +23,20 @@ type AdminConfig struct {
 	CDSEnabled            bool     `json:"cds_enabled" bson:"cds_enabled"`
 	InitialSchemaSyncDone bool     `json:"initial_schema_sync_done" bson:"initial_schema_sync_done"`
 	SystemApplications    []string `json:"system_applications" bson:"system_applications"`
+	// CORSAllowedOrigins are the browser origins allowed to call this organisation's
+	// endpoints. An empty list means the organisation has configured none, and the
+	// deployment-wide auth.cors_allowed_origins list applies instead.
+	CORSAllowedOrigins []string `json:"cors_allowed_origins" bson:"cors_allowed_origins"`
 }
 
 type AdminConfigAPI struct {
 	CDSEnabled         bool     `json:"cds_enabled" bson:"cds_enabled"`
 	SystemApplications []string `json:"system_applications,omitempty" bson:"system_applications,omitempty"`
+	CORSAllowedOrigins []string `json:"cors_allowed_origins,omitempty" bson:"cors_allowed_origins,omitempty"`
 }
 
 type AdminConfigUpdateAPI struct {
 	CDSEnabled         *bool    `json:"cds_enabled" bson:"cds_enabled"`
 	SystemApplications []string `json:"system_applications,omitempty"`
+	CORSAllowedOrigins []string `json:"cors_allowed_origins,omitempty"`
 }

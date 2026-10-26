@@ -38,7 +38,8 @@ type AdminConfigServiceInterface interface {
 	IsCDSEnabled(ctx context.Context, orgHandle string) bool
 	IsInitialSchemaSyncDone(ctx context.Context, orgHandle string) bool
 	IsSystemApplication(ctx context.Context, orgHandle, appId string) (bool, error)
-	UpdateAdminConfig(ctx context.Context, category model.AdminConfig, orgHandle string) error
+	GetCORSAllowedOrigins(ctx context.Context, orgHandle string) []string
+	UpdateAdminConfig(ctx context.Context, updatedConfig *model.AdminConfig, orgHandle string) error
 	UpdateInitialSchemaSync(ctx context.Context, state bool, orgHandle string) error
 }
 
@@ -77,6 +78,28 @@ func (a AdminConfigService) IsSystemApplication(ctx context.Context, orgHandle, 
 	return false, nil
 }
 
+// GetCORSAllowedOrigins returns the browser origins the organisation allows, served from a
+// short-lived cache because the CORS middleware consults it on every request. An empty
+// result means the organisation has configured none and the caller should fall back to the
+// deployment-wide list. A read failure is reported the same way, so that a database blip
+// leaves the deployment-wide origins working rather than blocking every browser client.
+func (a AdminConfigService) GetCORSAllowedOrigins(ctx context.Context, orgHandle string) []string {
+
+	if cached, found := corsOriginsCache.Get(orgHandle); found {
+		if origins, ok := cached.([]string); ok {
+			return origins
+		}
+	}
+
+	config, err := store.GetAdminConfig(ctx, orgHandle)
+	if err != nil || config == nil {
+		return nil
+	}
+
+	corsOriginsCache.Set(orgHandle, config.CORSAllowedOrigins)
+	return config.CORSAllowedOrigins
+}
+
 func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string) (model.AdminConfig, error) {
 
 	defaultConfig := model.AdminConfig{
@@ -84,6 +107,7 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 		CDSEnabled:            false,
 		InitialSchemaSyncDone: false,
 		SystemApplications:    []string{},
+		CORSAllowedOrigins:    []string{},
 	}
 	config, err := store.GetAdminConfig(ctx, orgHandle)
 	if err != nil || config == nil {
@@ -92,8 +116,16 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 	return *config, nil
 }
 
+// UpdateAdminConfig validates and stores the organisation's configuration. It normalizes
+// updatedConfig in place, so the caller can report back exactly what was stored.
 func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
-	updatedConfig model.AdminConfig, orgHandle string) error {
+	updatedConfig *model.AdminConfig, orgHandle string) error {
+	validatedOrigins, err := validateCORSOrigins(updatedConfig.CORSAllowedOrigins)
+	if err != nil {
+		return err
+	}
+	updatedConfig.CORSAllowedOrigins = validatedOrigins
+
 	isCDSEnabledInitialState := a.IsCDSEnabled(ctx, orgHandle)
 	isInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(ctx, orgHandle)
 
@@ -132,7 +164,14 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 		}
 	}
 
-	return store.UpdateAdminConfig(ctx, updatedConfig, orgHandle)
+	if err := store.UpdateAdminConfig(ctx, *updatedConfig, orgHandle); err != nil {
+		return err
+	}
+
+	// Drop the cached origins so this process serves the new list at once. Other replicas
+	// pick it up when their own entry expires.
+	corsOriginsCache.Delete(orgHandle)
+	return nil
 }
 
 func (a AdminConfigService) UpdateInitialSchemaSync(ctx context.Context, state bool, orgHandle string) error {
