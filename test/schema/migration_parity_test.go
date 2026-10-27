@@ -24,7 +24,10 @@ import (
 	"testing"
 )
 
-const migrationScript = "../../dbscripts/migrations/001-identity-resolution-postgres.sql"
+// The migration is a shell script rather than a .sql file so operations has one artifact
+// to attach to a change request and run. The SQL is embedded in it, and these checks read
+// it as text, which works the same either way.
+const migrationScript = "../../dbscripts/migrations/identityResolutionSchema.sh"
 
 // identityResolutionTables are the tables a database created before this feature does not
 // have. A fresh install gets them from dbscripts/postgres.sql; an existing one gets them
