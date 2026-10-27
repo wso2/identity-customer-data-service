@@ -32,6 +32,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	dbmodel "github.com/wso2/identity-customer-data-service/internal/system/database/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
+	urStore "github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
 )
 
 // fuzzyRuleInsert writes the rule row directly, leaving property_id unset. The store always
@@ -210,6 +211,61 @@ func Test_FuzzyMatchingSwitch_SearchPath(t *testing.T) {
 			t.Errorf("search scored %d tolerant match(es) while the server has tolerant "+
 				"matching off; blocking still reaches the candidate, so the rule has to be "+
 				"read as exact", n)
+		}
+	})
+}
+
+// Test_FuzzyMatchingSwitch_Backfill covers the index backfill, which writes blocking keys
+// straight from the rule rather than through the evaluation path.
+//
+// Activating a rule rebuilds that attribute's keys across every profile in the org. The
+// backfill therefore has its own reading of the rule's method, and has to honour the server
+// switch like the rest — otherwise an org on a server with tolerant matching switched off
+// still has its whole index widened the moment a fuzzy-stored rule is toggled on.
+func Test_FuzzyMatchingSwitch_Backfill(t *testing.T) {
+	const fullName = "Jonathan Smith"
+
+	phonetic, _ := algorithms.DoubleMetaphonePhrase(fullName)
+
+	backfill := func(t *testing.T, org string, fuzzyOn bool) (exact, tolerant bool) {
+		t.Helper()
+
+		conf := config.Config{}
+		conf.IdentityResolution.FuzzyMatchingEnabled = fuzzyOn
+		config.OverrideCDSRuntime(conf)
+
+		// The profile exists before the rule, so the only thing that can index it is the
+		// backfill the rule's activation triggers.
+		profile := insertBareProfile(t, org, "", map[string]interface{}{"name": fullName})
+		insertFuzzyNameRule(t, org)
+
+		rules, err := urStore.GetUnificationRules(context.Background(), org)
+		if err != nil || len(rules) == 0 {
+			t.Fatalf("load rules for %s: %v", org, err)
+		}
+		irWorker.IndexNewAttribute(context.Background(), org, rules[0])
+
+		return findableUnder(t, org, "traits.name", "jonathan smith", profile.ProfileId),
+			findableUnder(t, org, "traits.name", phonetic, profile.ProfileId)
+	}
+
+	t.Run("on — the backfill widens the index", func(t *testing.T) {
+		exact, tolerant := backfill(t, newOrg("backfill-on"), true)
+		if !exact {
+			t.Error("the backfill did not write the exact key")
+		}
+		if !tolerant {
+			t.Errorf("the backfill wrote no phonetic key %q while tolerant matching is on", phonetic)
+		}
+	})
+
+	t.Run("off — the backfill writes only the exact key", func(t *testing.T) {
+		exact, tolerant := backfill(t, newOrg("backfill-off"), false)
+		if !exact {
+			t.Error("the backfill must still write the exact key; the rule is narrowed, not disabled")
+		}
+		if tolerant {
+			t.Errorf("the backfill wrote phonetic key %q while tolerant matching is switched off", phonetic)
 		}
 	})
 }
