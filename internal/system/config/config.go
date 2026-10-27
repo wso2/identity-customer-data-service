@@ -157,6 +157,37 @@ type Config struct {
 	Shutdown     ShutdownConfig     `yaml:"shutdown"`
 	// ApplicationIdentifierType selects how applications are identified: "client_id" (default) or "app_id".
 	ApplicationIdentifierType string `yaml:"application_identifier_type"`
+
+	IdentityResolution IdentityResolutionConfig `yaml:"identity_resolution"`
+}
+
+// IdentityResolutionConfig holds server-wide settings for profile matching.
+type IdentityResolutionConfig struct {
+	// AllowEvidenceStrengthOverride lets a unification rule carry its own match_strength
+	// and mismatch_strength instead of taking the values derived from its attribute_type.
+	//
+	// Off by default. The strengths decide whether an attribute can merge two profiles on
+	// its own and whether a difference in it blocks a merge outright, so getting them wrong
+	// silently changes who gets merged. Until there is a way for an operator to see the
+	// effect of a change before committing to it, the derived values are the safer contract
+	// and the fields are rejected rather than quietly ignored.
+	AllowEvidenceStrengthOverride bool `yaml:"allow_evidence_strength_override"`
+
+	// FuzzyMatchingEnabled switches tolerant matching on for the whole server.
+	//
+	// Off by default, including for a deployment.yaml written before the key existed. An
+	// upgrade therefore keeps matching exactly as it did, and an operator turns tolerant
+	// matching on when the organisation is ready for it rather than finding that an
+	// upgrade changed which profiles get unified.
+	//
+	// While off, new fuzzy rules are refused, the options endpoint stops offering the
+	// method, and a rule already stored as fuzzy is evaluated as an exact match. Switching
+	// it back on restores that rule, because only the reading of it changes.
+	//
+	// Turning it off undoes nothing: profiles already unified stay unified, review tasks a
+	// fuzzy rule raised stay in the queue to be answered, and blocking keys written for
+	// fuzzy matching remain until each profile is next re-indexed.
+	FuzzyMatchingEnabled bool `yaml:"fuzzy_matching_enabled"`
 }
 
 // ShutdownConfig bounds the graceful shutdown of the whole process. Zero, which

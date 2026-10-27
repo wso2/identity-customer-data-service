@@ -127,6 +127,12 @@ func Test_Profile(t *testing.T) {
 		_, err := profileSvc.CreateProfile(context.Background(), profileRequest, SuperTenantOrg)
 		require.NoError(t, err)
 
+		// The profile just created carries the same user_id as the one above, so the
+		// unification worker merges the two. That runs asynchronously: listing before it
+		// lands returns the duplicate as a master, and the merge then overwrites whatever
+		// this test wrote to it. Wait for the queue to settle on a single master first.
+		waitForSingleMaster(t, profileSvc, SuperTenantOrg)
+
 		var updatedRequest profileModel.ProfileRequest
 		jsonData := []byte(`{
 		"identity_attributes": {
@@ -172,4 +178,21 @@ func Test_Profile(t *testing.T) {
 		_ = profileSchemaSvc.DeleteProfileSchema(context.Background(), SuperTenantOrg)
 		_ = profileSchemaSvc.DeleteProfileSchemaAttributesByScope(context.Background(), SuperTenantOrg, constants.IdentityAttributes)
 	})
+}
+
+// waitForSingleMaster polls until the unification worker has merged the duplicate profiles an
+// organisation holds down to one master, so a test that lists profiles afterwards sees a
+// settled queue rather than whichever profile the merge had not reached yet.
+func waitForSingleMaster(t *testing.T, profileSvc profileService.ProfilesServiceInterface, org string) {
+	t.Helper()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		profiles, _, err := profileSvc.GetAllProfilesCursor(context.Background(), org, 10, nil)
+		if err == nil && len(profiles) == 1 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("profiles in %s were not merged down to a single master within the deadline", org)
 }
