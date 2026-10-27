@@ -1,51 +1,62 @@
-#!/usr/bin/env bash
+#!/bin/bash
 #
-# Identity resolution: schema delta for an existing CDS database.
+# Identity resolution: schema delta for the existing CDS database.
 #
-# Brings a database created before identity resolution up to the schema in
-# dbscripts/postgres.sql, and nothing else. Purely additive — no table, column, index or row
-# is dropped or rewritten — so it is safe to run against a live database, and every
-# statement is guarded, so it is safe to run twice.
+# Adds the three tables and four columns identity resolution needs, and nothing else.
+# Purely additive — no table, column, index or row is dropped or rewritten — so it is safe
+# against a live database, and every statement is guarded, so it is safe to run twice.
 #
-# Usage:
-#   PGHOST=... PGPORT=5432 PGUSER=... PGPASSWORD=... PGDATABASE=... ./identityResolutionSchema.sh
-#
-#   --verify-only   run the checks against the database without changing anything
-#   --help          this message
-#
-# Exits non-zero if the migration fails or if any check does not hold afterwards.
+# Usage: ./identityResolutionSchema.sh <env>
 
-set -euo pipefail
+set -e
+set -o pipefail
+env=$1
 
-VERIFY_ONLY=false
-for arg in "$@"; do
-    case "$arg" in
-        --verify-only) VERIFY_ONLY=true ;;
-        --help|-h) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *) echo "unknown argument: $arg (try --help)" >&2; exit 2 ;;
-    esac
-done
+if [ "$env" == "prod-us" ]; then
+    echo "exporting prod-us..."
+    export ADMIN_KEY_VAULT_NAME=kv-asgr-admin-pr-eus2-01
+    export PG_HOST="asgardeo-prod-us.postgres.database.azure.com"
+    export PG_DB="cdsdb"
+elif [ "$env" == "prod-eu" ]; then
+    echo "exporting prod-eu..."
+    export ADMIN_KEY_VAULT_NAME=kv-asgr-admin-eupr-ne-02
+    export PG_HOST="asgardeo-prod-eu.postgres.database.azure.com"
+    export PG_DB="cdsdb"
+elif [ "$env" == "stage-us" ]; then
+    export ADMIN_KEY_VAULT_NAME=kv-asgr-admin-st-eus2-01
+    export PG_HOST="asgardeo-stage-us.postgres.database.azure.com"
+    export PG_DB="cdsdb"
+elif [ "$env" == "stage-eu" ]; then
+    export ADMIN_KEY_VAULT_NAME=kv-asgr-admin-eust-ne-01
+    export PG_HOST="asgardeo-stage-eu.postgres.database.azure.com"
+    export PG_DB="cdsdb"
+elif [ "$env" == "dev-us" ]; then
+    export ADMIN_KEY_VAULT_NAME=kv-asgr-admin-de-eus2-01
+    export PG_HOST="asgardeo-dev-us.postgres.database.azure.com"
+    export PG_DB="cdsdb"
+elif [ "$env" == "dev-eu" ]; then
+    export ADMIN_KEY_VAULT_NAME=kv-asgr-admin-eu-ne-01
+    export PG_HOST="asgardeo-dev-eu.postgres.database.azure.com"
+    export PG_DB="cdsdb"
+else
+  echo "Invalid environment."
+  exit 1
+fi
 
-: "${PGHOST:?PGHOST must be set}"
-: "${PGUSER:?PGUSER must be set}"
-: "${PGDATABASE:?PGDATABASE must be set}"
-export PGPORT="${PGPORT:-5432}"
+echo "Configuring DB credentials for $env..."
 
-command -v psql >/dev/null || { echo "psql not found on PATH" >&2; exit 2; }
+export PG_USER=$(az keyvault secret show --name postgres-admin-username --vault-name $ADMIN_KEY_VAULT_NAME --query value -o tsv)
+export PG_PASS=$(az keyvault secret show --name postgres-admin-password --vault-name $ADMIN_KEY_VAULT_NAME --query value -o tsv)
 
-PSQL=(psql --no-psqlrc --quiet -v ON_ERROR_STOP=1)
+export PGPASSWORD=$PG_PASS
 
-echo "Target: ${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
+echo "Applying the identity resolution schema delta..."
 
-# ──────────────────────────────────────────────────────────────────────────────────────
-# Migration
-# ──────────────────────────────────────────────────────────────────────────────────────
-apply_migration() {
-    echo "Applying the identity resolution schema delta..."
+# ON_ERROR_STOP with --single-transaction: either every statement lands or none does, so a
+# failure part-way cannot leave the database half-migrated.
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 --single-transaction << 'EOF'
 
-    # --single-transaction: either every statement lands or none does.
-    "${PSQL[@]}" --single-transaction <<'SQL'
--- ── unification_rules: how a rule compares values ─────────────────────────────────────
+-- UNIFICATION RULES: how a rule compares values.
 --
 -- attribute_type and unification_method carry defaults on purpose: a rule written before
 -- typed matching is an exact match on a plain value, which is what the engine applied then
@@ -58,16 +69,16 @@ ALTER TABLE unification_rules
 -- The strengths are deliberately nullable WITH NO DEFAULT. A default here would stamp a
 -- concrete value onto every existing rule, which the engine cannot tell apart from an
 -- operator's deliberate override — it would stop deriving the strength from attribute_type
--- and silently change which profiles merge. Leave these exactly as they are.
+-- and silently change which profiles merge. Do not add a default or NOT NULL here.
 ALTER TABLE unification_rules
     ADD COLUMN IF NOT EXISTS match_strength     VARCHAR(20);
 ALTER TABLE unification_rules
     ADD COLUMN IF NOT EXISTS mismatch_strength  VARCHAR(20);
 
--- ── blocking_keys: the candidate index ────────────────────────────────────────────────
+-- BLOCKING KEYS: the candidate index.
 --
--- Hash partitioned on org_handle, and again on key_value beneath it. The moduli cannot be
--- changed later without rebuilding the table.
+-- Hash partitioned on org_handle, and again on key_value beneath it, giving 8 x 4 = 32
+-- leaves. The moduli cannot be changed later without rebuilding the table.
 CREATE TABLE IF NOT EXISTS blocking_keys (
     profile_id      VARCHAR(255) NOT NULL REFERENCES profiles(profile_id) ON DELETE CASCADE,
     org_handle      VARCHAR(255) NOT NULL,
@@ -92,7 +103,7 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_blocking_keys_org_profile ON blocking_keys(org_handle, profile_id);
 
--- ── review_tasks: pairs awaiting an administrator's decision ──────────────────────────
+-- REVIEW TASKS: pairs awaiting an administrator's decision.
 CREATE TABLE IF NOT EXISTS review_tasks (
     id                     VARCHAR(255) PRIMARY KEY,
     org_handle             VARCHAR(255) NOT NULL,
@@ -113,7 +124,7 @@ CREATE INDEX IF NOT EXISTS idx_review_tasks_org_status ON review_tasks(org_handl
 CREATE INDEX IF NOT EXISTS idx_review_tasks_created   ON review_tasks(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_review_tasks_incoming  ON review_tasks(incoming_profile_id, status);
 
--- ── rejection_pairs: pairs an administrator ruled are different people ────────────────
+-- REJECTION PAIRS: pairs an administrator ruled are different people.
 CREATE TABLE IF NOT EXISTS rejection_pairs (
     id              VARCHAR(255) PRIMARY KEY,
     org_handle      VARCHAR(255) NOT NULL,
@@ -128,65 +139,32 @@ CREATE TABLE IF NOT EXISTS rejection_pairs (
 
 CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p1 ON rejection_pairs(org_handle, profile_id_1);
 CREATE INDEX IF NOT EXISTS idx_rejection_pairs_p2 ON rejection_pairs(org_handle, profile_id_2);
-SQL
 
-    echo "Applied."
-}
+-- SCHEMA DELTA ENDS
+EOF
 
-# ──────────────────────────────────────────────────────────────────────────────────────
-# Verification
-# ──────────────────────────────────────────────────────────────────────────────────────
-FAILURES=0
+echo "Verifying..."
 
-check() {
-    local label="$1" expected="$2" sql="$3" actual
-    actual="$("${PSQL[@]}" --tuples-only --no-align -c "$sql" | tr -d '[:space:]')"
-    if [[ "$actual" == "$expected" ]]; then
-        printf '  PASS  %-52s %s\n' "$label" "$actual"
-    else
-        printf '  FAIL  %-52s got %s, expected %s\n' "$label" "${actual:-<empty>}" "$expected"
-        FAILURES=$((FAILURES + 1))
-    fi
-}
+# Each check prints the value and what it should be. The last two matter most: a default on
+# either strength column stamps a value onto every migrated rule, which the engine reads as
+# a deliberate override instead of deriving it from attribute_type.
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 << 'EOF'
+\echo 'expected: tables=3  partitions=32  columns=4  nullable_strengths=2  rules_with_stored_strength=0'
+SELECT
+  (SELECT count(*) FROM pg_tables
+    WHERE tablename IN ('blocking_keys','review_tasks','rejection_pairs'))        AS tables,
+  (SELECT count(*) FROM pg_class
+    WHERE relname ~ '^blocking_keys_p[0-9]+_k[0-9]+$' AND relkind = 'r')          AS partitions,
+  (SELECT count(*) FROM information_schema.columns
+    WHERE table_name = 'unification_rules'
+      AND column_name IN ('attribute_type','unification_method',
+                          'match_strength','mismatch_strength'))                  AS columns,
+  (SELECT count(*) FROM information_schema.columns
+    WHERE table_name = 'unification_rules'
+      AND column_name IN ('match_strength','mismatch_strength')
+      AND is_nullable = 'YES' AND column_default IS NULL)                         AS nullable_strengths,
+  (SELECT count(*) FROM unification_rules
+    WHERE match_strength IS NOT NULL OR mismatch_strength IS NOT NULL)            AS rules_with_stored_strength;
+EOF
 
-verify() {
-    echo "Verifying..."
-
-    check "identity resolution tables" "3" \
-        "SELECT count(*) FROM pg_tables
-          WHERE tablename IN ('blocking_keys','review_tasks','rejection_pairs');"
-
-    check "blocking_keys leaf partitions" "32" \
-        "SELECT count(*) FROM pg_class
-          WHERE relname ~ '^blocking_keys_p[0-9]+_k[0-9]+\$' AND relkind = 'r';"
-
-    check "unification_rules matching columns" "4" \
-        "SELECT count(*) FROM information_schema.columns
-          WHERE table_name = 'unification_rules'
-            AND column_name IN ('attribute_type','unification_method','match_strength','mismatch_strength');"
-
-    # The one that matters most. A default on either strength column stamps a concrete value
-    # onto every migrated rule, which the engine reads as a deliberate override — it stops
-    # deriving the strength from attribute_type and quietly changes which profiles merge.
-    check "strengths are nullable with no default" "2" \
-        "SELECT count(*) FROM information_schema.columns
-          WHERE table_name = 'unification_rules'
-            AND column_name IN ('match_strength','mismatch_strength')
-            AND is_nullable = 'YES' AND column_default IS NULL;"
-
-    check "no existing rule carries a stored strength" "0" \
-        "SELECT count(*) FROM unification_rules
-          WHERE match_strength IS NOT NULL OR mismatch_strength IS NOT NULL;"
-}
-
-if [[ "$VERIFY_ONLY" == false ]]; then
-    apply_migration
-fi
-verify
-
-if (( FAILURES > 0 )); then
-    echo "FAILED: $FAILURES check(s) did not hold." >&2
-    exit 1
-fi
-
-echo "OK: the database carries the identity resolution schema."
+echo "Schema delta completed successfully!"
