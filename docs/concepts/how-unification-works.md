@@ -222,6 +222,16 @@ The same name evidence produced no action when the NICs contradicted, and an aut
 
 ---
 
+## Switching tolerant matching on and off
+
+`identity_resolution.fuzzy_matching_enabled` can be turned on or off on a running deployment. The schema is identical either way, so neither direction needs a migration — but the two are not symmetric.
+
+**Off** is immediate. A rule stored as `fuzzy` is read as exact everywhere: the worker, the synchronous search, the index backfill, and the options endpoint stops offering the method. The stored value is untouched, so switching back on restores what the operator configured rather than requiring the rules to be written again. Two residues, neither harmful: phonetic and LSH keys already written stay until each profile is next re-indexed, where they gather candidates that then score exactly — comparisons, not wrong answers — and review tasks raised while it was on stay in the queue to be answered.
+
+**On needs a reindex.** Nothing tolerant was written while it was off, so blocking cannot reach any profile created or updated in that period, and tolerant matching quietly under-matches. Deactivating and reactivating each fuzzy rule rebuilds that attribute's keys across the organisation. Without that step, enabling the feature looks like it did nothing.
+
+---
+
 ## Searching profiles by similarity
 
 Unification runs on a queue after a write. The same engine is also reachable synchronously, as a search: `GET /profiles?fuzzyFilter=traits.name eq Jonathan Smith` returns profiles *similar* to the values given rather than equal to them, each with the score it was given and the per-rule breakdown behind it.

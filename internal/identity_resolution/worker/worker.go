@@ -457,6 +457,15 @@ func IndexNewAttribute(ctx context.Context, orgHandle string, rule urModel.Unifi
 	if method == "" {
 		method = constants.UnificationMethodDeterministic
 	}
+	// The backfill writes keys straight from the rule rather than through the evaluation
+	// path, so it has to ask the same question that path asks. Without this, a server with
+	// tolerant matching switched off still writes phonetic and LSH keys across every
+	// profile in the org the moment a fuzzy-stored rule is toggled active — work the
+	// feature is not meant to be doing, and index rows nothing will ever read.
+	if method == constants.UnificationMethodFuzzy &&
+		!config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled {
+		method = constants.UnificationMethodDeterministic
+	}
 
 	logger.Info(fmt.Sprintf("Reindexer: starting backfill of '%s' for org '%s'",
 		rule.PropertyName, orgHandle))
