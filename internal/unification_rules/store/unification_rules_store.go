@@ -137,7 +137,7 @@ func GetUnificationRules(ctx context.Context, orgHandle string) ([]model.Unifica
 }
 
 // GetUnificationRule fetches a specific unification rule by its Id
-func GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationRule, error) {
+func GetUnificationRule(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -154,7 +154,7 @@ func GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationR
 	defer dbClient.Close()
 
 	query := scripts.GetUnificationRule
-	results, err := dbClient.ExecuteQueryContext(ctx, query, ruleId)
+	results, err := dbClient.ExecuteQueryContext(ctx, query, ruleId, orgHandle)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Debug(fmt.Sprintf("No unification rule found for rule_id: %s ", ruleId))
@@ -182,7 +182,7 @@ func GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationR
 }
 
 // PatchUnificationRule applies partial updates to a unification rule.
-func PatchUnificationRule(ctx context.Context, ruleId string, updatedRule model.UnificationRule) error {
+func PatchUnificationRule(ctx context.Context, ruleId, orgHandle string, updatedRule model.UnificationRule) error {
 
 	defer invalidateRulesCache()
 
@@ -203,7 +203,8 @@ func PatchUnificationRule(ctx context.Context, ruleId string, updatedRule model.
 	query := scripts.UpdateUnificationRule
 	_, err = dbClient.ExecuteQueryContext(ctx, query, updatedRule.RuleName, updatedRule.Priority,
 		updatedRule.IsActive, updatedRule.AttributeType, updatedRule.UnificationMethod,
-		updatedRule.MatchStrength, updatedRule.MismatchStrength, time.Now().UTC(), ruleId)
+		updatedRule.MatchStrength, updatedRule.MismatchStrength, time.Now().UTC(), ruleId,
+		orgHandle)
 
 	if err != nil {
 		errorMsg := fmt.Sprintf("Error occurred while updating unification rule for rule_id: %s", ruleId)
@@ -221,7 +222,7 @@ func PatchUnificationRule(ctx context.Context, ruleId string, updatedRule model.
 }
 
 // DeleteUnificationRule deletes a unification rule by its Id
-func DeleteUnificationRule(ctx context.Context, ruleId string) error {
+func DeleteUnificationRule(ctx context.Context, ruleId, orgHandle string) error {
 
 	defer invalidateRulesCache()
 
@@ -240,7 +241,7 @@ func DeleteUnificationRule(ctx context.Context, ruleId string) error {
 	defer dbClient.Close()
 
 	query := scripts.DeleteUnificationRule
-	_, err = dbClient.ExecuteQueryContext(ctx, query, ruleId)
+	_, err = dbClient.ExecuteQueryContext(ctx, query, ruleId, orgHandle)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to delete unification rule: %s", ruleId)
 		logger.Debug(errorMsg, log.Error(err))

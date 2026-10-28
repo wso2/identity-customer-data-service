@@ -92,7 +92,7 @@ func (ph *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	profile, err := profilesService.GetProfile(ctx, profileId)
+	profile, err := profilesService.GetProfile(ctx, profileId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -161,7 +161,7 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 	// Try cookie-based resolution first
 	cookie, err := r.Cookie(constants.ProfileCookie)
 	if err == nil && cookie.Value != "" {
-		cookieObj, err := profilesService.GetProfileCookieById(ctx, cookie.Value)
+		cookieObj, err := profilesService.GetProfileCookieById(ctx, cookie.Value, orgHandle)
 		if err == nil && cookieObj != nil && cookieObj.IsActive {
 			profileId = cookieObj.ProfileId
 		}
@@ -202,7 +202,7 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 				utils.HandleError(w, clientError)
 				return
 			}
-			profile, err := profilesService.FindProfileByUserId(ctx, subStr)
+			profile, err := profilesService.FindProfileByUserId(ctx, subStr, orgHandle)
 			if err != nil {
 				utils.HandleError(w, err)
 				return
@@ -221,7 +221,7 @@ func (ph *ProfileHandler) GetCurrentUserProfile(w http.ResponseWriter, r *http.R
 	}
 
 	// Fetch the profile using the resolved profile ID
-	profile, err := profilesService.GetProfile(ctx, profileId)
+	profile, err := profilesService.GetProfile(ctx, profileId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -272,7 +272,7 @@ func (ph *ProfileHandler) DeleteProfile(w http.ResponseWriter, r *http.Request) 
 	}
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	err = profilesService.DeleteProfile(ctx, profileId)
+	err = profilesService.DeleteProfile(ctx, profileId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -669,10 +669,11 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Request, cookieVal string) bool {
 
 	ctx := r.Context()
+	orgHandle := utils.ExtractOrgHandleFromPath(r)
 
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
-	cookieObj, err := profilesService.GetProfileCookieById(ctx, cookieVal)
+	cookieObj, err := profilesService.GetProfileCookieById(ctx, cookieVal, orgHandle)
 	if err != nil || cookieObj == nil {
 		return false
 	}
@@ -680,7 +681,7 @@ func (ph *ProfileHandler) handleExistingCookie(w http.ResponseWriter, r *http.Re
 	if !cookieObj.IsActive {
 		return false
 	}
-	profileResponse, err := profilesService.GetProfile(ctx, cookieObj.ProfileId)
+	profileResponse, err := profilesService.GetProfile(ctx, cookieObj.ProfileId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return true
@@ -759,7 +760,7 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	profileResponse, err := profilesService.GetProfile(ctx, profileId)
+	profileResponse, err := profilesService.GetProfile(ctx, profileId, orgHandle)
 	if err != nil {
 		errMsg := fmt.Sprintf("Failed to update profile with profileId: %s", profileId)
 		log.GetLogger().Debug(errMsg, log.Error(err))
@@ -818,7 +819,7 @@ func (ph *ProfileHandler) PatchProfile(w http.ResponseWriter, r *http.Request) {
 		utils.HandleError(w, err)
 		return
 	}
-	profileResponse, err := profilesService.GetProfile(ctx, profileId)
+	profileResponse, err := profilesService.GetProfile(ctx, profileId, orgHandle)
 	if err != nil {
 		errMsg := fmt.Sprintf("Failed to update profile with profileId: %s", profileId)
 		log.GetLogger().Debug(errMsg, log.Error(err))
@@ -890,7 +891,7 @@ func (ph *ProfileHandler) LinkProfile(w http.ResponseWriter, r *http.Request) {
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	existingProfile, err := profilesService.GetProfile(ctx, profileId)
+	existingProfile, err := profilesService.GetProfile(ctx, profileId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -968,7 +969,7 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 	// Try cookie-based profileId resolution (preferred)
 	cookie, err := r.Cookie(constants.ProfileCookie)
 	if err == nil && cookie.Value != "" {
-		cookieObj, err := profilesService.GetProfileCookieById(ctx, cookie.Value)
+		cookieObj, err := profilesService.GetProfileCookieById(ctx, cookie.Value, orgHandle)
 		if err == nil && cookieObj != nil && cookieObj.IsActive {
 			profileId = cookieObj.ProfileId
 		}
@@ -1000,7 +1001,7 @@ func (ph *ProfileHandler) PatchCurrentUserProfile(w http.ResponseWriter, r *http
 			}
 
 			// Lookup profile by sub (username)
-			profile, err := profilesService.FindProfileByUserId(ctx, subStr)
+			profile, err := profilesService.FindProfileByUserId(ctx, subStr, orgHandle)
 			if err != nil || profile == nil {
 				http.Error(w, "Profile not found for token subject", http.StatusUnauthorized)
 				return
@@ -1114,14 +1115,14 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	if profileSync.Event == constants.AddUserEvent {
 		if profileSync.ProfileCookie != "" && profileSync.UserId != "" {
 			logger.Debug("Syncing profile for user id: " + profileSync.UserId + " with profile cookie: " + profileSync.ProfileCookie)
-			cookieObj, err := profilesService.GetProfileCookieById(ctx, profileSync.ProfileCookie)
+			cookieObj, err := profilesService.GetProfileCookieById(ctx, profileSync.ProfileCookie, orgHandle)
 			if err == nil && cookieObj != nil && cookieObj.IsActive {
 				profileId = cookieObj.ProfileId
 				logger.Debug("Found active profile cookie with profile id: " + profileId)
 			}
 
 			// This scenario is when the user anonymously tried and then trying to signup or login. So profile with profile id exists
-			existingProfile, err = profilesService.GetProfile(ctx, profileId)
+			existingProfile, err = profilesService.GetProfile(ctx, profileId, orgHandle)
 			if err != nil {
 				utils.HandleError(writer, err)
 				return
@@ -1156,7 +1157,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 		} else if profileSync.ProfileCookie == "" && profileSync.UserId != "" {
 			logger.Debug("Syncing profile for user id: " + profileSync.UserId + " without profile cookie")
 			// this is when we create a profile for a new user created in IS
-			existingProfile, err = profilesService.FindProfileByUserId(ctx, profileSync.UserId)
+			existingProfile, err = profilesService.FindProfileByUserId(ctx, profileSync.UserId, orgHandle)
 			if err != nil {
 				if !utils.HasClientErrorCode(err, errors2.PROFILE_NOT_FOUND.Code) {
 					utils.HandleError(writer, err)
@@ -1187,7 +1188,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 	}
 
 	if profileSync.Event == constants.DeleteUserEvent {
-		existingProfile, err = profilesService.FindProfileByUserId(ctx, profileSync.UserId)
+		existingProfile, err = profilesService.FindProfileByUserId(ctx, profileSync.UserId, orgHandle)
 		if err != nil {
 			utils.HandleError(writer, err)
 			return
@@ -1196,7 +1197,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			logger.Debug("No profile found for user: " + profileSync.UserId)
 			return
 		}
-		err := profilesService.DeleteProfile(ctx, existingProfile.ProfileId)
+		err := profilesService.DeleteProfile(ctx, existingProfile.ProfileId, orgHandle)
 		if err != nil {
 			utils.HandleError(writer, err)
 			return
@@ -1206,7 +1207,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 	if profileSync.Event == constants.UpdateUserClaimsEvent || profileSync.Event == constants.UpdateUserClaimEvent {
 		if profileSync.UserId != "" {
-			existingProfile, err = profilesService.FindProfileByUserId(ctx, profileSync.UserId)
+			existingProfile, err = profilesService.FindProfileByUserId(ctx, profileSync.UserId, orgHandle)
 			if err != nil {
 				utils.HandleError(writer, err)
 				return
@@ -1280,7 +1281,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 
 			// Step 1: Resolve anonymous profile from cookie
 			var anonymousProfile *model.ProfileResponse
-			cookieObj, err := profilesService.GetProfileCookieById(ctx, profileSync.ProfileCookie)
+			cookieObj, err := profilesService.GetProfileCookieById(ctx, profileSync.ProfileCookie, orgHandle)
 			if err != nil {
 				if !utils.HasClientErrorCode(err, errors2.PROFILE_COOKIE_NOT_FOUND.Code) {
 					utils.HandleError(writer, err)
@@ -1288,7 +1289,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				}
 			}
 			if cookieObj != nil && cookieObj.IsActive {
-				anonymousProfile, err = profilesService.GetProfile(ctx, cookieObj.ProfileId)
+				anonymousProfile, err = profilesService.GetProfile(ctx, cookieObj.ProfileId, orgHandle)
 				if err != nil {
 					logger.Debug("Failed to fetch anonymous profile from cookie",
 						log.Error(err))
@@ -1297,7 +1298,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 			}
 
 			// Step 2: Look up existing profile by userId
-			existingUserProfile, err := profilesService.FindProfileByUserId(ctx, profileSync.UserId)
+			existingUserProfile, err := profilesService.FindProfileByUserId(ctx, profileSync.UserId, orgHandle)
 			if err != nil {
 				if !utils.HasClientErrorCode(err, errors2.PROFILE_NOT_FOUND.Code) {
 					utils.HandleError(writer, err)
@@ -1368,7 +1369,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				logger.Debug("No profile cookie provided for session termination. Skipping cookie deactivation.")
 				return
 			}
-			existingProfile, err = profilesService.FindProfileByUserId(ctx, profileSync.UserId)
+			existingProfile, err = profilesService.FindProfileByUserId(ctx, profileSync.UserId, orgHandle)
 			if err != nil {
 				utils.HandleError(writer, err)
 				return
@@ -1379,7 +1380,7 @@ func (ph *ProfileHandler) SyncProfile(writer http.ResponseWriter, request *http.
 				return
 			}
 
-			profileCookie, err := profilesService.GetProfileCookieById(ctx, profileSync.ProfileCookie)
+			profileCookie, err := profilesService.GetProfileCookieById(ctx, profileSync.ProfileCookie, orgHandle)
 			if err != nil {
 				if utils.HasClientErrorCode(err, errors2.PROFILE_COOKIE_NOT_FOUND.Code) {
 					logger.Debug("No cookie found during session termination. Skipping cookie deactivation.")
@@ -1455,7 +1456,7 @@ func (ph *ProfileHandler) GetProfileConsents(w http.ResponseWriter, r *http.Requ
 	profilesService := profilesProvider.GetProfilesService()
 
 	// Verify profile exists first
-	consentRecords, err := profilesService.GetProfileConsents(ctx, profileId)
+	consentRecords, err := profilesService.GetProfileConsents(ctx, profileId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -1499,7 +1500,7 @@ func (ph *ProfileHandler) UpdateProfileConsents(w http.ResponseWriter, r *http.R
 	profilesService := profilesProvider.GetProfilesService()
 
 	// Verify profile exists first
-	_, err = profilesService.GetProfile(ctx, profileId)
+	_, err = profilesService.GetProfile(ctx, profileId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

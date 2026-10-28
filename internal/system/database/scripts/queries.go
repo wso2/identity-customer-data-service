@@ -150,10 +150,10 @@ FROM unification_rules WHERE org_handle = $1`)
 var GetUnificationRule = newQuery("CDS-UNR-02",
 	`SELECT rule_id, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method,
 	 match_strength, mismatch_strength, created_at, updated_at
-	 FROM unification_rules WHERE rule_id = $1`)
+	 FROM unification_rules WHERE rule_id = $1 AND org_handle = $2`)
 
 var DeleteUnificationRule = newQuery("CDS-UNR-03",
-	`DELETE FROM unification_rules WHERE rule_id = $1`)
+	`DELETE FROM unification_rules WHERE rule_id = $1 AND org_handle = $2`)
 var InsertUnificationRule = newQuery("CDS-UNR-04",
 	`INSERT INTO unification_rules (rule_id, org_handle, rule_name, property_name, property_id, priority, is_active,
 			attribute_type, unification_method, match_strength, mismatch_strength, created_at, updated_at)
@@ -162,7 +162,7 @@ var InsertUnificationRule = newQuery("CDS-UNR-04",
 var UpdateUnificationRule = newQuery("CDS-UNR-05",
 	`UPDATE unification_rules SET rule_name = $1, priority = $2, is_active = $3, attribute_type = $4,
 		 unification_method = $5, match_strength = $6, mismatch_strength = $7, updated_at = $8
-		 WHERE rule_id = $9;`)
+		 WHERE rule_id = $9 AND org_handle = $10;`)
 
 var InsertProfile = newQuery("CDS-PRF-01",
 	`
@@ -186,7 +186,8 @@ var GetProfileById = newQuery("CDS-PRF-03",
 		LEFT JOIN 
 			profile_reference r ON p.profile_id = r.profile_id
 		WHERE 
-			p.profile_id = $1;`)
+			p.profile_id = $1
+			AND p.org_handle = $2;`)
 
 var GetProfileConsentsByProfileId = newQuery("CDS-CON-01",
 	`SELECT profile_id, category_id, consent_status, consented_at FROM profile_consents WHERE profile_id = $1;`)
@@ -215,7 +216,7 @@ var UpdateProfile = newQuery("CDS-PRF-07",
 			traits = $4,
 			identity_attributes = $5,
 			updated_at = $6
-		 WHERE profile_id = $7;`)
+		 WHERE profile_id = $7 AND org_handle = $8;`)
 
 var UpsertProfileReference = newQuery("CDS-PRF-08",
 	`
@@ -359,6 +360,7 @@ var GetProfileByUserId = newQuery("CDS-PRF-17",
 			profile_reference r ON p.profile_id = r.profile_id
 		WHERE 
 			p.user_id = $1
+			AND p.org_handle = $2
 			AND r.profile_status = 'REFERENCE_PROFILE';`)
 
 // FindOldestReferenceProfileIDByUserID returns one profile ID using explicit
@@ -434,22 +436,25 @@ var UpsertDefaultIdentityDataCategory = newQuery("CDS-CON-05",
 				)`)
 
 var GetAllConsentCategories = newQuery("CDS-CON-06",
-	`SELECT category_name, category_identifier, org_handle, purpose, destinations, is_mandatory FROM consent_categories`)
+	`SELECT category_name, category_identifier, org_handle, purpose, destinations, is_mandatory FROM consent_categories WHERE org_handle = $1`)
 
 var GetConsentCategoryById = newQuery("CDS-CON-07",
-	`SELECT category_name, category_identifier, org_handle, purpose, destinations, is_mandatory FROM consent_categories WHERE category_identifier = $1`)
+	`SELECT category_name, category_identifier, org_handle, purpose, destinations, is_mandatory FROM consent_categories WHERE category_identifier = $1 AND org_handle = $2`)
 
 var GetConsentCategoryByName = newQuery("CDS-CON-08",
 	`SELECT category_name, category_identifier, org_handle, purpose, destinations, is_mandatory FROM consent_categories WHERE category_name = $1 AND org_handle = $2`)
+
+var GetConsentCategoryIdsByOrg = newQuery("CDS-CON-16",
+	`SELECT category_identifier FROM consent_categories WHERE org_handle = $1`)
 
 var GetMandatoryConsentCategoryIdsByOrg = newQuery("CDS-CON-09",
 	`SELECT category_identifier FROM consent_categories WHERE org_handle = $1 AND is_mandatory = TRUE`)
 
 var UpdateConsentCategory = newQuery("CDS-CON-10",
-	`UPDATE consent_categories SET category_name=$1, purpose=$2, destinations=$3 WHERE category_identifier=$4`)
+	`UPDATE consent_categories SET category_name=$1, purpose=$2, destinations=$3 WHERE category_identifier=$4 AND org_handle=$5`)
 
 var DeleteConsentCategory = newQuery("CDS-CON-11",
-	`DELETE FROM consent_categories WHERE category_identifier=$1`)
+	`DELETE FROM consent_categories WHERE category_identifier=$1 AND org_handle=$2`)
 
 var InsertConsentCategoryAttribute = newQuery("CDS-CON-12",
 	`INSERT INTO consent_category_attributes (category_id, scope, attribute_name, attribute_id, application_identifier)
@@ -472,7 +477,9 @@ var InsertCookie = newQuery("CDS-CKI-01",
 	`INSERT INTO profile_cookies (cookie_id, profile_id, is_active) VALUES ($1, $2, $3)`)
 
 var GetCookieByCookieId = newQuery("CDS-CKI-02",
-	`SELECT cookie_id, profile_id, is_active FROM profile_cookies WHERE cookie_id = $1`)
+	`SELECT c.cookie_id, c.profile_id, c.is_active FROM profile_cookies c
+		JOIN profiles p ON p.profile_id = c.profile_id
+		WHERE c.cookie_id = $1 AND p.org_handle = $2`)
 
 var GetCookieByProfileId = newQuery("CDS-CKI-03",
 	`SELECT cookie_id, profile_id, is_active FROM profile_cookies WHERE profile_id = $1`)

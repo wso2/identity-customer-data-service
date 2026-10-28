@@ -139,7 +139,7 @@ func (s *IdentityResolutionService) ResolveReviewTask(ctx context.Context, orgHa
 		return nil
 	}
 
-	incomingProfile, err := profileStore.GetProfile(ctx, task.IncomingProfileID)
+	incomingProfile, err := profileStore.GetProfile(ctx, task.IncomingProfileID, task.OrgHandle)
 	if err != nil {
 		logger.Error("Service: failed to load incoming profile for review merge", log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
@@ -156,7 +156,7 @@ func (s *IdentityResolutionService) ResolveReviewTask(ctx context.Context, orgHa
 		}, http.StatusNotFound)
 	}
 
-	candidate, err := profileStore.GetProfile(ctx, task.CandidateProfileID)
+	candidate, err := profileStore.GetProfile(ctx, task.CandidateProfileID, task.OrgHandle)
 	if err != nil {
 		logger.Error("Service: failed to load candidate profile for review merge", log.Error(err))
 		return errors2.NewServerError(errors2.ErrorMessage{
@@ -247,14 +247,14 @@ func (s *IdentityResolutionService) ResolveReviewTask(ctx context.Context, orgHa
 
 	// Re-enqueue the affected profiles so they are re-evaluated against the new master.
 	for _, incomingID := range cancelledIncomingIDs {
-		affected, loadErr := profileStore.GetProfile(ctx, incomingID)
+		affected, loadErr := profileStore.GetProfile(ctx, incomingID, task.OrgHandle)
 		if loadErr != nil || affected == nil {
 			logger.Warn(fmt.Sprintf("Service: skipping re-evaluation for '%s' — profile not found or error", incomingID))
 			continue
 		}
 
 		if affected.ProfileStatus != nil && affected.ProfileStatus.ReferenceProfileId != "" {
-			master, masterErr := profileStore.GetProfile(ctx, affected.ProfileStatus.ReferenceProfileId)
+			master, masterErr := profileStore.GetProfile(ctx, affected.ProfileStatus.ReferenceProfileId, task.OrgHandle)
 			if masterErr == nil && master != nil {
 				workers.EnqueueProfileForProcessing(*master)
 			}
@@ -280,7 +280,7 @@ func redirectToMasterIfChild(ctx context.Context, p *profileModel.Profile, logge
 	}
 	masterID := p.ProfileStatus.ReferenceProfileId
 
-	master, err := profileStore.GetProfile(ctx, masterID)
+	master, err := profileStore.GetProfile(ctx, masterID, p.OrgHandle)
 	if err != nil || master == nil {
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.IR_MERGE_FAILED.Code,

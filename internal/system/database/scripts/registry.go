@@ -74,6 +74,7 @@ func AllQueries() map[string]model.DBQuery {
 		"GetConsentCategoryById":                      GetConsentCategoryById,
 		"GetConsentCategoryByName":                    GetConsentCategoryByName,
 		"GetMandatoryConsentCategoryIdsByOrg":         GetMandatoryConsentCategoryIdsByOrg,
+		"GetConsentCategoryIdsByOrg":                  GetConsentCategoryIdsByOrg,
 		"UpdateConsentCategory":                       UpdateConsentCategory,
 		"DeleteConsentCategory":                       DeleteConsentCategory,
 		"InsertConsentCategoryAttribute":              InsertConsentCategoryAttribute,

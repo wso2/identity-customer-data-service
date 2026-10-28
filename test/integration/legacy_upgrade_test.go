@@ -148,7 +148,7 @@ func Test_LegacyOrganisation_KeepsExactMatchMerging(t *testing.T) {
 				if id == master.ProfileId {
 					continue
 				}
-				child, err := profileStore.GetProfile(context.Background(), id)
+				child, err := profileStore.GetProfile(context.Background(), id, org)
 				if err != nil || child == nil {
 					t.Fatalf("load %s: %v", id, err)
 				}

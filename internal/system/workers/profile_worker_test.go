@@ -69,7 +69,7 @@ func workerProfile(t *testing.T, db *sql.DB, id, userID, attrs string, age time.
 	_, err = db.Exec(`INSERT INTO profile_reference (profile_id, org_handle, profile_status, reference_reason)
 		VALUES (?, 'tenant', 'REFERENCE_PROFILE', '')`, id)
 	require.NoError(t, err)
-	p, err := profileStore.GetProfileWithOptions(context.Background(), id,
+	p, err := profileStore.GetProfileWithOptions(context.Background(), id, "tenant",
 		profileStore.GetProfileOptions{IncludeApplicationData: false})
 	require.NoError(t, err)
 	require.NotNil(t, p)
@@ -163,7 +163,7 @@ func TestUnificationChildStaysWithParent(t *testing.T) {
 	_, err := db.Exec(`UPDATE profile_reference SET profile_status='MERGED_TO', reference_profile_id='parent'
 		WHERE profile_id='incoming'`)
 	require.NoError(t, err)
-	child, err := profileStore.GetProfileWithOptions(context.Background(), "incoming",
+	child, err := profileStore.GetProfileWithOptions(context.Background(), "incoming", "tenant",
 		profileStore.GetProfileOptions{IncludeApplicationData: false})
 	require.NoError(t, err)
 	unifyProfiles(context.Background(), *child)
@@ -194,7 +194,7 @@ func TestCandidateDiscoveryDoesNotRequireApplicationDataTable(t *testing.T) {
 	incoming := workerProfile(t, db, "incoming", "", `{"email":"b"}`, 0)
 	_, err := db.Exec(`DROP TABLE application_data`)
 	require.NoError(t, err)
-	_, err = profileStore.GetProfileWithOptions(context.Background(), incoming.ProfileId,
+	_, err = profileStore.GetProfileWithOptions(context.Background(), incoming.ProfileId, incoming.OrgHandle,
 		profileStore.GetProfileOptions{IncludeApplicationData: false})
 	require.NoError(t, err)
 	id, err := profileStore.FindOldestReferenceProfileIDByAttributeValues(context.Background(), incoming.OrgHandle,

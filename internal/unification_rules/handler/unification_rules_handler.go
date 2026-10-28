@@ -191,7 +191,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		utils.HandleError(w, err)
 		return
 	}
-	addedRule, err := ruleService.GetUnificationRule(ctx, rule.RuleId)
+	addedRule, err := ruleService.GetUnificationRule(ctx, rule.RuleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -294,7 +294,7 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	rule, err := ruleService.GetUnificationRule(ctx, ruleId)
+	rule, err := ruleService.GetUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -354,7 +354,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	ruleService := ruleProvider.GetUnificationRuleService()
 
 	// Fetch old rule to detect is_active changes.
-	oldRule, err := ruleService.GetUnificationRule(ctx, ruleId)
+	oldRule, err := ruleService.GetUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -439,7 +439,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		return
 	}
 
-	newRule, err := ruleService.GetUnificationRule(ctx, ruleId)
+	newRule, err := ruleService.GetUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -514,13 +514,13 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	ruleService := ruleProvider.GetUnificationRuleService()
 
 	// Fetch the rule before deleting so we can trigger reindex cleanup.
-	rule, fetchErr := ruleService.GetUnificationRule(ctx, ruleId)
+	rule, fetchErr := ruleService.GetUnificationRule(ctx, ruleId, orgHandle)
 	if fetchErr != nil {
 		logger := log.GetLogger()
 		logger.Warn(fmt.Sprintf("DeleteUnificationRule: could not fetch rule %s before deletion", ruleId))
 	}
 
-	err = ruleService.DeleteUnificationRule(ctx, ruleId)
+	err = ruleService.DeleteUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

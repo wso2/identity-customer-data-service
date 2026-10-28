@@ -51,23 +51,23 @@ import (
 )
 
 type ProfilesServiceInterface interface {
-	DeleteProfile(ctx context.Context, profileId string) error
+	DeleteProfile(ctx context.Context, profileId, orgHandle string) error
 	GetAllProfilesCursor(ctx context.Context,
 		orgHandle string, limit int, cursor *profileModel.ProfileCursor) ([]profileModel.ProfileResponse, bool, error)
 	CreateProfile(ctx context.Context,
 		profile profileModel.ProfileRequest, orgHandle string) (*profileModel.ProfileResponse, error)
 	UpdateProfile(ctx context.Context,
 		profileId, orgHandle string, update profileModel.ProfileRequest) (*profileModel.ProfileResponse, error)
-	GetProfile(ctx context.Context, profileId string) (*profileModel.ProfileResponse, error)
-	FindProfileByUserId(ctx context.Context, userId string) (*profileModel.ProfileResponse, error)
+	GetProfile(ctx context.Context, profileId, orgHandle string) (*profileModel.ProfileResponse, error)
+	FindProfileByUserId(ctx context.Context, userId, orgHandle string) (*profileModel.ProfileResponse, error)
 	GetAllProfilesWithFilterCursor(ctx context.Context, orgHandle string, filters []string, limit int, cursor *profileModel.ProfileCursor) ([]profileModel.ProfileResponse, bool, error)
-	GetProfileConsents(ctx context.Context, profileId string) ([]profileModel.ConsentRecord, error)
+	GetProfileConsents(ctx context.Context, profileId, orgHandle string) ([]profileModel.ConsentRecord, error)
 	UpdateProfileConsents(ctx context.Context,
 		profileId string, orgHandle string, consents []profileModel.ConsentRecord) error
 	PatchProfile(ctx context.Context,
 		profileId, orgHandle string, data map[string]interface{}) (*profileModel.ProfileResponse, error)
 	GetProfileCookieByProfileId(ctx context.Context, profileId string) (*profileModel.ProfileCookie, error)
-	GetProfileCookieById(ctx context.Context, cookie string) (*profileModel.ProfileCookie, error)
+	GetProfileCookieById(ctx context.Context, cookie, orgHandle string) (*profileModel.ProfileCookie, error)
 	CreateProfileCookie(ctx context.Context, profileId string) (*profileModel.ProfileCookie, error)
 	UpdateCookieStatusByCookieId(ctx context.Context, cookieId string, isActive bool) error
 	UpdateCookieStatusByProfileId(ctx context.Context, profileId string, isActive bool) error
@@ -186,7 +186,7 @@ func (ps *ProfilesService) CreateProfile(ctx context.Context,
 		logger.Debug(fmt.Sprintf("Error inserting profile: %s", profile.ProfileId), log.Error(err))
 		return nil, err
 	}
-	profileFetched, errWait := ps.GetProfile(ctx, profileId)
+	profileFetched, errWait := ps.GetProfile(ctx, profileId, orgHandle)
 	if errWait != nil || profileFetched == nil {
 		logger.Warn(fmt.Sprintf("Profile: %s not available after insertion: %v", profile.ProfileId, errWait))
 		return nil, errWait
@@ -766,7 +766,7 @@ func isValidType(value interface{}, expected string, multiValued bool, subAttrs 
 func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 	profileId, orgHandle string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
 
-	profile, err := profileStore.GetProfile(ctx, profileId)
+	profile, err := profileStore.GetProfile(ctx, profileId, orgHandle)
 	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("Error fetching profile for updatedProfile: %s", profileId)
@@ -822,6 +822,7 @@ func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 		// convert profile request to model
 		profileToUpDate = profileModel.Profile{
 			ProfileId:          profileId,
+			OrgHandle:          profile.OrgHandle,
 			UserId:             updatedProfile.UserId,
 			ApplicationData:    appData,
 			Traits:             updatedProfile.Traits,
@@ -833,7 +834,7 @@ func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 		}
 	} else {
 		// If it is a child profile, we need to update the master profile
-		masterProfile, err := profileStore.GetProfile(ctx, profile.ProfileStatus.ReferenceProfileId)
+		masterProfile, err := profileStore.GetProfile(ctx, profile.ProfileStatus.ReferenceProfileId, orgHandle)
 		if err != nil {
 			errMsg := fmt.Sprintf("Error fetching master profile for updatedProfile: %s", profile.ProfileId)
 			logger.Debug(errMsg, log.Error(err))
@@ -847,6 +848,7 @@ func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 
 		profileToUpDate = profileModel.Profile{
 			ProfileId:          masterProfile.ProfileId,
+			OrgHandle:          masterProfile.OrgHandle,
 			UserId:             updatedProfile.UserId,
 			ApplicationData:    appData,
 			Traits:             updatedProfile.Traits,
@@ -863,7 +865,7 @@ func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 		return nil, err
 	}
 
-	profileFetched, errWait := ps.GetProfile(ctx, profile.ProfileId)
+	profileFetched, errWait := ps.GetProfile(ctx, profile.ProfileId, orgHandle)
 	if errWait != nil || profileFetched == nil {
 		return nil, errWait
 	}
@@ -922,9 +924,9 @@ func ConvertAppDataToMap(appDataList []profileModel.ApplicationData) map[string]
 }
 
 // GetProfile retrieves a profile
-func (ps *ProfilesService) GetProfile(ctx context.Context, ProfileId string) (*profileModel.ProfileResponse, error) {
+func (ps *ProfilesService) GetProfile(ctx context.Context, ProfileId, orgHandle string) (*profileModel.ProfileResponse, error) {
 
-	profile, err := profileStore.GetProfile(ctx, ProfileId)
+	profile, err := profileStore.GetProfile(ctx, ProfileId, orgHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -972,7 +974,7 @@ func (ps *ProfilesService) GetProfile(ctx context.Context, ProfileId string) (*p
 		return profileResponse, nil
 	} else {
 		// fetching merged master profile
-		masterProfile, err := profileStore.GetProfile(ctx, profile.ProfileStatus.ReferenceProfileId)
+		masterProfile, err := profileStore.GetProfile(ctx, profile.ProfileStatus.ReferenceProfileId, orgHandle)
 
 		if err != nil {
 			return nil, err
@@ -1010,9 +1012,16 @@ func (ps *ProfilesService) GetProfile(ctx context.Context, ProfileId string) (*p
 
 // GetProfileConsents retrieves a profile
 func (ps *ProfilesService) GetProfileConsents(ctx context.Context,
-	ProfileId string) ([]profileModel.ConsentRecord, error) {
+	ProfileId, orgHandle string) ([]profileModel.ConsentRecord, error) {
 
-	consentRecords, err := profileStore.GetProfileConsents(ctx, ProfileId)
+	profile, err := profileStore.GetProfile(ctx, ProfileId, orgHandle)
+	if err != nil {
+		return nil, err
+	}
+	if profile == nil {
+		return nil, profileNotFoundError()
+	}
+	consentRecords, err := profileStore.GetProfileConsents(ctx, ProfileId, orgHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -1033,6 +1042,14 @@ func (ps *ProfilesService) UpdateProfileConsents(ctx context.Context,
 	profileId string, orgHandle string, consents []profileModel.ConsentRecord) error {
 	logger := log.GetLogger()
 
+	profile, err := profileStore.GetProfile(ctx, profileId, orgHandle)
+	if err != nil {
+		return err
+	}
+	if profile == nil {
+		return profileNotFoundError()
+	}
+
 	// Reject any attempt to modify a mandatory consent category.
 	mandatoryIds, err := consentStore.GetMandatoryConsentCategoryIds(ctx, orgHandle)
 	if err != nil {
@@ -1049,6 +1066,21 @@ func (ps *ProfilesService) UpdateProfileConsents(ctx context.Context,
 				Message:     errors2.CONSENT_CAT_MANDATORY.Message,
 				Description: fmt.Sprintf("Consent for mandatory category '%s' cannot be modified.", c.CategoryIdentifier),
 			}, http.StatusForbidden)
+		}
+	}
+
+	// Reject categories that are not defined in the org.
+	orgCategorySet, err := consentCategoryIdSet(ctx, orgHandle)
+	if err != nil {
+		return err
+	}
+	for _, c := range consents {
+		if !orgCategorySet[c.CategoryIdentifier] {
+			return errors2.NewClientError(errors2.ErrorMessage{
+				Code:        errors2.CONSENT_CAT_VALIDATION.Code,
+				Message:     errors2.CONSENT_CAT_VALIDATION.Message,
+				Description: fmt.Sprintf("Consent category '%s' not found.", c.CategoryIdentifier),
+			}, http.StatusBadRequest)
 		}
 	}
 
@@ -1072,13 +1104,13 @@ func (ps *ProfilesService) UpdateProfileConsents(ctx context.Context,
 }
 
 // DeleteProfile removes a profile from MongoDB by `perma_id`
-func (ps *ProfilesService) DeleteProfile(ctx context.Context, ProfileId string) error {
+func (ps *ProfilesService) DeleteProfile(ctx context.Context, ProfileId, orgHandle string) error {
 
 	// Fetch the existing profile before deletion
-	profile, err := profileStore.GetProfile(ctx, ProfileId)
+	profile, err := profileStore.GetProfile(ctx, ProfileId, orgHandle)
 	logger := log.GetLogger()
-	if profile == nil {
-		logger.Warn(fmt.Sprintf("Profile with profile_id: %s that is requested for deletion is not found",
+	if err == nil && profile == nil {
+		logger.Debug(fmt.Sprintf("Profile with profile_id: %s that is requested for deletion is not found",
 			ProfileId))
 		return nil
 	}
@@ -1170,7 +1202,7 @@ func (ps *ProfilesService) DeleteProfile(ctx context.Context, ProfileId string) 
 
 		logger.Info(fmt.Sprintf("Deleting child profile: %s with parent: %s", ProfileId,
 			profile.ProfileStatus.ReferenceProfileId))
-		parentProfile, err := profileStore.GetProfile(ctx, profile.ProfileStatus.ReferenceProfileId)
+		parentProfile, err := profileStore.GetProfile(ctx, profile.ProfileStatus.ReferenceProfileId, orgHandle)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Error while deleting the child profile: %s ", ProfileId)
 			logger.Debug(errorMsg, log.Error(err))
@@ -1459,19 +1491,14 @@ func parseTypedValueForFilters(valueType string, raw string) interface{} {
 
 // FindProfileByUserId retrieves a profile by user_id
 func (ps *ProfilesService) FindProfileByUserId(ctx context.Context,
-	userId string) (*profileModel.ProfileResponse, error) {
+	userId, orgHandle string) (*profileModel.ProfileResponse, error) {
 
-	profile, err := profileStore.GetProfileWithUserId(ctx, userId)
+	profile, err := profileStore.GetProfileWithUserId(ctx, userId, orgHandle)
 	if err != nil {
 		return nil, err
 	}
 	if profile == nil {
-		clientError := errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.PROFILE_NOT_FOUND.Code,
-			Message:     errors2.PROFILE_NOT_FOUND.Message,
-			Description: errors2.PROFILE_NOT_FOUND.Description,
-		}, http.StatusNotFound)
-		return nil, clientError
+		return nil, profileNotFoundError()
 	}
 
 	alias, err := profileStore.FetchReferencedProfiles(ctx, profile.ProfileId)
@@ -1502,7 +1529,7 @@ func (ps *ProfilesService) FindProfileByUserId(ctx context.Context,
 func (ps *ProfilesService) PatchProfile(ctx context.Context,
 	profileId, orgHandle string, patch map[string]interface{}) (*profileModel.ProfileResponse, error) {
 
-	existingProfile, err := profileStore.GetProfile(ctx, profileId)
+	existingProfile, err := profileStore.GetProfile(ctx, profileId, orgHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -1520,7 +1547,7 @@ func (ps *ProfilesService) PatchProfile(ctx context.Context,
 	// accumulated merged data that only exists on the master.
 	profileForBase := existingProfile
 	if existingProfile.ProfileStatus != nil && !existingProfile.ProfileStatus.IsReferenceProfile && existingProfile.ProfileStatus.ReferenceProfileId != "" {
-		masterProfile, err := profileStore.GetProfile(ctx, existingProfile.ProfileStatus.ReferenceProfileId)
+		masterProfile, err := profileStore.GetProfile(ctx, existingProfile.ProfileStatus.ReferenceProfileId, orgHandle)
 		if err != nil {
 			return nil, err
 		}
@@ -1624,9 +1651,9 @@ func (ps *ProfilesService) GetProfileCookieByProfileId(ctx context.Context,
 }
 
 func (ps *ProfilesService) GetProfileCookieById(ctx context.Context,
-	cookie string) (*profileModel.ProfileCookie, error) {
+	cookie, orgHandle string) (*profileModel.ProfileCookie, error) {
 
-	cookieObj, err := profileStore.GetProfileCookie(ctx, cookie)
+	cookieObj, err := profileStore.GetProfileCookie(ctx, cookie, orgHandle)
 	logger := log.GetLogger()
 	if err != nil {
 		errMsg := fmt.Sprintf("Error fetching profile cookie : %s", cookie)
@@ -1725,6 +1752,14 @@ func (ps *ProfilesService) DeleteCookieByProfileId(ctx context.Context, profileI
 		return serverError
 	}
 	return nil
+}
+
+func profileNotFoundError() error {
+	return errors2.NewClientError(errors2.ErrorMessage{
+		Code:        errors2.PROFILE_NOT_FOUND.Code,
+		Message:     errors2.PROFILE_NOT_FOUND.Message,
+		Description: errors2.PROFILE_NOT_FOUND.Description,
+	}, http.StatusNotFound)
 }
 
 // DeepMerge merges two maps recursively, with src overwriting dst
@@ -2043,7 +2078,7 @@ func scoreAndBuildFuzzyResults(ctx context.Context,
 		// GetProfile reports "no such profile" as (nil, nil), so the nil profile has to be
 		// checked separately from the error — a candidate can disappear between the
 		// blocking lookup and this read.
-		profile, err := profileStore.GetProfile(ctx, sm.candidateID)
+		profile, err := profileStore.GetProfile(ctx, sm.candidateID, orgHandle)
 		if err != nil || profile == nil {
 			logger.Warn(fmt.Sprintf("scoreAndBuildFuzzyResults: could not load profile '%s', skipping", sm.candidateID))
 			continue

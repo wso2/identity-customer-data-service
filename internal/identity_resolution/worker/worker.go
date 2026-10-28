@@ -40,7 +40,7 @@ import (
 func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 	logger := log.GetLogger()
 
-	freshProfile, err := profileStore.GetProfile(ctx, profile.ProfileId)
+	freshProfile, err := profileStore.GetProfile(ctx, profile.ProfileId, profile.OrgHandle)
 	if err != nil || freshProfile == nil {
 		logger.Error(fmt.Sprintf("AsyncWorker: failed to fetch profile '%s', skipping", profile.ProfileId))
 		return
@@ -264,7 +264,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 
 		if decision == constants.DecisionAutoMerge {
 
-			matchedProfile, loadErr := profileStore.GetProfile(ctx, sc.id)
+			matchedProfile, loadErr := profileStore.GetProfile(ctx, sc.id, orgHandle)
 			if loadErr != nil || matchedProfile == nil {
 				logger.Error(fmt.Sprintf("AsyncWorker: failed to load matched profile '%s' for auto-merge", sc.id))
 				insertReviewTask(ctx, orgHandle, freshProfile.ProfileId, sc.id, sc.score, sc.breakdown, thresholds.ManualReview, rejections)
@@ -315,7 +315,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 				freshProfile.ProfileId, mergedMaster.ProfileId), log.Error(cancelErr))
 		}
 		for _, srcID := range cancelledIncomingIDs {
-			p, loadErr := profileStore.GetProfile(ctx, srcID)
+			p, loadErr := profileStore.GetProfile(ctx, srcID, orgHandle)
 			if loadErr != nil || p == nil {
 				continue
 			}
@@ -325,7 +325,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 				if masterID == mergedMaster.ProfileId {
 					continue
 				}
-				master, mErr := profileStore.GetProfile(ctx, masterID)
+				master, mErr := profileStore.GetProfile(ctx, masterID, orgHandle)
 				if mErr != nil || master == nil {
 					continue
 				}
