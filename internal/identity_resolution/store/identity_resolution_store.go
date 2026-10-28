@@ -419,12 +419,18 @@ func scanReviewTask(row map[string]interface{}) model.ReviewTask {
 	if v, ok := row["status"]; ok && v != nil {
 		task.Status = fmt.Sprintf("%v", v)
 	}
-	if v, ok := row["score_breakdown"]; ok && v != nil {
-		if b, ok := v.([]byte); ok {
-			var breakdown map[string]float64
-			if err := json.Unmarshal(b, &breakdown); err == nil {
-				task.ScoreBreakdown = breakdown
-			}
+	// PostgreSQL returns the JSONB column as bytes and SQLite returns its TEXT column as a
+	// string. Reading only the first dropped the breakdown on the inbuilt datasource, and with
+	// it the evidence a rejection is recorded against.
+	var breakdown map[string]float64
+	switch raw := row["score_breakdown"].(type) {
+	case []byte:
+		if err := json.Unmarshal(raw, &breakdown); err == nil {
+			task.ScoreBreakdown = breakdown
+		}
+	case string:
+		if err := json.Unmarshal([]byte(raw), &breakdown); err == nil {
+			task.ScoreBreakdown = breakdown
 		}
 	}
 	if v, ok := row["created_at"]; ok && v != nil {
