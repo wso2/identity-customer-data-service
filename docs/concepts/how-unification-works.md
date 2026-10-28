@@ -114,7 +114,7 @@ otherwise              → type-specific algorithm
 |---|---|---|
 | `EMAIL` | lowercase, trim | split at `@`; Levenshtein on the local part, Jaro-Winkler on the domain; score is the **lower of the two** |
 | `NAME` | lowercase, strip punctuation, **sort tokens** | Jaro-Winkler; if Double Metaphone codes match exactly, floor at 0.9 |
-| `PHONE` | digits only | last 7 digits equal → 0.9, otherwise 0 |
+| `PHONE` | digits only | same subscriber → 1.0, otherwise 0 |
 | `LOCATION` | lowercase, trim | expand street abbreviations, then Jaccard over tokens |
 | `FUZZY_STRING` | lowercase, trim | Jaro-Winkler |
 | `DATE` | parse to `YYYY.MM.DD` | none — equal or 0 |
@@ -122,6 +122,8 @@ otherwise              → type-specific algorithm
 | `PRIMITIVE_EXACT` | none | none — raw equality or 0 |
 
 Email takes the *minimum* of its two halves rather than the average: a perfect local part against a stranger's domain is not a near-match, so the weaker half governs. `NAME` sorts tokens first, so `John Smith` and `Smith John` are identical.
+
+`PHONE` has no partial score: two numbers either name the same subscriber or they do not. Each number is read every way it can be written — with or without its country calling code, with a national trunk `0`, with `00` for `+` — and the two match when they share a national number and their countries do not contradict each other. So `+94 77 123 4567` and `077 123 4567` score 1.0, while `+94 77 123 4567` and `+94 70 123 4567` score 0 despite sharing their last seven digits. A phone rule never produces a borderline score, so a review task on a phone match comes from another rule objecting or from the number being shared too widely — never from two numbers merely looking alike. The 7-digit suffix is still a blocking key: it is a reasonable way to gather candidates, just not to decide between them.
 
 A multi-valued attribute takes the best pair — every input value against every candidate value, highest wins. One matching email out of three is a match on that rule.
 
