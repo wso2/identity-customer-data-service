@@ -332,11 +332,14 @@ const (
 	// Shipped defaults for an organisation that has set no thresholds of its own. Both are
 	// per-org admin config, and validation requires manual_review <= auto_merge - ScorePenaltyOffset.
 	//
-	// 0.95 sits above where a genuine typo lands — Jonathan Smith / Jonathon Smyth measured
-	// 0.9429 — so a lone name similarity goes to review rather than merging unattended.
+	// 1.0 merges unattended only on a perfect score: an exact match, which is how unification
+	// worked before typed matching, so an organisation upgrading keeps the merges it had. Every
+	// tolerant match — a typo, a spelling variant — goes to review until the organisation
+	// lowers the threshold itself, since a wrong merge is far harder to undo than a pending
+	// review. (Jonathan Smith / Jonathon Smyth measures 0.9429, for scale.)
 	// 0.75 is also the bar a rule must clear to count as agreeing, which is why it is kept
 	// well clear of ScoreContradictionThreshold.
-	DefaultAutoMergeThreshold    = 0.95
+	DefaultAutoMergeThreshold    = 1.0
 	DefaultManualReviewThreshold = 0.75
 )
 

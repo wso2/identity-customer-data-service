@@ -174,7 +174,7 @@ Caps only ever downgrade `AUTO_MERGE` to `MANUAL_REVIEW`. They never suppress a 
 
 | Score | Decision |
 |---|---|
-| ≥ `auto_merge_threshold` (default 0.95) | `AUTO_MERGE` |
+| ≥ `auto_merge_threshold` (default 1.0) | `AUTO_MERGE` |
 | ≥ `manual_review_threshold` (default 0.75) | `MANUAL_REVIEW` — a review task is created |
 | below that | `UNIQUE` — no action |
 
@@ -188,7 +188,7 @@ Whether the objections in steps 4–6 apply to a deterministic match at all is a
 
 ### Worked examples
 
-Rules: **P1** `nic` (UNIQUE_ID, deterministic) · **P2** `name` (NAME, fuzzy) · **P3** `city` (LOCATION, fuzzy). Thresholds 0.95 / 0.75.
+Rules: **P1** `nic` (UNIQUE_ID, deterministic) · **P2** `name` (NAME, fuzzy) · **P3** `city` (LOCATION, fuzzy). Thresholds 0.95 / 0.75 — an organisation that has lowered the automatic threshold from its 1.0 default, so tolerant matches can merge unattended.
 
 | # | Scenario | nic | name | city | Outcome | Why |
 |---|---|---|---|---|---|---|
