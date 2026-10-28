@@ -1,5 +1,5 @@
 # Allow overriding base images
-ARG GO_BASE=golang:1.26.9
+ARG GO_BASE=golang:1.26.10
 ARG RUNTIME_BASE=alpine:latest
 
 # -------------------------
