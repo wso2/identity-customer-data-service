@@ -972,12 +972,14 @@ CDS_SCOPES="internal_cds_profile_view internal_cds_profile_create internal_cds_p
 internal_cds_profile_schema_view internal_cds_profile_schema_create internal_cds_profile_schema_update internal_cds_profile_schema_delete
 internal_cds_unification_rule_view internal_cds_unification_rule_create internal_cds_unification_rule_update internal_cds_unification_rule_delete
 internal_cds_admin_config_view internal_cds_admin_config_update
+internal_cds_identity_resolution_view internal_cds_identity_resolution_update
 internal_cds_consent_category_view internal_cds_consent_category_create internal_cds_consent_category_update internal_cds_consent_category_delete"
 
 CDS_API_IDENTIFIERS="/cds/api/v1/profiles
 /cds/api/v1/profile-schema
 /cds/api/v1/unification-rules
 /cds/api/v1/config
+/cds/api/v1/identity-resolution
 /cds/api/v1/consent-categories"
 
 api_resource_id() {
