@@ -117,7 +117,7 @@ func Test_Profile(t *testing.T) {
 		profiles, _, err := profileSvc.GetAllProfilesCursor(context.Background(), SuperTenantOrg, 10, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, profiles)
-		profile, err := profileSvc.GetProfile(context.Background(), profiles[0].ProfileId)
+		profile, err := profileSvc.GetProfile(context.Background(), profiles[0].ProfileId, SuperTenantOrg)
 		require.NoError(t, err)
 		require.NotNil(t, profile)
 		require.Contains(t, profile.IdentityAttributes["email"], email)
@@ -159,21 +159,21 @@ func Test_Profile(t *testing.T) {
 		require.NoError(t, err)
 		p := profiles[0]
 
-		err = profileSvc.DeleteProfile(context.Background(), p.ProfileId)
+		err = profileSvc.DeleteProfile(context.Background(), p.ProfileId, SuperTenantOrg)
 		require.NoError(t, err)
 
-		_, err = profileSvc.GetProfile(context.Background(), p.ProfileId)
+		_, err = profileSvc.GetProfile(context.Background(), p.ProfileId, SuperTenantOrg)
 		require.Error(t, err)
 	})
 
 	t.Cleanup(func() {
 		rules, _ := unificationSvc.GetUnificationRules(context.Background(), SuperTenantOrg)
 		for _, r := range rules {
-			_ = unificationSvc.DeleteUnificationRule(context.Background(), r.RuleId)
+			_ = unificationSvc.DeleteUnificationRule(context.Background(), r.RuleId, SuperTenantOrg)
 		}
 		profiles, _, _ := profileSvc.GetAllProfilesCursor(context.Background(), SuperTenantOrg, 10, nil)
 		for _, p := range profiles {
-			_ = profileSvc.DeleteProfile(context.Background(), p.ProfileId)
+			_ = profileSvc.DeleteProfile(context.Background(), p.ProfileId, SuperTenantOrg)
 		}
 		_ = profileSchemaSvc.DeleteProfileSchema(context.Background(), SuperTenantOrg)
 		_ = profileSchemaSvc.DeleteProfileSchemaAttributesByScope(context.Background(), SuperTenantOrg, constants.IdentityAttributes)

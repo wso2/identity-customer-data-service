@@ -258,7 +258,7 @@ func Test_BlockingKeys_RemovedWhenProfileDeleted(t *testing.T) {
 	if err := irStore.UpsertBlockingKeys(context.Background(), profile.ProfileId, org, key); err != nil {
 		t.Fatalf("index profile: %v", err)
 	}
-	if err := profileService.GetProfilesService().DeleteProfile(context.Background(), profile.ProfileId); err != nil {
+	if err := profileService.GetProfilesService().DeleteProfile(context.Background(), profile.ProfileId, org); err != nil {
 		t.Fatalf("delete profile: %v", err)
 	}
 

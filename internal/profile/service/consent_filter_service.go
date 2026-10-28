@@ -45,6 +45,21 @@ func FilterProfileByConsent(ctx context.Context, response model.ProfileResponse,
 		MergedFrom: response.MergedFrom,
 	}
 
+	// Ignore requested categories that are not defined in the org.
+	if len(consentIds) > 0 {
+		orgCategorySet, err := consentCategoryIdSet(ctx, orgHandle)
+		if err != nil {
+			return filtered, err
+		}
+		orgConsentIds := make([]string, 0, len(consentIds))
+		for _, id := range consentIds {
+			if orgCategorySet[id] {
+				orgConsentIds = append(orgConsentIds, id)
+			}
+		}
+		consentIds = orgConsentIds
+	}
+
 	// Always include mandatory categories in the allowed set regardless of what
 	// the caller requested.  This ensures identity attributes are never stripped.
 	mandatoryIds, err := consentStore.GetMandatoryConsentCategoryIds(ctx, orgHandle)
@@ -166,6 +181,20 @@ func FilterProfileByConsent(ctx context.Context, response model.ProfileResponse,
 	}
 
 	return filtered, nil
+}
+
+// consentCategoryIdSet returns the IDs of all consent categories of the org.
+func consentCategoryIdSet(ctx context.Context, orgHandle string) (map[string]bool, error) {
+
+	ids, err := consentStore.GetConsentCategoryIds(ctx, orgHandle)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set, nil
 }
 
 // attributeKey returns the canonical string key for a ConsentAttribute used for

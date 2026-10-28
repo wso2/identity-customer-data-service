@@ -85,7 +85,7 @@ func StartProfileWorker() error {
 
 	if err := q.Start(func(profile profileModel.Profile) {
 		err := lifecycle.run(func(ctx context.Context) {
-			storedProfile, err := profileStore.GetProfileWithOptions(ctx, profile.ProfileId,
+			storedProfile, err := profileStore.GetProfileWithOptions(ctx, profile.ProfileId, profile.OrgHandle,
 				profileStore.GetProfileOptions{IncludeApplicationData: false})
 			if err != nil {
 				log.GetLogger().Error(fmt.Sprintf("Failed to load profile %s for unification",
@@ -249,7 +249,7 @@ func findCandidate(ctx context.Context, incoming profileModel.Profile, property 
 func mergeUnificationCandidate(ctx context.Context, candidateID string, incoming profileModel.Profile,
 	reason string, rule *model.UnificationRule) bool {
 	logger := log.GetLogger()
-	candidate, err := profileStore.GetProfileWithOptions(ctx, candidateID,
+	candidate, err := profileStore.GetProfileWithOptions(ctx, candidateID, incoming.OrgHandle,
 		profileStore.GetProfileOptions{IncludeApplicationData: false})
 	if err != nil {
 		logger.Error("Failed to load unification candidate", log.Error(err))
@@ -533,7 +533,7 @@ func persistMergedProfileData(ctx context.Context, masterProfile profileModel.Pr
 	logger := log.GetLogger()
 
 	for _, appCtx := range masterProfile.ApplicationData {
-		if err := profileStore.InsertMergedMasterProfileAppData(ctx, masterProfile.ProfileId, appCtx); err != nil {
+		if err := profileStore.InsertMergedMasterProfileAppData(ctx, masterProfile.ProfileId, masterProfile.OrgHandle, appCtx); err != nil {
 			logger.Error(fmt.Sprintf("Failed to update app data for master profile %s while unifying profile %s",
 				masterProfile.ProfileId, triggerProfileId), log.Error(err))
 			return fmt.Errorf("persist app data for master '%s': %w", masterProfile.ProfileId, err)
@@ -541,7 +541,7 @@ func persistMergedProfileData(ctx context.Context, masterProfile profileModel.Pr
 	}
 
 	if masterProfile.Traits != nil {
-		if err := profileStore.InsertMergedMasterProfileTraitData(ctx, masterProfile.ProfileId, masterProfile.Traits); err != nil {
+		if err := profileStore.InsertMergedMasterProfileTraitData(ctx, masterProfile.ProfileId, masterProfile.OrgHandle, masterProfile.Traits); err != nil {
 			logger.Error(fmt.Sprintf("Failed to update traits for master profile %s while unifying profile %s",
 				masterProfile.ProfileId, triggerProfileId), log.Error(err))
 			return fmt.Errorf("persist traits for master '%s': %w", masterProfile.ProfileId, err)
@@ -549,7 +549,7 @@ func persistMergedProfileData(ctx context.Context, masterProfile profileModel.Pr
 	}
 
 	if masterProfile.IdentityAttributes != nil {
-		if err := profileStore.MergeIdentityDataOfProfiles(ctx, masterProfile.ProfileId, masterProfile.IdentityAttributes); err != nil {
+		if err := profileStore.MergeIdentityDataOfProfiles(ctx, masterProfile.ProfileId, masterProfile.OrgHandle, masterProfile.IdentityAttributes); err != nil {
 			logger.Error(fmt.Sprintf("Failed to update identity data for master profile %s while unifying profile %s",
 				masterProfile.ProfileId, triggerProfileId), log.Error(err))
 			return fmt.Errorf("persist identity attributes for master '%s': %w", masterProfile.ProfileId, err)

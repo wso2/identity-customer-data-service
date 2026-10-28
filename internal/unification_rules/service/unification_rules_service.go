@@ -36,9 +36,9 @@ import (
 type UnificationRuleServiceInterface interface {
 	AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgHandle string) error
 	GetUnificationRules(ctx context.Context, orgHandle string) ([]model.UnificationRule, error)
-	GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationRule, error)
+	GetUnificationRule(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error)
 	PatchUnificationRule(ctx context.Context, ruleId, orgHandle string, updatedRule model.UnificationRule) error
-	DeleteUnificationRule(ctx context.Context, ruleId string) error
+	DeleteUnificationRule(ctx context.Context, ruleId, orgHandle string) error
 	// GetUnificationOptions reads no data, so it takes no context.
 	GetUnificationOptions() model.UnificationOptionsResponse
 }
@@ -137,20 +137,24 @@ func (urs *UnificationRuleService) GetUnificationRules(ctx context.Context,
 
 // GetUnificationRule Fetches a specific resolution rule.
 func (urs *UnificationRuleService) GetUnificationRule(ctx context.Context,
-	ruleId string) (*model.UnificationRule, error) {
+	ruleId, orgHandle string) (*model.UnificationRule, error) {
 
-	unificationRule, err := store.GetUnificationRule(ctx, ruleId)
+	unificationRule, err := store.GetUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		return nil, err
 	}
 	if unificationRule == nil {
-		return nil, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.UNIFICATION_RULE_NOT_FOUND.Code,
-			Message:     errors2.UNIFICATION_RULE_NOT_FOUND.Message,
-			Description: fmt.Sprintf("Unification rule: '%s' not found", ruleId),
-		}, http.StatusNotFound)
+		return nil, unificationRuleNotFoundError(ruleId)
 	}
 	return unificationRule, err
+}
+
+func unificationRuleNotFoundError(ruleId string) error {
+	return errors2.NewClientError(errors2.ErrorMessage{
+		Code:        errors2.UNIFICATION_RULE_NOT_FOUND.Code,
+		Message:     errors2.UNIFICATION_RULE_NOT_FOUND.Message,
+		Description: fmt.Sprintf("Unification rule: '%s' not found", ruleId),
+	}, http.StatusNotFound)
 }
 
 // PatchUnificationRule Applies a partial update on a specific resolution rule.
@@ -165,10 +169,13 @@ func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
 		}, http.StatusBadRequest)
 	}
 
-	// Validate that the priority is not already in use
+	// Validate that the rule exists in the org, and that the priority is not already in use
 	existingRules, err := store.GetUnificationRules(ctx, orgHandle)
 	if err != nil {
 		return err
+	}
+	if !containsRule(existingRules, ruleId) {
+		return unificationRuleNotFoundError(ruleId)
 	}
 	for _, existingRule := range existingRules {
 		if existingRule.RuleId != ruleId && existingRule.Priority == updatedRule.Priority {
@@ -179,13 +186,22 @@ func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
 			}, http.StatusBadRequest)
 		}
 	}
-	return store.PatchUnificationRule(ctx, ruleId, updatedRule)
+	return store.PatchUnificationRule(ctx, ruleId, orgHandle, updatedRule)
 }
 
 // DeleteUnificationRule Removes a unification rule.
-func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId string) error {
+func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId, orgHandle string) error {
 
-	return store.DeleteUnificationRule(ctx, ruleId)
+	return store.DeleteUnificationRule(ctx, ruleId, orgHandle)
+}
+
+func containsRule(rules []model.UnificationRule, ruleId string) bool {
+	for _, rule := range rules {
+		if rule.RuleId == ruleId {
+			return true
+		}
+	}
+	return false
 }
 
 // attributeTypeOptions is the ordered list of all supported attribute types and their allowed

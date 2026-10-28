@@ -218,12 +218,13 @@ type GetProfileOptions struct {
 }
 
 // GetProfile retrieves a profile by its ID, including application data.
-func GetProfile(ctx context.Context, profileId string) (*model.Profile, error) {
-	return GetProfileWithOptions(ctx, profileId, GetProfileOptions{IncludeApplicationData: true})
+func GetProfile(ctx context.Context, profileId, orgHandle string) (*model.Profile, error) {
+	return GetProfileWithOptions(ctx, profileId, orgHandle, GetProfileOptions{IncludeApplicationData: true})
 }
 
 // GetProfileWithOptions retrieves a profile by its ID using the supplied loading options.
-func GetProfileWithOptions(ctx context.Context, profileId string, options GetProfileOptions) (*model.Profile, error) {
+func GetProfileWithOptions(ctx context.Context, profileId, orgHandle string,
+	options GetProfileOptions) (*model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -241,7 +242,7 @@ func GetProfileWithOptions(ctx context.Context, profileId string, options GetPro
 
 	query := scripts.GetProfileById
 
-	results, err := dbClient.ExecuteQueryContext(ctx, query, profileId)
+	results, err := dbClient.ExecuteQueryContext(ctx, query, profileId, orgHandle)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		logger.Debug(fmt.Sprintf("No profile found with the given Id: %s", profileId))
@@ -280,7 +281,7 @@ func GetProfileWithOptions(ctx context.Context, profileId string, options GetPro
 }
 
 // GetProfileConsents retrieves the consents of a profile by its profileId
-func GetProfileConsents(ctx context.Context, profileId string) ([]model.ConsentRecord, error) {
+func GetProfileConsents(ctx context.Context, profileId, orgHandle string) ([]model.ConsentRecord, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -316,7 +317,7 @@ func GetProfileConsents(ctx context.Context, profileId string) ([]model.ConsentR
 	}
 	if len(results) == 0 {
 		logger.Debug(fmt.Sprintf("No profile found with the given Id: %s", profileId))
-		var profile, _ = GetProfile(ctx, profileId)
+		var profile, _ = GetProfile(ctx, profileId, orgHandle)
 		if profile != nil {
 			// If no consents found and the user exists, return an empty slice instead of nil
 			return []model.ConsentRecord{}, nil
@@ -499,6 +500,7 @@ func UpdateProfile(ctx context.Context, profile model.Profile) error {
 		identityJSON,
 		profile.UpdatedAt,
 		profile.ProfileId,
+		profile.OrgHandle,
 	)
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed updating the profile: %s", profile.ProfileId)
@@ -904,9 +906,9 @@ func DetachRefererProfileFromReference(ctx context.Context, referenceProfileId, 
 }
 
 // InsertMergedMasterProfileAppData adds or updates application-specific context data.
-func InsertMergedMasterProfileAppData(ctx context.Context, profileId string, newAppCtx model.ApplicationData) error {
+func InsertMergedMasterProfileAppData(ctx context.Context, profileId, orgHandle string, newAppCtx model.ApplicationData) error {
 
-	profile, err := GetProfile(ctx, profileId)
+	profile, err := GetProfile(ctx, profileId, orgHandle)
 	logger := log.GetLogger()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to fetch profile %s for app data update.", profileId)
@@ -959,9 +961,9 @@ func InsertMergedMasterProfileAppData(ctx context.Context, profileId string, new
 
 // InsertMergedMasterProfileTraitData replaces (PUT) the traits data inside Profile
 func InsertMergedMasterProfileTraitData(ctx context.Context,
-	profileId string, traitsData map[string]interface{}) error {
+	profileId, orgHandle string, traitsData map[string]interface{}) error {
 
-	profile, err := GetProfile(ctx, profileId)
+	profile, err := GetProfile(ctx, profileId, orgHandle)
 	logger := log.GetLogger()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to fetch profile %s for trait data update.", profileId)
@@ -989,9 +991,9 @@ func InsertMergedMasterProfileTraitData(ctx context.Context,
 }
 
 // MergeIdentityDataOfProfiles replaces or adds to identity_attributes in Profile
-func MergeIdentityDataOfProfiles(ctx context.Context, profileId string, identityData map[string]interface{}) error {
+func MergeIdentityDataOfProfiles(ctx context.Context, profileId, orgHandle string, identityData map[string]interface{}) error {
 
-	profile, err := GetProfile(ctx, profileId)
+	profile, err := GetProfile(ctx, profileId, orgHandle)
 	logger := log.GetLogger()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to fetch profile %s for identity data update.", profileId)
@@ -1783,7 +1785,7 @@ func toInt(val interface{}) (int, bool) {
 	return 0, false
 }
 
-func GetProfileWithUserId(ctx context.Context, userId string) (*model.Profile, error) {
+func GetProfileWithUserId(ctx context.Context, userId, orgHandle string) (*model.Profile, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -1801,7 +1803,7 @@ func GetProfileWithUserId(ctx context.Context, userId string) (*model.Profile, e
 
 	query := scripts.GetProfileByUserId
 
-	results, err := dbClient.ExecuteQueryContext(ctx, query, userId)
+	results, err := dbClient.ExecuteQueryContext(ctx, query, userId, orgHandle)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		logger.Debug(fmt.Sprintf("No profile found with the given userId: %s", userId))
@@ -1918,7 +1920,7 @@ func GetProfileCookieByProfileId(ctx context.Context, profileId string) (*model.
 }
 
 // GetProfileCookie retrieves a profile cookie by profileId
-func GetProfileCookie(ctx context.Context, cookie string) (*model.ProfileCookie, error) {
+func GetProfileCookie(ctx context.Context, cookie, orgHandle string) (*model.ProfileCookie, error) {
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -1936,7 +1938,7 @@ func GetProfileCookie(ctx context.Context, cookie string) (*model.ProfileCookie,
 
 	query := scripts.GetCookieByCookieId
 
-	results, err := dbClient.ExecuteQueryContext(ctx, query, cookie)
+	results, err := dbClient.ExecuteQueryContext(ctx, query, cookie, orgHandle)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		logger.Debug(fmt.Sprintf("No profile cookie found with the given cookie: %s", cookie))
