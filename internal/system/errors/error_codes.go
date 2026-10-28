@@ -449,18 +449,18 @@ var (
 	}
 
 	SHARE_BAD_REQUEST = ErrorMessage{
-		Code:    errorPrefix + "17001",
+		Code:    errorPrefix + "17014",
 		Message: "Invalid share request.",
 	}
 
 	SHARED_RESOURCE_READ_ONLY = ErrorMessage{
-		Code:        errorPrefix + "17002",
+		Code:        errorPrefix + "17015",
 		Message:     "Shared resource is read-only.",
 		Description: "Only the owner organization can change a shared resource.",
 	}
 
 	SHARE_POLICY_NOT_FOUND = ErrorMessage{
-		Code:    errorPrefix + "17003",
+		Code:    errorPrefix + "17016",
 		Message: "Share policy not found.",
 	}
 

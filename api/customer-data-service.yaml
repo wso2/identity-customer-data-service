@@ -1437,7 +1437,7 @@ components:
       properties:
         code:
           type: string
-          example: CDS-17001
+          example: CDS-17014
         message:
           type: string
           example: Invalid share request.
