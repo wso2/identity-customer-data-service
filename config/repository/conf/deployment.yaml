@@ -100,6 +100,10 @@ auth_server:
       - "internal_cds_consent_category_update"
     consent_category:delete:
       - "internal_cds_consent_category_delete"
+    identity_resolution:view:
+      - "internal_cds_identity_resolution_view"
+    identity_resolution:update:
+      - "internal_cds_identity_resolution_update"
 
     org:profile:create:
       - "internal_org_cds_profile_create"
@@ -123,7 +127,6 @@ auth_server:
 
     org:consent_category:view:
       - "internal_org_cds_consent_category_view"
-
 
 sync:
   schema:
@@ -189,3 +192,14 @@ tls:
   server_key: "server.key" #filename
   client_cert: "client.crt"   #filename
   trust_store: "trust_store.pem"      #filename
+
+identity_resolution:
+  # Allow a unification rule to carry its own match_strength and mismatch_strength rather
+  # than taking the values derived from its attribute_type. Off until operators have a way
+  # to preview what a change would do to existing profiles.
+  allow_evidence_strength_override: false
+
+  # Tolerant matching, server-wide. Off by default, including where this key is absent, so
+  # an upgrade keeps unifying profiles exactly as it did. Turn it on deliberately: while it
+  # is off new fuzzy rules are refused and any already stored are evaluated as exact.
+  fuzzy_matching_enabled: false

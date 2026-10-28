@@ -43,6 +43,8 @@ func QueryPlaceholders(n int) string {
 func CompleteStatement(name, statement string) string {
 
 	switch name {
+	case "FindOldestReferenceProfileIDByAttributeValues":
+		return fmt.Sprintf(statement, "p.identity_attributes")
 	case "InsertIdentityClaimsForProfileSchema":
 		return statement + QueryPlaceholders(13)
 	case "InsertProfileSchemaAttributesForScope":
@@ -58,6 +60,15 @@ func CompleteStatement(name, statement string) string {
 	case "GetAppDataByProfileIds", "GetConsentCategoryAttributesByCategoryIds", "GetOrganizationsByIds",
 		"GetProfileSchemaAttributesByIds", "GetUnificationRulesByIds":
 		return fmt.Sprintf(statement, "$1")
+	case "IRGetProfilesByIDs":
+		return fmt.Sprintf(statement, "$1")
+	case "IRFindCandidateIDsByKeys":
+		// An IN list plus the positions of the exclude and limit arguments.
+		return fmt.Sprintf(statement, "$1", 2, 3)
+	case "IRInsertBlockingKeys":
+		return fmt.Sprintf(statement, "($1, $2, $3, $4)")
+	case "GetProfileIDsWithFiltersBase":
+		return statement + " WHERE p.org_handle = $1"
 	default:
 		return statement
 	}

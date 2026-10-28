@@ -231,6 +231,23 @@ name = "internal_cds_consent_category_delete"
 displayName = "Consent category delete"
 description = "Delete consent category"
 
+[[api_resources]]
+name = "Customer Data Service identity resolution API"
+identifier = "/cds/api/v1/identity-resolution"
+requiresAuthorization = true
+description = "API representation of the identity resolution review API"
+type = "TENANT"
+
+[[api_resources.scopes]]
+name = "internal_cds_identity_resolution_view"
+displayName = "Identity resolution review view"
+description = "View identity resolution review tasks"
+
+[[api_resources.scopes]]
+name = "internal_cds_identity_resolution_update"
+displayName = "Identity resolution review resolve"
+description = "Approve or reject identity resolution review tasks, merging profiles"
+
 # --- CDS API resources for sub organizations -------------------------------- #
 # Only the profile resource has write scopes.
 [[api_resources]]
@@ -333,6 +350,9 @@ name = "internal_cds_organization_view"
 [[api_resource_collections.scopes.read]]
 name = "internal_cds_consent_category_view"
 
+[[api_resource_collections.scopes.read]]
+name = "internal_cds_identity_resolution_view"
+
 [[api_resource_collections.scopes.create]]
 name = "internal_cds_profile_create"
 
@@ -368,6 +388,9 @@ name = "internal_cds_unification_rule_share"
 
 [[api_resource_collections.scopes.update]]
 name = "internal_cds_consent_category_update"
+
+[[api_resource_collections.scopes.update]]
+name = "internal_cds_identity_resolution_update"
 
 [[api_resource_collections.scopes.delete]]
 name = "internal_cds_profile_delete"

@@ -11,16 +11,85 @@ paths:
     get:
       tags: [Profile]
       summary: Get all profiles
+      description: |
+        Lists profiles, optionally narrowed by `filter`, by `fuzzyFilter`, or by both.
+
+        `filter` selects profiles whose values satisfy the condition exactly.
+        `fuzzyFilter` runs the identity resolution engine instead, returning profiles whose
+        values are *similar* to the ones given, each with the score it was given.
+
+        Supplying both is a hybrid search: a profile is returned only where it is similar on
+        the `fuzzyFilter` values **and** exactly satisfies every `filter` condition.
       operationId: getAllProfiles
+      parameters:
+        - name: filter
+          in: query
+          required: false
+          description: |
+            An exact condition, as `<attribute> <operator> <value>` — for example
+            `traits.city eq Colombo`. Repeat the parameter to apply more than one.
+          schema:
+            type: string
+          example: "traits.city eq Colombo"
+        - name: fuzzyFilter
+          in: query
+          required: false
+          description: |
+            A value to match on similarity rather than equality, written the same way and
+            always compared with `eq` — for example `traits.name eq Jonathan Smith`, which
+            also matches `Jonathon Smyth`. Repeat the parameter to search on more than one
+            attribute.
+
+            How closely two values have to agree is decided by the organisation's active
+            unification rules: an attribute is only searched where a rule names it, and the
+            rule's attribute type selects the comparison. A rule matched exactly contributes
+            nothing extra here, so tolerant search needs at least one rule set to `fuzzy`.
+
+            Tolerant matching has to be switched on for the server
+            (`identity_resolution.fuzzy_matching_enabled`). While it is off, rules stored as
+            fuzzy are read as exact and this parameter returns only exact matches.
+          schema:
+            type: string
+          example: "traits.name eq Jonathan Smith"
+        - name: threshold
+          in: query
+          required: false
+          description: |
+            Lowest match score to return, between 0 and 1. Only applies alongside
+            `fuzzyFilter`. Omitted, every scored candidate is returned.
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
+          example: 0.75
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of profiles to return.
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor from a previous page. Not used by a `fuzzyFilter` search.
+          schema:
+            type: string
       responses:
         '200':
-          description: Successful response
+          description: |
+            An array of profiles. Where `fuzzyFilter` was supplied each entry carries the
+            score it was given, highest first, instead of being a bare profile.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Profile'
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/Profile'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/FuzzyMatchResult'
 
   /profiles/{profile_id}:
     get:
@@ -916,6 +985,32 @@ components:
             $ref: '#/components/schemas/Error'
 
   schemas:
+    FuzzyMatchResult:
+      type: object
+      description: |
+        A profile the identity resolution engine judged similar to the values supplied in
+        `fuzzyFilter`, with the score it was given.
+      properties:
+        profile:
+          $ref: '#/components/schemas/Profile'
+        match_score:
+          type: number
+          format: double
+          description: |
+            How alike the profile and the supplied values were judged to be, between 0 and 1.
+            It is the score of the highest-priority rule that agreed, not a combination of
+            every rule, so a rule in the breakdown can score higher than this.
+          example: 0.9429
+        score_breakdown:
+          type: object
+          description: Each rule that had something to compare, and what it scored.
+          additionalProperties:
+            type: number
+            format: double
+          example:
+            name: 0.9429
+            city: 1.0
+
     Profile:
       type: object
       properties:
@@ -1137,6 +1232,60 @@ components:
           type: boolean
           description: Whether the rule is currently active
           example: true
+        attribute_type:
+          type: string
+          description: |
+            What kind of value the attribute holds. Determines which comparison is applied
+            and which blocking keys are indexed.
+
+            Optional. Omitted, it defaults to `PRIMITIVE_EXACT`, which is how a rule written
+            before typed matching is read. It is **required when `unification_method` is
+            `fuzzy`**, because it selects how two values are compared and there is nothing
+            sensible to assume.
+
+            It still shapes behaviour under `deterministic`: `DATE` and `UNIQUE_ID` are
+            normalized before comparing, so a date written two ways still matches, and the
+            type seeds the evidence strengths.
+          enum: [PRIMITIVE_EXACT, FUZZY_STRING, NAME, EMAIL, PHONE, LOCATION, DATE, UNIQUE_ID]
+          example: "EMAIL"
+        unification_method:
+          type: string
+          description: |
+            Whether this rule matches on exact equality or tolerates variation. Rules of
+            both kinds are evaluated side by side within a single comparison. Only
+            FUZZY_STRING, NAME, EMAIL, PHONE and LOCATION support `fuzzy`.
+
+            Optional. Omitted, it defaults to `deterministic`.
+          enum: [deterministic, fuzzy]
+          example: "deterministic"
+        match_strength:
+          type: string
+          description: |
+            How much an agreement on this attribute supports a merge. HIGH means the
+            attribute identifies a person well enough to merge on it alone; MEDIUM and LOW
+            require a second agreeing rule.
+
+            Present only on a server that sets
+            `identity_resolution.allow_evidence_strength_override`, which is off by default.
+            Elsewhere sending it is rejected and it is never returned, because the value is
+            derived from `attribute_type` and no caller can change it.
+
+            Where the setting is on, an absent field means the rule inherits the strength
+            its `attribute_type` implies; a present one is a deliberate override.
+          enum: [HIGH, MEDIUM, LOW]
+          example: "HIGH"
+        mismatch_strength:
+          type: string
+          description: |
+            How much a disagreement on this attribute opposes a merge. HIGH makes the
+            attribute discriminating: two present, differing values veto an automatic merge
+            whatever else agrees. Independent of `match_strength`, because the two
+            directions rarely carry equal weight — matching emails strongly imply the same
+            person while differing emails imply little, and a date of birth is the reverse.
+
+            Gated and reported exactly as `match_strength`.
+          enum: [HIGH, MEDIUM, LOW]
+          example: "LOW"
         created_at:
           type: integer
           format: int64
@@ -1172,6 +1321,49 @@ components:
           type: boolean
           description: Whether the rule is currently active
           example: true
+        attribute_type:
+          type: string
+          description: |
+            What kind of value the attribute holds. Determines which comparison is applied
+            and which blocking keys are indexed.
+          enum: [PRIMITIVE_EXACT, FUZZY_STRING, NAME, EMAIL, PHONE, LOCATION, DATE, UNIQUE_ID]
+          example: "EMAIL"
+        unification_method:
+          type: string
+          description: |
+            Whether this rule matches on exact equality or tolerates variation. Rules of
+            both kinds are evaluated side by side within a single comparison. Only
+            FUZZY_STRING, NAME, EMAIL, PHONE and LOCATION support `fuzzy`.
+          enum: [deterministic, fuzzy]
+          example: "deterministic"
+        match_strength:
+          type: string
+          description: |
+            How much an agreement on this attribute supports a merge. HIGH means the
+            attribute identifies a person well enough to merge on it alone; MEDIUM and LOW
+            require a second agreeing rule.
+
+            Present only on a server that sets
+            `identity_resolution.allow_evidence_strength_override`, which is off by default.
+            Elsewhere sending it is rejected and it is never returned, because the value is
+            derived from `attribute_type` and no caller can change it.
+
+            Where the setting is on, an absent field means the rule inherits the strength
+            its `attribute_type` implies; a present one is a deliberate override.
+          enum: [HIGH, MEDIUM, LOW]
+          example: "HIGH"
+        mismatch_strength:
+          type: string
+          description: |
+            How much a disagreement on this attribute opposes a merge. HIGH makes the
+            attribute discriminating: two present, differing values veto an automatic merge
+            whatever else agrees. Independent of `match_strength`, because the two
+            directions rarely carry equal weight — matching emails strongly imply the same
+            person while differing emails imply little, and a date of birth is the reverse.
+
+            Gated and reported exactly as `match_strength`.
+          enum: [HIGH, MEDIUM, LOW]
+          example: "LOW"
 
     ConsentCategory:
       type: object

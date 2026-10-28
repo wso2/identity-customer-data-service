@@ -32,6 +32,7 @@ import (
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	shareModel "github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -42,14 +43,14 @@ import (
 type UnificationRuleServiceInterface interface {
 	AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgHandle string) error
 	GetUnificationRules(ctx context.Context, orgHandle string) ([]model.UnificationRule, error)
-	GetUnificationRule(ctx context.Context, ruleId string) (*model.UnificationRule, error)
+	GetUnificationRule(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error)
 	// GetUnificationRuleForOrg returns the rule when the organization owns it or when it is an
 	// active shared rule in the organization.
 	GetUnificationRuleForOrg(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error)
 	// GetOwnedUnificationRule returns the rule when the organization owns it.
 	GetOwnedUnificationRule(ctx context.Context, ruleId, orgHandle string) (*model.UnificationRule, error)
 	PatchUnificationRule(ctx context.Context, ruleId, orgHandle string, updatedRule model.UnificationRule) error
-	DeleteUnificationRule(ctx context.Context, ruleId string) error
+	DeleteUnificationRule(ctx context.Context, ruleId, orgHandle string) error
 	CreateSharingPolicy(ctx context.Context, initiator orgModel.Organization, ruleId string,
 		req shareModel.PolicyRequest) (*shareModel.PolicyResponse, error)
 	ListSharingPolicies(ctx context.Context, initiator orgModel.Organization,
@@ -59,6 +60,8 @@ type UnificationRuleServiceInterface interface {
 	UpdateSharingPolicy(ctx context.Context, initiator orgModel.Organization, ruleId, policyId string,
 		req shareModel.PolicyRequest) (*shareModel.PolicyResponse, error)
 	DeleteSharingPolicy(ctx context.Context, initiator orgModel.Organization, ruleId, policyId string) error
+	// GetUnificationOptions reads no data, so it takes no context.
+	GetUnificationOptions() model.UnificationOptionsResponse
 }
 
 // UnificationRuleService is the default implementation of the UnificationRuleServiceInterface.
@@ -272,20 +275,24 @@ func ruleNotFound(ruleId string) error {
 
 // GetUnificationRule Fetches a specific resolution rule.
 func (urs *UnificationRuleService) GetUnificationRule(ctx context.Context,
-	ruleId string) (*model.UnificationRule, error) {
+	ruleId, orgHandle string) (*model.UnificationRule, error) {
 
-	unificationRule, err := store.GetUnificationRule(ctx, ruleId)
+	unificationRule, err := store.GetUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		return nil, err
 	}
 	if unificationRule == nil {
-		return nil, errors2.NewClientError(errors2.ErrorMessage{
-			Code:        errors2.UNIFICATION_RULE_NOT_FOUND.Code,
-			Message:     errors2.UNIFICATION_RULE_NOT_FOUND.Message,
-			Description: fmt.Sprintf("Unification rule: '%s' not found", ruleId),
-		}, http.StatusNotFound)
+		return nil, unificationRuleNotFoundError(ruleId)
 	}
 	return unificationRule, err
+}
+
+func unificationRuleNotFoundError(ruleId string) error {
+	return errors2.NewClientError(errors2.ErrorMessage{
+		Code:        errors2.UNIFICATION_RULE_NOT_FOUND.Code,
+		Message:     errors2.UNIFICATION_RULE_NOT_FOUND.Message,
+		Description: fmt.Sprintf("Unification rule: '%s' not found", ruleId),
+	}, http.StatusNotFound)
 }
 
 // PatchUnificationRule Applies a partial update on a specific resolution rule.
@@ -303,10 +310,13 @@ func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
 		}, http.StatusBadRequest)
 	}
 
-	// Validate that the priority is not already in use
+	// Validate that the rule exists in the org, and that the priority is not already in use
 	existingRules, err := store.GetUnificationRules(ctx, orgHandle)
 	if err != nil {
 		return err
+	}
+	if !containsRule(existingRules, ruleId) {
+		return unificationRuleNotFoundError(ruleId)
 	}
 	for _, existingRule := range existingRules {
 		if existingRule.RuleId != ruleId && existingRule.Priority == updatedRule.Priority {
@@ -317,14 +327,11 @@ func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
 			}, http.StatusBadRequest)
 		}
 	}
-	if err := store.PatchUnificationRule(ctx, ruleId, updatedRule); err != nil {
-		return err
-	}
-	return nil
+	return store.PatchUnificationRule(ctx, ruleId, orgHandle, updatedRule)
 }
 
 // DeleteUnificationRule deletes a unification rule and its sharing policies.
-func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId string) error {
+func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId, orgHandle string) error {
 
 	rule, err := store.GetUnificationRule(ctx, ruleId)
 	if err != nil {
@@ -576,4 +583,105 @@ func (urs *UnificationRuleService) DeleteSharingPolicy(ctx context.Context,
 		return err
 	}
 	return sharingService.DeletePolicy(ctx, model.SharingResourceType, rule.RuleId, policyId, initiator)
+}
+
+func containsRule(rules []model.UnificationRule, ruleId string) bool {
+	for _, rule := range rules {
+		if rule.RuleId == ruleId {
+			return true
+		}
+	}
+	return false
+}
+
+// attributeTypeOptions is the ordered list of all supported attribute types and their allowed
+// matching methods, derived entirely from system constants — no database access required.
+var attributeTypeOptions = []model.AttributeTypeOption{
+	{
+		Value: constants.AttributeTypePrimitiveExact,
+		Label: constants.AttributeTypeLabelPrimitiveExact,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeFuzzyString,
+		Label: constants.AttributeTypeLabelFuzzyString,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypeName,
+		Label: constants.AttributeTypeLabelName,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyPhonetic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeEmail,
+		Label: constants.AttributeTypeLabelEmail,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypePhone,
+		Label: constants.AttributeTypeLabelPhone,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyFormat},
+		},
+	},
+	{
+		Value: constants.AttributeTypeLocation,
+		Label: constants.AttributeTypeLabelLocation,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+			{Value: constants.UnificationMethodFuzzy, Label: constants.UnificationMethodLabelFuzzyGeneral},
+		},
+	},
+	{
+		Value: constants.AttributeTypeDate,
+		Label: constants.AttributeTypeLabelDate,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+	{
+		Value: constants.AttributeTypeUniqueID,
+		Label: constants.AttributeTypeLabelUniqueID,
+		AllowedMethods: []model.MethodOption{
+			{Value: constants.UnificationMethodDeterministic, Label: constants.UnificationMethodLabelDeterministic},
+		},
+	},
+}
+
+// GetUnificationOptions returns the supported attribute types and their allowed matching
+// methods.
+//
+// Where the server has tolerant matching switched off, fuzzy is not offered for any type.
+// This endpoint is what a client builds its method picker from, so it is the one place that
+// has to agree with what the create and patch handlers will accept.
+func (urs *UnificationRuleService) GetUnificationOptions() model.UnificationOptionsResponse {
+	if config.GetCDSRuntime().Config.IdentityResolution.FuzzyMatchingEnabled {
+		return model.UnificationOptionsResponse{AttributeTypes: attributeTypeOptions}
+	}
+
+	exactOnly := make([]model.AttributeTypeOption, 0, len(attributeTypeOptions))
+	for _, option := range attributeTypeOptions {
+		methods := make([]model.MethodOption, 0, len(option.AllowedMethods))
+		for _, method := range option.AllowedMethods {
+			if method.Value != constants.UnificationMethodFuzzy {
+				methods = append(methods, method)
+			}
+		}
+		option.AllowedMethods = methods
+		exactOnly = append(exactOnly, option)
+	}
+
+	return model.UnificationOptionsResponse{AttributeTypes: exactOnly}
 }

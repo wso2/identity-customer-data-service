@@ -63,6 +63,13 @@ func HandleError(w http.ResponseWriter, err error) {
 	}
 }
 
+func ExtractPathPrefixFromContext(r *http.Request) string {
+	if prefix, ok := r.Context().Value(constants.PathPrefixContextKey).(string); ok && prefix != "" {
+		return prefix
+	}
+	return "/t/"
+}
+
 func ExtractOrgHandleFromPath(r *http.Request) string {
 	tenant := r.Context().Value(constants.TenantContextKey).(string)
 	if tenant == "" {
@@ -96,21 +103,21 @@ func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError
 	_ = json.NewEncoder(w).Encode("Invalid erquest format")
 }
 
-// MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
-// with the tenant added to the context. It preserves the remaining path (e.g., /api/v1/...).
-func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
-	mux.HandleFunc("/t/", func(w http.ResponseWriter, r *http.Request) {
+// mountPrefixDispatcher is the shared implementation for tenant-style prefix dispatchers.
+// It extracts the identifier segment immediately after prefix, stores it in context under
+// TenantContextKey, rewrites the request path to the remaining suffix, and calls handlerFunc.
+func mountPrefixDispatcher(mux *http.ServeMux, prefix string, handlerFunc http.HandlerFunc) {
+	mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 
-		if !strings.HasPrefix(path, "/t/") {
+		if !strings.HasPrefix(path, prefix) {
 			http.NotFound(w, r)
 			return
 		}
 
-		// Split: /t/{tenant}/...
-		parts := strings.SplitN(path[len("/t/"):], "/", 2)
+		parts := strings.SplitN(path[len(prefix):], "/", 2)
 		if len(parts) != 2 {
-			http.Error(w, "Invalid tenant path format", http.StatusBadRequest)
+			http.Error(w, "Invalid path format", http.StatusBadRequest)
 			return
 		}
 
@@ -118,6 +125,7 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 		remainingPath := "/" + parts[1]
 
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, orgHandle)
+		ctx = context.WithValue(ctx, constants.PathPrefixContextKey, prefix)
 		if strings.HasPrefix(remainingPath, "/o/") {
 			// /t/{primary_handle}/o/{org_id}/... is the path of a sub organization.
 			segments := strings.SplitN(strings.TrimPrefix(remainingPath, "/o/"), "/", 2)
@@ -150,6 +158,18 @@ func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
 
 		handlerFunc(w, r)
 	})
+}
+
+// MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
+// with the tenant added to the context. It preserves the remaining path (e.g., /cds/api/v1/...).
+func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
+	mountPrefixDispatcher(mux, "/t/", handlerFunc)
+}
+
+// MountOrgDispatcher mounts a dispatcher under /o/{org-uuid}/... and forwards requests to handlerFunc
+// with the org UUID stored in context under TenantContextKey, preserving the remaining path.
+func MountOrgDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
+	mountPrefixDispatcher(mux, "/o/", handlerFunc)
 }
 
 // SubOrgResolver returns the handle of the sub organization of a sub organization path. It returns a

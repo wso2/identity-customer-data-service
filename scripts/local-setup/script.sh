@@ -973,6 +973,7 @@ internal_cds_profile_schema_view internal_cds_profile_schema_create internal_cds
 internal_cds_unification_rule_view internal_cds_unification_rule_create internal_cds_unification_rule_update internal_cds_unification_rule_delete internal_cds_unification_rule_share
 internal_cds_admin_config_view internal_cds_admin_config_update
 internal_cds_organization_view internal_cds_organization_update
+internal_cds_identity_resolution_view internal_cds_identity_resolution_update
 internal_cds_consent_category_view internal_cds_consent_category_create internal_cds_consent_category_update internal_cds_consent_category_delete"
 
 CDS_API_IDENTIFIERS="/cds/api/v1/profiles
@@ -980,6 +981,7 @@ CDS_API_IDENTIFIERS="/cds/api/v1/profiles
 /cds/api/v1/unification-rules
 /cds/api/v1/config
 /cds/api/v1/organizations
+/cds/api/v1/identity-resolution
 /cds/api/v1/consent-categories"
 
 api_resource_id() {
