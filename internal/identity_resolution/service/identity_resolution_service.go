@@ -33,7 +33,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/pagination"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 	urModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
-	urStore "github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
+	urService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 )
 
 type IdentityResolutionServiceInterface interface {
@@ -207,7 +207,7 @@ func (s *IdentityResolutionService) ResolveReviewTask(ctx context.Context, orgHa
 	// Not coerced by the server's fuzzy setting, unlike the evaluation path: these rules are
 	// read to name the rule that drove a match already made, and reading a fuzzy rule as
 	// exact here would attribute the merge to a different rule than the one responsible.
-	if rawRules, rulesErr := urStore.GetUnificationRules(ctx, task.OrgHandle); rulesErr == nil {
+	if rawRules, rulesErr := urService.GetUnificationRuleService().GetUnificationRules(ctx, task.OrgHandle); rulesErr == nil {
 		rules := urModel.ActiveSortedByPriority(rawRules, constants.AttributeTypePrimitiveExact,
 			constants.UnificationMethodDeterministic, constants.DefaultMatchStrength,
 			constants.DefaultMismatchStrength)

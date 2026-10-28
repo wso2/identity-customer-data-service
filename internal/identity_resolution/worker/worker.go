@@ -34,7 +34,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
 	urModel "github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
-	urStore "github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
+	urService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 )
 
 func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
@@ -51,7 +51,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 	flatAttrs := flattenProfile(freshProfile)
 
 	// Load unification rules for blocking key generation and scoring/merge decisions.
-	rawRules, err := urStore.GetUnificationRules(ctx, orgHandle)
+	rawRules, err := urService.GetUnificationRuleService().GetUnificationRules(ctx, orgHandle)
 	if err != nil {
 		logger.Error(fmt.Sprintf("AsyncWorker: failed to load unification rules for org '%s'", orgHandle), log.Error(err))
 		return
@@ -400,7 +400,7 @@ func ReindexAfterMerge(ctx context.Context, masterProfileID, triggerProfileId, o
 			triggerProfileId, masterProfileID), log.Error(err))
 	}
 
-	rawRules, err := urStore.GetUnificationRules(ctx, orgHandle)
+	rawRules, err := urService.GetUnificationRuleService().GetUnificationRules(ctx, orgHandle)
 	if err != nil {
 		logger.Warn(fmt.Sprintf("ReindexAfterMerge: failed to load unification rules for org '%s'", orgHandle),
 			log.Error(err))
