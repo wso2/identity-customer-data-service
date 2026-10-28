@@ -22,11 +22,20 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
-func BuildProfileLocation(orgId, profileId string) string {
-	return fmt.Sprintf("%s/cds/api/v1/profiles/%s", orgId, profileId)
+// BuildProfileLocation returns the absolute URL of a profile. Sub-org UUIDs are served under /o/{uuid},
+// and tenant handles under /t/{handle}.
+func BuildProfileLocation(orgHandle, profileId string) string {
+	serverURL := strings.TrimSuffix(config.GetCDSRuntime().Config.ServerURL, "/")
+	pathPrefix := "/t/"
+	if _, err := uuid.Parse(orgHandle); err == nil {
+		pathPrefix = "/o/"
+	}
+	return fmt.Sprintf("%s%s%s%s/v1/profiles/%s", serverURL, pathPrefix, orgHandle, constants.ApiBasePath, profileId)
 }
 
 // ResolveDisplayNameFromAttribute takes an attribute name (potentially in dot notation) and converts it to a human-readable display name.
