@@ -221,14 +221,21 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 	})
 
 	// Drop candidates an administrator has already decided are different people, unless
-	// this evaluation is materially stronger than the one they rejected.
+	// this evaluation is materially stronger than the one they rejected. A pair that comes
+	// back goes to an administrator again, never straight to a merge: the new evidence can
+	// score for an automatic merge, and merging on it would overturn a human decision with
+	// no human involved.
 	rejections, _ := irStore.GetRejectionsForProfile(ctx, orgHandle, freshProfile.ProfileId)
+	reconsidered := map[string]bool{}
 	if len(rejections) > 0 {
 		var filtered []scoredCandidate
 		for _, sc := range scored {
 			rejection, wasRejected := rejections[sc.id]
-			if wasRejected && !rejection.ShouldReconsider(sc.score, sc.breakdown, thresholds.ManualReview) {
-				continue
+			if wasRejected {
+				if !rejection.ShouldReconsider(sc.score, sc.breakdown, thresholds.ManualReview) {
+					continue
+				}
+				reconsidered[sc.id] = true
 			}
 			filtered = append(filtered, sc)
 		}
@@ -262,7 +269,7 @@ func ResolveProfileAsync(ctx context.Context, profile profileModel.Profile) {
 	for i, sc := range scored {
 		decision := model.Decide(sc.score, thresholds)
 
-		if decision == constants.DecisionAutoMerge {
+		if decision == constants.DecisionAutoMerge && !reconsidered[sc.id] {
 
 			matchedProfile, loadErr := profileStore.GetProfile(ctx, sc.id, orgHandle)
 			if loadErr != nil || matchedProfile == nil {

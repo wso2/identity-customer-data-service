@@ -564,13 +564,16 @@ var IRCountProfilesByBlockingKey = newQuery("CDS-IDR-07",
 	`SELECT COUNT(DISTINCT profile_id) AS profile_count FROM blocking_keys
 				 WHERE org_handle = $1 AND attribute_name = $2 AND key_value = $3`)
 
+// IRInsertReviewTask raises a task, reopening the pair's existing row where there is one. A
+// REJECTED row is reopened too: the worker raises a task for a rejected pair only once the
+// rejection is reconsidered, and the decision itself is kept in rejection_pairs.
 var IRInsertReviewTask = newQuery("CDS-IDR-08",
 	`INSERT INTO review_tasks (id, org_handle, incoming_profile_id, candidate_profile_id, match_score, status, score_breakdown)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7)
 				 ON CONFLICT (incoming_profile_id, candidate_profile_id)
 				 DO UPDATE SET match_score = $5, score_breakdown = $7, status = $6,
 				               resolved_at = NULL, resolved_by = NULL, resolution_notes = NULL
-				 WHERE review_tasks.status IN ('PENDING', 'CANCELLED')`)
+				 WHERE review_tasks.status IN ('PENDING', 'CANCELLED', 'REJECTED')`)
 
 // IRMirrorReviewTaskExists checks whether a PENDING task exists for the reverse pair (candidate→incoming).
 var IRMirrorReviewTaskExists = newQuery("CDS-IDR-09",
