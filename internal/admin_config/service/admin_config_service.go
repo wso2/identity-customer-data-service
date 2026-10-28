@@ -112,6 +112,19 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 	if !config.CDSEnabled {
 		config.CDSEnabled = a.IsCDSEnabled(ctx, orgHandle)
 	}
+	// A sub organization uses the identity resolution settings of its primary organization.
+	if primaryHandle, known := orgService.PrimaryHandleOf(ctx, orgHandle); known && primaryHandle != orgHandle {
+		primaryConfig, err := store.GetAdminConfig(ctx, primaryHandle)
+		if err != nil {
+			return defaultConfig, err
+		}
+		if primaryConfig != nil {
+			config.AutoMergeEnabled = primaryConfig.AutoMergeEnabled
+			config.AutoMergeThreshold = primaryConfig.AutoMergeThreshold
+			config.ManualReviewThreshold = primaryConfig.ManualReviewThreshold
+			config.DeterministicMatchDecisive = primaryConfig.DeterministicMatchDecisive
+		}
+	}
 	return *config, nil
 }
 
