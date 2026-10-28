@@ -29,7 +29,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/cache"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
-	"github.com/wso2/identity-customer-data-service/internal/system/database/rows"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -215,17 +214,7 @@ func GetUnificationRulesByIds(ctx context.Context, ruleIds []string) ([]model.Un
 	}
 	rules := make([]model.UnificationRule, 0, len(results))
 	for _, row := range results {
-		rules = append(rules, model.UnificationRule{
-			RuleId:       rows.String(row, "rule_id"),
-			OrgHandle:    rows.String(row, "org_handle"),
-			RuleName:     rows.String(row, "rule_name"),
-			PropertyName: rows.String(row, "property_name"),
-			PropertyId:   rows.String(row, "property_id"),
-			Priority:     rows.Int(row, "priority"),
-			IsActive:     rows.Bool(row, "is_active"),
-			CreatedAt:    rows.Time(row, "created_at"),
-			UpdatedAt:    rows.Time(row, "updated_at"),
-		})
+		rules = append(rules, scanUnificationRule(row))
 	}
 	return rules, nil
 }
@@ -314,6 +303,7 @@ func scanUnificationRule(row map[string]interface{}) model.UnificationRule {
 	var rule model.UnificationRule
 
 	rule.RuleId = stringColumn(row, "rule_id")
+	rule.OrgHandle = stringColumn(row, "org_handle")
 	rule.RuleName = stringColumn(row, "rule_name")
 	rule.PropertyName = stringColumn(row, "property_name")
 	rule.PropertyId = stringColumn(row, "property_id")

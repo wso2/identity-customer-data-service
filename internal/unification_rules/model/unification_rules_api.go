@@ -56,16 +56,19 @@ type UnificationRuleAPIResponse struct {
 	OwnerOrgHandle    string `json:"owner_org_handle,omitempty" bson:"-"`
 }
 
-// ToAPIResponse converts a rule to its API response.
+// ToAPIResponse converts a rule to its API response. It leaves out the evidence strengths, which
+// the caller sets when the server exposes them.
 func ToAPIResponse(rule UnificationRule) UnificationRuleAPIResponse {
 	return UnificationRuleAPIResponse{
-		RuleId:         rule.RuleId,
-		RuleName:       rule.RuleName,
-		PropertyName:   rule.PropertyName,
-		Priority:       rule.Priority,
-		IsActive:       rule.IsActive,
-		Origin:         rule.Origin,
-		OwnerOrgHandle: rule.OwnerOrgHandle,
+		RuleId:            rule.RuleId,
+		RuleName:          rule.RuleName,
+		PropertyName:      rule.PropertyName,
+		Priority:          rule.Priority,
+		IsActive:          rule.IsActive,
+		AttributeType:     rule.AttributeType,
+		UnificationMethod: rule.UnificationMethod,
+		Origin:            rule.Origin,
+		OwnerOrgHandle:    rule.OwnerOrgHandle,
 	}
 }
 

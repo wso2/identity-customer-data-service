@@ -30,7 +30,6 @@ import (
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
 	schemaModel "github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
-	shareModel "github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -561,24 +560,6 @@ func persistMergedProfileData(ctx context.Context, masterProfile profileModel.Pr
 		reindexAfterMergeFunc(ctx, masterProfile.ProfileId, triggerProfileId, masterProfile.OrgHandle, masterProfile)
 	}
 	return nil
-}
-
-// filterActiveRulesAndSortByPriority returns the rules that run, in evaluation order. Rules with a
-// share state other than ACTIVE do not run.
-func filterActiveRulesAndSortByPriority(rules []model.UnificationRule) []model.UnificationRule {
-	activeRules := make([]model.UnificationRule, 0, len(rules))
-	for _, r := range rules {
-		if r.IsActive && (r.State == "" || r.State == shareModel.StateActive) {
-			activeRules = append(activeRules, r)
-		}
-	}
-	sort.SliceStable(activeRules, func(i, j int) bool {
-		if activeRules[i].Rank != activeRules[j].Rank {
-			return activeRules[i].Rank < activeRules[j].Rank
-		}
-		return activeRules[i].Priority < activeRules[j].Priority
-	})
-	return activeRules
 }
 
 // MergeProfiles merges two profiles based on schema rules and returns the merged profile.

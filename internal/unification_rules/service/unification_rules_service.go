@@ -221,34 +221,34 @@ func (urs *UnificationRuleService) GetUnificationRules(ctx context.Context,
 func (urs *UnificationRuleService) GetUnificationRuleForOrg(ctx context.Context,
 	ruleId, orgHandle string) (*model.UnificationRule, error) {
 
-	rule, err := store.GetUnificationRule(ctx, ruleId)
+	rule, err := store.GetUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		return nil, err
 	}
-	if rule != nil && rule.OrgHandle == orgHandle {
+	if rule != nil {
 		return rule, nil
 	}
-	if rule != nil {
-		org, err := orgService.GetOrganizationByHandle(ctx, orgHandle)
-		if err != nil {
-			return nil, err
-		}
-		var shared []sharedRule
-		if org != nil {
-			if shared, err = getSharedRules(ctx, *org); err != nil {
-				return nil, err
-			}
-		}
-		for _, s := range shared {
-			if s.Rule.RuleId == ruleId && s.State == shareModel.StateActive {
-				rule.Origin = shareModel.OriginShared
-				rule.OwnerOrgHandle = rule.OrgHandle
-				rule.State = s.State
-				return rule, nil
-			}
+	org, err := orgService.GetOrganizationByHandle(ctx, orgHandle)
+	if err != nil {
+		return nil, err
+	}
+	if org == nil {
+		return nil, unificationRuleNotFoundError(ruleId)
+	}
+	shared, err := getSharedRules(ctx, *org)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range shared {
+		if s.Rule.RuleId == ruleId && s.State == shareModel.StateActive {
+			sharedRule := s.Rule
+			sharedRule.Origin = shareModel.OriginShared
+			sharedRule.OwnerOrgHandle = sharedRule.OrgHandle
+			sharedRule.State = s.State
+			return &sharedRule, nil
 		}
 	}
-	return nil, ruleNotFound(ruleId)
+	return nil, unificationRuleNotFoundError(ruleId)
 }
 
 // GetOwnedUnificationRule returns the rule when the organization owns it.
@@ -263,14 +263,6 @@ func (urs *UnificationRuleService) GetOwnedUnificationRule(ctx context.Context,
 		return nil, sharingService.ReadOnlyError()
 	}
 	return rule, nil
-}
-
-func ruleNotFound(ruleId string) error {
-	return errors2.NewClientError(errors2.ErrorMessage{
-		Code:        errors2.UNIFICATION_RULE_NOT_FOUND.Code,
-		Message:     errors2.UNIFICATION_RULE_NOT_FOUND.Message,
-		Description: fmt.Sprintf("Unification rule: '%s' not found", ruleId),
-	}, http.StatusNotFound)
 }
 
 // GetUnificationRule Fetches a specific resolution rule.
@@ -330,23 +322,18 @@ func (urs *UnificationRuleService) PatchUnificationRule(ctx context.Context,
 	return store.PatchUnificationRule(ctx, ruleId, orgHandle, updatedRule)
 }
 
-// DeleteUnificationRule deletes a unification rule and its sharing policies.
+// DeleteUnificationRule deletes a unification rule of the organization and its sharing policies.
 func (urs *UnificationRuleService) DeleteUnificationRule(ctx context.Context, ruleId, orgHandle string) error {
 
-	rule, err := store.GetUnificationRule(ctx, ruleId)
-	if err != nil {
+	if err := suborg.RejectWrite(ctx, orgHandle); err != nil {
 		return err
 	}
-	if rule != nil {
-		if err := suborg.RejectWrite(ctx, rule.OrgHandle); err != nil {
-			return err
-		}
-	}
-	if err := store.DeleteUnificationRule(ctx, ruleId); err != nil {
+	rule, err := store.GetUnificationRule(ctx, ruleId, orgHandle)
+	if err != nil || rule == nil {
 		return err
 	}
-	if rule == nil {
-		return nil
+	if err := store.DeleteUnificationRule(ctx, ruleId, orgHandle); err != nil {
+		return err
 	}
 	return sharingService.DeletePoliciesOfResource(ctx, model.SharingResourceType, ruleId)
 }

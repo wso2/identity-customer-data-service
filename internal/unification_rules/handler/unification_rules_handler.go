@@ -31,7 +31,6 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
@@ -197,17 +196,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		utils.HandleError(w, err)
 		return
 	}
-	addedRuleResponse := model.UnificationRuleAPIResponse{
-		RuleId:            addedRule.RuleId,
-		RuleName:          addedRule.RuleName,
-		PropertyName:      addedRule.PropertyName,
-		Priority:          addedRule.Priority,
-		IsActive:          addedRule.IsActive,
-		AttributeType:     addedRule.AttributeType,
-		UnificationMethod: addedRule.UnificationMethod,
-		MatchStrength:     exposedStrength(addedRule.MatchStrength),
-		MismatchStrength:  exposedStrength(addedRule.MismatchStrength),
-	}
+	addedRuleResponse := toRuleResponse(*addedRule)
 
 	// Trigger reindex if rule is active.
 	if addedRule.IsActive {
@@ -247,7 +236,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	// Convert rules to API response format
 	rulesResponse := make([]model.UnificationRuleAPIResponse, 0, len(rules))
 	for _, rule := range rules {
-		rulesResponse = append(rulesResponse, model.ToAPIResponse(rule))
+		rulesResponse = append(rulesResponse, toRuleResponse(rule))
 	}
 	utils.RespondJSON(w, http.StatusOK, rulesResponse, constants.UnificationRuleResource)
 }
@@ -289,7 +278,7 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 		utils.HandleError(w, err)
 		return
 	}
-	utils.RespondJSON(w, http.StatusOK, model.ToAPIResponse(*rule), constants.UnificationRuleResource)
+	utils.RespondJSON(w, http.StatusOK, toRuleResponse(*rule), constants.UnificationRuleResource)
 }
 
 // PatchUnificationRule applies partial updates to a unification rule.
@@ -450,17 +439,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		})
 	}
 
-	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:            newRule.RuleId,
-		RuleName:          newRule.RuleName,
-		PropertyName:      newRule.PropertyName,
-		Priority:          newRule.Priority,
-		IsActive:          newRule.IsActive,
-		AttributeType:     newRule.AttributeType,
-		UnificationMethod: newRule.UnificationMethod,
-		MatchStrength:     exposedStrength(newRule.MatchStrength),
-		MismatchStrength:  exposedStrength(newRule.MismatchStrength),
-	}
+	ruleResponse := toRuleResponse(*newRule)
 	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
 }
 
@@ -675,6 +654,15 @@ func resolveEvidenceStrength(supplied string, field string) (string, *errors2.Cl
 		return "", invalidEvidenceStrength(field, supplied)
 	}
 	return supplied, nil
+}
+
+// toRuleResponse converts a rule to its API response, with the evidence strengths that the server
+// exposes.
+func toRuleResponse(rule model.UnificationRule) model.UnificationRuleAPIResponse {
+	response := model.ToAPIResponse(rule)
+	response.MatchStrength = exposedStrength(rule.MatchStrength)
+	response.MismatchStrength = exposedStrength(rule.MismatchStrength)
+	return response
 }
 
 // exposedStrength reports what a response should carry for a rule's evidence strength.

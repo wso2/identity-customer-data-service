@@ -156,8 +156,9 @@ FROM unification_rules WHERE org_handle = $1`)
 
 // GetUnificationRulesByIds returns the rules with the IDs. The %s is the IN list of rule IDs.
 var GetUnificationRulesByIds = newQuery("CDS-UNR-06",
-	`SELECT rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, created_at, updated_at
-	FROM unification_rules WHERE rule_id IN (%s)`)
+	`SELECT rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, attribute_type,
+	 unification_method, match_strength, mismatch_strength, created_at, updated_at
+	 FROM unification_rules WHERE rule_id IN (%s)`)
 
 var GetUnificationRule = newQuery("CDS-UNR-02",
 	`SELECT rule_id, org_handle, rule_name, property_name, property_id, priority, is_active, attribute_type, unification_method,
