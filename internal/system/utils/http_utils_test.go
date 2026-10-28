@@ -163,3 +163,36 @@ func TestTenantDispatcherLookupFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestTenantDispatcherOrgBasePath(t *testing.T) {
+
+	defer func(resolver func(context.Context, string, string) (string, error), isSub func(context.Context,
+		string) (bool, error)) {
+		SubOrgResolver, IsSubOrgHandle = resolver, isSub
+	}(SubOrgResolver, IsSubOrgHandle)
+	SubOrgResolver = func(_ context.Context, _, _ string) (string, error) { return "region1", nil }
+	IsSubOrgHandle = func(_ context.Context, _ string) (bool, error) { return false, nil }
+
+	basePathOf := func(path string) string {
+		mux := http.NewServeMux()
+		var basePath string
+		MountTenantDispatcher(mux, func(w http.ResponseWriter, r *http.Request) {
+			basePath = ExtractOrgBasePath(r)
+		})
+		mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, path, nil))
+		return basePath
+	}
+	if got := basePathOf("/t/carbon.super/cds/api/v1/profiles"); got != "/t/carbon.super" {
+		t.Errorf("primary org path: got %q", got)
+	}
+	if got := basePathOf("/t/carbon.super/o/4f088c20/cds/api/v1/profiles"); got != "/t/carbon.super/o/4f088c20" {
+		t.Errorf("sub org path: got %q", got)
+	}
+}
+
+func TestTenantDispatcherDoesNotServeOrgRootPath(t *testing.T) {
+
+	if code, org, _ := serve(t, "/o/4f088c20/cds/api/v1/config"); code != http.StatusNotFound || org != "" {
+		t.Errorf("expected 404 without the handler, got %d %q", code, org)
+	}
+}

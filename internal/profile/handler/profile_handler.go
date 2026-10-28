@@ -652,11 +652,9 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Construct Location header for created resource
 	serverURL := config.GetCDSRuntime().Config.ServerURL
-	pathPrefix := utils.ExtractPathPrefixFromContext(r)
-	location := fmt.Sprintf("%s%s%s%s/profiles/%s",
+	location := fmt.Sprintf("%s%s%s/profiles/%s",
 		serverURL,
-		pathPrefix,
-		orgHandle,
+		utils.ExtractOrgBasePath(r),
 		constants.ApiBasePath+"/v1",
 		profileResponse.ProfileId,
 	)

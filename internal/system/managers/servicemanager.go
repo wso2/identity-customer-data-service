@@ -63,7 +63,6 @@ func (sm *ServiceManager) RegisterServices() error {
 		_ = services.NewOrganizationService(routesMux)
 	}
 
-	// Shared handler used by both /t/ and /o/ dispatchers.
 	tenantHandler := func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 		if path == "" {
@@ -75,6 +74,5 @@ func (sm *ServiceManager) RegisterServices() error {
 	}
 
 	utils.MountTenantDispatcher(sm.mux, tenantHandler)
-	utils.MountOrgDispatcher(sm.mux, tenantHandler)
 	return nil
 }

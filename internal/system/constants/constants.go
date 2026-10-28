@@ -57,7 +57,9 @@ var DisplayNameRegex = regexp.MustCompile(`[^a-zA-Z0-9.\-_+ ]`)
 type contextKey string
 
 const TenantContextKey contextKey = "org_handle"
-const PathPrefixContextKey contextKey = "path_prefix"
+
+// OrgBasePathContextKey holds the path of the organization of the request.
+const OrgBasePathContextKey contextKey = "org_base_path"
 
 // OrgIdContextKey holds the organization ID of a sub organization path.
 const OrgIdContextKey contextKey = "org_id"
