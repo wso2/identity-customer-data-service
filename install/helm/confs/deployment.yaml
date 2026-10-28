@@ -106,3 +106,7 @@ message_queue:
     password: "${ACTIVE_MQ_PASSWORD}"
     profile_queue_name: {{ .Values.cloud.deployment.cds.config.message_queue.broker.profile_queue_name }}
     schema_sync_queue_name: {{ .Values.cloud.deployment.cds.config.message_queue.broker.schema_sync_queue_name }}
+
+identity_resolution:
+  allow_evidence_strength_override: {{ .Values.cloud.deployment.cds.config.identityResolution.allowEvidenceStrengthOverride }}
+  fuzzy_matching_enabled: {{ .Values.cloud.deployment.cds.config.identityResolution.fuzzyMatchingEnabled }}
