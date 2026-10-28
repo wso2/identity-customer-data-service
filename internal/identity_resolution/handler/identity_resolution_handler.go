@@ -44,7 +44,7 @@ func NewIdentityResolutionHandler() *IdentityResolutionHandler {
 func (h *IdentityResolutionHandler) GetReviewTasks(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger()
 
-	err := security.AuthnAndAuthz(r, "identity_resolution:review")
+	err := security.AuthnAndAuthz(r, "identity_resolution:view")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -93,7 +93,7 @@ func (h *IdentityResolutionHandler) GetReviewTasks(w http.ResponseWriter, r *htt
 func (h *IdentityResolutionHandler) ResolveReviewTask(w http.ResponseWriter, r *http.Request) {
 	logger := log.GetLogger()
 
-	err := security.AuthnAndAuthz(r, "identity_resolution:review")
+	err := security.AuthnAndAuthz(r, "identity_resolution:update")
 	if err != nil {
 		utils.HandleError(w, err)
 		return
