@@ -249,7 +249,7 @@ displayName = "Identity resolution review resolve"
 description = "Approve or reject identity resolution review tasks, merging profiles"
 
 # --- CDS API resources for sub organizations -------------------------------- #
-# Only the profile resource has write scopes.
+# Only the profile and identity resolution resources have write scopes.
 [[api_resources]]
 name = "Customer Data Service profile management API (organization)"
 identifier = "/o/cds/api/v1/profiles"
@@ -316,6 +316,20 @@ type = "ORGANIZATION"
 name = "internal_org_cds_consent_category_view"
 displayName = "Consent category view"
 description = "View consent category(s)"
+[[api_resources]]
+name = "Customer Data Service identity resolution API (organization)"
+identifier = "/o/cds/api/v1/identity-resolution"
+requiresAuthorization = true
+description = "Identity resolution review API of CDS for sub organizations"
+type = "ORGANIZATION"
+[[api_resources.scopes]]
+name = "internal_org_cds_identity_resolution_view"
+displayName = "Identity resolution review view"
+description = "View identity resolution review tasks"
+[[api_resources.scopes]]
+name = "internal_org_cds_identity_resolution_update"
+displayName = "Identity resolution review resolve"
+description = "Approve or reject identity resolution review tasks, merging profiles"
 
 # --- Console navigation grouping ------------------------------------------- #
 [[api_resource_collections]]

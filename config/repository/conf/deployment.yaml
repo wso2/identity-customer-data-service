@@ -128,6 +128,11 @@ auth_server:
     org:consent_category:view:
       - "internal_org_cds_consent_category_view"
 
+    org:identity_resolution:view:
+      - "internal_org_cds_identity_resolution_view"
+    org:identity_resolution:update:
+      - "internal_org_cds_identity_resolution_update"
+
 sync:
   schema:
     enabled: true
