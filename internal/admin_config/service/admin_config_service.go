@@ -120,6 +120,29 @@ func roundToThresholdPrecision(value float64) float64 {
 }
 
 func validateThresholds(autoMerge, manualReview float64) error {
+	// A value outside the range a score is expressed in is not applied: the store reads it
+	// back as unset and the organisation keeps running on the shipped default. Accepting it
+	// would report a setting that has no effect.
+	if autoMerge < 0 || autoMerge > 1 {
+		return errors.NewClientError(errors.ErrorMessage{
+			Code:    errors.UPDATE_CONFIG_BAD_REQUEST.Code,
+			Message: errors.UPDATE_CONFIG_BAD_REQUEST.Message,
+			Description: fmt.Sprintf(
+				"auto_merge_threshold (%g) must be between 0 and 1, the range a match score is "+
+					"expressed in. To stop automatic merging, set auto_merge_enabled to false.",
+				autoMerge),
+		}, http.StatusBadRequest)
+	}
+	if manualReview < 0 || manualReview > 1 {
+		return errors.NewClientError(errors.ErrorMessage{
+			Code:    errors.UPDATE_CONFIG_BAD_REQUEST.Code,
+			Message: errors.UPDATE_CONFIG_BAD_REQUEST.Message,
+			Description: fmt.Sprintf(
+				"manual_review_threshold (%g) must be between 0 and 1, the range a match score is "+
+					"expressed in.", manualReview),
+		}, http.StatusBadRequest)
+	}
+
 	if autoMerge == 0 {
 		autoMerge = constants.DefaultAutoMergeThreshold
 	}

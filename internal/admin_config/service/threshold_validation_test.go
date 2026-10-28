@@ -57,13 +57,23 @@ func TestValidateThresholds(t *testing.T) {
 		{"review at the contradiction bar", 0.95, 0.30, true},
 		{"review below the contradiction bar", 0.95, 0.10, true},
 		{"review unset but auto-merge too low for the default", 0.70, 0, true},
+
+		// Outside the range a score is expressed in. The store reads such a value back as
+		// unset, so accepting it would report a setting the engine never applies.
+		{"auto-merge at the top of the range", 1, 0, false},
+		{"auto-merge above 1", 1.5, 0, true},
+		{"auto-merge above 1 with a review threshold set", 1.5, 0.8, true},
+		{"auto-merge negative", -0.5, 0, true},
+		{"review above 1", 0, 1.2, true},
+		{"both above 1 and one offset apart", 1.3, 1.2, true},
+		{"review negative", 0.95, -0.5, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validateThresholds(tt.autoMerge, tt.manualView)
 			if tt.wantErr && err == nil {
-				t.Errorf("validateThresholds(%g, %g) accepted a combination that breaks capping",
+				t.Errorf("validateThresholds(%g, %g) accepted a combination the engine cannot apply",
 					tt.autoMerge, tt.manualView)
 			}
 			if !tt.wantErr && err != nil {
