@@ -159,6 +159,18 @@ type Config struct {
 	ApplicationIdentifierType string `yaml:"application_identifier_type"`
 
 	IdentityResolution IdentityResolutionConfig `yaml:"identity_resolution"`
+
+	MCP MCPConfig `yaml:"mcp"`
+}
+
+// MCPConfig controls the Model Context Protocol endpoint at /t/{org}/cds/mcp.
+type MCPConfig struct {
+	// Enabled serves the endpoint. Off by default, including where the key is absent, so
+	// an upgrade does not expose profiles to agents until an operator decides to.
+	Enabled bool `yaml:"enabled"`
+
+	// ReadOnly leaves out every tool that changes data, whatever scopes the token carries.
+	ReadOnly bool `yaml:"read_only"`
 }
 
 // IdentityResolutionConfig holds server-wide settings for profile matching.
