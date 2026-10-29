@@ -163,3 +163,10 @@ identity_resolution:
   # an upgrade keeps unifying profiles exactly as it did. Turn it on deliberately: while it
   # is off new fuzzy rules are refused and any already stored are evaluated as exact.
   fuzzy_matching_enabled: false
+
+# Model Context Protocol endpoint for AI agents, served at /t/{org}/cds/mcp and
+# /o/{org}/cds/mcp. Agents authenticate with the same tokens and scopes as the REST API.
+mcp:
+  enabled: false
+  # Leave out every tool that changes data, whatever scopes the token carries.
+  read_only: false

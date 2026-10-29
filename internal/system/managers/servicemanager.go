@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/mcp"
 	"github.com/wso2/identity-customer-data-service/internal/system/services"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
@@ -58,6 +60,10 @@ func (sm *ServiceManager) RegisterServices() error {
 	_ = services.NewConsentCategoryService(routesMux)
 	_ = services.NewAdminConfigService(routesMux)
 	_ = services.NewIdentityResolutionService(routesMux)
+
+	if mcpConfig := config.GetCDSRuntime().Config.MCP; mcpConfig.Enabled {
+		mcp.Register(sm.mux, routesMux, mcpConfig.ReadOnly)
+	}
 
 	// Shared handler used by both /t/ and /o/ dispatchers.
 	tenantHandler := func(w http.ResponseWriter, r *http.Request) {
