@@ -38,11 +38,12 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/system/workers"
-	urStore "github.com/wso2/identity-customer-data-service/internal/unification_rules/store"
+	urService "github.com/wso2/identity-customer-data-service/internal/unification_rules/service"
 
 	consentStore "github.com/wso2/identity-customer-data-service/internal/consent/store"
 	profileModel "github.com/wso2/identity-customer-data-service/internal/profile/model"
 	profileStore "github.com/wso2/identity-customer-data-service/internal/profile/store"
+	"github.com/wso2/identity-customer-data-service/internal/profile_schema/identitysource"
 	schemaService "github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
@@ -198,7 +199,7 @@ func (ps *ProfilesService) CreateProfile(ctx context.Context,
 
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
 		// Only enqueue if the profile has at least one attribute matching an active unification rule.
-		activeRules, rulesErr := urStore.GetUnificationRules(ctx, orgHandle)
+		activeRules, rulesErr := urService.GetUnificationRuleService().GetUnificationRules(ctx, orgHandle)
 		if rulesErr != nil {
 			logger.Warn("CreateProfile: failed to load unification rules, enqueueing anyway", log.Error(rulesErr))
 			profile.OrgHandle = orgHandle
@@ -874,7 +875,7 @@ func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 	queue := &workers.ProfileWorkerQueue{}
 	if config.ProfileUnificationTrigger.TriggerType == constants.SyncProfileOnUpdate {
 		// Only enqueue if the profile has at least one attribute matching an active unification rule.
-		activeRules, rulesErr := urStore.GetUnificationRules(ctx, orgHandle)
+		activeRules, rulesErr := urService.GetUnificationRuleService().GetUnificationRules(ctx, orgHandle)
 		if rulesErr != nil {
 			logger.Warn("UpdateProfile: failed to load unification rules, enqueueing anyway", log.Error(rulesErr))
 			profileToUpDate.OrgHandle = orgHandle
@@ -1051,7 +1052,7 @@ func (ps *ProfilesService) UpdateProfileConsents(ctx context.Context,
 	}
 
 	// Reject any attempt to modify a mandatory consent category.
-	mandatoryIds, err := consentStore.GetMandatoryConsentCategoryIds(ctx, orgHandle)
+	mandatoryIds, err := consentStore.GetMandatoryConsentCategoryIds(ctx, identitysource.HandleOf(ctx, orgHandle))
 	if err != nil {
 		return err
 	}
@@ -1796,7 +1797,7 @@ func (ps *ProfilesService) GetProfilesWithFuzzyResolution(
 		return []profileModel.FuzzyMatchResult{}, nil
 	}
 
-	rawRules, err := urStore.GetUnificationRules(ctx, orgHandle)
+	rawRules, err := urService.GetUnificationRuleService().GetUnificationRules(ctx, orgHandle)
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.IR_SEARCH_FAILED.Code,
@@ -1870,7 +1871,7 @@ func (ps *ProfilesService) GetProfilesHybrid(
 	}
 
 	// Step 2: Load unification rules.
-	rawRules, err := urStore.GetUnificationRules(ctx, orgHandle)
+	rawRules, err := urService.GetUnificationRuleService().GetUnificationRules(ctx, orgHandle)
 	if err != nil {
 		return nil, errors2.NewServerError(errors2.ErrorMessage{
 			Code:        errors2.IR_SEARCH_FAILED.Code,

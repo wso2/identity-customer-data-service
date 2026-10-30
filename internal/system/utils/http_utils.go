@@ -63,11 +63,13 @@ func HandleError(w http.ResponseWriter, err error) {
 	}
 }
 
-func ExtractPathPrefixFromContext(r *http.Request) string {
-	if prefix, ok := r.Context().Value(constants.PathPrefixContextKey).(string); ok && prefix != "" {
-		return prefix
+// ExtractOrgBasePath returns the path of the organization of the request: /t/{org_handle}, or
+// /t/{primary_handle}/o/{org_id} for a sub organization.
+func ExtractOrgBasePath(r *http.Request) string {
+	if basePath, ok := r.Context().Value(constants.OrgBasePathContextKey).(string); ok && basePath != "" {
+		return basePath
 	}
-	return "/t/"
+	return "/t/" + ExtractOrgHandleFromPath(r)
 }
 
 func ExtractOrgHandleFromPath(r *http.Request) string {
@@ -103,10 +105,10 @@ func WriteBadRequestErrorResponse(w http.ResponseWriter, err *error2.ClientError
 	_ = json.NewEncoder(w).Encode("Invalid erquest format")
 }
 
-// mountPrefixDispatcher is the shared implementation for tenant-style prefix dispatchers.
-// It extracts the identifier segment immediately after prefix, stores it in context under
-// TenantContextKey, rewrites the request path to the remaining suffix, and calls handlerFunc.
-func mountPrefixDispatcher(mux *http.ServeMux, prefix string, handlerFunc http.HandlerFunc) {
+// MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
+// with the tenant added to the context. It preserves the remaining path (e.g., /cds/api/v1/...).
+func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
+	const prefix = "/t/"
 	mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 
@@ -124,8 +126,37 @@ func mountPrefixDispatcher(mux *http.ServeMux, prefix string, handlerFunc http.H
 		orgHandle := parts[0]
 		remainingPath := "/" + parts[1]
 
+		basePath := prefix + orgHandle
 		ctx := context.WithValue(r.Context(), constants.TenantContextKey, orgHandle)
-		ctx = context.WithValue(ctx, constants.PathPrefixContextKey, prefix)
+		if strings.HasPrefix(remainingPath, "/o/") {
+			// /t/{primary_handle}/o/{org_id}/... is the path of a sub organization.
+			segments := strings.SplitN(strings.TrimPrefix(remainingPath, "/o/"), "/", 2)
+			if len(segments) != 2 || segments[0] == "" || SubOrgResolver == nil {
+				http.NotFound(w, r)
+				return
+			}
+			orgId := segments[0]
+			subOrgHandle, err := SubOrgResolver(r.Context(), orgHandle, orgId)
+			if err != nil {
+				HandleError(w, err)
+				return
+			}
+			ctx = context.WithValue(ctx, constants.TenantContextKey, subOrgHandle)
+			ctx = context.WithValue(ctx, constants.OrgIdContextKey, orgId)
+			remainingPath = "/" + segments[1]
+			basePath += "/o/" + orgId
+		} else if IsSubOrgHandle != nil {
+			isSubOrg, err := IsSubOrgHandle(r.Context(), orgHandle)
+			if err != nil {
+				HandleError(w, err)
+				return
+			}
+			if isSubOrg {
+				HandleError(w, error2.NewClientError(error2.ORGANIZATION_PATH_NOT_SUPPORTED, http.StatusBadRequest))
+				return
+			}
+		}
+		ctx = context.WithValue(ctx, constants.OrgBasePathContextKey, basePath)
 		r = r.WithContext(ctx)
 		r.URL.Path = remainingPath
 
@@ -133,17 +164,12 @@ func mountPrefixDispatcher(mux *http.ServeMux, prefix string, handlerFunc http.H
 	})
 }
 
-// MountTenantDispatcher mounts a dispatcher under /t/{tenant}/... and forwards requests to handlerFunc
-// with the tenant added to the context. It preserves the remaining path (e.g., /cds/api/v1/...).
-func MountTenantDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
-	mountPrefixDispatcher(mux, "/t/", handlerFunc)
-}
+// SubOrgResolver returns the handle of the sub organization of a sub organization path. It returns a
+// client error when the organization is not in the tree, and a server error when the lookup fails.
+var SubOrgResolver func(ctx context.Context, primaryHandle, orgId string) (string, error)
 
-// MountOrgDispatcher mounts a dispatcher under /o/{org-uuid}/... and forwards requests to handlerFunc
-// with the org UUID stored in context under TenantContextKey, preserving the remaining path.
-func MountOrgDispatcher(mux *http.ServeMux, handlerFunc http.HandlerFunc) {
-	mountPrefixDispatcher(mux, "/o/", handlerFunc)
-}
+// IsSubOrgHandle reports whether the handle belongs to a sub organization.
+var IsSubOrgHandle func(ctx context.Context, orgHandle string) (bool, error)
 
 // RespondJSON sends a JSON response with the given status code and payload
 func RespondJSON(w http.ResponseWriter, status int, payload any, resource string) {

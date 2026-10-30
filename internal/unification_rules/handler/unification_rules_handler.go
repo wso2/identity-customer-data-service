@@ -31,13 +31,13 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
-	"github.com/wso2/identity-customer-data-service/internal/system/log"
 	"github.com/wso2/identity-customer-data-service/internal/system/security"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/model"
 	"github.com/wso2/identity-customer-data-service/internal/unification_rules/provider"
 
 	"github.com/google/uuid"
+	shareHandler "github.com/wso2/identity-customer-data-service/internal/sharing/handler"
 )
 
 type UnificationRulesHandler struct {
@@ -196,17 +196,7 @@ func (urh *UnificationRulesHandler) AddUnificationRule(w http.ResponseWriter, r 
 		utils.HandleError(w, err)
 		return
 	}
-	addedRuleResponse := model.UnificationRuleAPIResponse{
-		RuleId:            addedRule.RuleId,
-		RuleName:          addedRule.RuleName,
-		PropertyName:      addedRule.PropertyName,
-		Priority:          addedRule.Priority,
-		IsActive:          addedRule.IsActive,
-		AttributeType:     addedRule.AttributeType,
-		UnificationMethod: addedRule.UnificationMethod,
-		MatchStrength:     exposedStrength(addedRule.MatchStrength),
-		MismatchStrength:  exposedStrength(addedRule.MismatchStrength),
-	}
+	addedRuleResponse := toRuleResponse(*addedRule)
 
 	// Trigger reindex if rule is active.
 	if addedRule.IsActive {
@@ -246,18 +236,7 @@ func (urh *UnificationRulesHandler) GetUnificationRules(w http.ResponseWriter, r
 	// Convert rules to API response format
 	rulesResponse := make([]model.UnificationRuleAPIResponse, 0, len(rules))
 	for _, rule := range rules {
-		tempRule := model.UnificationRuleAPIResponse{
-			RuleId:            rule.RuleId,
-			RuleName:          rule.RuleName,
-			PropertyName:      rule.PropertyName,
-			Priority:          rule.Priority,
-			IsActive:          rule.IsActive,
-			AttributeType:     rule.AttributeType,
-			UnificationMethod: rule.UnificationMethod,
-			MatchStrength:     exposedStrength(rule.MatchStrength),
-			MismatchStrength:  exposedStrength(rule.MismatchStrength),
-		}
-		rulesResponse = append(rulesResponse, tempRule)
+		rulesResponse = append(rulesResponse, toRuleResponse(rule))
 	}
 	utils.RespondJSON(w, http.StatusOK, rulesResponse, constants.UnificationRuleResource)
 }
@@ -294,23 +273,12 @@ func (urh *UnificationRulesHandler) GetUnificationRule(w http.ResponseWriter, r 
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-	rule, err := ruleService.GetUnificationRule(ctx, ruleId, orgHandle)
+	rule, err := ruleService.GetUnificationRuleForOrg(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
-	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:            rule.RuleId,
-		RuleName:          rule.RuleName,
-		PropertyName:      rule.PropertyName,
-		Priority:          rule.Priority,
-		IsActive:          rule.IsActive,
-		AttributeType:     rule.AttributeType,
-		UnificationMethod: rule.UnificationMethod,
-		MatchStrength:     exposedStrength(rule.MatchStrength),
-		MismatchStrength:  exposedStrength(rule.MismatchStrength),
-	}
-	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
+	utils.RespondJSON(w, http.StatusOK, toRuleResponse(*rule), constants.UnificationRuleResource)
 }
 
 // PatchUnificationRule applies partial updates to a unification rule.
@@ -353,8 +321,8 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
 
-	// Fetch old rule to detect is_active changes.
-	oldRule, err := ruleService.GetUnificationRule(ctx, ruleId, orgHandle)
+	// Fetch old rule to detect is_active changes. Only a rule that the organization owns can change.
+	oldRule, err := ruleService.GetOwnedUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -471,17 +439,7 @@ func (urh *UnificationRulesHandler) PatchUnificationRule(w http.ResponseWriter, 
 		})
 	}
 
-	ruleResponse := model.UnificationRuleAPIResponse{
-		RuleId:            newRule.RuleId,
-		RuleName:          newRule.RuleName,
-		PropertyName:      newRule.PropertyName,
-		Priority:          newRule.Priority,
-		IsActive:          newRule.IsActive,
-		AttributeType:     newRule.AttributeType,
-		UnificationMethod: newRule.UnificationMethod,
-		MatchStrength:     exposedStrength(newRule.MatchStrength),
-		MismatchStrength:  exposedStrength(newRule.MismatchStrength),
-	}
+	ruleResponse := toRuleResponse(*newRule)
 	utils.RespondJSON(w, http.StatusOK, ruleResponse, constants.UnificationRuleResource)
 }
 
@@ -512,14 +470,16 @@ func (urh *UnificationRulesHandler) DeleteUnificationRule(w http.ResponseWriter,
 	}
 	ruleProvider := provider.NewUnificationRuleProvider()
 	ruleService := ruleProvider.GetUnificationRuleService()
-
-	// Fetch the rule before deleting so we can trigger reindex cleanup.
-	rule, fetchErr := ruleService.GetUnificationRule(ctx, ruleId, orgHandle)
-	if fetchErr != nil {
-		logger := log.GetLogger()
-		logger.Warn(fmt.Sprintf("DeleteUnificationRule: could not fetch rule %s before deletion", ruleId))
+	// Delete only a rule that the organization owns.
+	rule, err := ruleService.GetOwnedUnificationRule(ctx, ruleId, orgHandle)
+	if err != nil {
+		if clientErr, ok := err.(*errors2.ClientError); ok && clientErr.StatusCode == http.StatusNotFound {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		utils.HandleError(w, err)
+		return
 	}
-
 	err = ruleService.DeleteUnificationRule(ctx, ruleId, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
@@ -551,6 +511,101 @@ func (urh *UnificationRulesHandler) GetUnificationOptions(w http.ResponseWriter,
 // isCDSEnabled checks if CDS is enabled for the given tenant
 func isCDSEnabled(ctx context.Context, orgHandle string) bool {
 	return adminConfigService.GetAdminConfigService().IsCDSEnabled(ctx, orgHandle)
+}
+
+// CreateSharingPolicy shares a rule of the organization.
+func (h *UnificationRulesHandler) CreateSharingPolicy(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:share")
+	if !ok {
+		return
+	}
+	req, ok := shareHandler.DecodePolicyRequest(w, r)
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	resp, err := ruleService.CreateSharingPolicy(r.Context(), *org, r.PathValue("ruleId"), req)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusCreated, resp, shareHandler.PolicyResource)
+}
+
+// ListSharingPolicies returns the sharing policies of a rule of the organization.
+func (h *UnificationRulesHandler) ListSharingPolicies(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:view")
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	resp, err := ruleService.ListSharingPolicies(r.Context(), *org, r.PathValue("ruleId"))
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusOK, resp, shareHandler.PolicyResource)
+}
+
+// GetSharingPolicy returns a sharing policy of a rule of the organization.
+func (h *UnificationRulesHandler) GetSharingPolicy(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:view")
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	resp, err := ruleService.GetSharingPolicy(r.Context(), *org,
+		r.PathValue("ruleId"), r.PathValue("policyId"))
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusOK, resp, shareHandler.PolicyResource)
+}
+
+// UpdateSharingPolicy replaces a sharing policy of a rule of the organization.
+func (h *UnificationRulesHandler) UpdateSharingPolicy(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:share")
+	if !ok {
+		return
+	}
+	req, ok := shareHandler.DecodePolicyRequest(w, r)
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	resp, err := ruleService.UpdateSharingPolicy(r.Context(), *org,
+		r.PathValue("ruleId"), r.PathValue("policyId"), req)
+	if err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	utils.RespondJSON(w, http.StatusOK, resp, shareHandler.PolicyResource)
+}
+
+// DeleteSharingPolicy removes a sharing policy of a rule of the organization.
+func (h *UnificationRulesHandler) DeleteSharingPolicy(w http.ResponseWriter, r *http.Request) {
+
+	org, ok := shareHandler.InitiatorOf(w, r, "unification_rules:share")
+	if !ok {
+		return
+	}
+	ruleProvider := provider.NewUnificationRuleProvider()
+	ruleService := ruleProvider.GetUnificationRuleService()
+	if err := ruleService.DeleteSharingPolicy(r.Context(), *org,
+		r.PathValue("ruleId"), r.PathValue("policyId")); err != nil {
+		utils.HandleError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // fuzzyMatchingAllowed reports whether this server offers tolerant matching at all.
@@ -599,6 +654,15 @@ func resolveEvidenceStrength(supplied string, field string) (string, *errors2.Cl
 		return "", invalidEvidenceStrength(field, supplied)
 	}
 	return supplied, nil
+}
+
+// toRuleResponse converts a rule to its API response, with the evidence strengths that the server
+// exposes.
+func toRuleResponse(rule model.UnificationRule) model.UnificationRuleAPIResponse {
+	response := model.ToAPIResponse(rule)
+	response.MatchStrength = exposedStrength(rule.MatchStrength)
+	response.MismatchStrength = exposedStrength(rule.MismatchStrength)
+	return response
 }
 
 // exposedStrength reports what a response should carry for a rule's evidence strength.

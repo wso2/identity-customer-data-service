@@ -28,7 +28,10 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/admin_config/store"
 	appProvider "github.com/wso2/identity-customer-data-service/internal/application/provider"
 	consentService "github.com/wso2/identity-customer-data-service/internal/consent/service"
+	orgService "github.com/wso2/identity-customer-data-service/internal/organization/service"
+	"github.com/wso2/identity-customer-data-service/internal/organization/suborg"
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/service"
+	sharingService "github.com/wso2/identity-customer-data-service/internal/sharing/service"
 	sysconfig "github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -48,12 +51,22 @@ type AdminConfigServiceInterface interface {
 // AdminConfigService is the default implementation.
 type AdminConfigService struct{}
 
+// IsCDSEnabled reports whether CDS is enabled for the organization. A sub organization is enabled
+// when its primary organization is enabled and the organization access includes it.
 func (a AdminConfigService) IsCDSEnabled(ctx context.Context, orgHandle string) bool {
 	config, err := store.GetAdminConfig(ctx, orgHandle)
-	if err != nil || config == nil {
+	if err == nil && config != nil && config.CDSEnabled {
+		return true
+	}
+	primaryHandle, known := orgService.PrimaryHandleOf(ctx, orgHandle)
+	if !known || primaryHandle == orgHandle {
 		return false
 	}
-	return config.CDSEnabled
+	primaryConfig, err := store.GetAdminConfig(ctx, primaryHandle)
+	if err != nil || primaryConfig == nil || !primaryConfig.CDSEnabled {
+		return false
+	}
+	return sharingService.IsSubOrgEnabled(ctx, orgHandle)
 }
 
 func (a AdminConfigService) IsInitialSchemaSyncDone(ctx context.Context, orgHandle string) bool {
@@ -89,8 +102,28 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 		SystemApplications:    []string{},
 	}
 	config, err := store.GetAdminConfig(ctx, orgHandle)
-	if err != nil || config == nil {
+	if err != nil {
 		return defaultConfig, err
+	}
+	if config == nil {
+		config = &defaultConfig
+	}
+	// A sub organization uses the enablement of its primary organization.
+	if !config.CDSEnabled {
+		config.CDSEnabled = a.IsCDSEnabled(ctx, orgHandle)
+	}
+	// A sub organization uses the identity resolution settings of its primary organization.
+	if primaryHandle, known := orgService.PrimaryHandleOf(ctx, orgHandle); known && primaryHandle != orgHandle {
+		primaryConfig, err := store.GetAdminConfig(ctx, primaryHandle)
+		if err != nil {
+			return defaultConfig, err
+		}
+		if primaryConfig != nil {
+			config.AutoMergeEnabled = primaryConfig.AutoMergeEnabled
+			config.AutoMergeThreshold = primaryConfig.AutoMergeThreshold
+			config.ManualReviewThreshold = primaryConfig.ManualReviewThreshold
+			config.DeterministicMatchDecisive = primaryConfig.DeterministicMatchDecisive
+		}
 	}
 	return *config, nil
 }
@@ -182,6 +215,11 @@ func validateThresholds(autoMerge, manualReview float64) error {
 
 func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 	updatedConfig model.AdminConfig, orgHandle string) error {
+	// A sub organization cannot change the configuration.
+	if err := suborg.RejectWrite(ctx, orgHandle); err != nil {
+		return err
+	}
+
 	logger := log.GetLogger()
 
 	if err := validateThresholds(updatedConfig.AutoMergeThreshold, updatedConfig.ManualReviewThreshold); err != nil {
@@ -228,7 +266,27 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 		}
 	}
 
-	return store.UpdateAdminConfig(ctx, updatedConfig, orgHandle)
+	if err := store.UpdateAdminConfig(ctx, updatedConfig, orgHandle); err != nil {
+		return err
+	}
+	if !sysconfig.OrganizationManagementEnabled() {
+		return nil
+	}
+
+	// Disabling CDS resets the organization tree sync.
+	if isCDSEnabledInitialState && !updatedConfig.CDSEnabled {
+		if err := orgService.ResetTreeSync(ctx, orgHandle); err != nil {
+			return err
+		}
+	}
+
+	// Enabling CDS stores the primary organization.
+	if !isCDSEnabledInitialState && updatedConfig.CDSEnabled {
+		if _, err := orgService.EnsurePrimary(ctx, orgHandle); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a AdminConfigService) UpdateInitialSchemaSync(ctx context.Context, state bool, orgHandle string) error {

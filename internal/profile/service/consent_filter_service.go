@@ -26,6 +26,7 @@ import (
 	consentModel "github.com/wso2/identity-customer-data-service/internal/consent/model"
 	consentStore "github.com/wso2/identity-customer-data-service/internal/consent/store"
 	"github.com/wso2/identity-customer-data-service/internal/profile/model"
+	"github.com/wso2/identity-customer-data-service/internal/profile_schema/identitysource"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
@@ -62,7 +63,9 @@ func FilterProfileByConsent(ctx context.Context, response model.ProfileResponse,
 
 	// Always include mandatory categories in the allowed set regardless of what
 	// the caller requested.  This ensures identity attributes are never stripped.
-	mandatoryIds, err := consentStore.GetMandatoryConsentCategoryIds(ctx, orgHandle)
+	// Mandatory categories belong to the organization that holds the identity attributes.
+	sourceHandle := identitysource.HandleOf(ctx, orgHandle)
+	mandatoryIds, err := consentStore.GetMandatoryConsentCategoryIds(ctx, sourceHandle)
 	if err != nil {
 		return filtered, err
 	}
@@ -85,7 +88,7 @@ func FilterProfileByConsent(ctx context.Context, response model.ProfileResponse,
 	}
 
 	// Fetch attributes for categories the profile has actively consented to (mandatory categories always included).
-	attrsByCategory, err := consentStore.GetConsentedCategoryAttributesByProfileId(ctx, profileId, orgHandle, merged)
+	attrsByCategory, err := consentStore.GetConsentedCategoryAttributesByProfileId(ctx, profileId, sourceHandle, merged)
 	if err != nil {
 		return filtered, err
 	}

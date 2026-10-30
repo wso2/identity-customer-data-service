@@ -22,6 +22,7 @@ import (
 	"sort"
 	"time"
 
+	shareModel "github.com/wso2/identity-customer-data-service/internal/sharing/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 )
 
@@ -44,6 +45,11 @@ type UnificationRule struct {
 	MismatchStrength string    `json:"mismatch_strength" bson:"mismatch_strength"`
 	CreatedAt        time.Time `json:"created_at" bson:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at" bson:"updated_at"`
+	// Set only on reads of the effective rules.
+	Origin         string `json:"origin,omitempty" bson:"-"`           // OWNED or SHARED
+	OwnerOrgHandle string `json:"owner_org_handle,omitempty" bson:"-"` // The owner org of a shared rule
+	State          string `json:"state,omitempty" bson:"-"`            // ACTIVE, or why the rule does not run
+	Rank           int    `json:"-" bson:"-"`                          // Position in the evaluation order
 }
 
 // ApplyDefaults fills in the fields that older rules predate, deriving each from the
@@ -80,14 +86,20 @@ func ActiveSortedByPriority(rules []UnificationRule, defaultAttributeType, defau
 
 	active := make([]UnificationRule, 0, len(rules))
 	for _, rule := range rules {
-		if !rule.IsActive {
+		// A shared rule runs only in the ACTIVE state. A rule read from the store has no state.
+		if !rule.IsActive || (rule.State != "" && rule.State != shareModel.StateActive) {
 			continue
 		}
 		active = append(active, ApplyDefaults(rule, defaultAttributeType, defaultMethod,
 			matchDefaults, mismatchDefaults))
 	}
 
-	sort.Slice(active, func(i, j int) bool {
+	// The rank orders the shared and owned rules of an organization. Rules without a rank keep
+	// the priority order.
+	sort.SliceStable(active, func(i, j int) bool {
+		if active[i].Rank != active[j].Rank {
+			return active[i].Rank < active[j].Rank
+		}
 		return active[i].Priority < active[j].Priority
 	})
 	return active
@@ -169,3 +181,10 @@ func PrimaryRuleName(breakdown map[string]float64, rules []UnificationRule,
 	}
 	return "", false
 }
+
+// SharingResourceType is the resource type of a unification rule in a sharing policy.
+const SharingResourceType = "UNIFICATION_RULE"
+
+// StateInactiveMissingAttribute is the state of a rule whose organization does not see a compatible
+// attribute for the property of the rule.
+const StateInactiveMissingAttribute = "INACTIVE_MISSING_ATTRIBUTE"

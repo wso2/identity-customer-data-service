@@ -52,6 +52,24 @@ type UnificationRuleAPIResponse struct {
 	UnificationMethod string `json:"unification_method" bson:"unification_method"`
 	MatchStrength     string `json:"match_strength,omitempty" bson:"match_strength,omitempty"`
 	MismatchStrength  string `json:"mismatch_strength,omitempty" bson:"mismatch_strength,omitempty"`
+	Origin            string `json:"origin,omitempty" bson:"-"`
+	OwnerOrgHandle    string `json:"owner_org_handle,omitempty" bson:"-"`
+}
+
+// ToAPIResponse converts a rule to its API response. It leaves out the evidence strengths, which
+// the caller sets when the server exposes them.
+func ToAPIResponse(rule UnificationRule) UnificationRuleAPIResponse {
+	return UnificationRuleAPIResponse{
+		RuleId:            rule.RuleId,
+		RuleName:          rule.RuleName,
+		PropertyName:      rule.PropertyName,
+		Priority:          rule.Priority,
+		IsActive:          rule.IsActive,
+		AttributeType:     rule.AttributeType,
+		UnificationMethod: rule.UnificationMethod,
+		Origin:            rule.Origin,
+		OwnerOrgHandle:    rule.OwnerOrgHandle,
+	}
 }
 
 type UnificationRuleUpdateRequest struct {

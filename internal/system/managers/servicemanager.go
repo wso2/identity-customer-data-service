@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/services"
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
@@ -58,8 +59,10 @@ func (sm *ServiceManager) RegisterServices() error {
 	_ = services.NewConsentCategoryService(routesMux)
 	_ = services.NewAdminConfigService(routesMux)
 	_ = services.NewIdentityResolutionService(routesMux)
+	if config.OrganizationManagementEnabled() {
+		_ = services.NewOrganizationService(routesMux)
+	}
 
-	// Shared handler used by both /t/ and /o/ dispatchers.
 	tenantHandler := func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSuffix(r.URL.Path, "/")
 		if path == "" {
@@ -71,6 +74,5 @@ func (sm *ServiceManager) RegisterServices() error {
 	}
 
 	utils.MountTenantDispatcher(sm.mux, tenantHandler)
-	utils.MountOrgDispatcher(sm.mux, tenantHandler)
 	return nil
 }

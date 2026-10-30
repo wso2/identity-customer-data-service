@@ -44,6 +44,7 @@ const SUBClaim = "sub"
 const ClientIdClaim = "client_id"
 const ActiveClaim = "active"
 const OrgHandleClaim = "org_handle"
+const OrgIdClaim = "org_id"
 const AudienceClaim = "aud"
 const ExpiryClaim = "exp"
 const FilterRegex = `^[a-zA-Z0-9._-]+$`
@@ -56,7 +57,12 @@ var DisplayNameRegex = regexp.MustCompile(`[^a-zA-Z0-9.\-_+ ]`)
 type contextKey string
 
 const TenantContextKey contextKey = "org_handle"
-const PathPrefixContextKey contextKey = "path_prefix"
+
+// OrgBasePathContextKey holds the path of the organization of the request.
+const OrgBasePathContextKey contextKey = "org_base_path"
+
+// OrgIdContextKey holds the organization ID of a sub organization path.
+const OrgIdContextKey contextKey = "org_id"
 
 const (
 	ProfileResource            = "profile"
