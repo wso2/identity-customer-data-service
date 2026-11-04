@@ -44,7 +44,8 @@ type AdminConfigServiceInterface interface {
 	IsCDSEnabled(ctx context.Context, orgHandle string) bool
 	IsInitialSchemaSyncDone(ctx context.Context, orgHandle string) bool
 	IsSystemApplication(ctx context.Context, orgHandle, appId string) (bool, error)
-	UpdateAdminConfig(ctx context.Context, category model.AdminConfig, orgHandle string) error
+	GetCORSAllowedOrigins(ctx context.Context, orgHandle string) []string
+	UpdateAdminConfig(ctx context.Context, updatedConfig *model.AdminConfig, orgHandle string) error
 	UpdateInitialSchemaSync(ctx context.Context, state bool, orgHandle string) error
 }
 
@@ -93,6 +94,16 @@ func (a AdminConfigService) IsSystemApplication(ctx context.Context, orgHandle, 
 	return false, nil
 }
 
+// GetCORSAllowedOrigins returns the browser origins the organisation allows, served from an
+// in-memory snapshot of every organisation's origins because the CORS middleware consults
+// it on every request, before authentication. An empty result means the organisation has
+// configured none and the caller should fall back to the deployment-wide list. A failed
+// reload keeps the previously loaded origins, so that a database blip does not change what
+// browser clients are allowed.
+func (a AdminConfigService) GetCORSAllowedOrigins(ctx context.Context, orgHandle string) []string {
+	return corsOrigins.get(ctx, orgHandle)
+}
+
 func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string) (model.AdminConfig, error) {
 
 	defaultConfig := model.AdminConfig{
@@ -100,6 +111,7 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 		CDSEnabled:            false,
 		InitialSchemaSyncDone: false,
 		SystemApplications:    []string{},
+		CORSAllowedOrigins:    []string{},
 	}
 	config, err := store.GetAdminConfig(ctx, orgHandle)
 	if err != nil {
@@ -123,6 +135,9 @@ func (a AdminConfigService) GetAdminConfig(ctx context.Context, orgHandle string
 			config.AutoMergeThreshold = primaryConfig.AutoMergeThreshold
 			config.ManualReviewThreshold = primaryConfig.ManualReviewThreshold
 			config.DeterministicMatchDecisive = primaryConfig.DeterministicMatchDecisive
+			// Its requests arrive under the path of the primary organization, so the CORS
+			// middleware answers them with the origins of the primary organization.
+			config.CORSAllowedOrigins = primaryConfig.CORSAllowedOrigins
 		}
 	}
 	return *config, nil
@@ -213,8 +228,10 @@ func validateThresholds(autoMerge, manualReview float64) error {
 	return nil
 }
 
+// UpdateAdminConfig validates and stores the organisation's configuration. It normalizes
+// updatedConfig in place, so the caller can report back exactly what was stored.
 func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
-	updatedConfig model.AdminConfig, orgHandle string) error {
+	updatedConfig *model.AdminConfig, orgHandle string) error {
 	// A sub organization cannot change the configuration.
 	if err := suborg.RejectWrite(ctx, orgHandle); err != nil {
 		return err
@@ -225,6 +242,11 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 	if err := validateThresholds(updatedConfig.AutoMergeThreshold, updatedConfig.ManualReviewThreshold); err != nil {
 		return err
 	}
+	validatedOrigins, err := validateCORSOrigins(updatedConfig.CORSAllowedOrigins)
+	if err != nil {
+		return err
+	}
+	updatedConfig.CORSAllowedOrigins = validatedOrigins
 
 	isCDSEnabledInitialState := a.IsCDSEnabled(ctx, orgHandle)
 	isInitialSchemaSyncDoneInitialState := a.IsInitialSchemaSyncDone(ctx, orgHandle)
@@ -274,9 +296,14 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 		}
 	}
 
-	if err := store.UpdateAdminConfig(ctx, updatedConfig, orgHandle); err != nil {
+	if err := store.UpdateAdminConfig(ctx, *updatedConfig, orgHandle); err != nil {
 		return err
 	}
+
+	// Reload the origins so this process serves the new list at once. Other replicas pick it
+	// up on their next reload.
+	corsOrigins.invalidate()
+
 	if !sysconfig.OrganizationManagementEnabled() {
 		return nil
 	}

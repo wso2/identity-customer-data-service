@@ -65,6 +65,7 @@ func (h *AdminConfigHandler) GetAdminConfig(w http.ResponseWriter, r *http.Reque
 		AutoMergeThreshold:         config.AutoMergeThreshold,
 		ManualReviewThreshold:      config.ManualReviewThreshold,
 		DeterministicMatchDecisive: config.DeterministicMatchDecisive,
+		CORSAllowedOrigins:         config.CORSAllowedOrigins,
 	}
 	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }
@@ -110,6 +111,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		AutoMergeThreshold:         existingConfig.AutoMergeThreshold,
 		ManualReviewThreshold:      existingConfig.ManualReviewThreshold,
 		DeterministicMatchDecisive: existingConfig.DeterministicMatchDecisive,
+		CORSAllowedOrigins:         existingConfig.CORSAllowedOrigins,
 	}
 
 	// Update only if provided in request
@@ -131,8 +133,11 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 	if config.DeterministicMatchDecisive != nil {
 		configToUpdate.DeterministicMatchDecisive = *config.DeterministicMatchDecisive
 	}
+	if config.CORSAllowedOrigins != nil {
+		configToUpdate.CORSAllowedOrigins = config.CORSAllowedOrigins
+	}
 
-	err = adminConfigService.UpdateAdminConfig(ctx, configToUpdate, orgHandle)
+	err = adminConfigService.UpdateAdminConfig(ctx, &configToUpdate, orgHandle)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
@@ -145,6 +150,7 @@ func (h *AdminConfigHandler) UpdateAdminConfig(w http.ResponseWriter, r *http.Re
 		AutoMergeThreshold:         configToUpdate.AutoMergeThreshold,
 		ManualReviewThreshold:      configToUpdate.ManualReviewThreshold,
 		DeterministicMatchDecisive: configToUpdate.DeterministicMatchDecisive,
+		CORSAllowedOrigins:         configToUpdate.CORSAllowedOrigins,
 	}
 	utils.RespondJSON(w, http.StatusOK, resp, constants.AdminConfigResource)
 }

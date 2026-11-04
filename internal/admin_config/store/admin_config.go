@@ -62,6 +62,53 @@ func GetAdminConfig(ctx context.Context, orgHandle string) (*model.AdminConfig, 
 	return scanAdminConfigRows(orgHandle, results), nil
 }
 
+// GetAllCORSAllowedOrigins returns the CORS allowed origins of every organization that has
+// configured any, keyed by organization handle, in one read.
+func GetAllCORSAllowedOrigins(ctx context.Context) (map[string][]string, error) {
+
+	dbClient, err := provider.NewDBProvider().GetDBClient()
+	logger := log.GetLogger()
+	if err != nil {
+		errorMsg := "Failed to get db client for fetching the CORS allowed origins of organizations"
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_ADMIN_CONFIG.Code,
+			Message:     errors2.GET_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	defer dbClient.Close()
+
+	results, err := dbClient.ExecuteQueryContext(ctx, scripts.GetConfigurationOfAllOrgs,
+		constants.ConfigCORSAllowedOrigins)
+	if err != nil {
+		errorMsg := "Failed to execute query for fetching the CORS allowed origins of organizations"
+		logger.Debug(errorMsg, log.Error(err))
+		return nil, errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.GET_ADMIN_CONFIG.Code,
+			Message:     errors2.GET_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
+	originsByOrg := make(map[string][]string, len(results))
+	for _, row := range results {
+		orgHandle, ok := row["org_handle"].(string)
+		if !ok {
+			continue
+		}
+		value, ok := row["value"].(string)
+		if !ok {
+			continue
+		}
+		var origins []string
+		if err := json.Unmarshal([]byte(value), &origins); err == nil && len(origins) > 0 {
+			originsByOrg[orgHandle] = origins
+		}
+	}
+	return originsByOrg, nil
+}
+
 // UpdateAdminConfig updates organization-level admin configuration (e.g., CDS enablement, schema sync flags).
 func UpdateAdminConfig(ctx context.Context, config model.AdminConfig, orgHandle string) error {
 
@@ -205,6 +252,29 @@ func UpdateAdminConfig(ctx context.Context, config model.AdminConfig, orgHandle 
 		}, err)
 	}
 
+	corsOriginsValue, err := json.Marshal(config.CORSAllowedOrigins)
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to marshal cors_allowed_origins for organization: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+	_, err = tx.ExecContext(ctx, query, orgHandle, constants.ConfigCORSAllowedOrigins, string(corsOriginsValue))
+	if err != nil {
+		_ = tx.Rollback()
+		errorMsg := fmt.Sprintf("Failed to update cors_allowed_origins for organization: %s", orgHandle)
+		logger.Debug(errorMsg, log.Error(err))
+		return errors2.NewServerError(errors2.ErrorMessage{
+			Code:        errors2.UPDATE_ADMIN_CONFIG.Code,
+			Message:     errors2.UPDATE_ADMIN_CONFIG.Message,
+			Description: errorMsg,
+		}, err)
+	}
+
 	return tx.Commit()
 }
 
@@ -268,6 +338,7 @@ func scanAdminConfigRows(orgHandle string, results []map[string]interface{}) *mo
 		CDSEnabled:            false,
 		InitialSchemaSyncDone: false,
 		SystemApplications:    []string{},
+		CORSAllowedOrigins:    []string{},
 		// Enabled unless the org has explicitly turned it off. An org configured before
 		// this key existed has no row for it, and reading that absence as "disabled" would
 		// silently stop every merge the tenant relied on and route it to review instead.
@@ -301,6 +372,11 @@ func scanAdminConfigRows(orgHandle string, results []map[string]interface{}) *mo
 			var apps []string
 			if err := json.Unmarshal([]byte(value), &apps); err == nil {
 				config.SystemApplications = apps
+			}
+		case constants.ConfigCORSAllowedOrigins:
+			var origins []string
+			if err := json.Unmarshal([]byte(value), &origins); err == nil {
+				config.CORSAllowedOrigins = origins
 			}
 		case constants.ConfigAutoMergeEnabled:
 			config.AutoMergeEnabled = value == "true"
