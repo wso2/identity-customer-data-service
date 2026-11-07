@@ -50,6 +50,15 @@ type Adapter interface {
 	IdentityAttributeSourceHandle(orgHandle, primaryHandle string) string
 }
 
+// ServiceCredentialsVerifier is implemented by the adapter of an identity provider that sends CDS
+// the service credentials CDS calls it with, one pair per primary organization. CDS stores a pair
+// only after the adapter verifies it, and refuses an encryption key for any other adapter.
+type ServiceCredentialsVerifier interface {
+	// VerifyServiceCredentials returns nil when the identity provider issues a token to the client
+	// for the organization, and a client error when it refuses the client.
+	VerifyServiceCredentials(ctx context.Context, orgHandle, clientID, clientSecret string) error
+}
+
 var (
 	adapterMu sync.RWMutex
 	adapter   Adapter
