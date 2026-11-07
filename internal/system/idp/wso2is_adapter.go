@@ -33,9 +33,20 @@ type WSO2ISAdapter struct {
 	client *client.IdentityClient
 }
 
+// WSO2 IS sends CDS the service credentials of each organization.
+var _ ServiceCredentialsVerifier = (*WSO2ISAdapter)(nil)
+
 // NewWSO2ISAdapter returns an adapter for the configured IS.
 func NewWSO2ISAdapter() *WSO2ISAdapter {
 	return &WSO2ISAdapter{client: client.NewIdentityClient(config.GetCDSRuntime().Config)}
+}
+
+// VerifyServiceCredentials asks the token endpoint of the organization for a token with the
+// client.
+func (a *WSO2ISAdapter) VerifyServiceCredentials(_ context.Context, orgHandle, clientID,
+	clientSecret string) error {
+
+	return a.client.VerifyClientCredentials(orgHandle, clientID, clientSecret)
 }
 
 func (a *WSO2ISAdapter) GetPrimaryOrganization(_ context.Context, primaryHandle string) (Organization, error) {
