@@ -84,24 +84,24 @@ paths:
           in: query
           required: false
           description: |
-            Lowest match score to return, between 0 and 1. Only applies alongside
-            `fuzzyFilter`. Omitted, every scored candidate is returned.
+            Lowest match score to return. Only applies alongside `fuzzyFilter`. Omitted, or 0
+            or less, the `manual_review_threshold` of the organization is used, which is 0.75
+            unless the organization changed it. A value above 1 is treated as 1. A value that
+            is not a number gives a 400.
           schema:
             type: number
             format: double
-            minimum: 0
-            maximum: 1
           example: 0.75
         - name: page_size
           in: query
           required: false
           description: |
-            Maximum number of profiles to return. Defaults to 5, with a maximum of 200.
-            A value that is not a valid number, or is out of range, gives a 400.
+            Maximum number of profiles to return. Defaults to 5. A value above 200 is treated
+            as 200, and 0 returns an empty page. A value that is not a whole number, or is
+            negative, gives a 400.
           schema:
             type: integer
             minimum: 0
-            maximum: 200
             default: 5
         - name: cursor
           in: query
@@ -118,7 +118,8 @@ paths:
           description: |
             Comma-separated list of the fields to return in each profile, for example
             `traits.city,identity_attributes`. A name with a dot selects one attribute of a
-            scope; a scope alone selects all of its attributes.
+            scope; a scope alone selects all of its attributes. Omitted, each profile in the
+            list carries only `profile_id`, `user_id`, `meta` and `merged_from`.
           schema:
             type: string
           example: "traits.city,identity_attributes"
@@ -276,7 +277,9 @@ paths:
       responses:
         '200':
           description: |
-            The event was processed.
+            The event was processed. `AUTHENTICATION_SUCCESS`, `SESSION_TERMINATE` and an event
+            that CDS ignores return `{"status": "updated"}`. The profile events (`POST_ADD_USER`,
+            `POST_DELETE_USER_WITH_ID` and the two claim events) return an empty body.
           content:
             application/json:
               schema:
@@ -362,10 +365,13 @@ paths:
         - name: includeApplicationData
           in: query
           required: false
-          description: Whether to include `application_data` in the response.
+          description: |
+            Whether to include `application_data` in the response. Omitted, it is not
+            returned. A caller that is not a system application only ever gets the data of
+            its own application.
           schema:
             type: boolean
-            default: true
+            default: false
         - name: application_identifier
           in: query
           required: false
@@ -639,14 +645,22 @@ paths:
       responses:
         '200':
           description: |
-            The attributes of the scope. For `application_data` the attributes of all
-            applications are returned unless a filter narrows them.
+            The attributes of the scope. For `identity_attributes` and `traits` the body is an
+            array. For `application_data` it is an object that holds the attributes of each
+            application under the application identifier, for all applications unless a filter
+            narrows them.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProfileSchemaAttribute'
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/ProfileSchemaAttribute'
+                  - type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/ProfileSchemaAttribute'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1448,8 +1462,15 @@ paths:
         Only the fields in the body change. Fields that
         are not part of the request schema are rejected with a 400.
 
+        The request is authorized with a bearer token that has the scope below, or with the
+        admin credentials (HTTP Basic), which the identity server uses to send the CDS enable
+        setting of an organization.
+
         <br><b>Scope required:</b> `admin_config:update`
       operationId: updateAdminConfig
+      security:
+        - bearerAuth: [ ]
+        - basicAuth: [ ]
       requestBody:
         required: true
         content:
@@ -1487,11 +1508,13 @@ paths:
         - name: page_size
           in: query
           required: false
-          description: Maximum number of tasks to return. Defaults to 5, with a maximum of 200.
+          description: |
+            Maximum number of tasks to return. Defaults to 5. A value above 200 is treated as
+            200, and 0 returns an empty page. A value that is not a whole number, or is
+            negative, gives a 400.
           schema:
             type: integer
             minimum: 0
-            maximum: 200
             default: 5
         - name: profile_id
           in: query
@@ -1951,6 +1974,9 @@ components:
   schemas:
     Pagination:
       type: object
+      required:
+        - count
+        - page_size
       properties:
         count:
           type: integer
@@ -1976,6 +2002,9 @@ components:
 
     ProfileListResponse:
       type: object
+      required:
+        - profile_id
+        - meta
       description: |
         A profile as listed by `GET /profiles`. Unlike `ProfileResponse` it has no
         `anonymous_profile_tracker` or `merged_to`. `match_score` and `score_breakdown`
@@ -2031,6 +2060,9 @@ components:
 
     ProfileResponse:
       type: object
+      required:
+        - profile_id
+        - meta
       properties:
         profile_id:
           type: string
@@ -2068,6 +2100,10 @@ components:
 
     ProfileMeta:
       type: object
+      required:
+        - created_at
+        - updated_at
+        - location
       properties:
         created_at:
           type: string
@@ -2146,9 +2182,12 @@ components:
         event:
           type: string
           description: |
-            Identity server event name, for example `POST_ADD_USER`,
-            `POST_DELETE_USER_WITH_ID`, `POST_SET_USER_CLAIM_VALUE_WITH_ID` or
-            `POST_SET_USER_CLAIM_VALUES_WITH_ID`.
+            Identity server event name. The events that CDS acts on are `POST_ADD_USER`,
+            `POST_DELETE_USER_WITH_ID`, `POST_SET_USER_CLAIM_VALUE_WITH_ID`,
+            `POST_SET_USER_CLAIM_VALUES_WITH_ID`, `AUTHENTICATION_SUCCESS` and
+            `SESSION_TERMINATE`. `AUTHENTICATION_SUCCESS` needs `userId` and attaches the user to
+            the anonymous profile of `profileCookie`. `SESSION_TERMINATE` deactivates that cookie.
+            Any other event is accepted and ignored.
         userId:
           type: string
         profileCookie:
@@ -2188,6 +2227,9 @@ components:
 
     ProfileLinkResponse:
       type: object
+      required:
+        - profile_id
+        - user_id
       properties:
         profile_id:
           type: string
@@ -2241,6 +2283,8 @@ components:
         - property_name
         - priority
         - is_active
+        - attribute_type
+        - unification_method
       properties:
         rule_id:
           type: string
@@ -2388,6 +2432,8 @@ components:
 
     ConsentAttribute:
       type: object
+      required:
+        - attribute_name
       properties:
         attribute_name:
           type: string
@@ -2430,6 +2476,11 @@ components:
 
     ConsentCategory:
       type: object
+      required:
+        - category_name
+        - category_identifier
+        - purpose
+        - is_mandatory
       properties:
         category_name:
           type: string
@@ -2505,11 +2556,11 @@ components:
         merge_strategy:
           type: string
           description: How the value is resolved when two profiles merge.
-          enum: [overwrite, latest, combine, oldest]
+          enum: [overwrite, combine]
         mutability:
           type: string
           description: Defaults to `readWrite`.
-          enum: [readWrite, readOnly, writeOnly, immutable, writeOnce, computed]
+          enum: [readWrite, readOnly, writeOnly, immutable, writeOnce]
         application_identifier:
           type: string
           description: Application the attribute belongs to. Only for `application_data`.
@@ -2590,6 +2641,12 @@ components:
 
     AdminConfig:
       type: object
+      required:
+        - cds_enabled
+        - auto_merge_enabled
+        - auto_merge_threshold
+        - manual_review_threshold
+        - deterministic_match_decisive
       properties:
         cds_enabled:
           type: boolean
@@ -2647,6 +2704,12 @@ components:
 
     ReviewTask:
       type: object
+      required:
+        - id
+        - incoming_profile_id
+        - candidate_profile_id
+        - status
+        - created_at
       properties:
         id:
           type: string
@@ -2735,6 +2798,9 @@ components:
 
     ReviewTaskList:
       type: object
+      required:
+        - pagination
+        - tasks
       properties:
         pagination:
           $ref: '#/components/schemas/Pagination'
