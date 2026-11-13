@@ -184,17 +184,21 @@ When fetching a profile, third-party apps always receive a consent-filtered resp
 GET /api/v1/{orgHandle}/profiles/{profileId}
 GET /api/v1/{orgHandle}/profiles/{profileId}?consentCategoryId=<marketing UUID>
 GET /api/v1/{orgHandle}/profiles/{profileId}?consentCategoryId=<marketing UUID>&consentCategoryId=<analytics UUID>
+GET /api/v1/{orgHandle}/profiles/{profileId}?consentCategoryId=<marketing UUID>&includeApplicationData=true
 ```
+
+`application_data` is **excluded by default**. Pass `includeApplicationData=true` to include it. When included, regular apps only receive data scoped to their own `application_identifier`; system apps receive all app data (or can filter by `application_identifier`).
 
 ### Behaviour by caller and consentCategoryId
 
-| Caller | `consentCategoryId` passed | Response |
-|---|---|---|
-| System app | yes or no | Full profile — consent filtering bypassed |
-| Regular app | no | Mandatory identity data fields only |
-| Regular app | yes, user has consented | Identity data fields + attributes from consented categories |
-| Regular app | yes, user has NOT consented | Identity data fields only (non-consented categories contribute nothing) |
-| Regular app | multiple consentCategoryIds | Identity data fields + **union** of attributes across all consented categories |
+| Caller | `consentCategoryId` passed | `includeApplicationData` | Response |
+|---|---|---|---|
+| System app | yes or no | any | Full profile — consent filtering bypassed |
+| Regular app | no | any | Mandatory identity data fields only |
+| Regular app | yes, user has consented | `false` (default) | Identity data fields + traits from consented categories |
+| Regular app | yes, user has consented | `true` | Identity data fields + traits + caller's own `application_data` from consented categories |
+| Regular app | yes, user has NOT consented | any | Identity data fields only (non-consented categories contribute nothing) |
+| Regular app | multiple consentCategoryIds | `true` | Identity data fields + **union** of traits and `application_data` across all consented categories |
 
 ---
 
@@ -244,10 +248,10 @@ No `consentCategoryId` passed → mandatory Identity Data fields only.
 ### Case 2 — Single consentCategoryId, user has consented
 
 ```
-GET /api/v1/acme/profiles/p-001?consentCategoryId=<marketing UUID>
+GET /api/v1/acme/profiles/p-001?consentCategoryId=<marketing UUID>&includeApplicationData=true
 ```
 
-Marketing is consented → union of Identity Data + Marketing attributes.
+Marketing is consented → union of Identity Data + Marketing attributes. `application_data` is included because `includeApplicationData=true` is set; the caller's own app data (`com.acme.crm`) is returned.
 
 ```json
 {
@@ -296,7 +300,7 @@ Analytics is revoked → only mandatory Identity Data fields returned.
 ### Case 4 — Multiple consentCategoryIds (union)
 
 ```
-GET /api/v1/acme/profiles/p-001?consentCategoryId=<marketing UUID>&consentCategoryId=<analytics UUID>
+GET /api/v1/acme/profiles/p-001?consentCategoryId=<marketing UUID>&consentCategoryId=<analytics UUID>&includeApplicationData=true
 ```
 
 Marketing is consented, Analytics is revoked → union of Identity Data + Marketing only.
