@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -480,6 +481,25 @@ func TestNewOutboundHTTPClient(t *testing.T) {
 	_, err = newOutboundHTTPClient(config.TLSConfig{CertDir: dir, MTLSEnabled: true, CDSPublicCert: "a.crt",
 		CDSPrivateKey: "a.key"})
 	assert.Error(t, err, "a client certificate that cannot be loaded")
+}
+
+func TestSharedOutboundHTTPClient(t *testing.T) {
+	resetSharedHTTPClient := func() {
+		sharedHTTPClientOnce = sync.Once{}
+		sharedHTTPClient, errSharedHTTPClient = nil, nil
+	}
+	resetSharedHTTPClient()
+	t.Cleanup(resetSharedHTTPClient)
+
+	first, err := sharedOutboundHTTPClient(config.TLSConfig{CertDir: t.TempDir()})
+	require.NoError(t, err)
+	second, err := sharedOutboundHTTPClient(config.TLSConfig{CertDir: t.TempDir()})
+	require.NoError(t, err)
+	assert.Same(t, first, second, "all calls share one client and one connection pool")
+
+	resetSharedHTTPClient()
+	_, err = sharedOutboundHTTPClient(config.TLSConfig{CertDir: t.TempDir(), TrustStore: "missing.pem"})
+	assert.Error(t, err, "the build error is returned")
 }
 
 func TestConvertSCIMClaimWithLocal(t *testing.T) {

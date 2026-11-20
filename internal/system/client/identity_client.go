@@ -33,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	idpModel "github.com/wso2/identity-customer-data-service/internal/identity_provider/model"
@@ -83,7 +84,7 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 	}
 	log.GetLogger().Info("Creating IdentityClient with base URL: " + baseHostPort)
 
-	httpClient, err := newOutboundHTTPClient(cfg.TLS)
+	httpClient, err := sharedOutboundHTTPClient(cfg.TLS)
 	if err != nil {
 		log.GetLogger().Error("Failed to create outbound HTTPS client for IS", log.Error(err))
 		os.Exit(1)
@@ -93,6 +94,21 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 		BaseURL:    baseHostPort,
 		HTTPClient: httpClient,
 	}
+}
+
+var (
+	sharedHTTPClientOnce sync.Once
+	sharedHTTPClient     *http.Client
+	errSharedHTTPClient  error
+)
+
+// sharedOutboundHTTPClient returns the one outbound HTTP client of the process. The first call builds it, and
+// later calls ignore tlsCfg. IdentityClient values are created per request, so they share this connection pool.
+func sharedOutboundHTTPClient(tlsCfg config.TLSConfig) (*http.Client, error) {
+	sharedHTTPClientOnce.Do(func() {
+		sharedHTTPClient, errSharedHTTPClient = newOutboundHTTPClient(tlsCfg)
+	})
+	return sharedHTTPClient, errSharedHTTPClient
 }
 
 // Builds an HTTP client with TLS/mTLS configuration for outbound requests.
@@ -150,6 +166,7 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig) (*http.Client, error) {
 		TLSHandshakeTimeout: 10 * time.Second,
 		IdleConnTimeout:     60 * time.Second,
 		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
 		MaxConnsPerHost:     100,
 	}
 	return &http.Client{
