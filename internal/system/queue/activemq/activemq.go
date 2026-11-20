@@ -220,6 +220,15 @@ func (mc *managedConn) getConn() *stomp.Conn {
 	return mc.conn
 }
 
+// send publishes one message on the current connection. Every message carries
+// the persistent header: ActiveMQ treats a STOMP message without it as
+// non-persistent and keeps it only in memory, so a broker restart or failover
+// would discard every job still in the queue.
+func (mc *managedConn) send(destination string, data []byte) error {
+	return mc.getConn().Send(destination, contentTypeJSON, data,
+		stomp.SendOpt.Header("persistent", "true"))
+}
+
 // getConnAndGeneration returns the current connection and its generation under
 // a read lock. Consumers use this to detect whether a closed subscription came
 // from a stale, intentionally retired connection.
@@ -392,7 +401,7 @@ func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
 		return fmt.Errorf("activemq: failed to marshal profile %s: %w", profile.ProfileID, err)
 	}
 
-	if err := q.mc.getConn().Send(q.destination, contentTypeJSON, data); err != nil {
+	if err := q.mc.send(q.destination, data); err != nil {
 		log.GetLogger().Error(fmt.Sprintf(
 			"activemq: send failed for profile %s, will reconnect and retry: %v",
 			profile.ProfileID, err))
@@ -402,7 +411,7 @@ func (q *ProfileQueue) Enqueue(profile profileModel.Profile) error {
 		}
 
 		// Single retry after reconnect.
-		if retryErr := q.mc.getConn().Send(q.destination, contentTypeJSON, data); retryErr != nil {
+		if retryErr := q.mc.send(q.destination, data); retryErr != nil {
 			return fmt.Errorf("activemq: retry send failed for profile %s: %w", profile.ProfileID, retryErr)
 		}
 	}
@@ -538,7 +547,7 @@ func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
 		return fmt.Errorf("activemq: failed to marshal schema sync for tenant %s: %w", sync.OrgHandle, err)
 	}
 
-	if err := q.mc.getConn().Send(q.destination, contentTypeJSON, data); err != nil {
+	if err := q.mc.send(q.destination, data); err != nil {
 		log.GetLogger().Error(fmt.Sprintf(
 			"activemq: send failed for schema sync tenant %s, will reconnect and retry: %v",
 			sync.OrgHandle, err))
@@ -547,7 +556,7 @@ func (q *SchemaSyncQueue) Enqueue(sync schemaModel.ProfileSchemaSync) error {
 			return fmt.Errorf("activemq: send failed for schema sync tenant %s: %w", sync.OrgHandle, reconnErr)
 		}
 
-		if retryErr := q.mc.getConn().Send(q.destination, contentTypeJSON, data); retryErr != nil {
+		if retryErr := q.mc.send(q.destination, data); retryErr != nil {
 			return fmt.Errorf("activemq: retry send failed for schema sync tenant %s: %w", sync.OrgHandle, retryErr)
 		}
 	}
