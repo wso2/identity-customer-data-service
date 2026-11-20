@@ -124,14 +124,14 @@ To plug in a different broker (Kafka, RabbitMQ, SQS, etc.) see [docs/guides/exte
 
 ## 🗄 Database
 
-CDS runs on any of four datasources, selected by `datasource.type` in
+CDS runs on any of five datasources, selected by `datasource.type` in
 `repository/conf/deployment.yaml`.
 
-| | Option A — inbuilt (SQLite) | Option B — PostgreSQL | Option C — MySQL | Option D — SQL Server |
-|---|---|---|---|---|
-| Setup | none | run a server, apply the DDL | run a server, apply the DDL | run a server, apply the DDL |
-| `datasource.type` | `sqlite` (the default) | `postgres` | `mysql` | `mssql` |
-| Best for | local development, demos, evaluation | production, multi-instance deployments | production, multi-instance deployments | production, multi-instance deployments |
+| | Option A — inbuilt (SQLite) | Option B — PostgreSQL | Option C — MySQL | Option D — SQL Server | Option E — Oracle |
+|---|---|---|---|---|---|
+| Setup | none | run a server, apply the DDL | run a server, apply the DDL | run a server, apply the DDL | run a server, apply the DDL |
+| `datasource.type` | `sqlite` (the default) | `postgres` | `mysql` | `mssql` | `oracle` |
+| Best for | local development, demos, evaluation | production, multi-instance deployments | production, multi-instance deployments | production, multi-instance deployments | production, multi-instance deployments |
 
 ### Option A: the inbuilt database
 
@@ -269,6 +269,47 @@ It allows 2100 parameters in a statement, so CDS splits its large inserts into s
 ones. And it rejects two cascading foreign keys from `review_tasks` to `profiles`, so
 deleting a profile also deletes the review tasks that name it as a candidate, in the
 same statement.
+
+### Option E: Oracle
+
+Oracle Database 19c, 21c and 23ai are supported, and one schema serves all three. Run
+CDS in a pluggable database, as a user that owns its tables. The example starts 23ai
+Free, whose pluggable database is `FREEPDB1`, and applies the schema as the application
+user:
+
+```bash
+docker run -d -p 1521:1521 --name oracle \
+  -e ORACLE_PASSWORD=rootpwd \
+  -e APP_USER=cdsuser \
+  -e APP_USER_PASSWORD=cdspwd \
+  gvenzl/oracle-free:23-slim
+
+docker exec -i oracle sqlplus -S cdsuser/cdspwd@//localhost:1521/FREEPDB1 < dbscripts/oracle.sql
+```
+
+The script is one PL/SQL block that skips what exists, so running it again is safe.
+Point the datasource at it. The shared settings apply, `port` defaults to 1521, and
+`name` is the service name of the pluggable database:
+
+```yaml
+datasource:
+  type: "oracle"
+  hostname: "localhost"
+  port: 1521
+  username: "cdsuser"
+  password: "${DB_PASSWORD}"
+  name: "FREEPDB1"
+  sslmode: disable
+```
+
+`sslmode` takes the same names as for MySQL. A mode other than `disable` needs a
+listener that serves TLS. Connection pool settings go under `datasource.oracle`.
+
+The behaviors that differ from PostgreSQL are the ones listed for MySQL: matching is
+case-sensitive, and `blocking_keys` is not partitioned. Two more apply to Oracle. It
+stores an empty string as NULL, so CDS reads a NULL back as an empty string in the few
+columns that can hold one. And before 23ai it has no multi-row `VALUES`, so CDS writes
+rows that arrive in a batch one statement at a time.
 
 ---
 

@@ -30,13 +30,18 @@
 
 set -euo pipefail
 
-# One line per database: its name and the Make target that runs its integration
-# suite. A database added here, and to the description of the `databases` input in
-# testgrid.yml, becomes an option of TestGrid.
+# One line per database: its name, the Make target that runs its integration suite, and
+# for a database that has several releases the container image of the release and, for
+# Oracle, its service name (both are left out for the others). A database added here, and to the
+# description of the `databases` input in testgrid.yml, becomes an option of TestGrid.
 TABLE='postgres integration-test
 sqlite integration-test-sqlite
 mysql integration-test-mysql
-mssql integration-test-mssql'
+mssql2022 integration-test-mssql mcr.microsoft.com/mssql/server:2022-latest
+mssql2019 integration-test-mssql mcr.microsoft.com/mssql/server:2019-latest
+mssql2017 integration-test-mssql mcr.microsoft.com/mssql/server:2017-latest
+oracle21c integration-test-oracle gvenzl/oracle-xe:21-slim XEPDB1
+oracle23ai integration-test-oracle gvenzl/oracle-free:23-slim FREEPDB1'
 
 OUTPUT="${GITHUB_OUTPUT:-/dev/stdout}"
 SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
@@ -45,6 +50,8 @@ all_names() { awk '{print $1}' <<<"$TABLE"; }
 valid_names() { all_names | paste -sd, - | sed 's/,/, /g'; }
 
 target_of() { awk -v name="$1" '$1 == name {print $2}' <<<"$TABLE"; }
+image_of() { awk -v name="$1" '$1 == name {print $3}' <<<"$TABLE"; }
+service_of() { awk -v name="$1" '$1 == name {print $4}' <<<"$TABLE"; }
 
 requested="$(printf '%s' "${DATABASES:-all}" | tr '[:upper:]' '[:lower:]' | tr ',' ' ')"
 if [ -z "$(printf '%s' "$requested" | tr -d '[:space:]')" ]; then
@@ -83,7 +90,8 @@ fi
 include='[]'
 for name in "${selected[@]}"; do
   include="$(jq -c --arg db "$name" --arg target "$(target_of "$name")" \
-    '. + [{db: $db, target: $target}]' <<<"$include")"
+    --arg image "$(image_of "$name")" --arg service "$(service_of "$name")" \
+    '. + [{db: $db, target: $target, image: $image, service: $service}]' <<<"$include")"
 done
 
 {

@@ -37,6 +37,7 @@ func Test_normalizesResults(t *testing.T) {
 		database.TypeSQLite:   true,
 		database.TypeMySQL:    true,
 		database.TypeMSSQL:    true,
+		database.TypeOracle:   true,
 		"":                    false,
 	}
 	for dbType, want := range expected {
@@ -212,4 +213,36 @@ func sortedKeys(set map[string]bool) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func Test_normalizeOracleValue(t *testing.T) {
+	moment := time.Date(2026, 3, 4, 5, 6, 7, 123456000, time.UTC)
+	local := time.Date(2026, 3, 4, 7, 6, 7, 0, time.FixedZone("x", 7200))
+
+	cases := []struct {
+		name         string
+		value        interface{}
+		declaredType string
+		column       string
+		expected     interface{}
+	}{
+		{"nil stays nil", nil, "NVARCHAR", "ORG_NAME", nil},
+		{"a NULL in a column that holds an empty string is read as one", nil, "NVARCHAR", "APPLICATION_IDENTIFIER", ""},
+		{"a boolean number becomes a bool", "1", "NUMBER", "LIST_PROFILE", true},
+		{"a boolean zero becomes false", "0", "NUMBER", "delete_profile", false},
+		{"json given as text becomes bytes", `{"a":1}`, "LongVarChar", "TRAITS", []byte(`{"a":1}`)},
+		{"a text CLOB that is not a JSON column stays text", "[]", "LongVarChar", "SUB_ATTRIBUTES", "[]"},
+		{"raw bytes become text", []byte("u-42"), "VARCHAR2", "USER_ID", "u-42"},
+		{"a time is returned in UTC", local, "TimeStampTZ_DTY", "CREATED_AT", local.UTC()},
+		{"a UTC time is unchanged", moment, "TimeStampTZ_DTY", "CREATED_AT", moment},
+		{"a whole number read as text becomes an int64", "7", "NUMBER", "PRIORITY", int64(7)},
+		{"a fractional number read as text becomes a float64", "0.8500", "NUMBER", "MATCH_SCORE", 0.85},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := normalizeOracleValue(c.value, c.declaredType, c.column); !reflect.DeepEqual(got, c.expected) {
+				t.Errorf("expected %#v, got %#v", c.expected, got)
+			}
+		})
+	}
 }

@@ -60,7 +60,7 @@ type serverEndpoint struct {
 }
 
 // TestMain runs the suite against the datasource named by CDS_TEST_DB:
-// "postgres" (the default), "sqlite", "mysql" or "mssql".
+// "postgres" (the default), "sqlite", "mysql", "mssql" or "oracle".
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
@@ -162,9 +162,33 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 
+	case database.TypeOracle:
+		ora, err := setup.SetupTestOracle(ctx)
+		if err != nil {
+			fmt.Println("Failed to start test DB:", err)
+			os.Exit(1)
+		}
+		db = ora.DB
+		suiteServer = &serverEndpoint{Host: ora.Host, Port: ora.Port, Username: ora.Username,
+			Password: ora.Password, Database: ora.Database}
+		teardown = func() {
+			_ = ora.Container.Terminate(ctx)
+
+			cmd := exec.Command("docker", "rm", "-f", "cds-test-oracle")
+			_, _ = cmd.CombinedOutput()
+		}
+
+		// The schema is the one operators apply, so the suite tests it too.
+		schemaPath := filepath.Join(utils.GetTestHome(), "dbscripts", "oracle.sql")
+		if err := ora.ApplySchemaFile(schemaPath); err != nil {
+			fmt.Println("Failed to create tables from schema:", err)
+			os.Exit(1)
+		}
+
 	default:
-		fmt.Printf("Unsupported CDS_TEST_DB value: %s (want %q, %q, %q or %q)\n",
-			dbType, database.TypePostgres, database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL)
+		fmt.Printf("Unsupported CDS_TEST_DB value: %s (want %q, %q, %q, %q or %q)\n",
+			dbType, database.TypePostgres, database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL,
+			database.TypeOracle)
 		os.Exit(1)
 	}
 

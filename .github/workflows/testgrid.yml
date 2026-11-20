@@ -21,14 +21,11 @@
 # Runs the integration suite against the databases you pick. It runs only when started
 # by hand: Actions > TestGrid > Run workflow, or
 #
-#   gh workflow run testgrid.yml -f databases=mysql,mssql --ref <branch>
+#   gh workflow run testgrid.yml -f databases=mysql,mssql2022 --ref <branch>
 #
-# The PR Builder keeps the PostgreSQL and SQLite suites. The slower ones, MySQL and
-# SQL Server, run from here. The branch picked in "Use workflow from" is the code that
-# is tested.
-#
-# To offer another database, add a line to the table in utils/testgrid-plan.sh and name
-# it in the description of `databases` below.
+# The PR Builder keeps the PostgreSQL and SQLite suites. The slower ones, MySQL, SQL
+# Server and Oracle, run from here. The branch picked in "Use workflow from" is the code
+# that is tested.
 
 name: TestGrid
 
@@ -38,7 +35,7 @@ on:
   workflow_dispatch:
     inputs:
       databases:
-        description: 'Databases to run, separated by commas: postgres, sqlite, mysql, mssql. Use "all" for every one.'
+        description: 'Databases to run, separated by commas: postgres, sqlite, mysql, mssql2022, mssql2019, mssql2017, oracle21c, oracle23ai. Use "all" for every one.'
         required: false
         type: string
         default: 'all'
@@ -110,6 +107,9 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           TEST_FILTER: ${{ needs.plan.outputs.test }}
+          CDS_TEST_MSSQL_IMAGE: ${{ matrix.image }}
+          CDS_TEST_ORACLE_IMAGE: ${{ matrix.image }}
+          CDS_TEST_ORACLE_SERVICE: ${{ matrix.service }}
         run: |
           args=()
           if [ -n "$TEST_FILTER" ]; then

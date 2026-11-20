@@ -94,6 +94,13 @@ func (client *DBClient) ExecuteQueryContext(ctx context.Context, query model.DBQ
 		return nil, fmt.Errorf("query %s failed: %w", query.ID, err)
 	}
 
+	if !database.ReturnsRows(client.dbType, sqlText) {
+		if _, err := client.db.ExecContext(ctx, sqlText, args...); err != nil {
+			return nil, fmt.Errorf("query %s failed: %w", query.ID, err)
+		}
+		return nil, nil
+	}
+
 	rows, err := client.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query %s failed: %w", query.ID, err)

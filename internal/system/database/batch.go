@@ -30,6 +30,9 @@ const (
 // and the batch size it prefers. The datasources other than SQL Server have no
 // limit a store's batch can reach, so they get math.MaxInt.
 func MaxRowsPerStatement(dbType string, paramsPerRow int) int {
+	if dbType == TypeOracle {
+		return 1
+	}
 	if dbType != TypeMSSQL {
 		return math.MaxInt
 	}

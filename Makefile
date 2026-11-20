@@ -71,6 +71,13 @@ else
 	TESTCONTAINERS_RYUK_DISABLED=true CDS_TEST_DB=mssql go test -v ./test/integration
 endif
 
+integration-test-oracle:
+ifdef test
+	TESTCONTAINERS_RYUK_DISABLED=true CDS_TEST_DB=oracle go test -v ./test/integration -run '$(test)'
+else
+	TESTCONTAINERS_RYUK_DISABLED=true CDS_TEST_DB=oracle go test -v ./test/integration
+endif
+
 # Run the unit tests.
 #
 # The race detector runs here because the process shares one connection pool
@@ -121,13 +128,14 @@ help:
 	@echo "  integration-test-sqlite    - Run integration tests against the inbuilt database (use test=TestName to filter)."
 	@echo "  integration-test-mysql     - Run integration tests against MySQL (use test=TestName to filter)."
 	@echo "  integration-test-mssql     - Run integration tests against SQL Server (use test=TestName to filter)."
+	@echo "  integration-test-oracle    - Run integration tests against Oracle Database (use test=TestName to filter)."
 	@echo "  mq-integration-test        - Run message queue integration tests (use test=TestName to filter)."
 	@echo "  unit-test                  - Run unit tests with the race detector."
 	@echo "  unit-test-coverage         - Run unit tests and write coverage reports to target/coverage."
 	@echo "  lint                       - Run golangci-lint."
 	@echo "  help                       - Show this help message."
 
-.PHONY: all clean build lint lint-all help integration-test integration-test-sqlite integration-test-mysql integration-test-mssql mq-integration-test unit-test unit-test-coverage
+.PHONY: all clean build lint lint-all help integration-test integration-test-sqlite integration-test-mysql integration-test-mssql integration-test-oracle mq-integration-test unit-test unit-test-coverage
 
 .PHONY: go_install_tool golangci-lint
 

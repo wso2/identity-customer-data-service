@@ -101,8 +101,31 @@ func Test_BuildFindOldestReferenceProfileIDByAttributeValuesQuery(t *testing.T) 
 		}
 	})
 
+	t.Run("oracle binds the values and puts the escaped path in the statement", func(t *testing.T) {
+		query, args, err := BuildFindOldestReferenceProfileIDByAttributeValuesQuery(
+			database.TypeOracle, "traits.contact.e'mail", values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(args, []interface{}{"a@b.com", `q"uote`}) {
+			t.Errorf("unexpected arguments: %#v", args)
+		}
+		text := query.GetQuery(database.TypeOracle)
+		for _, part := range []string{
+			`JSON_EXISTS(p.traits, '$."contact"."e''mail"[*]?(@.type() == "string" && (@ == $v0 || @ == $v1))'`,
+			`PASSING $4 AS "v0", $5 AS "v1"`, "FETCH FIRST 1 ROWS ONLY"} {
+			if !strings.Contains(text, part) {
+				t.Errorf("the Oracle statement does not contain %q:\n%s", part, text)
+			}
+		}
+		if _, _, err := database.BindStatement(database.TypeOracle, text,
+			append([]interface{}{"o", "p", "u"}, args...)); err != nil {
+			t.Errorf("the Oracle statement does not rebind: %v", err)
+		}
+	})
+
 	t.Run("a datasource without a lookup is refused", func(t *testing.T) {
-		for _, dbType := range []string{"oracle", ""} {
+		for _, dbType := range []string{"db2", ""} {
 			if _, _, err := BuildFindOldestReferenceProfileIDByAttributeValuesQuery(
 				dbType, "traits.email", values); err == nil {
 				t.Errorf("expected an error for %q", dbType)

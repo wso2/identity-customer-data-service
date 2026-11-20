@@ -27,6 +27,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/cache"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
+	dbmodel "github.com/wso2/identity-customer-data-service/internal/system/database/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/provider"
 	"github.com/wso2/identity-customer-data-service/internal/system/database/scripts"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
@@ -75,29 +76,18 @@ func UpsertBlockingKeys(ctx context.Context, profileID, orgID string, keys []mod
 		}, err)
 	}
 
-	var valueClauses []string
-	var args []interface{}
-	argIdx := 1
-
-	for _, key := range keys {
-		valueClauses = append(valueClauses,
-			fmt.Sprintf("($%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3))
-		args = append(args, profileID, orgID, key.AttributeName, key.KeyValue)
-		argIdx += blockingKeyColumns
-	}
-
-	insertQuery := scripts.IRInsertBlockingKeys.Format(strings.Join(valueClauses, ", "))
-
-	if _, err = tx.ExecContext(ctx, insertQuery, args...); err != nil {
-		logger.Error("BlockingStore: failed to insert blocking keys", log.Error(err))
-		if rbErr := tx.Rollback(); rbErr != nil {
-			logger.Error("BlockingStore: failed to rollback transaction", log.Error(rbErr))
+	for _, insert := range buildBlockingKeyInserts(dbClient.DBType(), profileID, orgID, keys) {
+		if _, err = tx.ExecContext(ctx, insert.query, insert.args...); err != nil {
+			logger.Error("BlockingStore: failed to insert blocking keys", log.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				logger.Error("BlockingStore: failed to rollback transaction", log.Error(rbErr))
+			}
+			return errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.IRBlockingKeysFailed.Code,
+				Message:     errors2.IRBlockingKeysFailed.Message,
+				Description: fmt.Sprintf("Failed to insert blocking keys for profile: %s", profileID),
+			}, err)
 		}
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IRBlockingKeysFailed.Code,
-			Message:     errors2.IRBlockingKeysFailed.Message,
-			Description: fmt.Sprintf("Failed to insert blocking keys for profile: %s", profileID),
-		}, err)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -187,30 +177,50 @@ func InsertBlockingKeys(ctx context.Context, profileID, orgID string, keys []mod
 	}
 	defer func() { _ = dbClient.Close() }()
 
-	var valueClauses []string
-	var args []interface{}
-	argIdx := 1
-
-	for _, key := range keys {
-		valueClauses = append(valueClauses,
-			fmt.Sprintf("($%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3))
-		args = append(args, profileID, orgID, key.AttributeName, key.KeyValue)
-		argIdx += blockingKeyColumns
-	}
-
-	insertQuery := scripts.IRInsertBlockingKeys.Format(strings.Join(valueClauses, ", "))
-
-	_, err = dbClient.ExecuteQueryContext(ctx, insertQuery, args...)
-	if err != nil {
-		logger.Error("BlockingStore: failed to insert blocking keys", log.Error(err))
-		return errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.IRBlockingKeysFailed.Code,
-			Message:     errors2.IRBlockingKeysFailed.Message,
-			Description: fmt.Sprintf("Failed to insert blocking keys for profile: %s", profileID),
-		}, err)
+	for _, insert := range buildBlockingKeyInserts(dbClient.DBType(), profileID, orgID, keys) {
+		if _, err = dbClient.ExecuteQueryContext(ctx, insert.query, insert.args...); err != nil {
+			logger.Error("BlockingStore: failed to insert blocking keys", log.Error(err))
+			return errors2.NewServerError(errors2.ErrorMessage{
+				Code:        errors2.IRBlockingKeysFailed.Code,
+				Message:     errors2.IRBlockingKeysFailed.Message,
+				Description: fmt.Sprintf("Failed to insert blocking keys for profile: %s", profileID),
+			}, err)
+		}
 	}
 
 	return nil
+}
+
+// blockingKeyInsert is one INSERT statement of a profile's blocking keys and its arguments.
+type blockingKeyInsert struct {
+	query dbmodel.DBQuery
+	args  []interface{}
+}
+
+// buildBlockingKeyInserts splits the keys of one profile into INSERT statements of as many rows
+// as dbType accepts in one statement: a single row on Oracle, which has no multi-row VALUES
+// before 23ai, and all of them on the other datasources.
+func buildBlockingKeyInserts(dbType, profileID, orgID string, keys []model.BlockingKey) []blockingKeyInsert {
+	rowsPerInsert := min(maxBlockingKeyRowsPerInsert, database.MaxRowsPerStatement(dbType, blockingKeyColumns))
+
+	var inserts []blockingKeyInsert
+	for start := 0; start < len(keys); start += rowsPerInsert {
+		chunk := keys[start:min(start+rowsPerInsert, len(keys))]
+		valueClauses := make([]string, 0, len(chunk))
+		args := make([]interface{}, 0, len(chunk)*blockingKeyColumns)
+		argIdx := 1
+		for _, key := range chunk {
+			valueClauses = append(valueClauses,
+				fmt.Sprintf("($%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3))
+			args = append(args, profileID, orgID, key.AttributeName, key.KeyValue)
+			argIdx += blockingKeyColumns
+		}
+		inserts = append(inserts, blockingKeyInsert{
+			query: scripts.IRInsertBlockingKeys.Format(strings.Join(valueClauses, ", ")),
+			args:  args,
+		})
+	}
+	return inserts
 }
 
 // blockingKeyRow is one pending index entry, flattened out of the per-profile map so the
@@ -224,19 +234,10 @@ type blockingKeyRow struct {
 const blockingKeyColumns = 4
 
 // maxBlockingKeyRowsPerInsert caps how many rows go into one statement.
-//
-// The PostgreSQL wire protocol allows at most 65535 bind parameters per statement, so at
-// four parameters per row the hard ceiling is 16383. A page of 500 profiles crosses that
-// once profiles average roughly 26 keys each — which ordinary data reaches: four email
-// addresses under a fuzzy rule is 20 keys before a fuzzy name adds 7 more. Past the limit
-// the whole statement is rejected, and because the backfill logs the failure and moves on,
-// those profiles are silently left out of the index. Chunking well below the ceiling keeps
-// the statement valid whatever the page holds.
 const maxBlockingKeyRowsPerInsert = 5000
 
 // InsertBlockingKeysBatch inserts blocking keys for many profiles, chunked so no single
 // statement exceeds the driver's bind-parameter limit.
-// Uses ON CONFLICT DO NOTHING to skip duplicates.
 func InsertBlockingKeysBatch(ctx context.Context, orgID string, perProfileKeys map[string][]model.BlockingKey) error {
 	logger := log.GetLogger()
 
@@ -313,8 +314,7 @@ func flattenBlockingKeyRows(perProfileKeys map[string][]model.BlockingKey) []blo
 }
 
 // FindCandidateIDsByKeys returns the IDs of the organization's profiles indexed under any of keyValues for
-// attributeName, leaving out excludeProfileID. When more than maxResults profiles match, the value is too
-// common to identify anyone and it returns nil with no error.
+// attributeName, leaving out excludeProfileID.
 func FindCandidateIDsByKeys(ctx context.Context,
 	orgID, attributeName string,
 	keyValues []string,
@@ -370,8 +370,7 @@ func FindCandidateIDsByKeys(ctx context.Context,
 	}
 
 	// The bucket is too crowded to be evidence of anything — a value this common says
-	// nothing about identity, so no candidate from it is worth scoring. Skipping is
-	// deliberate, but it costs recall, so make it visible rather than silent.
+	// nothing about identity, so no candidate from it is worth scoring.
 	if len(results) > maxResults {
 		logger.Warn(fmt.Sprintf(
 			"BlockingStore: attribute '%s' matched more than %d profiles in org '%s' — skipping this key group",

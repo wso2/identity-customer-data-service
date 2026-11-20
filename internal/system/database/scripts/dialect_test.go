@@ -73,6 +73,7 @@ func Test_LikeOperator(t *testing.T) {
 		database.TypeSQLite:   "LIKE",
 		database.TypeMySQL:    "LIKE",
 		database.TypeMSSQL:    "LIKE",
+		database.TypeOracle:   "LIKE",
 	}
 	for dbType, want := range expected {
 		operator, err := LikeOperator(dbType)
@@ -84,7 +85,7 @@ func Test_LikeOperator(t *testing.T) {
 		}
 	}
 
-	if _, err := LikeOperator("oracle"); err == nil {
+	if _, err := LikeOperator("db2"); err == nil {
 		t.Error("expected an error for an unsupported datasource")
 	}
 	if _, err := LikeOperator(""); err == nil {
@@ -184,6 +185,20 @@ func Test_JSONEqCondition(t *testing.T) {
 		}
 	})
 
+	t.Run("oracle reads the value as text and compares it", func(t *testing.T) {
+		condition, arg, err := JSONEqCondition(database.TypeOracle, "p.traits",
+			[]string{"app_specific_data", "ui.mode"}, "dark", 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if expected := `JSON_VALUE(p.traits, '$."app_specific_data"."ui.mode"') = $2`; condition != expected {
+			t.Errorf("expected %q, got %q", expected, condition)
+		}
+		if arg != "dark" {
+			t.Errorf("expected the bare value, got %#v", arg)
+		}
+	})
+
 	t.Run("an invalid key is rejected", func(t *testing.T) {
 		for _, dbType := range supportedDatasources {
 			if _, _, err := JSONEqCondition(
@@ -195,7 +210,7 @@ func Test_JSONEqCondition(t *testing.T) {
 	})
 
 	t.Run("an unsupported datasource is rejected", func(t *testing.T) {
-		if _, _, err := JSONEqCondition("oracle", "p.traits", []string{"email"}, "x", 1); err == nil {
+		if _, _, err := JSONEqCondition("db2", "p.traits", []string{"email"}, "x", 1); err == nil {
 			t.Error("expected an error")
 		}
 	})
@@ -264,14 +279,14 @@ func Test_JSONLikeCondition(t *testing.T) {
 	})
 
 	t.Run("an unsupported datasource is rejected", func(t *testing.T) {
-		if _, err := JSONLikeCondition("oracle", "p.traits", []string{"email"}, 1); err == nil {
+		if _, err := JSONLikeCondition("db2", "p.traits", []string{"email"}, 1); err == nil {
 			t.Error("expected an error")
 		}
 	})
 }
 
 var supportedDatasources = []string{
-	database.TypePostgres, database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL,
+	database.TypePostgres, database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL, database.TypeOracle,
 }
 
 func Test_KeysetCondition(t *testing.T) {
@@ -283,6 +298,8 @@ func Test_KeysetCondition(t *testing.T) {
 		{database.TypeMySQL, "<", `(p.created_at, p.profile_id) < ($2, $3)`},
 		{database.TypeMySQL, ">=", `(p.created_at, p.profile_id) >= ($2, $3)`},
 		{database.TypeMSSQL, "<", `(p.created_at < $2 OR (p.created_at = $2 AND p.profile_id < $3))`},
+		{database.TypeOracle, "<", `(p.created_at < $2 OR (p.created_at = $2 AND p.profile_id < $3))`},
+		{database.TypeOracle, ">=", `(p.created_at > $2 OR (p.created_at = $2 AND p.profile_id >= $3))`},
 		{database.TypeMSSQL, ">", `(p.created_at > $2 OR (p.created_at = $2 AND p.profile_id > $3))`},
 		{database.TypeMSSQL, "<=", `(p.created_at < $2 OR (p.created_at = $2 AND p.profile_id <= $3))`},
 		{database.TypeMSSQL, ">=", `(p.created_at > $2 OR (p.created_at = $2 AND p.profile_id >= $3))`},
@@ -306,7 +323,7 @@ func Test_KeysetCondition(t *testing.T) {
 	})
 
 	t.Run("an unsupported datasource is rejected", func(t *testing.T) {
-		if _, err := KeysetCondition("oracle", "<", 2, 3); err == nil {
+		if _, err := KeysetCondition("db2", "<", 2, 3); err == nil {
 			t.Error("expected an error")
 		}
 	})
@@ -333,7 +350,7 @@ func Test_EncodeStringArray(t *testing.T) {
 	})
 
 	t.Run("an unsupported datasource is rejected", func(t *testing.T) {
-		if _, err := EncodeStringArray("oracle", []string{"a"}); err == nil {
+		if _, err := EncodeStringArray("db2", []string{"a"}); err == nil {
 			t.Error("expected an error")
 		}
 	})

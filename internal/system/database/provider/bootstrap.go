@@ -48,6 +48,9 @@ func validateNumericSettings(ds config.DataSourceConfig) error {
 	case database.TypeMSSQL:
 		_, err := resolveMSSQLPoolSettings(ds.MSSQL)
 		return err
+	case database.TypeOracle:
+		_, err := resolveOraclePoolSettings(ds.Oracle)
+		return err
 	default:
 		_, err := resolvePostgresPoolSettings(ds.Postgres)
 		return err
@@ -79,6 +82,10 @@ func ValidateDataSource(ds config.DataSourceConfig) error {
 		}
 	case database.TypeMSSQL:
 		if _, _, err := mssqlTLS(ds.SSLMode); err != nil {
+			return err
+		}
+	case database.TypeOracle:
+		if _, _, err := oracleTLS(ds.SSLMode); err != nil {
 			return err
 		}
 	}

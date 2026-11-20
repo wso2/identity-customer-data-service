@@ -115,9 +115,18 @@ type MSSQLConfig struct {
 	ConnectTimeoutSeconds  int `yaml:"connect_timeout_seconds"`
 }
 
+// OracleConfig holds the connection pool settings for Oracle Database.
+type OracleConfig struct {
+	MaxOpenConns           int `yaml:"max_open_conns"`
+	MaxIdleConns           int `yaml:"max_idle_conns"`
+	ConnMaxLifetimeSeconds int `yaml:"conn_max_lifetime_seconds"`
+	ConnMaxIdleTimeSeconds int `yaml:"conn_max_idle_time_seconds"`
+	ConnectTimeoutSeconds  int `yaml:"connect_timeout_seconds"`
+}
+
 // DataSourceConfig selects and configures the database.
 type DataSourceConfig struct {
-	Type string `yaml:"type"` // "sqlite" (inbuilt, the default), "postgres", "mysql" or "mssql"
+	Type string `yaml:"type"` // "sqlite" (inbuilt, the default), "postgres", "mysql", "mssql" or "oracle"
 
 	Hostname string `yaml:"hostname"`
 	Port     int    `yaml:"port"`
@@ -134,6 +143,9 @@ type DataSourceConfig struct {
 
 	// MSSQL connection pool settings. Read only when Type is "mssql".
 	MSSQL MSSQLConfig `yaml:"mssql"`
+
+	// Oracle connection pool settings. Read only when Type is "oracle".
+	Oracle OracleConfig `yaml:"oracle"`
 
 	// SQLite settings. Read only when Type is "sqlite".
 	SQLite SQLiteConfig `yaml:"sqlite"`

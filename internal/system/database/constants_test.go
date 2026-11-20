@@ -41,15 +41,15 @@ func Test_ResolveType(t *testing.T) {
 // ResolveType passes an unrecognized value through, and the startup check is
 // what refuses to run on it.
 func Test_unsupportedTypeIsRejected(t *testing.T) {
-	if normalized := ResolveType(" Oracle "); normalized != "oracle" {
-		t.Errorf("ResolveType(%q) = %q, expected %q", " Oracle ", normalized, "oracle")
+	if normalized := ResolveType(" DB2 "); normalized != "db2" {
+		t.Errorf("ResolveType(%q) = %q, expected %q", " DB2 ", normalized, "db2")
 	}
-	for _, unsupported := range []string{"oracle", ""} {
+	for _, unsupported := range []string{"db2", ""} {
 		if IsSupportedType(unsupported) {
 			t.Errorf("%q is not a datasource CDS can run on and must not be reported as supported", unsupported)
 		}
 	}
-	for _, supported := range []string{TypePostgres, TypeSQLite, TypeMySQL, TypeMSSQL} {
+	for _, supported := range []string{TypePostgres, TypeSQLite, TypeMySQL, TypeMSSQL, TypeOracle} {
 		if !IsSupportedType(supported) {
 			t.Errorf("%q must be reported as supported", supported)
 		}

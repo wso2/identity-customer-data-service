@@ -41,8 +41,9 @@ var backendPID = model.DBQuery{
 	ID:    "PROVIDER-IT-01",
 	Query: "SELECT pg_backend_pid() AS pid",
 	Overrides: map[string]string{
-		database.TypeMySQL: "SELECT CONNECTION_ID() AS pid",
-		database.TypeMSSQL: "SELECT @@SPID AS pid",
+		database.TypeMySQL:  "SELECT CONNECTION_ID() AS pid",
+		database.TypeMSSQL:  "SELECT @@SPID AS pid",
+		database.TypeOracle: "SELECT SYS_CONTEXT('USERENV', 'SID') AS pid FROM dual",
 	},
 }
 
@@ -55,6 +56,10 @@ var holdConnection = model.DBQuery{
 	Overrides: map[string]string{
 		database.TypeMySQL: "SELECT SLEEP(0.2), CONNECTION_ID() AS pid",
 		database.TypeMSSQL: "WAITFOR DELAY '00:00:00.200'; SELECT @@SPID AS pid",
+		// Oracle has no sleep function a query can call, so the statement counts rows for a moment.
+		database.TypeOracle: "SELECT SYS_CONTEXT('USERENV', 'SID') AS pid, " +
+			"(SELECT COUNT(*) FROM (SELECT 1 FROM dual CONNECT BY LEVEL <= 1000), " +
+			"(SELECT 1 FROM dual CONNECT BY LEVEL <= 3000)) AS held FROM dual",
 	},
 }
 
@@ -94,6 +99,9 @@ func useProductionProvider(t *testing.T) {
 			MaxOpenConns: providerPoolLimit, MaxIdleConns: providerPoolLimit, ConnectTimeoutSeconds: 10}
 	case database.TypeMSSQL:
 		dataSource.MSSQL = config.MSSQLConfig{
+			MaxOpenConns: providerPoolLimit, MaxIdleConns: providerPoolLimit, ConnectTimeoutSeconds: 10}
+	case database.TypeOracle:
+		dataSource.Oracle = config.OracleConfig{
 			MaxOpenConns: providerPoolLimit, MaxIdleConns: providerPoolLimit, ConnectTimeoutSeconds: 10}
 	default:
 		t.Fatalf("no pool settings for the %s datasource", suiteDBType)

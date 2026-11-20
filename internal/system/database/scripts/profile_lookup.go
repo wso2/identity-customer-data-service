@@ -68,6 +68,12 @@ func BuildFindOldestReferenceProfileIDByAttributeValuesQuery(
 		}
 		args = append(args, string(valuesJSON))
 		return query.WithOverride(database.TypeMSSQL, mssqlLookupStatement(column, len(keys))), args, nil
+	case database.TypeOracle:
+		args := make([]interface{}, len(values))
+		for i, value := range values {
+			args[i] = value
+		}
+		return query.WithOverride(database.TypeOracle, oracleLookupStatement(column, parts[1:], len(values))), args, nil
 	default:
 		return model.DBQuery{}, nil, unsupportedDatasource(dbType)
 	}
@@ -171,4 +177,42 @@ func mssqlLookupStatement(column string, keyCount int) string {
 		WHERE leaf.t = 1 AND leaf.v %s IN (SELECT value %s FROM OPENJSON($%d))
 	)
 	ORDER BY p.created_at, p.profile_id`, from.String(), binary, binary, 4+keyCount)
+}
+
+// oracleLookupStatement builds the attribute lookup for Oracle.
+func oracleLookupStatement(column string, keys []string, valueCount int) string {
+	var path strings.Builder
+	path.WriteString("$")
+	for _, key := range keys {
+		path.WriteString(`."`)
+		path.WriteString(oracleEscapeLiteral(oracleEscapePathKey(key)))
+		path.WriteString(`"`)
+	}
+
+	predicates := make([]string, valueCount)
+	bindings := make([]string, valueCount)
+	for i := range predicates {
+		predicates[i] = fmt.Sprintf("@ == $v%d", i)
+		bindings[i] = fmt.Sprintf(`$%d AS "v%d"`, 4+i, i)
+	}
+
+	return fmt.Sprintf(`SELECT p.profile_id
+	FROM profiles p JOIN profile_reference r ON r.profile_id = p.profile_id
+	WHERE p.org_id = $1 AND r.org_id = $1
+	AND r.profile_status = 'REFERENCE_PROFILE'
+	AND ($2 IS NULL OR p.profile_id != $2)
+	AND ($3 IS NULL OR p.user_id IS NULL OR p.user_id = $3)
+	AND JSON_EXISTS(%s, '%s[*]?(@.type() == "string" && (%s))' PASSING %s)
+	ORDER BY p.created_at, p.profile_id
+	FETCH FIRST 1 ROWS ONLY`, column, path.String(), strings.Join(predicates, " || "), strings.Join(bindings, ", "))
+}
+
+// oracleEscapePathKey escapes a key for a quoted name in a JSON path.
+func oracleEscapePathKey(key string) string {
+	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(key)
+}
+
+// oracleEscapeLiteral escapes text for a single-quoted SQL literal.
+func oracleEscapeLiteral(text string) string {
+	return strings.ReplaceAll(text, "'", "''")
 }

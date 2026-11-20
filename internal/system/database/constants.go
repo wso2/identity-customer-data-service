@@ -37,6 +37,8 @@ const (
 	TypeMySQL = "mysql"
 	// TypeMSSQL is the Microsoft SQL Server datasource.
 	TypeMSSQL = "mssql"
+	// TypeOracle is the Oracle Database datasource.
+	TypeOracle = "oracle"
 )
 
 // DefaultType is the datasource used when `datasource.type` is not configured,
@@ -44,7 +46,7 @@ const (
 const DefaultType = TypeSQLite
 
 // SupportedTypes lists every value `datasource.type` accepts.
-var SupportedTypes = []string{TypePostgres, TypeSQLite, TypeMySQL, TypeMSSQL}
+var SupportedTypes = []string{TypePostgres, TypeSQLite, TypeMySQL, TypeMSSQL, TypeOracle}
 
 // ResolveType normalizes a configured `datasource.type`. An empty value means
 // DefaultType. The returned value may still be unsupported, which
@@ -73,6 +75,7 @@ const (
 	DriverSQLite   = "sqlite"
 	DriverMySQL    = "mysql"
 	DriverMSSQL    = "sqlserver"
+	DriverOracle   = "oracle"
 )
 
 // SQLite defaults, applied when the corresponding configuration values are
@@ -147,4 +150,14 @@ const (
 	DefaultMSSQLConnMaxLifetime = DefaultPostgresConnMaxLifetime
 	DefaultMSSQLConnMaxIdleTime = DefaultPostgresConnMaxIdleTime
 	DefaultMSSQLConnectTimeout  = DefaultPostgresConnectTimeout
+)
+
+// Oracle connection pool defaults, applied when the corresponding configuration
+// value is zero. They match the PostgreSQL defaults.
+const (
+	DefaultOracleMaxOpenConns    = DefaultPostgresMaxOpenConns
+	DefaultOracleMaxIdleConns    = DefaultPostgresMaxIdleConns
+	DefaultOracleConnMaxLifetime = DefaultPostgresConnMaxLifetime
+	DefaultOracleConnMaxIdleTime = DefaultPostgresConnMaxIdleTime
+	DefaultOracleConnectTimeout  = DefaultPostgresConnectTimeout
 )

@@ -63,6 +63,7 @@ var (
 	postgresHandle *sql.DB
 	mysqlHandle    *sql.DB
 	mssqlHandle    *sql.DB
+	oracleHandle   *sql.DB
 	// closed records that CloseDB ran.
 	closed bool
 )
@@ -114,6 +115,8 @@ func getDB(dbType string) (*sql.DB, error) {
 		return getMySQLDB()
 	case database.TypeMSSQL:
 		return getMSSQLDB()
+	case database.TypeOracle:
+		return getOracleDB()
 	default:
 		return nil, fmt.Errorf("unsupported datasource type %q", dbType)
 	}
@@ -337,6 +340,23 @@ func resolveMSSQLPoolSettings(cfg config.MSSQLConfig) (serverPoolSettings, error
 	})
 }
 
+// resolveOraclePoolSettings returns every number the Oracle pool uses.
+func resolveOraclePoolSettings(cfg config.OracleConfig) (serverPoolSettings, error) {
+	return resolveServerPoolSettings("datasource.oracle", poolInput{
+		maxOpenConns:           cfg.MaxOpenConns,
+		maxIdleConns:           cfg.MaxIdleConns,
+		connMaxLifetimeSeconds: cfg.ConnMaxLifetimeSeconds,
+		connMaxIdleTimeSeconds: cfg.ConnMaxIdleTimeSeconds,
+		connectTimeoutSeconds:  cfg.ConnectTimeoutSeconds,
+	}, poolDefaults{
+		maxOpenConns:    database.DefaultOracleMaxOpenConns,
+		maxIdleConns:    database.DefaultOracleMaxIdleConns,
+		connMaxLifetime: database.DefaultOracleConnMaxLifetime,
+		connMaxIdleTime: database.DefaultOracleConnMaxIdleTime,
+		connectTimeout:  database.DefaultOracleConnectTimeout,
+	})
+}
+
 // resolveMySQLPoolSettings returns every number the MySQL pool uses.
 func resolveMySQLPoolSettings(cfg config.MySQLConfig) (serverPoolSettings, error) {
 	return resolveServerPoolSettings("datasource.mysql", poolInput{
@@ -368,8 +388,8 @@ func applyPoolSettings(db *sql.DB, settings serverPoolSettings) {
 // returns ErrDatabaseClosed rather than a new pool.
 func CloseDB() error {
 	dbMu.Lock()
-	handles := []*sql.DB{postgresHandle, mysqlHandle, mssqlHandle, sqliteHandle}
-	postgresHandle, mysqlHandle, mssqlHandle, sqliteHandle = nil, nil, nil, nil
+	handles := []*sql.DB{postgresHandle, mysqlHandle, mssqlHandle, oracleHandle, sqliteHandle}
+	postgresHandle, mysqlHandle, mssqlHandle, oracleHandle, sqliteHandle = nil, nil, nil, nil, nil
 	closed = true
 	dbMu.Unlock()
 
@@ -501,6 +521,17 @@ func getDBConfig(dataSource config.Config) (DBConfig, error) {
 			return DBConfig{}, err
 		}
 		return DBConfig{driverName: database.DriverMSSQL, dsn: dsn}, nil
+
+	case database.TypeOracle:
+		settings, err := resolveOraclePoolSettings(ds.Oracle)
+		if err != nil {
+			return DBConfig{}, err
+		}
+		dsn, err := OracleDSN(ds, settings.connectTimeout)
+		if err != nil {
+			return DBConfig{}, err
+		}
+		return DBConfig{driverName: database.DriverOracle, dsn: dsn}, nil
 
 	default:
 		return DBConfig{}, fmt.Errorf("unsupported datasource type %q", ds.Type)

@@ -26,8 +26,7 @@ import (
 
 // BindStatement prepares a statement and its arguments for dbType: it rewrites
 // the placeholders and converts the argument values to the types that
-// datasource's driver binds correctly. The stores and the statements stay
-// datasource-agnostic, so this is the one place the two are adapted.
+// datasource's driver binds correctly.
 func BindStatement(dbType, sqlText string, args []interface{}) (string, []interface{}, error) {
 	text, bound, err := Rebind(dbType, sqlText, args)
 	if err != nil {
@@ -39,27 +38,14 @@ func BindStatement(dbType, sqlText string, args []interface{}) (string, []interf
 
 // Rebind rewrites the numbered placeholders ($1, $2, ...) of a statement into
 // the style dbType understands, and returns the arguments to bind with it.
-//
-// Statements are written with numbered placeholders, and one number may appear
-// more than once. PostgreSQL and SQLite read that form, so they get the
-// statement and arguments back unchanged. The others do not:
-//
-//   - MySQL has only an unnumbered ?, which takes the next argument in order of
-//     appearance. Each $n becomes ?, and the returned arguments follow the order
-//     the placeholders appear in, repeating a value each time its number recurs.
-//   - MSSQL names its parameters, and a name may recur. Each $n becomes @pn and
-//     the arguments are returned as given.
-//
-// Text inside quotes and comments is left alone, so a literal such as 'costs $1'
-// is not read as a placeholder. A placeholder with no argument, and an argument
-// no placeholder uses, are errors: PostgreSQL rejects both, and the rewrite
-// must not hide them.
 func Rebind(dbType, sqlText string, args []interface{}) (string, []interface{}, error) {
 	switch dbType {
 	case TypeMySQL:
 		return rebindPositional(sqlText, args)
 	case TypeMSSQL:
 		return rebindNamed(sqlText, args)
+	case TypeOracle:
+		return rebindOrdinal(sqlText, args)
 	default:
 		return sqlText, args, nil
 	}
@@ -67,6 +53,29 @@ func Rebind(dbType, sqlText string, args []interface{}) (string, []interface{}, 
 
 func rebindPositional(sqlText string, args []interface{}) (string, []interface{}, error) {
 	text, order, err := rewritePlaceholders(sqlText, func(int) string { return "?" })
+	if err != nil {
+		return "", nil, err
+	}
+	if err := checkPlaceholderUse(order, len(args)); err != nil {
+		return "", nil, err
+	}
+
+	ordered := make([]interface{}, len(order))
+	for i, number := range order {
+		ordered[i] = args[number-1]
+	}
+
+	return text, ordered, nil
+}
+
+func rebindOrdinal(sqlText string, args []interface{}) (string, []interface{}, error) {
+	sqlText = strings.TrimRight(sqlText, "; \t\r\n")
+
+	position := 0
+	text, order, err := rewritePlaceholders(sqlText, func(int) string {
+		position++
+		return ":" + strconv.Itoa(position)
+	})
 	if err != nil {
 		return "", nil, err
 	}
@@ -185,4 +194,14 @@ func quotedEnd(sqlText string, start int) int {
 
 func isDigit(c byte) bool {
 	return c >= '0' && c <= '9'
+}
+
+// ReturnsRows reports whether a bound statement is read as a query.
+func ReturnsRows(dbType, sqlText string) bool {
+	if dbType != TypeOracle {
+		return true
+	}
+
+	text := strings.ToUpper(strings.TrimLeft(sqlText, " \t\r\n("))
+	return strings.HasPrefix(text, "SELECT") || strings.HasPrefix(text, "WITH")
 }

@@ -28,7 +28,7 @@ import (
 )
 
 var allDatasources = []string{
-	database.TypePostgres, database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL,
+	database.TypePostgres, database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL, database.TypeOracle,
 }
 
 const profileIDsBase = "SELECT DISTINCT p.profile_id FROM profiles p LEFT JOIN profile_reference r " +
@@ -87,6 +87,17 @@ func Test_buildProfileIDsQuery(t *testing.T) {
 			args: []interface{}{"org-1", "Colombo", "%ndy", "%ice%", "app-1", "da%", "dark", "id-a", "id-b"},
 		},
 		database.TypeMSSQL: {
+			conditions: []string{
+				`p.org_id = $1`,
+				`JSON_VALUE(p.traits, '$."city"') = $2`,
+				`JSON_VALUE(p.traits, '$."city"') LIKE $3`,
+				`p.user_id LIKE $4`,
+				`JSON_VALUE(a_app_1.application_data, '$."app_specific_data"."theme"') LIKE $6`,
+				`JSON_VALUE(a.application_data, '$."app_specific_data"."mode"') = $7`,
+			},
+			args: []interface{}{"org-1", "Colombo", "%ndy", "%ice%", "app-1", "da%", "dark", "id-a", "id-b"},
+		},
+		database.TypeOracle: {
 			conditions: []string{
 				`p.org_id = $1`,
 				`JSON_VALUE(p.traits, '$."city"') = $2`,
@@ -160,7 +171,7 @@ func Test_buildProfileIDsQuery_WithoutFilters(t *testing.T) {
 
 func Test_buildProfileIDsQuery_Rejects(t *testing.T) {
 	t.Run("an unsupported datasource", func(t *testing.T) {
-		if _, _, err := buildProfileIDsQuery("oracle", "org-1", nil, nil); err == nil {
+		if _, _, err := buildProfileIDsQuery("db2", "org-1", nil, nil); err == nil {
 			t.Fatal("expected an error")
 		}
 	})

@@ -140,7 +140,7 @@ func Test_ValidateDataSource_mysql(t *testing.T) {
 }
 
 func Test_getDB_refusesAnUnsupportedType(t *testing.T) {
-	if _, err := getDB("oracle"); err == nil {
+	if _, err := getDB("db2"); err == nil {
 		t.Fatal("expected an error")
 	}
 }

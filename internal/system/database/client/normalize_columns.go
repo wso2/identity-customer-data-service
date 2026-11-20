@@ -17,7 +17,7 @@
  */
 
 // Package client runs statements against the configured datasource and converts
-// what the MySQL and MSSQL drivers return to the types the stores read.
+// what the MySQL, MSSQL and Oracle drivers return to the types the stores read.
 package client
 
 import (
@@ -35,7 +35,7 @@ const (
 
 func normalizesResults(dbType string) bool {
 	switch dbType {
-	case database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL:
+	case database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL, database.TypeOracle:
 		return true
 	default:
 		return false
@@ -50,6 +50,8 @@ func normalizeValue(dbType string, value interface{}, declaredType, column strin
 		return normalizeMySQLValue(value, declaredType, column)
 	case database.TypeMSSQL:
 		return normalizeMSSQLValue(value, declaredType, column)
+	case database.TypeOracle:
+		return normalizeOracleValue(value, declaredType, column)
 	default:
 		return value
 	}

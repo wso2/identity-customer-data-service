@@ -122,12 +122,18 @@ func SetupTestPostgres(ctx context.Context) (*TestPostgres, error) {
 // this normally succeeds on the first attempt. It is the last guard: the
 // readiness of the test database is a successful query, not an open port.
 func waitForQuery(ctx context.Context, db *sql.DB) error {
+	return waitForStatement(ctx, db, "SELECT 1")
+}
+
+// waitForStatement is waitForQuery with the statement chosen by the caller, for a
+// database that does not accept SELECT 1 on its own.
+func waitForStatement(ctx context.Context, db *sql.DB, statement string) error {
 	deadline, cancel := context.WithTimeout(ctx, postgresReadyTimeout)
 	defer cancel()
 
 	var lastErr error
 	for {
-		_, err := db.ExecContext(deadline, "SELECT 1")
+		_, err := db.ExecContext(deadline, statement)
 		if err == nil {
 			return nil
 		}

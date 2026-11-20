@@ -20,10 +20,12 @@ package store
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/wso2/identity-customer-data-service/internal/identity_resolution/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
+	"github.com/wso2/identity-customer-data-service/internal/system/database"
 )
 
 // postgresBindParameterLimit is the ceiling the wire protocol imposes on one statement.
@@ -117,5 +119,44 @@ func TestRealisticPageExceedsOneChunk(t *testing.T) {
 		if (end-start)*blockingKeyColumns >= postgresBindParameterLimit {
 			t.Errorf("chunk %d-%d binds too many parameters", start, end)
 		}
+	}
+}
+
+// TestBlockingKeyInsertsFollowTheRowLimit checks that the keys of one profile reach Oracle one row per
+// statement, because Oracle takes a multi-row VALUES only from 23ai, and reach the other datasources in one.
+func TestBlockingKeyInsertsFollowTheRowLimit(t *testing.T) {
+	keys := []model.BlockingKey{
+		{AttributeName: "email", KeyValue: "a"},
+		{AttributeName: "email", KeyValue: "b"},
+		{AttributeName: "phone_number", KeyValue: "c"},
+	}
+
+	oracle := buildBlockingKeyInserts(database.TypeOracle, "p1", "org", keys)
+	if len(oracle) != len(keys) {
+		t.Fatalf("Oracle got %d statements, want %d", len(oracle), len(keys))
+	}
+	for i, insert := range oracle {
+		if len(insert.args) != blockingKeyColumns {
+			t.Errorf("statement %d binds %d arguments, want %d", i, len(insert.args), blockingKeyColumns)
+		}
+		if insert.args[3] != keys[i].KeyValue {
+			t.Errorf("statement %d carries %v, want %q", i, insert.args[3], keys[i].KeyValue)
+		}
+		text := insert.query.GetQuery(database.TypeOracle)
+		if want := "VALUES ($1, $2, $3, $4)"; !strings.Contains(text, want) {
+			t.Errorf("statement %d is not a single row:\n%s", i, text)
+		}
+	}
+
+	for _, dbType := range []string{database.TypePostgres, database.TypeSQLite, database.TypeMySQL} {
+		inserts := buildBlockingKeyInserts(dbType, "p1", "org", keys)
+		if len(inserts) != 1 || len(inserts[0].args) != len(keys)*blockingKeyColumns {
+			t.Errorf("%s: want one statement of %d arguments, got %d statements",
+				dbType, len(keys)*blockingKeyColumns, len(inserts))
+		}
+	}
+
+	if inserts := buildBlockingKeyInserts(database.TypeOracle, "p1", "org", nil); len(inserts) != 0 {
+		t.Errorf("no keys gave %d statements", len(inserts))
 	}
 }

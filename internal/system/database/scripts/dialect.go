@@ -46,15 +46,11 @@ func unsupportedDatasource(dbType string) error {
 }
 
 // LikeOperator returns the pattern-match operator for case-insensitive search.
-// PostgreSQL has ILIKE for this. SQLite's LIKE is case-insensitive for ASCII,
-// which is the closest equivalent; MySQL and MSSQL decide case by the collation
-// of the column, so their LIKE is the operator and the schema supplies the
-// collation.
 func LikeOperator(dbType string) (string, error) {
 	switch dbType {
 	case database.TypePostgres:
 		return "ILIKE", nil
-	case database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL:
+	case database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL, database.TypeOracle:
 		return "LIKE", nil
 	default:
 		return "", unsupportedDatasource(dbType)
@@ -62,8 +58,6 @@ func LikeOperator(dbType string) (string, error) {
 }
 
 // ValidateJSONKey checks a JSON key before it is interpolated into a statement.
-// Keys arrive from user-supplied filters, so they are restricted to the
-// characters allowed for filter values.
 func ValidateJSONKey(key string) error {
 	if key == "" {
 		return fmt.Errorf("JSON key must not be empty")
@@ -89,15 +83,7 @@ func validateJSONPath(path []string) error {
 }
 
 // JSONEqCondition builds an equality condition against a key nested inside a
-// JSON column, together with the argument to bind for it. The argument is
-// returned because the datasources need different ones, though all select the
-// same rows.
-//
-// PostgreSQL tests containment, which keeps its GIN indexes usable. The other
-// datasources read the value at the path as text and compare it, so a value at
-// the path that is an array or an object does not match.
-//
-// path is the chain of keys to the value, e.g. ["app_specific_data", "email"].
+// JSON column, together with the argument to bind for it.
 func JSONEqCondition(dbType, column string, path []string, value string, argID int) (string, interface{}, error) {
 	if err := validateJSONPath(path); err != nil {
 		return "", nil, err
@@ -113,7 +99,7 @@ func JSONEqCondition(dbType, column string, path []string, value string, argID i
 		condition := fmt.Sprintf("JSON_UNQUOTE(JSON_EXTRACT(%s, '%s')) = $%d",
 			column, jsonPathExpression(path), argID)
 		return condition, value, nil
-	case database.TypeMSSQL:
+	case database.TypeMSSQL, database.TypeOracle:
 		condition := fmt.Sprintf("JSON_VALUE(%s, '%s') = $%d", column, jsonPathExpression(path), argID)
 		return condition, value, nil
 	default:
@@ -169,7 +155,7 @@ func JSONLikeCondition(dbType, column string, path []string, argID int) (string,
 	case database.TypeMySQL:
 		return fmt.Sprintf("JSON_UNQUOTE(JSON_EXTRACT(%s, '%s')) %s $%d",
 			column, jsonPathExpression(path), operator, argID), nil
-	case database.TypeMSSQL:
+	case database.TypeMSSQL, database.TypeOracle:
 		return fmt.Sprintf("JSON_VALUE(%s, '%s') %s $%d", column, jsonPathExpression(path), operator, argID), nil
 	default:
 		return "", unsupportedDatasource(dbType)
@@ -177,8 +163,7 @@ func JSONLikeCondition(dbType, column string, path []string, argID int) (string,
 }
 
 // jsonPathExpression renders a JSON path expression for json_extract,
-// JSON_EXTRACT and JSON_VALUE. Each key is quoted so that a key containing a dot
-// is not read as a nested lookup.
+// JSON_EXTRACT and JSON_VALUE.
 func jsonPathExpression(path []string) string {
 	var builder strings.Builder
 	builder.WriteString("$")
@@ -193,11 +178,6 @@ func jsonPathExpression(path []string) string {
 
 // KeysetCondition builds the condition used for cursor pagination: the rows
 // whose (created_at, profile_id) pair is before or after the cursor's.
-//
-// operator is one of <, >, <= and >=. PostgreSQL, SQLite and MySQL compare the
-// pair as a row. MSSQL has no row comparison, so the same test is written out:
-// the first column compares strictly, or it is equal and the second compares by
-// the operator.
 func KeysetCondition(dbType, operator string, timestampArgID, idArgID int) (string, error) {
 	switch operator {
 	case "<", ">", "<=", ">=":
@@ -211,7 +191,7 @@ func KeysetCondition(dbType, operator string, timestampArgID, idArgID int) (stri
 			operator, timestampArgID, idArgID), nil
 	case database.TypeSQLite, database.TypeMySQL:
 		return fmt.Sprintf("(p.created_at, p.profile_id) %s ($%d, $%d)", operator, timestampArgID, idArgID), nil
-	case database.TypeMSSQL:
+	case database.TypeMSSQL, database.TypeOracle:
 		strict := strings.TrimSuffix(operator, "=")
 		return fmt.Sprintf("(p.created_at %s $%d OR (p.created_at = $%d AND p.profile_id %s $%d))",
 			strict, timestampArgID, timestampArgID, operator, idArgID), nil
@@ -221,13 +201,12 @@ func KeysetCondition(dbType, operator string, timestampArgID, idArgID int) (stri
 }
 
 // EncodeStringArray prepares a list of strings for storage: a PostgreSQL array
-// or, for the datasources with no array type, a JSON array. DecodeStringArray
-// reads back either form.
+// or, for the datasources with no array type, a JSON array.
 func EncodeStringArray(dbType string, values []string) (interface{}, error) {
 	switch dbType {
 	case database.TypePostgres:
 		return pq.Array(values), nil
-	case database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL:
+	case database.TypeSQLite, database.TypeMySQL, database.TypeMSSQL, database.TypeOracle:
 		if values == nil {
 			values = []string{}
 		}
@@ -241,8 +220,7 @@ func EncodeStringArray(dbType string, values []string) (interface{}, error) {
 	}
 }
 
-// DecodeStringArray reads a list of strings written by EncodeStringArray, in
-// either form.
+// DecodeStringArray reads a list of strings written by EncodeStringArray
 func DecodeStringArray(raw interface{}) []string {
 	var text string
 	switch typed := raw.(type) {

@@ -70,6 +70,7 @@ func newQuery(id, base string, sqliteOverride ...string) model.DBQuery {
 
 // serverStatements maps each server datasource to the statements written for it.
 var serverStatements = map[string]map[string]string{
-	database.TypeMySQL: mysqlStatements,
-	database.TypeMSSQL: mssqlStatements,
+	database.TypeMySQL:  mysqlStatements,
+	database.TypeMSSQL:  mssqlStatements,
+	database.TypeOracle: oracleStatements,
 }

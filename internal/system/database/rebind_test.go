@@ -363,11 +363,109 @@ func Test_MaxRowsPerStatement(t *testing.T) {
 		{TypeMSSQL, 0, 1000},
 		{TypePostgres, 4, math.MaxInt},
 		{TypeMySQL, 13, math.MaxInt},
+		{TypeOracle, 4, 1},
+		{TypeOracle, 13, 1},
 		{TypeSQLite, 4, math.MaxInt},
 	}
 	for _, tc := range cases {
 		if got := MaxRowsPerStatement(tc.dbType, tc.paramsPerRow); got != tc.want {
 			t.Errorf("MaxRowsPerStatement(%q, %d) = %d, expected %d", tc.dbType, tc.paramsPerRow, got, tc.want)
+		}
+	}
+}
+
+func Test_Rebind_Oracle(t *testing.T) {
+	t.Run("each placeholder becomes a numbered bind by position", func(t *testing.T) {
+		gotSQL, gotArgs, err := Rebind(TypeOracle, `WHERE a = $1 AND b = $2`, []interface{}{"x", "y"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotSQL != `WHERE a = :1 AND b = :2` {
+			t.Errorf("unexpected statement: %q", gotSQL)
+		}
+		if !reflect.DeepEqual(gotArgs, []interface{}{"x", "y"}) {
+			t.Errorf("unexpected arguments: %#v", gotArgs)
+		}
+	})
+
+	t.Run("a number that recurs gets its own bind and a repeated argument", func(t *testing.T) {
+		gotSQL, gotArgs, err := Rebind(TypeOracle, `WHERE a = $2 AND b = $1 AND c = $2`, []interface{}{"one", "two"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotSQL != `WHERE a = :1 AND b = :2 AND c = :3` {
+			t.Errorf("unexpected statement: %q", gotSQL)
+		}
+		if !reflect.DeepEqual(gotArgs, []interface{}{"two", "one", "two"}) {
+			t.Errorf("unexpected arguments: %#v", gotArgs)
+		}
+	})
+
+	t.Run("the semicolon that ends a statement is removed", func(t *testing.T) {
+		gotSQL, _, err := Rebind(TypeOracle, "DELETE FROM t WHERE a = $1;\n", []interface{}{"x"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotSQL != `DELETE FROM t WHERE a = :1` {
+			t.Errorf("unexpected statement: %q", gotSQL)
+		}
+	})
+
+	t.Run("text inside quotes is left alone", func(t *testing.T) {
+		gotSQL, _, err := Rebind(TypeOracle, `SELECT 'costs $1' FROM dual WHERE a = $1`, []interface{}{"x"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotSQL != `SELECT 'costs $1' FROM dual WHERE a = :1` {
+			t.Errorf("unexpected statement: %q", gotSQL)
+		}
+	})
+
+	t.Run("a mismatch between placeholders and arguments is an error", func(t *testing.T) {
+		if _, _, err := Rebind(TypeOracle, `WHERE a = $1 AND b = $2`, []interface{}{"x"}); err == nil {
+			t.Error("expected an error for a placeholder with no argument")
+		}
+		if _, _, err := Rebind(TypeOracle, `WHERE a = $1`, []interface{}{"x", "y"}); err == nil {
+			t.Error("expected an error for an unused argument")
+		}
+	})
+}
+
+func Test_NormalizeArgs_Oracle(t *testing.T) {
+	moment := time.Date(2026, 5, 1, 10, 0, 0, 0, time.FixedZone("x", 3600))
+	long := strings.Repeat("a", oracleMaxVarcharBytes+1)
+
+	got := NormalizeArgs(TypeOracle, []interface{}{
+		[]byte(`{"a":1}`), json.RawMessage(`[]`), moment, true, false, 7, nil, "text", long,
+	})
+
+	expected := []interface{}{`{"a":1}`, `[]`, moment.UTC(), int64(1), int64(0), 7, nil, "text"}
+	if !reflect.DeepEqual(got[:len(expected)], expected) {
+		t.Errorf("expected %#v, got %#v", expected, got[:len(expected)])
+	}
+	if _, isText := got[len(expected)].(string); isText {
+		t.Error("text too long for a VARCHAR2 must be bound as a CLOB")
+	}
+}
+
+func Test_ReturnsRows(t *testing.T) {
+	cases := []struct {
+		dbType, sqlText string
+		want            bool
+	}{
+		{TypeOracle, "SELECT 1 FROM dual", true},
+		{TypeOracle, "  \n select a from t", true},
+		{TypeOracle, "WITH c AS (SELECT 1 FROM dual) SELECT * FROM c", true},
+		{TypeOracle, "(SELECT 1 FROM dual)", true},
+		{TypeOracle, "MERGE INTO t USING dual ON (1 = 1)", false},
+		{TypeOracle, "DELETE FROM t", false},
+		{TypeOracle, "INSERT INTO t VALUES (1)", false},
+		{TypePostgres, "DELETE FROM t", true},
+		{TypeMSSQL, "MERGE t USING x", true},
+	}
+	for _, c := range cases {
+		if got := ReturnsRows(c.dbType, c.sqlText); got != c.want {
+			t.Errorf("ReturnsRows(%q, %q) = %v, expected %v", c.dbType, c.sqlText, got, c.want)
 		}
 	}
 }

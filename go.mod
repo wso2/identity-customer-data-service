@@ -11,6 +11,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-mssqldb v1.10.0
 	github.com/pkg/errors v0.9.1
+	github.com/sijms/go-ora/v2 v2.9.0
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	gopkg.in/yaml.v2 v2.4.0

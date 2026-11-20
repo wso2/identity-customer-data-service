@@ -186,7 +186,7 @@ message_queue:
 
 # Datasource configuration.
 # Use "sqlite" for the inbuilt database, which needs no external server, and
-# "postgres", "mysql" or "mssql" for production. An unset type means "sqlite".
+# "postgres", "mysql", "mssql" or "oracle" for production. An unset type means "sqlite".
 datasource:
   type: "postgres"
   hostname: "localhost"
@@ -215,6 +215,15 @@ datasource:
   # Applies only when type is "mssql". The same settings as postgres, with the
   # same defaults. For mssql, sslmode is disable, require, verify-ca or verify-full.
   # mssql:
+  #   max_open_conns: 100
+  #   max_idle_conns: 25
+  #   conn_max_lifetime_seconds: 1800
+  #   conn_max_idle_time_seconds: 300
+  #   connect_timeout_seconds: 10
+  # Applies only when type is "oracle". The same settings as postgres, with the
+  # same defaults. For oracle, name is the service name of the pluggable database,
+  # and sslmode is disable, require, verify-ca or verify-full.
+  # oracle:
   #   max_open_conns: 100
   #   max_idle_conns: 25
   #   conn_max_lifetime_seconds: 1800
