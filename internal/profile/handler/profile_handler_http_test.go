@@ -349,6 +349,41 @@ func TestUpdateProfile(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, noID.Code)
 }
 
+// The identity server is the source of truth for the user ID, so an update neither sets it nor
+// drops the one the profile is linked to.
+func TestUpdateProfileLeavesTheUserIDAlone(t *testing.T) {
+	env := newProfileHandlerEnv(t)
+	created := env.createProfile(t, "Colombo")
+
+	refusals := map[string]string{
+		"an unknown field": `{"color":"red"}`,
+		"a user ID":        `{"user_id":"u-1","traits":{"city":"Galle"}}`,
+	}
+	for name, body := range refusals {
+		t.Run(name, func(t *testing.T) {
+			refused := env.call(t, env.h.UpdateProfile, http.MethodPut, env.auth.ValidToken, "", body,
+				profileIDOf(created.ProfileID))
+			assert.Equal(t, http.StatusBadRequest, refused.Code, refused.Body.String())
+		})
+	}
+	unchanged, err := env.svc.GetProfile(env.ctx, created.ProfileID, env.orgID)
+	require.NoError(t, err)
+	assert.Empty(t, unchanged.UserID, "a rejected update does not set the user ID")
+	assert.Equal(t, "Colombo", unchanged.Traits["city"], "a rejected update changes nothing")
+
+	linked := env.call(t, env.h.LinkProfile, http.MethodPost, env.auth.ValidToken, "",
+		fmt.Sprintf(`{"profile_id":%q,"user_id":"u-1"}`, created.ProfileID), nil)
+	require.Equal(t, http.StatusOK, linked.Code, linked.Body.String())
+
+	updated := env.call(t, env.h.UpdateProfile, http.MethodPut, env.auth.ValidToken, "",
+		`{"traits":{"city":"Kandy"}}`, profileIDOf(created.ProfileID))
+	require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+	stored, err := env.svc.GetProfile(env.ctx, created.ProfileID, env.orgID)
+	require.NoError(t, err)
+	assert.Equal(t, "u-1", stored.UserID, "an update without a user ID keeps the linked one")
+	assert.Equal(t, "Kandy", stored.Traits["city"])
+}
+
 func TestPatchProfile(t *testing.T) {
 	env := newProfileHandlerEnv(t)
 	created, err := env.svc.CreateProfile(env.ctx, model.ProfileRequest{

@@ -63,15 +63,16 @@ type Meta struct {
 	Location  string    `json:"location" bson:"location"`
 }
 
-// ProfileCreateRequest is the request body of POST /profiles.
-type ProfileCreateRequest struct {
+// ProfileWriteRequest is the request body of POST /profiles and PUT /profiles/{profileId}. It has no user ID,
+// so a caller cannot tie a profile to a user; only the identity server sync and the link endpoint do.
+type ProfileWriteRequest struct {
 	IdentityAttributes map[string]any `json:"identity_attributes,omitempty"`
 	Traits             map[string]any `json:"traits,omitempty"`
 	ApplicationData    map[string]any `json:"application_data"`
 }
 
 // ToProfileRequest returns the service input for this request, with no user ID.
-func (r ProfileCreateRequest) ToProfileRequest() ProfileRequest {
+func (r ProfileWriteRequest) ToProfileRequest() ProfileRequest {
 	return ProfileRequest{
 		IdentityAttributes: r.IdentityAttributes,
 		Traits:             r.Traits,

@@ -553,7 +553,7 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	var profile model.ProfileCreateRequest
+	var profile model.ProfileWriteRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&profile)
@@ -677,8 +677,10 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	var profile model.ProfileRequest
-	err = json.NewDecoder(request.Body).Decode(&profile)
+	var profile model.ProfileWriteRequest
+	decoder := json.NewDecoder(request.Body)
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&profile)
 	if err != nil {
 		clientError := errors2.NewClientError(errors2.ErrorMessage{
 			Code:        errors2.UpdateProfile.Code,
@@ -692,7 +694,7 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	_, err = profilesService.UpdateProfile(ctx, profileID, org.ID, profile)
+	_, err = profilesService.UpdateProfile(ctx, profileID, org.ID, profile.ToProfileRequest())
 	if err != nil {
 		utils.HandleError(writer, err)
 		return

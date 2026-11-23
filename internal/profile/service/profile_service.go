@@ -813,6 +813,16 @@ func isValidType(value interface{}, expected string, multiValued bool) bool {
 	}
 }
 
+// userIDToKeep returns the user ID an update stores: the requested one when an internal caller, such as the
+// identity server sync or the link endpoint, sets it, and the stored one otherwise. A public update carries no
+// user ID, so it neither ties the profile to a user nor unlinks it from the one it has.
+func userIDToKeep(requested, stored string) string {
+	if requested != "" {
+		return requested
+	}
+	return stored
+}
+
 // UpdateProfile creates or updates a profile
 func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 	profileID string, orgID string, updatedProfile profileModel.ProfileRequest) (*profileModel.ProfileResponse, error) {
@@ -876,7 +886,7 @@ func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 		profileToUpDate = profileModel.Profile{
 			ProfileID:          profileID,
 			OrgID:              profile.OrgID,
-			UserID:             updatedProfile.UserID,
+			UserID:             userIDToKeep(updatedProfile.UserID, profile.UserID),
 			ApplicationData:    appData,
 			Traits:             updatedProfile.Traits,
 			IdentityAttributes: updatedProfile.IdentityAttributes,
@@ -901,7 +911,7 @@ func (ps *ProfilesService) UpdateProfile(ctx context.Context,
 		profileToUpDate = profileModel.Profile{
 			ProfileID:          masterProfile.ProfileID,
 			OrgID:              masterProfile.OrgID,
-			UserID:             updatedProfile.UserID,
+			UserID:             userIDToKeep(updatedProfile.UserID, masterProfile.UserID),
 			ApplicationData:    appData,
 			Traits:             updatedProfile.Traits,
 			IdentityAttributes: updatedProfile.IdentityAttributes,
