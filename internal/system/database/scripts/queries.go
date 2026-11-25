@@ -239,6 +239,34 @@ var InsertProfileReference = newQuery("CDS-PRF-02",
 		VALUES ($1,$2,$3,$4, $5, $6)
 		ON CONFLICT (profile_id) DO NOTHING;`)
 
+// InsertProfileWithReferenceAndCookie stores a new profile, its reference row and, when $13 is not null, its
+// cookie in one statement, so that a profile create costs one round trip. It is used on PostgreSQL only (see
+// PostgresOnlyQueries): the other datasources write the same rows with InsertProfile, InsertProfileReference
+// and InsertCookie in one transaction. The foreign keys of the reference and the cookie are checked at the end
+// of the statement, so they see the new profile row. $10 to $12 are the status, the reference profile ID and
+// the reason, and $14 is the cookie state.
+var InsertProfileWithReferenceAndCookie = newQuery("CDS-PRF-27",
+	`WITH new_profile AS (
+		INSERT INTO profiles (
+			profile_id, user_id, org_id, created_at, updated_at, list_profile, delete_profile, traits,
+			identity_attributes
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (profile_id) DO NOTHING
+	), new_reference AS (
+		INSERT INTO profile_reference (profile_id, profile_status, reference_profile_id, reference_reason, org_id,
+			reference_profile_org_id)
+		VALUES ($1, $10, $11, $12, $3, $3)
+		ON CONFLICT (profile_id) DO NOTHING
+	)
+	INSERT INTO profile_cookies (cookie_id, profile_id, is_active)
+	SELECT CAST($13 AS VARCHAR), $1, CAST($14 AS BOOLEAN) WHERE CAST($13 AS VARCHAR) IS NOT NULL`)
+
+// PostgresOnlyQueries names the statements that run on PostgreSQL only. The code does not send them to
+// another datasource, so the tests do not prepare them there.
+var PostgresOnlyQueries = map[string]bool{
+	"InsertProfileWithReferenceAndCookie": true,
+}
+
 // GetProfileByID returns a profile of an org by ID, with its reference details.
 var GetProfileByID = newQuery("CDS-PRF-03",
 	`
@@ -724,6 +752,16 @@ var HealthCheckPing = newQuery("CDS-SYS-01", `SELECT 1;`)
 var DeleteBlockingKeysSQL = newQuery("CDS-IDR-01",
 	`DELETE FROM blocking_keys WHERE org_id = $1 AND profile_id = $2`)
 
+// IRGetBlockingKeysOfProfile returns the stored blocking keys of one profile, so that an update can change
+// only the keys that changed. The org_id prunes the partitions, as in DeleteBlockingKeysSQL.
+var IRGetBlockingKeysOfProfile = newQuery("CDS-IDR-25",
+	`SELECT attribute_name, key_value FROM blocking_keys WHERE org_id = $1 AND profile_id = $2`)
+
+// IRDeleteBlockingKeysOfProfile removes some blocking keys of one profile. The %s is an OR list of
+// (attribute_name = $n AND key_value = $m) pairs.
+var IRDeleteBlockingKeysOfProfile = newQuery("CDS-IDR-26",
+	`DELETE FROM blocking_keys WHERE org_id = $1 AND profile_id = $2 AND (%s)`)
+
 // DeleteBlockingKeysByAttributeSQL removes every blocking key of an org for one attribute.
 var DeleteBlockingKeysByAttributeSQL = newQuery("CDS-IDR-02",
 	`DELETE FROM blocking_keys WHERE org_id = $1 AND attribute_name = $2`)
@@ -753,10 +791,15 @@ var IRInsertBlockingKeys = newQuery("CDS-IDR-05",
 	`INSERT INTO blocking_keys (profile_id, org_id, attribute_name, key_value)
 				 VALUES %s ON CONFLICT DO NOTHING`)
 
-// IRFindCandidateIDsByKeys returns the profiles that share a blocking key value with the incoming profile.
-// The %s is the IN list of key values, and the %d placeholders take the excluded profile ID and the limit.
+// IRFindCandidateIDsByKeys returns the rows of the profiles that share a blocking key value with the incoming
+// profile. The %s is the IN list of key values, and the %d placeholders take the excluded profile ID and the
+// limit.
+//
+// There is no DISTINCT on purpose: with DISTINCT the database reads every row of the keys before the LIMIT
+// applies, which for a crowded key is thousands of rows. Without it the index scan stops at the limit, and the
+// caller removes the duplicates.
 var IRFindCandidateIDsByKeys = newQuery("CDS-IDR-06",
-	`SELECT DISTINCT profile_id FROM blocking_keys
+	`SELECT profile_id, key_value FROM blocking_keys
 				 WHERE org_id = $1 AND attribute_name = $2 AND key_value IN (%s)
 				   AND profile_id != $%d LIMIT $%d`)
 

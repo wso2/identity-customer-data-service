@@ -577,20 +577,15 @@ func (ph *ProfileHandler) InitProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If no valid cookie, create a new profile and cookie
-	profileResponse, err := profilesService.CreateProfile(ctx, profile.ToProfileRequest(), org.ID)
+	// The profile and its cookie are written together.
+	profileResponse, cookie, err := profilesService.CreateProfileWithCookie(ctx, profile.ToProfileRequest(), org.ID)
 	if err != nil {
 		utils.HandleError(w, err)
 		return
 	}
-	// Set the target now, so that a later failure still names the created profile.
 	audit.SetTargetID(ctx, profileResponse.ProfileID)
 
-	cookie, err := profilesService.CreateProfileCookie(ctx, profileResponse.ProfileID)
-	if err != nil {
-		utils.HandleError(w, err)
-		return
-	}
-	// Create and set a new cookie
+	// Set the new cookie
 	setProfileCookie(w, cookie.CookieID, r)
 
 	profileResponse.AnonymousTracker = cookie.CookieID
@@ -692,22 +687,11 @@ func (ph *ProfileHandler) UpdateProfile(writer http.ResponseWriter, request *htt
 	profilesProvider := provider.NewProfilesProvider()
 	profilesService := profilesProvider.GetProfilesService()
 
-	_, err = profilesService.UpdateProfile(ctx, profileID, org.ID, profile)
+	// The update returns the profile as a read after the write gives it, so the profile is not read again.
+	profileResponse, err := profilesService.UpdateProfile(ctx, profileID, org.ID, profile)
 	if err != nil {
 		utils.HandleError(writer, err)
 		return
-	}
-
-	profileResponse, err := profilesService.GetProfile(ctx, profileID, org.ID)
-	if err != nil {
-		errMsg := fmt.Sprintf("Failed to update profile with profileId: %s", profileID)
-		log.GetLogger().Debug(errMsg, log.Error(err))
-		serverError := errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.UpdateProfile.Code,
-			Message:     errors2.UpdateProfile.Message,
-			Description: errMsg,
-		}, err)
-		utils.HandleError(writer, serverError)
 	}
 	utils.RespondJSON(writer, http.StatusOK, profileResponse, constants.ProfileResource)
 }
