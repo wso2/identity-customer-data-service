@@ -50,6 +50,12 @@ Before production, replace the default certificate and move to PostgreSQL,
 MySQL or SQL Server — the [installation guide](guides/on-prem-installation.md)
 covers configuration, certificates, secrets and running CDD as a service.
 
+## Architecture
+
+| Document | Description |
+|---|---|
+| [Architecture](architecture.md) | How CDS is put together — request path, layering, data layer, workers, security, and the conventions that hold them together |
+
 ## Concepts
 
 | Document | Description |

@@ -357,3 +357,11 @@ onboarding paths, configuring CDD, switching it on in the Identity Server,
 running it as a service, and certificates.
 
 ---
+
+## 📚 Documentation
+
+Start with the [architecture overview](docs/architecture.md) — how CDS is put together, the
+layers a request passes through, and the conventions to follow when adding to it. The full
+index, covering concepts, guides and process, is in [docs/README.md](docs/README.md).
+
+Coding agents working in this repository should read [CLAUDE.md](CLAUDE.md).
