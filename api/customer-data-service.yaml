@@ -171,6 +171,15 @@ paths:
 
         <br><b>Scope required:</b> `profile:create`
       operationId: createProfile
+      parameters:
+        - name: cds_profile
+          in: cookie
+          required: false
+          description: |
+            The `cds_profile` cookie set by an earlier call. When it belongs to an active profile,
+            that profile is returned instead of a new one.
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -327,8 +336,8 @@ paths:
           in: query
           required: false
           description: |
-            Application identifiers whose `application_data` is returned, comma-separated or
-            repeated. Use `*` for all applications.
+            Application identifiers whose `application_data` is returned, comma-separated. Use `*`
+            for all applications.
           schema:
             type: string
           example: "app-1,app-2"
@@ -468,6 +477,13 @@ paths:
           description: |
             Bad Request. The body is not a valid array of consent records (this response can have
             a plain text body), or CDS is not enabled for the organization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            text/plain:
+              schema:
+                type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -761,6 +777,13 @@ paths:
           description: |
             Bad Request. The body is not valid (this response can have a plain text body), the
             scope is `identity_attributes` or not a valid scope, or CDS is not enabled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnyError'
+            text/plain:
+              schema:
+                type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1455,6 +1478,9 @@ paths:
         the identity resolution engine held back from an automatic merge. Only pending tasks are
         listed.
 
+        The tasks are returned in a single page, without cursors. Raise `page_size`, up to 200,
+        to see more.
+
         <br><b>Scope required:</b> `identity_resolution:view`
       operationId: getReviewTasks
       parameters:
@@ -2124,6 +2150,7 @@ components:
 
     ProfileRequest:
       type: object
+      additionalProperties: false
       description: Fields that are not listed here are rejected.
       properties:
         identity_attributes:
@@ -2235,7 +2262,11 @@ components:
 
     UnificationRuleRequest:
       type: object
-      description: Fields that are not listed here are rejected.
+      additionalProperties: false
+      description: |
+        Fields that are not listed here are rejected. Left out, `attribute_type` defaults to
+        `PRIMITIVE_EXACT`, which is how a rule written before typed matching is read, and
+        `unification_method` to `deterministic`.
       required:
         - rule_name
         - property_name
@@ -2319,9 +2350,10 @@ components:
 
     UnificationRulePatch:
       type: object
+      additionalProperties: false
       description: |
         Fields that are not listed here are rejected. `rule_name` and `property_name` cannot be
-        changed.
+        changed. Fields that are left out keep their values.
       properties:
         priority:
           type: integer
@@ -2346,10 +2378,8 @@ components:
         What kind of value the attribute holds. Determines which comparison is applied
         and which blocking keys are indexed.
 
-        Optional. Omitted, it defaults to `PRIMITIVE_EXACT`, which is how a rule written
-        before typed matching is read. It is **required when `unification_method` is
-        `fuzzy`**, because it selects how two values are compared and there is nothing
-        sensible to assume.
+        It is **required when `unification_method` is `fuzzy`**, because it selects how two
+        values are compared and there is nothing sensible to assume.
 
         It still shapes behaviour under `deterministic`: `DATE` and `UNIQUE_ID` are
         normalized before comparing, so a date written two ways still matches, and the
@@ -2364,8 +2394,8 @@ components:
         both kinds are evaluated side by side within a single comparison. Only
         FUZZY_STRING, NAME, EMAIL, PHONE and LOCATION support `fuzzy`.
 
-        Optional. Omitted, it defaults to `deterministic`. `fuzzy` is refused while the server
-        has `identity_resolution.fuzzy_matching_enabled` turned off.
+        `fuzzy` is refused while the server has `identity_resolution.fuzzy_matching_enabled`
+        turned off.
       enum: [deterministic, fuzzy]
       example: "deterministic"
 
@@ -2685,6 +2715,7 @@ components:
 
     AdminConfigUpdate:
       type: object
+      additionalProperties: false
       description: Fields that are not listed here are rejected. Only the fields that are sent change.
       properties:
         cds_enabled:
@@ -2844,6 +2875,8 @@ components:
         The service writes client errors in two shapes. This one, with `code`, `message` and
         `description`, is used by most endpoints. Some checks use `LegacyError` instead; the
         operations that can return either say so.
+      required:
+        - code
       properties:
         code:
           type: string
@@ -2862,6 +2895,8 @@ components:
         The other shape of a client error, with the keys prefixed `error_`. It is written by the
         validation of unification rules, by adding profile schema attributes, and by a few
         other checks.
+      required:
+        - error_code
       properties:
         error_code:
           type: string
@@ -2917,6 +2952,43 @@ components:
           items:
             $ref: '#/components/schemas/ChildOrg'
 
+    ChildOrgsRequest:
+      description: |
+        The child organizations a policy reaches. With `mode` `all`, leave `orgs` out or send it
+        empty. With `mode` `selected`, list each organization once.
+      oneOf:
+        - title: All
+          type: object
+          additionalProperties: false
+          required:
+            - mode
+          properties:
+            mode:
+              type: string
+              enum: [all]
+              description: All current and future organizations below the initiating organization.
+            orgs:
+              type: array
+              maxItems: 0
+              items:
+                $ref: '#/components/schemas/ChildOrg'
+        - title: Selected
+          type: object
+          additionalProperties: false
+          required:
+            - mode
+            - orgs
+          properties:
+            mode:
+              type: string
+              enum: [selected]
+              description: The organizations in `orgs`.
+            orgs:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/ChildOrg'
+
     SharingPolicyRequest:
       type: object
       additionalProperties: false
@@ -2924,7 +2996,7 @@ components:
         - child_orgs
       properties:
         child_orgs:
-          $ref: '#/components/schemas/ChildOrgs'
+          $ref: '#/components/schemas/ChildOrgsRequest'
       example:
         child_orgs:
           mode: selected
