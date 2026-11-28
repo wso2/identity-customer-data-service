@@ -55,7 +55,6 @@ const (
 	backoffMultiplier = 2
 )
 
-// The tests shorten these values.
 var (
 	// sendTimeout is the time that a send waits for the I/O loop of go-stomp to
 	// take the frame.
