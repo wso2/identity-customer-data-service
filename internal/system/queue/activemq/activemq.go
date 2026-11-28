@@ -63,6 +63,10 @@ var (
 	// retireTimeout is the time that a replaced connection gets for a graceful
 	// disconnect before its socket is closed by force.
 	retireTimeout = 5 * time.Second
+	// connectTimeout bounds the STOMP handshake of a new connection. Without it,
+	// a broker that accepts the socket but never answers CONNECT holds the dial
+	// for good.
+	connectTimeout = 10 * time.Second
 )
 
 func init() {
@@ -205,7 +209,9 @@ func (mc *managedConn) dial() error {
 		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
 	}
 
-	stompConn, err := stomp.Connect(netConn, opts...)
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	stompConn, err := stomp.ConnectWithContext(ctx, netConn, opts...)
+	cancel()
 	if err != nil {
 		_ = netConn.Close() // prevent fd leak if STOMP handshake fails
 		return fmt.Errorf("activemq: dial %s: %w", mc.addr, err)
@@ -430,6 +436,9 @@ type queueConns struct {
 	mu sync.Mutex
 	// consumer receives the messages. It is connected when the consumer starts.
 	consumer *managedConn
+	// starting is true while the consumer connection is dialed. The dial runs
+	// without mu, so that Close does not wait for it.
+	starting bool
 	closed   bool
 }
 
@@ -441,22 +450,39 @@ func newQueueConns(addr, username, password string, tlsCfg config.TLSConfig) (*q
 	return &queueConns{addr: addr, username: username, password: password, tlsCfg: tlsCfg, producer: producer}, nil
 }
 
-// openConsumer connects the consumer connection of the queue.
+// openConsumer connects the consumer connection of the queue. It dials without
+// holding mu, so a Close during the dial returns at once. The dial then ends
+// with an error, and its connection is closed.
 func (qc *queueConns) openConsumer() (*managedConn, error) {
 	qc.mu.Lock()
-	defer qc.mu.Unlock()
-	if qc.closed {
+	switch {
+	case qc.closed:
+		qc.mu.Unlock()
 		return nil, errors.New("activemq: the queue is closed")
-	}
-	if qc.consumer != nil {
+	case qc.consumer != nil || qc.starting:
+		qc.mu.Unlock()
 		return nil, errors.New("activemq: the consumer is already started")
 	}
+	qc.starting = true
+	qc.mu.Unlock()
+
 	mc, err := newManagedConn(qc.addr, qc.username, qc.password, qc.tlsCfg)
-	if err != nil {
+
+	qc.mu.Lock()
+	qc.starting = false
+	if err == nil && qc.closed {
+		err = errors.New("activemq: the queue was closed while the consumer connected")
+		qc.mu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), retireTimeout)
+		defer cancel()
+		_ = mc.closeWithin(ctx)
 		return nil, err
 	}
-	qc.consumer = mc
-	return mc, nil
+	if err == nil {
+		qc.consumer = mc
+	}
+	qc.mu.Unlock()
+	return mc, err
 }
 
 // releaseConsumer closes a consumer connection that could not subscribe, so

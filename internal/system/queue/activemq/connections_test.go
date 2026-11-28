@@ -19,7 +19,10 @@
 package activemq
 
 import (
+	"bufio"
 	"context"
+	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -127,5 +130,126 @@ func Test_dial_doesNotWaitForTheReplacedConnection(t *testing.T) {
 	case <-broker.readEnded:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the old connection was not closed after retireTimeout")
+	}
+}
+
+// startHandshakeBroker listens on a local port and answers the CONNECT of the
+// first answered connections only. Later connections are accepted and read,
+// but get no CONNECTED frame, like a broker that hangs.
+func startHandshakeBroker(t *testing.T, answered int) (addr string, accepted func() int) {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	var mu sync.Mutex
+	var conns []net.Conn
+	t.Cleanup(func() {
+		_ = listener.Close()
+		mu.Lock()
+		for _, c := range conns {
+			_ = c.Close()
+		}
+		mu.Unlock()
+	})
+
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns = append(conns, conn)
+			answer := len(conns) <= answered
+			mu.Unlock()
+			go func() {
+				reader := bufio.NewReader(conn)
+				for {
+					frame, err := readFrame(reader)
+					if err != nil {
+						return
+					}
+					command, headers := parseFrame(frame)
+					switch {
+					case answer && (command == "CONNECT" || command == "STOMP"):
+						_, _ = conn.Write([]byte("CONNECTED\nversion:1.2\n\n\x00"))
+					case answer && command == "DISCONNECT":
+						_, _ = conn.Write([]byte("RECEIPT\nreceipt-id:" + headers["receipt"] + "\n\n\x00"))
+					}
+				}
+			}()
+		}
+	}()
+
+	return "tcp://" + listener.Addr().String(), func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(conns)
+	}
+}
+
+// Test_dial_endsAHandshakeThatTheBrokerDoesNotAnswer checks that a broker that
+// accepts the socket but never answers CONNECT does not hold the dial for good.
+func Test_dial_endsAHandshakeThatTheBrokerDoesNotAnswer(t *testing.T) {
+	connectAfter := connectTimeout
+	connectTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { connectTimeout = connectAfter })
+
+	addr, _ := startHandshakeBroker(t, 0)
+	start := time.Now()
+	if _, err := NewProfileQueue(addr, "", "", "/queue/profiles", config.TLSConfig{}); err == nil {
+		t.Fatal("the queue connected to a broker that did not answer CONNECT")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("the dial took %s, want about connectTimeout", elapsed)
+	}
+}
+
+// Test_Close_doesNotWaitForAConsumerThatConnects checks that Close returns
+// inside its context while Start dials the consumer connection, and that the
+// late Start then fails without leaving a consumer behind.
+func Test_Close_doesNotWaitForAConsumerThatConnects(t *testing.T) {
+	connectAfter := connectTimeout
+	connectTimeout = 2 * time.Second
+	t.Cleanup(func() { connectTimeout = connectAfter })
+
+	addr, accepted := startHandshakeBroker(t, 1)
+	q, err := NewProfileQueue(addr, "", "", "/queue/profiles", config.TLSConfig{})
+	if err != nil {
+		t.Fatalf("failed to connect the producer: %v", err)
+	}
+
+	started := make(chan error, 1)
+	go func() { started <- q.Start(func(profileModel.Profile) error { return nil }, 1) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for accepted() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("Start did not dial the consumer connection")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_ = q.Close(ctx)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Close took %s, so it waited for the consumer connection", elapsed)
+	}
+
+	select {
+	case err := <-started:
+		if err == nil {
+			t.Fatal("Start succeeded after Close")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Start did not return")
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.consumer != nil {
+		t.Error("the queue kept a consumer connection after Close")
 	}
 }
