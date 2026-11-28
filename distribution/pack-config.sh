@@ -1,15 +1,31 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
+#
+# Choreo Labs licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 #
 # Applies the configuration defaults that belong to an installed pack.
 #
-# One deployment.yaml serves three deployments: the container image, the Helm
-# chart, and the pack. Most of it is the same for all three, but the datasource
+# One deployment.yaml serves two deployments: the container image and the
+# pack. Most of it is the same for both, but the datasource
 # is not. A container is handed a PostgreSQL to use; a pack is extracted onto a
 # machine where nothing else has been installed, and a default pointing at a
 # database that is not there means it cannot start at all.
 #
 # So the packed copy — and only the packed copy — defaults to the inbuilt
-# database. Nothing the container or the chart reads is touched.
+# database. Nothing the container reads is touched.
 #
 # The same goes for the TLS material: a container mounts it at /etc/certs,
 # while a pack carries it in repository/resources/security, so the packed copy

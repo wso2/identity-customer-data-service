@@ -1,3 +1,19 @@
+-- Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
+--
+-- Choreo Labs licenses this file to you under the Apache License,
+-- Version 2.0 (the "License"); you may not use this file except
+-- in compliance with the License.
+-- You may obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing,
+-- software distributed under the License is distributed on an
+-- "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+-- KIND, either express or implied.  See the License for the
+-- specific language governing permissions and limitations
+-- under the License.
+
 CREATE TABLE IF NOT EXISTS profiles
 (
     profile_id          VARCHAR(36)  NOT NULL PRIMARY KEY,
@@ -240,7 +256,8 @@ CREATE TABLE IF NOT EXISTS review_tasks
     CONSTRAINT uq_review_task_profiles UNIQUE (incoming_profile_id, candidate_profile_id),
     INDEX idx_review_tasks_org_id_status (org_id, status),
     INDEX idx_review_tasks_created (created_at DESC),
-    INDEX idx_review_tasks_incoming (incoming_profile_id, status)
+    INDEX idx_review_tasks_incoming (incoming_profile_id, status),
+    INDEX idx_review_tasks_candidate (candidate_profile_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 -- Pairs an administrator explicitly rejected as non-matches. Kept separate from

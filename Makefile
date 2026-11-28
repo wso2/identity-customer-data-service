@@ -1,3 +1,19 @@
+# Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
+#
+# Choreo Labs licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 # Constants.
 VERSION_FILE=version.txt
 BINARY_NAME=cds
@@ -196,6 +212,12 @@ clean-dist:
 check-licenses:
 	@PLATFORMS="$(PLATFORMS)" $(DISTRIBUTION_SRC)/check-licenses.sh LICENSE.txt
 
+# Check the license header of the source files changed since BASE_REF.
+# Set BASE_REF=upstream/main when origin is a fork.
+BASE_REF ?= origin/main
+check-license-headers:
+	@./scripts/check-license-headers.sh $(BASE_REF)
+
 help:
 	@echo "Makefile targets:"
 	@echo "  all                        - Clean, build, and test the project."
@@ -204,6 +226,7 @@ help:
 	@echo "  dist                       - Build the release packs into $(DIST_DIR)."
 	@echo "  clean-dist                 - Remove the staged distributions and their zips."
 	@echo "  check-licenses             - Check that LICENSE.txt lists exactly the modules the packs link."
+	@echo "  check-license-headers      - Check the license headers of the files changed since BASE_REF (default origin/main)."
 	@echo "  integration-test           - Run integration tests against PostgreSQL (use test=TestName to filter)."
 	@echo "  integration-test-sqlite    - Run integration tests against the inbuilt database (use test=TestName to filter)."
 	@echo "  integration-test-mysql     - Run integration tests against MySQL (use test=TestName to filter)."
@@ -215,7 +238,7 @@ help:
 	@echo "  lint                       - Run golangci-lint."
 	@echo "  help                       - Show this help message."
 
-.PHONY: all clean build dist clean-dist check-licenses _dist_one _dist_metadata lint lint-all help integration-test integration-test-sqlite integration-test-mysql integration-test-mssql integration-test-oracle mq-integration-test unit-test unit-test-coverage
+.PHONY: all clean build dist clean-dist check-licenses check-license-headers _dist_one _dist_metadata lint lint-all help integration-test integration-test-sqlite integration-test-mysql integration-test-mssql integration-test-oracle mq-integration-test unit-test unit-test-coverage
 
 .PHONY: go_install_tool golangci-lint
 

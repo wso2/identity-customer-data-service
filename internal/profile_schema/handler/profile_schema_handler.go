@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -358,12 +358,19 @@ func (psh *ProfileSchemaHandler) PatchProfileSchemaAttributeByID(w http.Response
 	}
 	schemaProvider := provider.NewProfileSchemaProvider()
 	schemaService := schemaProvider.GetProfileSchemaService()
-	var updates map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	var update model.ProfileSchemaAttributeUpdate
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&update); err != nil {
+		clientError := errors2.NewClientError(errors2.ErrorMessage{
+			Code:        errors2.InvalidAttribute.Code,
+			Message:     errors2.InvalidAttribute.Message,
+			Description: utils.HandleDecodeError(err, "profile schema attribute"),
+		}, http.StatusBadRequest)
+		utils.WriteErrorResponse(w, clientError)
 		return
 	}
-	err = schemaService.UpdateProfileSchemaAttributeByID(ctx, org.ID, attributeID, updates, scope)
+	err = schemaService.UpdateProfileSchemaAttributeByID(ctx, org.ID, attributeID, update, scope)
 	if err != nil {
 		utils.HandleError(w, err)
 		return

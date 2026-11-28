@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -433,8 +433,8 @@ func TestCheckStore(t *testing.T) {
 		t.Fatalf("failed to drop the table: %v", err)
 	}
 	if err := servicecreds.CheckStore(context.Background()); err == nil ||
-		!strings.Contains(err.Error(), "003-service-credentials-postgres.sql") {
-		t.Fatalf("CheckStore without the table: got %v, want the migration named", err)
+		!strings.Contains(err.Error(), "org_service_credentials table cannot be read") {
+		t.Fatalf("CheckStore without the table: got %v, want the table named", err)
 	}
 }
 

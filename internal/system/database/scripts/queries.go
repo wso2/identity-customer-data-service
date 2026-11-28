@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -178,11 +178,6 @@ var DeleteProfileSchemaAttributeByID = newQuery("CDS-SCH-13",
 var DeleteStaleIdentityClaimsForProfileSchema = newQuery("CDS-SCH-14",
 	`DELETE FROM profile_schema WHERE org_id = $1 AND scope = 'identity_attributes'
 	 AND attribute_id NOT IN (%s)`)
-
-// UpdateProfileSchemaAttributeFields is the prefix of a partial update. The
-// caller appends the SET assignments and the WHERE clause.
-var UpdateProfileSchemaAttributeFields = newQuery("CDS-SCH-15",
-	`UPDATE profile_schema SET `)
 
 // GetUnificationRules returns every unification rule of an org.
 var GetUnificationRules = newQuery(

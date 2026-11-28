@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -44,6 +44,7 @@ func NewAdminConfigService(mux *http.ServeMux) *AdminConfigService {
 	// Register routes with Go 1.22 ServeMux patterns on shared mux
 	s.mux.HandleFunc("GET "+base+"/config", s.handler.GetAdminConfig)
 	s.mux.HandleFunc("PATCH "+base+"/config", audit.Wrap(audit.AdminConfigUpdate, s.handler.UpdateAdminConfig))
+	s.mux.HandleFunc("POST "+base+"/config/sync", audit.Wrap(audit.AdminConfigSync, s.handler.SyncAdminConfig))
 
 	return s
 }

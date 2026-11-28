@@ -29,21 +29,27 @@ several tenants needs an application per tenant.
 **The Identity Server does.** When an organization enables CDD through the
 Identity Server (`PATCH /api/server/v1/configs/cds`), the CDD extension in the
 Identity Server creates a machine-to-machine application named
-`Customer Data Directory` for that organization, authorizes it for the management
+`Customer Data Service` for that organization, authorizes it for the management
 APIs CDD calls, and sends its credentials to CDD. Then it enables CDD for the
 organization. An organization that already has the application keeps it: its
 secret is renewed and sent when the organization turns CDD on from off.
 
 The application is the Identity Server's own. Reserve its name so that tenant
 administrators cannot change or delete it, and the Console does not list it.
+The name is `Customer Data Service`: the extension does not set up the
+application unless that name is reserved, so enabling CDD fails otherwise.
 Both lists apply to every tenant, and each replaces its default, so keep the
 default entries:
 
 ```toml
 [system_applications]
-read_only_apps = ["Console", "Customer Data Directory"]
-system_portals = ["Console", "My Account", "Customer Data Directory"]
+read_only_apps = ["Console", "Customer Data Service"]
+system_portals = ["Console", "My Account", "Customer Data Service"]
 ```
+
+An Identity Server that reserves the name itself when `[customer_data_service]`
+is enabled still takes these lists from `deployment.toml` when they are set
+there, so a list that leaves out `Customer Data Service` makes enabling fail.
 
 CDD never creates applications and never holds Identity Server administrator
 credentials. The extension already pushes profiles, claims and organizations to
@@ -57,7 +63,7 @@ Identity Server (CDD extension)                             CDD
   │ POST /t/{org}/cds/api/v1/service-credentials/sync ──────▶ token request to /t/{org}/oauth2/token
   │      {event: SERVICE_CREDENTIALS_UPDATED,                  stores only if a token is issued
   │       org_id, client_id, client_secret}
-  │ PATCH /t/{org}/cds/api/v1/config {cds_enabled} ─────────▶ initial schema sync, with the new credentials
+  │ POST /t/{org}/cds/api/v1/config/sync {cds_enabled} ─────▶ initial schema sync, with the new credentials
 ```
 
 The endpoint accepts HTTP Basic with the sync admin credentials only, and only on
@@ -121,9 +127,8 @@ idp:
 openssl rand -base64 32    # the value for SERVICE_CREDENTIALS_ENCRYPTION_KEY
 ```
 
-On PostgreSQL, run
-[`dbscripts/migrations/003-service-credentials-postgres.sql`](../../dbscripts/migrations/003-service-credentials-postgres.sql)
-first. SQLite creates the table at start.
+Every database script in `repository/dbscripts/` creates the
+`org_service_credentials` table. SQLite creates it at start.
 
 The key is the switch. Without it, the endpoint answers `400 CDS-16004`, the
 Identity Server sends no credentials, and CDD uses the configured pair for every
@@ -132,8 +137,7 @@ any of these is true:
 
 - The key is not usable.
 - The identity provider sends no credentials.
-- The `org_service_credentials` table cannot be read, as on PostgreSQL before the
-  migration.
+- The `org_service_credentials` table cannot be read.
 
 ---
 

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -75,6 +75,7 @@ func (e *profileHandlerEnv) createCookie(t *testing.T, profileID string, active 
 
 func TestInitProfileReturnsTheProfileOfAnActiveCookie(t *testing.T) {
 	env := newProfileHandlerEnv(t)
+	env.markConsoleSystemApp(t)
 	existing := env.createProfile(t, "Colombo")
 	cookieID := env.createCookie(t, existing.ProfileID, true)
 
@@ -86,6 +87,11 @@ func TestInitProfileReturnsTheProfileOfAnActiveCookie(t *testing.T) {
 	assert.Equal(t, existing.ProfileID, got.ProfileID, "no new profile is created")
 	assert.Equal(t, "Colombo", got.Traits["city"])
 	assert.Equal(t, cookieID, got.AnonymousTracker)
+	cookies := recorder.Result().Cookies()
+	require.Len(t, cookies, 1, "the cookie is set again")
+	assert.Equal(t, constants.ProfileCookie, cookies[0].Name)
+	assert.Equal(t, cookieID, cookies[0].Value)
+	assertProfileCookieAttributes(t, cookies[0])
 }
 
 func TestInitProfileCreatesANewProfileWhenTheCookieIsInactive(t *testing.T) {

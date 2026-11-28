@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,6 +19,7 @@ package client
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,6 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -124,7 +126,12 @@ func TestFetchTokenUsesClientCredentialsPerOrganization(t *testing.T) {
 	assert.Equal(t, "/t/acme/oauth2/token", is.tokenPaths[0])
 	assert.Equal(t, clientID, is.tokenUsers[0])
 	assert.Equal(t, "client_credentials", is.tokenRequests[0].Get("grant_type"))
-	assert.Contains(t, is.tokenRequests[0].Get("scope"), "internal_application_mgt_view")
+	assert.ElementsMatch(t, []string{
+		"internal_application_mgt_view",
+		"internal_claim_meta_view",
+		"internal_organization_view",
+	}, strings.Fields(is.tokenRequests[0].Get("scope")),
+		"CDS asks only for the scopes of the IS APIs it calls; it reads no users")
 }
 
 func TestFetchTokenUsesTheSystemAppGrantWhenEnabled(t *testing.T) {
@@ -458,33 +465,6 @@ func TestGetProfileSchemaFailures(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestGetSCIMUserFlattensTheNestedClaims(t *testing.T) {
-	is, c := newIdentityServer(t, false)
-	is.handle("/t/acme/scim2/Users/u-1", func(w http.ResponseWriter, r *http.Request) {
-		requireToken(t, r, false)
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"id":       "u-1",
-			"userName": "jane",
-			"name":     map[string]interface{}{"givenName": "Jane", "familyName": "Doe"},
-		})
-	})
-	is.handle("/t/acme/scim2/Users/garbled", func(w http.ResponseWriter, r *http.Request) {
-		_,
-			_ = w.Write([]byte("nope"))
-	})
-
-	user, err := c.GetSCIMUser("acme", "u-1")
-	require.NoError(t, err)
-	assert.Equal(t, map[string]interface{}{
-		"id": "u-1", "userName": "jane", "name.givenName": "Jane", "name.familyName": "Doe",
-	}, user)
-
-	_, err = c.GetSCIMUser("acme", "garbled")
-	requireServerError(t, err)
-	_, err = c.GetSCIMUser("bad/handle", "u-1")
-	assert.Error(t, err)
-}
-
 func TestSubOrganizationCallsUseTheOrgPath(t *testing.T) {
 	is, c := newIdentityServer(t, false)
 	subOrg := uuid.New().String()
@@ -553,6 +533,30 @@ func TestNewOutboundHTTPClient(t *testing.T) {
 	_, err = newOutboundHTTPClient(config.TLSConfig{CertDir: dir, MTLSEnabled: true, CDSPublicCert: "a.crt",
 		CDSPrivateKey: "a.key"})
 	assert.Error(t, err, "a client certificate that cannot be loaded")
+}
+
+func TestSharedOutboundHTTPClient(t *testing.T) {
+	dir := t.TempDir()
+
+	first, err := sharedOutboundHTTPClient(config.TLSConfig{CertDir: dir})
+	require.NoError(t, err)
+	second, err := sharedOutboundHTTPClient(config.TLSConfig{CertDir: dir})
+	require.NoError(t, err)
+	assert.Same(t, first, second, "the same TLS settings share one client")
+
+	other, err := sharedOutboundHTTPClient(config.TLSConfig{CertDir: t.TempDir()})
+	require.NoError(t, err)
+	assert.NotSame(t, first, other, "other TLS settings get their own client")
+
+	withTrustStore := config.TLSConfig{CertDir: dir, TrustStore: "ca.crt"}
+	_, err = sharedOutboundHTTPClient(withTrustStore)
+	assert.Error(t, err, "a trust store that cannot be read")
+	writeKeyPair(t, dir, "ca", x509.ExtKeyUsageServerAuth)
+	_, err = sharedOutboundHTTPClient(withTrustStore)
+	assert.NoError(t, err, "a failure is not kept: the next call reads the trust store again")
+
+	transport := first.Transport.(*http.Transport)
+	assert.Equal(t, 100, transport.MaxIdleConnsPerHost, "keeps idle connections to the identity server")
 }
 
 func TestConvertSCIMClaimWithLocal(t *testing.T) {
@@ -638,6 +642,38 @@ func TestSmallHelpers(t *testing.T) {
 	assert.Equal(t, "plain", extractClaimKeyFromLocalURI("plain"))
 	assert.Equal(t, "a", ifThenElse(true, "a", "b"))
 	assert.Equal(t, "b", ifThenElse(false, "a", "b"))
-	assert.Equal(t, map[string]interface{}{"a.b": 1, "c": 2, "d": []int{1}},
-		flattenSCIMClaims(map[string]interface{}{"a": map[string]interface{}{"b": 1}, "c": 2, "d": []int{1}}))
+}
+
+func TestFetchJWKS(t *testing.T) {
+	is, c := newIdentityServer(t, false)
+	is.handle("/t/acme/oauth2/jwks", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"keys": []interface{}{}})
+	})
+
+	endpoint, err := c.JWKSEndpoint("acme", "/oauth2/jwks")
+	require.NoError(t, err)
+	body, err := c.FetchJWKS(endpoint)
+
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"keys":[]}`, string(body))
+}
+
+func TestFetchJWKSGivesUpAfterTheTimeout(t *testing.T) {
+	is, c := newIdentityServer(t, false)
+	is.handle("/t/acme/oauth2/jwks", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	})
+	defer func(previous time.Duration) { jwksFetchTimeout = previous }(jwksFetchTimeout)
+	jwksFetchTimeout = 100 * time.Millisecond
+
+	endpoint, err := c.JWKSEndpoint("acme", "/oauth2/jwks")
+	require.NoError(t, err)
+	started := time.Now()
+	_, err = c.FetchJWKS(endpoint)
+
+	require.Error(t, err)
+	assert.Less(t, time.Since(started), 2*time.Second)
 }

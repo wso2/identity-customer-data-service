@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -63,6 +63,37 @@ func TestUsingDefaultCertificate(t *testing.T) {
 	}
 	if usingDefaultCertificate(filepath.Join(dir, "junk.crt")) {
 		t.Error("an unreadable file was reported as the default")
+	}
+}
+
+// A client trust store holding the default anywhere in its bundle lets anyone
+// with the public default key call the sync endpoints, so it is found there too.
+func TestTrustsDefaultCertificate(t *testing.T) {
+	dir := t.TempDir()
+	other := filepath.Join(dir, "other.crt")
+	writeTestCertificate(t, other, "is.example.com")
+	otherPEM, err := os.ReadFile(filepath.Clean(other))
+	if err != nil {
+		t.Fatalf("could not read the certificate: %v", err)
+	}
+	defaultPEM, err := os.ReadFile(filepath.Clean(defaultCertificate))
+	if err != nil {
+		t.Fatalf("could not read the default certificate: %v", err)
+	}
+	bundle := filepath.Clean(filepath.Join(dir, "bundle.pem"))
+	//nolint:gosec // the bundle is written to the test's own temporary directory
+	if err := os.WriteFile(bundle, append(otherPEM, defaultPEM...), 0o600); err != nil {
+		t.Fatalf("could not stage the bundle: %v", err)
+	}
+
+	if !trustsDefaultCertificate(bundle) {
+		t.Error("the default after another certificate was not found")
+	}
+	if trustsDefaultCertificate(other) {
+		t.Error("a bundle without the default was reported as trusting it")
+	}
+	if trustsDefaultCertificate("") {
+		t.Error("no client trust store was reported as trusting the default")
 	}
 }
 

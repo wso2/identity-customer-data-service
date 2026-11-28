@@ -1,3 +1,19 @@
+# Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
+#
+# Choreo Labs licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 openapi: 3.0.0
 info:
   title: Custodian API
@@ -228,8 +244,8 @@ paths:
       responses:
         '200':
           description: |
-            The event was processed. `AUTHENTICATION_SUCCESS`, `SESSION_TERMINATE` and an event
-            that CDS ignores return `{"status": "updated"}`. The profile events (`POST_ADD_USER`,
+            The event was processed. `AUTHENTICATION_SUCCESS`, `SESSION_TERMINATE`,
+            `SESSION_EXPIRE` and an event that CDS ignores return `{"status": "updated"}`. The profile events (`POST_ADD_USER`,
             `POST_DELETE_USER_WITH_ID` and the two claim events) return an empty body.
           content:
             application/json:
@@ -257,7 +273,9 @@ paths:
       tags: [Profile]
       summary: Link an anonymous profile to a user
       description: |
-        Sets the `user_id` of an anonymous profile.
+        Sets the `user_id` of an anonymous profile. If the user already has a profile, the
+        anonymous `identity_attributes` only fill those it has no value for: the identity
+        provider is the source of truth for the identity attributes of a profile linked to a user.
         The call is idempotent: linking a profile to the user it is already linked to returns
         a 200 with no change.
 
@@ -366,7 +384,12 @@ paths:
         Partially updates a profile.
         `identity_attributes`, `traits` and `application_data` in the body are deep merged
         into the existing values. If the profile has been merged into another profile, the
-        patch is applied to that profile's data.
+        patch is applied to that profile's data. Fields that are not part of the request
+        schema, `user_id` included, are rejected with a 400.
+
+        The identity provider is the source of truth for the `identity_attributes` of a profile
+        linked to a user, so a patch that changes them on such a profile is rejected with
+        `CDS-11018`. They can be changed only on an anonymous profile.
 
         <br><b>Scope required:</b> `profile:update`
       operationId: patchProfile
@@ -733,8 +756,8 @@ paths:
       summary: Update a schema attribute
       description: |
         Despite the method, this is a **partial
-        update**: only the fields in the body change. The body is any JSON object of attribute
-        fields.
+        update**: only the fields in the body change. Fields that are not part of the request
+        schema are rejected with a 400.
 
         Not allowed for `identity_attributes`, which returns a 400.
 
@@ -746,10 +769,48 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              additionalProperties: false
               description: The attribute fields to change.
+              required: [attribute_name, value_type, merge_strategy, mutability]
+              properties:
+                attribute_name:
+                  type: string
+                display_name:
+                  type: string
+                value_type:
+                  type: string
+                merge_strategy:
+                  type: string
+                mutability:
+                  type: string
+                multi_valued:
+                  type: boolean
+                canonical_values:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      value:
+                        type: string
+                      label:
+                        type: string
+                sub_attributes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      attribute_id:
+                        type: string
+                      attribute_name:
+                        type: string
+                application_identifier:
+                  type: string
               example:
+                attribute_name: traits.city
                 display_name: Preferred city
+                value_type: string
+                merge_strategy: overwrite
+                mutability: readWrite
       responses:
         '200':
           description: The attribute after the update.
@@ -759,8 +820,9 @@ paths:
                 $ref: '#/components/schemas/ProfileSchemaAttribute'
         '400':
           description: |
-            Bad Request. The body is not valid (this response can have a plain text body), the
-            scope is `identity_attributes` or not a valid scope, or CDS is not enabled.
+            Bad Request. The body is not valid, has a field that cannot be updated or a value of
+            the wrong type, the scope is `identity_attributes` or not a valid scope, or CDS is not
+            enabled.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1415,15 +1477,10 @@ paths:
         Only the fields in the body change. Fields that
         are not part of the request schema are rejected with a 400.
 
-        The request is authorized with a bearer token that has the scope below, or with the
-        admin credentials (HTTP Basic), which the identity server uses to send the CDS enable
-        setting of an organization.
-
         <br><b>Scope required:</b> `admin_config:update`
       operationId: updateAdminConfig
       security:
         - bearerAuth: [ ]
-        - basicAuth: [ ]
       requestBody:
         required: true
         content:
@@ -1443,6 +1500,37 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /config/sync:
+    post:
+      tags: [Admin Config]
+      summary: Receive the CDS enable setting of the organization from the identity provider
+      description: >-
+        The identity provider sends the CDS enable setting of a root organization when the setting
+        changes. Only the identity provider calls this endpoint, with the admin credentials. Only
+        cds_enabled can be sent, and the other settings do not change.
+      operationId: syncAdminConfig
+      security:
+        - basicAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminConfigSync'
+      responses:
+        '200':
+          description: The configuration after the update.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminConfig'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -1593,7 +1681,8 @@ paths:
                     type: string
                     example: ready
         '503':
-          description: Service Unavailable. The service is not ready.
+          description: >-
+            Service Unavailable. The service is not ready. The reason is in the application log.
           content:
             application/json:
               schema:
@@ -1602,8 +1691,6 @@ paths:
                   status:
                     type: string
                     example: not ready
-                  error:
-                    type: string
 
   /organizations/event-sync:
     post:
@@ -2178,9 +2265,10 @@ components:
           description: |
             Identity server event name. The events that CDS acts on are `POST_ADD_USER`,
             `POST_DELETE_USER_WITH_ID`, `POST_SET_USER_CLAIM_VALUE_WITH_ID`,
-            `POST_SET_USER_CLAIM_VALUES_WITH_ID`, `AUTHENTICATION_SUCCESS` and
-            `SESSION_TERMINATE`. `AUTHENTICATION_SUCCESS` needs `userId` and attaches the user to
-            the anonymous profile of `profileCookie`. `SESSION_TERMINATE` deactivates that cookie.
+            `POST_SET_USER_CLAIM_VALUES_WITH_ID`, `AUTHENTICATION_SUCCESS`, `SESSION_TERMINATE`
+            and `SESSION_EXPIRE`. `AUTHENTICATION_SUCCESS` needs `userId` and attaches the user to
+            the anonymous profile of `profileCookie`. `SESSION_TERMINATE` and `SESSION_EXPIRE`
+            deactivate that cookie when it belongs to the profile of `userId`.
             Any other event is accepted and ignored.
         userId:
           type: string
@@ -2682,6 +2770,14 @@ components:
           minimum: 1
           description: Days between two cleanups of the temporary profiles of the organization. The default is 30.
 
+    AdminConfigSync:
+      type: object
+      description: The CDS enable setting that the identity provider sends. Other fields are rejected.
+      required: [cds_enabled]
+      additionalProperties: false
+      properties:
+        cds_enabled:
+          type: boolean
     AdminConfigUpdate:
       type: object
       description: Fields that are not listed here are rejected. Only the fields that are sent change.

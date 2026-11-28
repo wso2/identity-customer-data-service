@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -71,6 +71,8 @@ func newReviewEnv(t *testing.T) *reviewEnv {
 	env := &reviewEnv{ctx: context.Background(), db: testDB.DB, handle: handle, orgID: setup.TestOrgID(handle),
 		auth: auth, h: NewIdentityResolutionHandler()}
 	setup.TestOrg(t, handle)
+	_, err = env.db.Exec(`INSERT INTO cds_config (org_id, config, value) VALUES (?, 'cds_enabled', 'true')`, env.orgID)
+	require.NoError(t, err)
 	return env
 }
 
@@ -253,6 +255,22 @@ func TestResolveReviewTaskRefusals(t *testing.T) {
 			assert.Equal(t, tc.status, recorder.Code, recorder.Body.String())
 		})
 	}
+}
+
+// TestResolveReviewTaskDecodeErrorNamesTheJSONType checks that a body of the wrong JSON type gets a
+// message that names the field and the JSON type.
+func TestResolveReviewTaskDecodeErrorNamesTheJSONType(t *testing.T) {
+	env := newReviewEnv(t)
+	recorder := env.call(t, env.h.ResolveReviewTask, http.MethodPost, env.auth.ValidToken, "",
+		`{"decision":5}`, taskID("task-1"))
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	assert.Equal(t, "Invalid type for field 'decision'. Expected a string in review task resolve request body.",
+		body["description"])
+	assert.NotContains(t, recorder.Body.String(), "ReviewResolveRequest")
+	assert.NotContains(t, recorder.Body.String(), "Go struct")
 }
 
 func TestATaskOfAnotherOrganizationIsReportedAsNotFound(t *testing.T) {

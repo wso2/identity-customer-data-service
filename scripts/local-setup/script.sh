@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
+#
+# Choreo Labs licenses this file to you under the Apache License,
+# Version 2.0 (the "License"); you may not use this file except
+# in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 #
 # Sets up CDS with a WSO2 Identity Server for local development: builds CDS and
 # the IS extension bundles, generates and exchanges TLS certificates, writes
@@ -1118,12 +1134,10 @@ provision_is() {
     || die "management API resource /api/server/v1/applications not found"
   authorize_api "$sys_id" "/api/server/v1/claim-dialects" internal_claim_meta_view \
     || die "management API resource /api/server/v1/claim-dialects not found"
-  authorize_api "$sys_id" "/scim2/Users" internal_user_mgt_list internal_user_mgt_view \
-    || die "management API resource /scim2/Users not found"
   # CDS reads the organization tree.
   authorize_api "$sys_id" "/api/server/v1/organizations" internal_organization_view \
     || die "management API resource /api/server/v1/organizations not found"
-  ok "'$SYS_APP_NAME' authorized for applications, claim-dialects, scim2/Users, and organizations"
+  ok "'$SYS_APP_NAME' authorized for applications, claim-dialects, and organizations"
 
   SYS_CLIENT_ID="$(oidc_config "$sys_id" | jq -r '.clientId // empty')"
   SYS_CLIENT_SECRET="$(oidc_config "$sys_id" | jq -r '.clientSecret // empty')"

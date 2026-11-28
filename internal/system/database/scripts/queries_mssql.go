@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -62,6 +62,10 @@ var mssqlStatements = map[string]string{
 		WHEN NOT MATCHED THEN INSERT (category_id, scope, attribute_name, attribute_id, application_identifier)
 			VALUES ($1, $2, $3, $4, $5);`,
 
+	"CDS-IDR-01": `DELETE t FROM blocking_keys AS t
+		WITH (FORCESEEK (idx_blocking_keys_org_id_profile (org_id, profile_id)), ROWLOCK)
+		WHERE t.org_id = $1 AND t.profile_id = $2`,
+
 	"CDS-IDR-03": `SELECT TOP ($3) profile_id, user_id, traits, identity_attributes
 		FROM profiles
 		WHERE org_id = $1 AND delete_profile = 0 AND profile_id > $2
@@ -73,13 +77,8 @@ var mssqlStatements = map[string]string{
 		LEFT JOIN profile_reference pr ON p.profile_id = pr.profile_id
 		WHERE p.profile_id IN (%s) AND p.delete_profile = 0`,
 
-	"CDS-IDR-05": `MERGE blocking_keys WITH (HOLDLOCK) AS t
-		USING (SELECT DISTINCT profile_id, org_id, attribute_name, key_value
-			FROM (VALUES %s) AS v (profile_id, org_id, attribute_name, key_value)) AS s
-			ON t.org_id = s.org_id AND t.attribute_name = s.attribute_name AND t.key_value = s.key_value
-			AND t.profile_id = s.profile_id
-		WHEN NOT MATCHED THEN INSERT (profile_id, org_id, attribute_name, key_value)
-			VALUES (s.profile_id, s.org_id, s.attribute_name, s.key_value);`,
+	"CDS-IDR-05": `INSERT INTO blocking_keys (profile_id, org_id, attribute_name, key_value)
+		VALUES %s`,
 
 	"CDS-IDR-06": `SELECT DISTINCT TOP ($%[3]d) profile_id FROM blocking_keys
 		WHERE org_id = $1 AND attribute_name = $2 AND key_value IN (%[1]s)

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -217,7 +217,9 @@ func Test_ProfileLink(t *testing.T) {
 		master, err := profileSvc.GetProfile(context.Background(), existing.ProfileID, org.ID)
 		require.NoError(t, err)
 		require.Equal(t, userID, master.UserID)
-		require.Contains(t, master.IdentityAttributes["email"].([]interface{}), "anon-3@wso2.com")
+		// The identity provider is the source of truth for the identity attributes of a linked profile, so the
+		// anonymous email is not carried into it.
+		require.Equal(t, []interface{}{"known@wso2.com"}, master.IdentityAttributes["email"])
 	})
 }
 

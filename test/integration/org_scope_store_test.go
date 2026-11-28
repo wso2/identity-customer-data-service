@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -184,7 +184,7 @@ func Test_OrgScope_ProfileStore(t *testing.T) {
 		})
 		assertClientError(t, err, http.StatusNotFound, errors2.ProfileNotFound.Code)
 		_, err = profiles.PatchProfile(ctx, owner.ProfileID, otherOrg.ID,
-			map[string]interface{}{"traits": map[string]interface{}{"interests": "changed"}})
+			profileModel.ProfilePatchRequest{Traits: map[string]interface{}{"interests": "changed"}})
 		assertClientError(t, err, http.StatusNotFound, errors2.ProfileNotFound.Code)
 		_, err = profiles.GetProfileConsents(ctx, owner.ProfileID, otherOrg.ID)
 		assertClientError(t, err, http.StatusNotFound, errors2.ProfileNotFound.Code)

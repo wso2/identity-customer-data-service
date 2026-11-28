@@ -1,3 +1,19 @@
+-- Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
+--
+-- Choreo Labs licenses this file to you under the Apache License,
+-- Version 2.0 (the "License"); you may not use this file except
+-- in compliance with the License.
+-- You may obtain a copy of the License at
+--
+-- http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing,
+-- software distributed under the License is distributed on an
+-- "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+-- KIND, either express or implied.  See the License for the
+-- specific language governing permissions and limitations
+-- under the License.
+
 IF OBJECT_ID(N'dbo.profiles', N'U') IS NULL
 BEGIN
 CREATE TABLE dbo.profiles
@@ -227,9 +243,6 @@ CREATE TABLE dbo.resource_sharing_policy_target
 );
 END;
 
--- The largest table in the system. The absent surrogate key and the primary key's
--- column order were settled by measurement: read "How the index is stored" in
--- docs/concepts/how-unification-works.md before changing either.
 IF OBJECT_ID(N'dbo.blocking_keys', N'U') IS NULL
 BEGIN
 CREATE TABLE dbo.blocking_keys
@@ -238,10 +251,9 @@ CREATE TABLE dbo.blocking_keys
     attribute_name NVARCHAR(128) COLLATE Latin1_General_100_BIN2 NOT NULL, -- Rule property name (e.g., "identity_attributes.emailaddress")
     key_value      NVARCHAR(512) COLLATE Latin1_General_100_BIN2 NOT NULL, -- Normalized blocking key; 512 because it holds a whole value, not an id
     org_id         NVARCHAR(36) COLLATE Latin1_General_100_BIN2 NOT NULL,
-    -- Column order matches the candidate lookup: equality, equality, then IN.
     CONSTRAINT pk_blocking_keys PRIMARY KEY NONCLUSTERED (org_id, attribute_name, key_value, profile_id)
+        WITH (IGNORE_DUP_KEY = ON)
 );
--- Serves the per-profile delete during re-indexing, which has no key_value to prune on.
 CREATE INDEX idx_blocking_keys_org_id_profile ON dbo.blocking_keys (org_id, profile_id);
 END;
 
@@ -266,7 +278,7 @@ CREATE TABLE dbo.review_tasks
 CREATE INDEX idx_review_tasks_org_id_status ON dbo.review_tasks (org_id, status);
 CREATE INDEX idx_review_tasks_created ON dbo.review_tasks (created_at DESC);
 CREATE INDEX idx_review_tasks_incoming ON dbo.review_tasks (incoming_profile_id, status);
-CREATE INDEX idx_review_tasks_candidate ON dbo.review_tasks (candidate_profile_id);
+CREATE INDEX idx_review_tasks_candidate ON dbo.review_tasks (candidate_profile_id, status);
 END;
 
 -- Pairs an administrator explicitly rejected as non-matches. Kept separate from

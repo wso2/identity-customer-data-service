@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
+ *
+ * Choreo Labs licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package integration
 
 import (
@@ -588,15 +606,16 @@ func Test_ProfileSchemaService(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			updates := map[string]interface{}{
-				"attribute_name": "identity_attributes.temp_field",
-				"attribute_id":   attrID,
-				"value_type":     "integer",
-				"merge_strategy": constants.MergeStrategyOverwrite,
-				"mutability":     constants.MutabilityReadWrite,
+			text := func(value string) *string { return &value }
+			update := model.ProfileSchemaAttributeUpdate{
+				AttributeName: text("identity_attributes.temp_field"),
+				ValueType:     text("integer"),
+				MergeStrategy: text(constants.MergeStrategyOverwrite),
+				Mutability:    text(constants.MutabilityReadWrite),
 			}
 
-			err = svc.UpdateProfileSchemaAttributeByID(context.Background(), SuperTenantOrg.ID, attrID, updates, "")
+			err = svc.UpdateProfileSchemaAttributeByID(context.Background(), SuperTenantOrg.ID, attrID, update,
+				constants.IdentityAttributes)
 			require.NoError(t, err, "Failed to patch profile schema attribute")
 
 			// Verify patch persisted

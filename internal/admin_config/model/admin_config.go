@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -65,6 +65,11 @@ type AdminConfigUpdateAPI struct {
 	// The cleanup settings of temporary profiles must be at least 1 when given.
 	TemporaryProfileRetentionDays       *int `json:"temporary_profile_retention_days,omitempty"`
 	TemporaryProfileCleanupIntervalDays *int `json:"temporary_profile_cleanup_interval_days,omitempty"`
+}
+
+// AdminConfigSyncAPI is the body that the identity provider sends to POST /config/sync. CDSEnabled is required.
+type AdminConfigSyncAPI struct {
+	CDSEnabled *bool `json:"cds_enabled"`
 }
 
 // TemporaryProfileCleanupSettings are the cleanup settings an organization has stored. A field is 0 when

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -35,10 +35,20 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/utils"
 )
 
-// AuthnWithAdminCredentials performs authentication using admin credentials from the request.
+// AuthnWithAdminCredentials performs authentication using admin credentials from the request. With a sync
+// listener of its own, the credentials are accepted on that listener only, so they are worth nothing on the
+// public one.
 func AuthnWithAdminCredentials(r *http.Request) error {
 	authHeader := r.Header.Get("Authorization")
 	logger := log.GetLogger()
+	if config.GetCDSRuntime().Config.SyncSeparate() && !OnSyncListener(r) {
+		logger.Debug("Admin credentials on the public listener while the sync endpoints have their own")
+		return errors.NewClientError(errors.ErrorMessage{
+			Code:        errors.Unauthorized.Code,
+			Message:     errors.Unauthorized.Message,
+			Description: "The admin credentials are accepted on the sync port only",
+		}, http.StatusUnauthorized)
+	}
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
 		logger.Debug("Missing or invalid Authorization header")
 		return errors.NewClientError(errors.ErrorMessage{

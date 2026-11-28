@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -33,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	idpModel "github.com/wso2/identity-customer-data-service/internal/identity_provider/model"
@@ -43,6 +44,7 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/profile_schema/model"
 	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 
+	"github.com/wso2/identity-customer-data-service/internal/system/certs"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	errors2 "github.com/wso2/identity-customer-data-service/internal/system/errors"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
@@ -54,8 +56,6 @@ import (
 var managementAPIScope = strings.Join([]string{
 	"internal_application_mgt_view",
 	"internal_claim_meta_view",
-	"internal_user_mgt_list",
-	"internal_user_mgt_view",
 	"internal_organization_view",
 }, constants.SpaceSeparator)
 
@@ -83,7 +83,7 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 	}
 	log.GetLogger().Info("Creating IdentityClient with base URL: " + baseHostPort)
 
-	httpClient, err := newOutboundHTTPClient(cfg.TLS)
+	httpClient, err := sharedOutboundHTTPClient(cfg.TLS)
 	if err != nil {
 		log.GetLogger().Error("Failed to create outbound HTTPS client for IS", log.Error(err))
 		os.Exit(1)
@@ -93,6 +93,53 @@ func NewIdentityClient(cfg config.Config) *IdentityClient {
 		BaseURL:    baseHostPort,
 		HTTPClient: httpClient,
 	}
+}
+
+// outboundClientKey identifies an outbound HTTP client: the TLS settings and the home that resolves a
+// relative cert_dir.
+type outboundClientKey struct {
+	tls     config.TLSConfig
+	cdsHome string
+}
+
+var (
+	outboundClientsMu sync.Mutex
+	outboundClients   = map[outboundClientKey]*http.Client{}
+)
+
+// sharedOutboundHTTPClient returns the outbound HTTP client for the TLS settings. It builds the client on
+// the first call and returns the same client on later calls with the same settings, so all identity
+// clients share one connection pool to the identity server and do not open a new TLS connection for each
+// call. Different TLS settings, for example after a configuration reload or in tests, get their own client.
+// A failure is not kept, so the next call tries again.
+func sharedOutboundHTTPClient(tlsCfg config.TLSConfig) (*http.Client, error) {
+	key := outboundClientKey{tls: tlsCfg, cdsHome: utils.GetCDSHome()}
+	outboundClientsMu.Lock()
+	defer outboundClientsMu.Unlock()
+	if httpClient, ok := outboundClients[key]; ok {
+		return httpClient, nil
+	}
+	httpClient, err := newOutboundHTTPClient(tlsCfg)
+	if err != nil {
+		return nil, err
+	}
+	outboundClients[key] = httpClient
+	return httpClient, nil
+}
+
+// serverCertsNotForClients holds the server certificates already reported as not allowing TLS client
+// authentication, so that each certificate is reported once.
+var serverCertsNotForClients sync.Map
+
+// warnServerCertNotForClients says, once for each certificate, that tls.mtls_enabled presents no client
+// certificate because the server certificate does not allow TLS client authentication.
+func warnServerCertNotForClients(path string) {
+	if _, warned := serverCertsNotForClients.LoadOrStore(path, true); warned {
+		return
+	}
+	log.GetLogger().Warn(fmt.Sprintf("tls.server_cert %s does not allow TLS client authentication, so CDD "+
+		"presents no client certificate when it calls the identity server, which does not require one. "+
+		"tls.mtls_enabled has no effect with this certificate.", path))
 }
 
 // Builds an HTTP client with TLS/mTLS configuration for outbound requests.
@@ -127,7 +174,9 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig) (*http.Client, error) {
 		}
 	}
 
-	// Client cert/key for mTLS (optional)
+	// Client cert/key for mTLS (optional). The server key pair is presented only when it allows TLS client
+	// authentication: a certificate a public CA issued is for TLS server authentication only, and the
+	// identity server ends the handshake on one, although it does not require a client certificate.
 	var certificates []tls.Certificate
 	if tlsCfg.MTLSEnabled {
 		cdsPublicCrt := filepath.Join(certDir, tlsCfg.CDSPublicCert)
@@ -136,7 +185,11 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig) (*http.Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load cert/key (%s, %s): %w", cdsPublicCrt, cdsPrivatekey, err)
 		}
-		certificates = []tls.Certificate{pair}
+		if certs.AllowsClientAuth(pair.Leaf) {
+			certificates = []tls.Certificate{pair}
+		} else {
+			warnServerCertNotForClients(cdsPublicCrt)
+		}
 	}
 
 	tcfg := &tls.Config{
@@ -150,6 +203,9 @@ func newOutboundHTTPClient(tlsCfg config.TLSConfig) (*http.Client, error) {
 		TLSHandshakeTimeout: 10 * time.Second,
 		IdleConnTimeout:     60 * time.Second,
 		MaxIdleConns:        100,
+		// The default keeps 2 idle connections for each host. CDS sends most calls to one host, so under
+		// load it would close the other connections and open new TLS connections again.
+		MaxIdleConnsPerHost: 100,
 		MaxConnsPerHost:     100,
 	}
 	return &http.Client{
@@ -175,7 +231,7 @@ func (c *IdentityClient) FetchToken(orgHandle string) (string, error) {
 	return c.fetchClientCredentialsToken(orgHandle, authCfg, scope)
 }
 
-// orgAPIPathPrefix returns the IS URL segment used for API calls (claims, apps, SCIM).
+// orgAPIPathPrefix returns the IS URL segment used for API calls (claims, apps).
 // Sub-org UUIDs use /o — the org context is carried by the token, no UUID in path.
 // Regular tenant handles use /t/{handle}.
 func (c *IdentityClient) orgAPIPathPrefix(orgHandle string) string {
@@ -583,6 +639,54 @@ func (c *IdentityClient) IntrospectToken(token, orgHandle string) (map[string]in
 
 	return c.introspect(introspectionEndpoint, authConfig.IntrospectionClientID, authConfig.IntrospectionClientSecret,
 		form)
+}
+
+// maxJWKSResponseBytes bounds the JWKS document that is read. A key set is a
+// few kilobytes.
+const maxJWKSResponseBytes = 1 << 20
+
+// jwksFetchTimeout bounds a JWKS fetch. Requests that need the keys wait for the
+// fetch, so a slow identity server holds them for at most this long.
+var jwksFetchTimeout = constants.JWKSFetchTimeout
+
+// JWKSEndpoint returns the URL of the JWKS endpoint of the primary organization
+// primaryHandle, at path after /t/{primaryHandle}. It is on the host that
+// introspects the tokens of the organization.
+func (c *IdentityClient) JWKSEndpoint(primaryHandle, path string) (string, error) {
+	authConfig := config.GetCDSRuntime().Config.AuthServer
+	host := c.BaseURL
+	if authConfig.IsSystemAppGrantEnabled {
+		host = authConfig.ADUISHostname
+	}
+	return orgEndpoint(host, primaryHandle, "/t/"+primaryHandle+path)
+}
+
+// FetchJWKS returns the JWKS document at endpoint, a URL that JWKSEndpoint
+// built.
+func (c *IdentityClient) FetchJWKS(endpoint string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), jwksFetchTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch the JWKS from %s: %w", endpoint, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("the JWKS endpoint %s returned status %d", endpoint, resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxJWKSResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the JWKS from %s: %w", endpoint, err)
+	}
+	if len(body) > maxJWKSResponseBytes {
+		return nil, fmt.Errorf("the JWKS from %s is larger than %d bytes", endpoint, maxJWKSResponseBytes)
+	}
+	return body, nil
 }
 
 // IntrospectTokenAsOrg introspects the token at the introspection endpoint of
@@ -1109,69 +1213,4 @@ func ifThenElse(cond bool, a, b string) string {
 		return a
 	}
 	return b
-}
-
-// GetSCIMUser fetches a SCIM user by ID
-func (c *IdentityClient) GetSCIMUser(orgID, userID string) (map[string]interface{}, error) {
-	endpoint, err := orgEndpoint(c.BaseURL, orgID, c.orgAPIPathPrefix(orgID)+"/scim2/Users/"+url.PathEscape(userID))
-	if err != nil {
-		return nil, err
-	}
-	req, _ := http.NewRequest("GET", endpoint, nil)
-	token, err := c.FetchToken(orgID)
-	logger := log.GetLogger()
-	if err != nil {
-		logger.Debug(fmt.Sprintf("Failed to get token for fetching the SCIM user:%s of the organization:%s",
-			userID, orgID), log.Error(err))
-		return nil, err
-	}
-	authCfg := config.GetCDSRuntime().Config.AuthServer
-	if authCfg.IsSystemAppGrantEnabled {
-		req.Header.Set("Authorization", constants.SystemAppHeader+constants.SpaceSeparator+token)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		errMsg := fmt.Sprintf("Failed to fetch SCIM user:%s of the organization:%s", userID, orgID)
-		logger.Debug(errMsg, log.Error(err))
-		return nil, errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GetSCIMUserFailed.Code,
-			Message:     errors2.GetSCIMUserFailed.Message,
-			Description: errMsg,
-		}, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	var user map[string]interface{}
-	body, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(body, &user); err != nil {
-		errMsg := fmt.Sprintf("Failed to parse SCIM user response for user:%s of the organization:%s", userID, orgID)
-		logger.Debug(errMsg, log.Error(err))
-		return nil, errors2.NewServerError(errors2.ErrorMessage{
-			Code:        errors2.GetSCIMUserFailed.Code,
-			Message:     errors2.GetSCIMUserFailed.Message,
-			Description: errMsg,
-		}, err)
-	}
-
-	return flattenSCIMClaims(user), nil
-}
-
-func flattenSCIMClaims(user map[string]interface{}) map[string]interface{} {
-	flat := make(map[string]interface{})
-
-	for key, val := range user {
-		switch v := val.(type) {
-		case map[string]interface{}:
-			for subKey, subVal := range v {
-				flat[key+"."+subKey] = subVal
-			}
-		default:
-			flat[key] = val
-		}
-	}
-
-	return flat
 }

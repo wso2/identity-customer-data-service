@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -35,8 +35,9 @@ import (
 // use. It resolves the settings with the same functions the pool uses, so the
 // rule cannot differ between this check and the pool.
 //
-// Only the settings that apply to the configured type are read, because the
-// Helm chart renders the PostgreSQL block whatever the type is.
+// Only the settings that apply to the configured type are read, because a
+// templated configuration, such as a Helm chart, can render the PostgreSQL
+// block whatever the type is.
 func validateNumericSettings(ds config.DataSourceConfig) error {
 	switch database.ResolveType(ds.Type) {
 	case database.TypeSQLite:

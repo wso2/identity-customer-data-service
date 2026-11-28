@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -69,6 +69,17 @@ type TokenIntrospector interface {
 	// organization of the request path orgHandle. primaryHandle is the primary
 	// organization of that path.
 	IntrospectToken(ctx context.Context, token, orgHandle, primaryHandle string) (map[string]interface{}, error)
+}
+
+// SigningKeyPublisher is implemented by the adapter of an identity provider that publishes the
+// keys its JWTs are signed with, as a JWKS. CDS checks the signature of every JWT with those keys,
+// which it caches. For any other adapter, CDS relies on introspection alone.
+type SigningKeyPublisher interface {
+	// JWKSEndpoint returns the URL of the JWKS that holds the keys of the tokens of the primary
+	// organization primaryHandle.
+	JWKSEndpoint(primaryHandle string) (string, error)
+	// FetchJWKS returns the JWKS document at endpoint, a URL that JWKSEndpoint returned.
+	FetchJWKS(endpoint string) ([]byte, error)
 }
 
 var (

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -324,6 +324,43 @@ func TestPatchProfileSchemaAttributeById(t *testing.T) {
 				tc.body, map[string]string{"scope": tc.scope, "attrID": attrID})
 
 			assert.Equal(t, tc.status, recorder.Code, recorder.Body.String())
+		})
+	}
+}
+
+// The body holds only the fields that an update can change, with their JSON types. Anything else is
+// refused before the service runs, and the attribute does not change.
+func TestPatchProfileSchemaAttributeRefusesABodyThatIsNotAnUpdate(t *testing.T) {
+	env := newSchemaHandlerEnv(t)
+	attrs := env.addTraits(t, "traits.city")
+	ids := map[string]string{"scope": constants.Traits, "attrID": attrs[0].AttributeID}
+	before := env.call(t, env.h.GetProfileSchemaAttributeByID, http.MethodGet, env.auth.ValidToken, "", "", ids)
+	require.Equal(t, http.StatusOK, before.Code, before.Body.String())
+	required := `"attribute_name":"traits.city","value_type":"string","merge_strategy":"overwrite",` +
+		`"mutability":"writeOnce"`
+
+	tests := map[string]string{
+		"an unknown field":              `"no_such_field":"x"`,
+		"the organization":              `"org_id":"other-org"`,
+		"the attribute ID":              `"attribute_id":"other-id"`,
+		"the scope":                     `"scope":"application_data"`,
+		"the origin":                    `"origin":"OWNED"`,
+		"two fields in one name":        `"display_name, scope":"x"`,
+		"a field name with punctuation": `"display_name'":"x"`,
+		"a field name with a space":     `"display_name ":"x"`,
+		"multi_valued as a string":      `"multi_valued":"yes"`,
+		"canonical_values as a string":  `"canonical_values":"x"`,
+		"sub_attributes as an object":   `"sub_attributes":{}`,
+		"display_name as a number":      `"display_name":5`,
+	}
+	for name, extra := range tests {
+		t.Run(name, func(t *testing.T) {
+			recorder := env.call(t, env.h.PatchProfileSchemaAttributeByID, http.MethodPatch, env.auth.ValidToken, "",
+				"{"+required+","+extra+"}", ids)
+
+			assert.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+			after := env.call(t, env.h.GetProfileSchemaAttributeByID, http.MethodGet, env.auth.ValidToken, "", "", ids)
+			assert.JSONEq(t, before.Body.String(), after.Body.String())
 		})
 	}
 }

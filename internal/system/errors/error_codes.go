@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025-2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -87,11 +87,6 @@ var (
 	GetLocalClaimsFailed = ErrorMessage{
 		Code:    errorPrefix + "15109",
 		Message: "Error while fetching local claims.",
-	}
-
-	GetSCIMUserFailed = ErrorMessage{
-		Code:    errorPrefix + "15110",
-		Message: "Error while fetching SCIM user.",
 	}
 
 	GetApplicationsFailed = ErrorMessage{
@@ -293,6 +288,12 @@ var (
 		Code:        errorPrefix + "11017",
 		Message:     "Profile already linked.",
 		Description: "The profile is already linked to a different user",
+	}
+
+	IdentityAttributesReadOnly = ErrorMessage{
+		Code:        errorPrefix + "11018",
+		Message:     "Identity attributes cannot be updated.",
+		Description: "The identity attributes of a profile linked to a user come from the identity provider",
 	}
 
 	UnificationRuleNotFound = ErrorMessage{

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -44,6 +44,20 @@ type ProfileSchemaAttribute struct {
 	// Set only on reads of the effective schema.
 	Origin     string `json:"origin,omitempty" bson:"-"` // OWNED, SHARED, or INHERITED
 	OwnerOrgID string `json:"-" bson:"-"`                // The owner org of a shared attribute, for the owner check
+}
+
+// ProfileSchemaAttributeUpdate is the body of an attribute update. It holds only the fields that a client
+// can change. A nil field keeps its stored value.
+type ProfileSchemaAttributeUpdate struct {
+	AttributeName         *string           `json:"attribute_name"`
+	DisplayName           *string           `json:"display_name"`
+	ValueType             *string           `json:"value_type"`
+	MergeStrategy         *string           `json:"merge_strategy"`
+	Mutability            *string           `json:"mutability"`
+	MultiValued           *bool             `json:"multi_valued"`
+	CanonicalValues       *[]CanonicalValue `json:"canonical_values"`
+	SubAttributes         *[]SubAttribute   `json:"sub_attributes"`
+	ApplicationIdentifier *string           `json:"application_identifier"`
 }
 
 // SubAttribute is a reference to an attribute nested in an object-type attribute.

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2026, Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -52,8 +52,6 @@ func CompleteStatement(name, statement string) string {
 		return statement + QueryPlaceholders(13)
 	case "InsertProfileSchemaAttributesForScope":
 		return statement + QueryPlaceholders(12)
-	case "UpdateProfileSchemaAttributeFields":
-		return statement + "attribute_name = $1 WHERE org_id = $2 AND attribute_id = $3"
 	case "UpsertIdentityClaimsForProfileSchema":
 		return fmt.Sprintf(statement, QueryPlaceholders(13))
 	case "InsertSharePolicyTargets":

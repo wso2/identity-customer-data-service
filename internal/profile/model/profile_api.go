@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) (2025-2026), Choreo Labs LLC. (https://choreolabs.com).
  *
- * WSO2 LLC. licenses this file to you under the Apache License,
+ * Choreo Labs licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License.
  * You may obtain a copy of the License at
@@ -77,6 +77,14 @@ func (r ProfileCreateRequest) ToProfileRequest() ProfileRequest {
 		Traits:             r.Traits,
 		ApplicationData:    r.ApplicationData,
 	}
+}
+
+// ProfilePatchRequest is the request body of PATCH /profiles/{profileId}. Each field is deep merged into the
+// stored value. It has no user ID: only a link or the identity server sync sets it.
+type ProfilePatchRequest struct {
+	IdentityAttributes map[string]any `json:"identity_attributes,omitempty"`
+	Traits             map[string]any `json:"traits,omitempty"`
+	ApplicationData    map[string]any `json:"application_data,omitempty"`
 }
 
 // ProfileRequest is the service input for creating or updating a profile. Only internal callers, such as the
