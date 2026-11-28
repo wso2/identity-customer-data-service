@@ -437,8 +437,9 @@ func GetProfilesByIDs(ctx context.Context, profileIDs []string) ([]model.Profile
 
 // rarityCache memoises value frequencies. Frequencies move slowly and are only used to
 // pick a band, so a short TTL keeps the scoring path off the database for hot values
-// without letting a genuinely spreading value stay classified as rare.
-var rarityCache = cache.NewCache(constants.RarityLookupCacheTTL)
+// without letting a genuinely spreading value stay classified as rare. It stays in memory even
+// with a shared cache store: it is read while scoring, and its keys hold attribute values.
+var rarityCache = cache.New[int]("identity_resolution.rarity", constants.RarityLookupCacheTTL, cache.Local())
 
 // CountProfilesByBlockingKey reports how many profiles in the org already carry the given
 // exact blocking key — that is, how common the value is within the tenant.
@@ -446,10 +447,8 @@ func CountProfilesByBlockingKey(ctx context.Context, orgID, attributeName, keyVa
 	logger := log.GetLogger()
 
 	cacheKey := orgID + "|" + attributeName + "|" + keyValue
-	if cached, found := rarityCache.Get(cacheKey); found {
-		if count, ok := cached.(int); ok {
-			return count, nil
-		}
+	if count, found := rarityCache.Get(ctx, cacheKey); found {
+		return count, nil
 	}
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -482,6 +481,6 @@ func CountProfilesByBlockingKey(ctx context.Context, orgID, attributeName, keyVa
 		}
 	}
 
-	rarityCache.Set(cacheKey, count)
+	rarityCache.Set(ctx, cacheKey, count)
 	return count, nil
 }

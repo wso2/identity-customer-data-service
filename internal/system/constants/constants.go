@@ -641,6 +641,11 @@ const (
 	// RarityLookupCacheTTL bounds how long a value's frequency is reused. Frequencies
 	// move slowly, and the count is only used to pick a band.
 	RarityLookupCacheTTL = 10 * time.Minute
+
+	// CacheInvalidationTimeout bounds one invalidation in a shared cache store. An invalidation
+	// is not cancelled with its request, so this is what stops a store that does not answer from
+	// holding the write that triggered it.
+	CacheInvalidationTimeout = 5 * time.Second
 )
 
 // Name matching

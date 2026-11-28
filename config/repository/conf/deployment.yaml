@@ -215,6 +215,10 @@ message_queue:
     profile_queue_name: "/queue/cds-profile-unification"
     schema_sync_queue_name: "/queue/cds-schema-sync"
 
+# Cache store. "memory" keeps the caches of each instance in its own memory.
+cache:
+  type: "memory" # Options: "memory" (default) or any registered custom provider
+
 # Datasource configuration.
 # Use "sqlite" for the inbuilt database, which needs no external server, and
 # "postgres", "mysql", "mssql" or "oracle" for production. An unset type means "sqlite".

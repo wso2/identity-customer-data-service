@@ -351,10 +351,10 @@ func (a AdminConfigService) UpdateAdminConfig(ctx context.Context,
 		return err
 	}
 
-	// Drop the cached origins so this process serves the new list at once. Other replicas
-	// pick it up once their cached entry expires.
-	corsOrigins.invalidate(org.ID)
-	corsOrgIDs.forget(org.Handle)
+	// Drop the cached origins so the new list is served at once. With the in-memory cache,
+	// other replicas pick it up once their cached entry expires.
+	corsOrigins.invalidate(ctx, org.ID)
+	corsOrgIDs.forget(ctx, org.Handle)
 
 	if !sysconfig.OrganizationManagementEnabled() {
 		return nil

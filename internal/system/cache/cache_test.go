@@ -19,10 +19,15 @@
 package cache
 
 import (
-	"fmt"
+	"context"
+	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/wso2/identity-customer-data-service/internal/system/config"
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
@@ -31,93 +36,286 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func TestGetDropsAnExpiredEntry(t *testing.T) {
-	c := NewCache(10 * time.Millisecond)
-	c.Set("k", "v")
-
-	if _, found := c.Get("k"); !found {
-		t.Fatal("entry should be readable before it expires")
-	}
-
-	time.Sleep(20 * time.Millisecond)
-
-	if _, found := c.Get("k"); found {
-		t.Error("expired entry should not be readable")
-	}
-	if c.Len() != 0 {
-		t.Errorf("reading an expired entry should remove it; %d left", c.Len())
-	}
+// fakeStore is a shared store in a map, which can be made to fail.
+type fakeStore struct {
+	mu      sync.Mutex
+	entries map[string][]byte
+	ttls    map[string]time.Duration
+	err     error
+	closed  int
+	// lastCtxErr is the error of the context of the last call, to tell whether it was cancelled.
+	lastCtxErr error
+	// lastDeadline is the deadline of the context of the last call, and hasDeadline whether it had one.
+	lastDeadline time.Time
+	hasDeadline  bool
 }
 
-// TestExpiredEntriesDoNotAccumulate is the bug this guards: an expired entry was invisible
-// to Get but still held its slot, and nothing ever removed it. Keyed by something
-// high-cardinality — an email address — the map grew for the life of the process.
-func TestExpiredEntriesDoNotAccumulate(t *testing.T) {
-	c := NewCache(time.Millisecond)
+// record notes the context of a call. The caller holds the lock.
+func (f *fakeStore) record(ctx context.Context) {
+	f.lastCtxErr = ctx.Err()
+	f.lastDeadline, f.hasDeadline = ctx.Deadline()
+}
 
-	for i := 0; i < initialSweepThreshold*3; i++ {
-		c.Set(fmt.Sprintf("value-%d@example.com", i), i)
-		if i%64 == 0 {
-			time.Sleep(2 * time.Millisecond)
+func newFakeStore() *fakeStore {
+	return &fakeStore{entries: map[string][]byte{}, ttls: map[string]time.Duration{}}
+}
+
+func (f *fakeStore) Get(ctx context.Context, namespace, key string) ([]byte, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record(ctx)
+	if f.err != nil {
+		return nil, false, f.err
+	}
+	value, ok := f.entries[namespace+"/"+key]
+	return value, ok, nil
+}
+
+func (f *fakeStore) Set(ctx context.Context, namespace, key string, value []byte, ttl time.Duration) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record(ctx)
+	if f.err != nil {
+		return f.err
+	}
+	f.entries[namespace+"/"+key] = value
+	f.ttls[namespace+"/"+key] = ttl
+	return nil
+}
+
+func (f *fakeStore) Delete(ctx context.Context, namespace, key string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record(ctx)
+	if f.err != nil {
+		return f.err
+	}
+	delete(f.entries, namespace+"/"+key)
+	return nil
+}
+
+func (f *fakeStore) Clear(ctx context.Context, namespace string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.record(ctx)
+	if f.err != nil {
+		return f.err
+	}
+	for key := range f.entries {
+		if strings.HasPrefix(key, namespace+"/") {
+			delete(f.entries, key)
+		}
+	}
+	return nil
+}
+
+func (f *fakeStore) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closed++
+	return nil
+}
+
+// useFakeStore registers a provider that returns a new fake store, selects it, and puts the
+// in-memory default back when the test ends.
+func useFakeStore(t *testing.T) *fakeStore {
+	t.Helper()
+	store := newFakeStore()
+	RegisterProvider("fake", func(config.CacheConfig) (Store, error) { return store, nil })
+	if err := Init(config.CacheConfig{Type: "fake"}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = Close() })
+	return store
+}
+
+type ref struct {
+	ID     string
+	Handle string
+}
+
+func TestMemoryIsTheDefault(t *testing.T) {
+	for _, typ := range []string{"", TypeMemory} {
+		if err := Init(config.CacheConfig{Type: typ}); err != nil {
+			t.Fatalf("Init(%q): %v", typ, err)
+		}
+		if sharedStore() != nil {
+			t.Errorf("Init(%q) selected a shared store", typ)
 		}
 	}
 
-	// Entries written long enough ago to have expired must not still be resident. The live
-	// set here is tiny, so the cache should be nowhere near the number of keys written.
-	if c.Len() >= initialSweepThreshold*2 {
-		t.Errorf("cache held %d entries after writing %d short-lived keys; it is not being swept",
-			c.Len(), initialSweepThreshold*3)
+	ctx := context.Background()
+	c := New[ref]("test.refs", time.Hour)
+	c.Set(ctx, "acme", ref{ID: "1", Handle: "acme"})
+	if got, ok := c.Get(ctx, "acme"); !ok || got.ID != "1" {
+		t.Errorf("Get = %v, %v; want the stored ref", got, ok)
+	}
+	c.Delete(ctx, "acme")
+	if _, ok := c.Get(ctx, "acme"); ok {
+		t.Error("a deleted key is still served")
 	}
 }
 
-// TestLiveEntriesSurviveASweep checks the sweep only removes what has actually expired.
-func TestLiveEntriesSurviveASweep(t *testing.T) {
-	c := NewCache(time.Hour)
-
-	for i := 0; i < initialSweepThreshold+50; i++ {
-		c.Set(fmt.Sprintf("k%d", i), i)
-	}
-
-	if c.Len() != initialSweepThreshold+50 {
-		t.Errorf("unexpired entries were dropped: have %d, wrote %d",
-			c.Len(), initialSweepThreshold+50)
-	}
-	if _, found := c.Get("k0"); !found {
-		t.Error("the first entry should still be present")
+func TestInitRefusesAnUnknownProvider(t *testing.T) {
+	err := Init(config.CacheConfig{Type: "no-such-provider"})
+	if err == nil || !strings.Contains(err.Error(), "no-such-provider") {
+		t.Fatalf("Init = %v; want an error naming the provider", err)
 	}
 }
 
-func TestSetRefreshesExpiry(t *testing.T) {
-	c := NewCache(40 * time.Millisecond)
-	c.Set("k", "first")
-
-	time.Sleep(25 * time.Millisecond)
-	c.Set("k", "second")
-	time.Sleep(25 * time.Millisecond)
-
-	value, found := c.Get("k")
-	if !found {
-		t.Fatal("re-setting a key should extend its life")
+func TestInitReportsAProviderThatFails(t *testing.T) {
+	RegisterProvider("broken", func(config.CacheConfig) (Store, error) { return nil, errors.New("no route") })
+	if err := Init(config.CacheConfig{Type: "broken"}); err == nil || !strings.Contains(err.Error(), "no route") {
+		t.Fatalf("Init = %v; want the provider's error", err)
 	}
-	if value != "second" {
-		t.Errorf("value = %v, want the refreshed one", value)
+	RegisterProvider("empty", func(config.CacheConfig) (Store, error) { return nil, nil })
+	if err := Init(config.CacheConfig{Type: "empty"}); err == nil {
+		t.Fatal("Init accepted a provider that returned no store")
 	}
 }
 
-func TestConcurrentReadsAndWrites(t *testing.T) {
-	c := NewCache(5 * time.Millisecond)
-	done := make(chan struct{})
+func TestInitPassesTheProperties(t *testing.T) {
+	var got map[string]string
+	RegisterProvider("props", func(cfg config.CacheConfig) (Store, error) {
+		got = cfg.Properties
+		return newFakeStore(), nil
+	})
+	if err := Init(config.CacheConfig{Type: "props", Properties: map[string]string{"addr": "cache:6379"}}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = Close() })
+	if got["addr"] != "cache:6379" {
+		t.Errorf("the provider got properties %v", got)
+	}
+}
 
-	for w := 0; w < 4; w++ {
-		go func(w int) {
-			for i := 0; i < 500; i++ {
-				c.Set(fmt.Sprintf("w%d-k%d", w, i), i)
-				c.Get(fmt.Sprintf("w%d-k%d", w, i/2))
+func TestSharedStoreHoldsTheEntries(t *testing.T) {
+	store := useFakeStore(t)
+	ctx := context.Background()
+
+	c := New[[]ref]("test.rules", 30*time.Second)
+	c.Set(ctx, "org-1", []ref{{ID: "1", Handle: "acme"}})
+
+	if _, ok := store.entries["test.rules/org-1"]; !ok {
+		t.Fatalf("the entry is not in the shared store: %v", store.entries)
+	}
+	if store.ttls["test.rules/org-1"] != 30*time.Second {
+		t.Errorf("the store got TTL %s, want the TTL of the cache", store.ttls["test.rules/org-1"])
+	}
+
+	// Another cache with the same name, as on another replica, reads the entry.
+	other := New[[]ref]("test.rules", 30*time.Second)
+	got, ok := other.Get(ctx, "org-1")
+	if !ok || len(got) != 1 || got[0].Handle != "acme" {
+		t.Fatalf("Get = %v, %v; want the entry written by the other cache", got, ok)
+	}
+
+	// An invalidation through one is seen by the other.
+	c.Clear(ctx)
+	if _, ok := other.Get(ctx, "org-1"); ok {
+		t.Error("a cleared entry is still served")
+	}
+}
+
+func TestLocalCacheStaysInMemory(t *testing.T) {
+	store := useFakeStore(t)
+	ctx := context.Background()
+
+	c := New[int]("test.rarity", time.Hour, Local())
+	c.Set(ctx, "k", 7)
+	if len(store.entries) != 0 {
+		t.Fatalf("a local cache wrote to the shared store: %v", store.entries)
+	}
+	if got, ok := c.Get(ctx, "k"); !ok || got != 7 {
+		t.Errorf("Get = %v, %v; want 7", got, ok)
+	}
+}
+
+func TestAFailingStoreIsAMiss(t *testing.T) {
+	store := useFakeStore(t)
+	ctx := context.Background()
+
+	c := New[string]("test.failing", time.Hour)
+	c.Set(ctx, "k", "v")
+	store.err = errors.New("connection refused")
+
+	if _, ok := c.Get(ctx, "k"); ok {
+		t.Error("a read that failed was served as a hit")
+	}
+	// Writes and invalidations that fail do not panic or block the caller.
+	c.Set(ctx, "k", "w")
+	c.Delete(ctx, "k")
+	c.Clear(ctx)
+}
+
+func TestAnUndecodableEntryIsAMiss(t *testing.T) {
+	store := useFakeStore(t)
+	ctx := context.Background()
+
+	store.entries["test.decode/k"] = []byte("not json")
+	c := New[ref]("test.decode", time.Hour)
+	if _, ok := c.Get(ctx, "k"); ok {
+		t.Error("an entry that does not decode was served as a hit")
+	}
+}
+
+func TestInvalidationOutlivesACancelledRequest(t *testing.T) {
+	store := useFakeStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	c := New[string]("test.cancel", time.Hour)
+	c.Delete(ctx, "k")
+	if store.lastCtxErr != nil {
+		t.Errorf("Delete passed on a cancelled context: %v", store.lastCtxErr)
+	}
+	c.Clear(ctx)
+	if store.lastCtxErr != nil {
+		t.Errorf("Clear passed on a cancelled context: %v", store.lastCtxErr)
+	}
+}
+
+// TestInvalidationIsBounded guards against an invalidation that waits on a store that does not
+// answer for as long as it likes: dropping the cancellation of the request must not drop a bound.
+func TestInvalidationIsBounded(t *testing.T) {
+	store := useFakeStore(t)
+	c := New[string]("test.bounded", time.Hour)
+
+	for name, invalidate := range map[string]func(){
+		"Delete": func() { c.Delete(context.Background(), "k") },
+		"Clear":  func() { c.Clear(context.Background()) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := time.Now()
+			invalidate()
+			if !store.hasDeadline {
+				t.Fatal("the store got a context with no deadline")
 			}
-			done <- struct{}{}
-		}(w)
+			limit := before.Add(constants.CacheInvalidationTimeout)
+			if store.lastDeadline.After(limit.Add(time.Second)) {
+				t.Errorf("deadline %s is later than the invalidation timeout allows (%s)", store.lastDeadline, limit)
+			}
+		})
 	}
-	for w := 0; w < 4; w++ {
-		<-done
+}
+
+func TestCloseClosesTheStoreAndFallsBackToMemory(t *testing.T) {
+	store := useFakeStore(t)
+	if err := Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if store.closed != 1 {
+		t.Errorf("the store was closed %d times, want once", store.closed)
+	}
+	if sharedStore() != nil {
+		t.Error("a shared store is still selected after Close")
+	}
+	// Selecting another provider closes the one it replaces.
+	next := useFakeStore(t)
+	if err := Init(config.CacheConfig{Type: TypeMemory}); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if next.closed != 1 {
+		t.Errorf("the replaced store was closed %d times, want once", next.closed)
 	}
 }

@@ -74,6 +74,9 @@ message_queue:
     profile_queue_name: "/queue/cds-profile-unification"
     schema_sync_queue_name: "/queue/cds-schema-sync"
 
+cache:
+  type: "memory"
+
 tls:
   mtls_enabled: false          # IS does not present a client certificate
   cert_dir: "${CDS_CERT_DIR}"

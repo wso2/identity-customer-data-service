@@ -40,10 +40,10 @@ const refCacheTTL = 5 * time.Minute
 
 // refs caches LookupOrganizationRef by org handle. It holds only stored organizations, so that a row
 // that another pod stores is found on the next lookup.
-var refs = cache.NewCache(refCacheTTL)
+var refs = cache.New[model.Ref]("organization.refs_by_handle", refCacheTTL)
 
 // refsByID caches LookupOrganizationRefByID by org ID, as refs does by org handle.
-var refsByID = cache.NewCache(refCacheTTL)
+var refsByID = cache.New[model.Ref]("organization.refs_by_id", refCacheTTL)
 
 func serverError(description string, err error) error {
 	return errors2.NewServerError(errors2.ErrorMessage{
@@ -70,8 +70,8 @@ func UpsertOrganization(ctx context.Context, org model.Organization) error {
 	if err != nil {
 		return serverError(fmt.Sprintf("Failed to store the organization: %s", org.OrgID), err)
 	}
-	refs.Delete(org.OrgHandle)
-	refsByID.Delete(org.OrgID)
+	refs.Delete(ctx, org.OrgHandle)
+	refsByID.Delete(ctx, org.OrgID)
 	return nil
 }
 
@@ -97,16 +97,14 @@ func GetOrganizationByHandle(ctx context.Context, orgHandle string) (*model.Orga
 // false when the handle has no row. Unlike GetOrganizationByHandle it reads the table when organization
 // management is disabled: the org ID of every deployment comes from it. The result is cached.
 func LookupOrganizationRef(ctx context.Context, orgHandle string) (ref model.Ref, found bool, err error) {
-	if value, ok := refs.Get(orgHandle); ok {
-		if ref, ok := value.(model.Ref); ok {
-			return ref, true, nil
-		}
+	if ref, ok := refs.Get(ctx, orgHandle); ok {
+		return ref, true, nil
 	}
 	org, err := getOne(ctx, scripts.GetOrganizationByHandle, orgHandle)
 	if err != nil || org == nil {
 		return model.Ref{}, false, err
 	}
-	refs.Set(orgHandle, org.Ref())
+	refs.Set(ctx, orgHandle, org.Ref())
 	return org.Ref(), true, nil
 }
 
@@ -114,16 +112,14 @@ func LookupOrganizationRef(ctx context.Context, orgHandle string) (ref model.Ref
 // ID. found is false when the ID has no row. As LookupOrganizationRef does, it reads the table when
 // organization management is disabled. The result is cached.
 func LookupOrganizationRefByID(ctx context.Context, orgID string) (ref model.Ref, found bool, err error) {
-	if value, ok := refsByID.Get(orgID); ok {
-		if ref, ok := value.(model.Ref); ok {
-			return ref, true, nil
-		}
+	if ref, ok := refsByID.Get(ctx, orgID); ok {
+		return ref, true, nil
 	}
 	org, err := getOne(ctx, scripts.GetOrganizationByID, orgID)
 	if err != nil || org == nil {
 		return model.Ref{}, false, err
 	}
-	refsByID.Set(orgID, org.Ref())
+	refsByID.Set(ctx, orgID, org.Ref())
 	return org.Ref(), true, nil
 }
 

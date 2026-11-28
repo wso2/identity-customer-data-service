@@ -163,7 +163,7 @@ func newTestCORSOriginsCache(t *testing.T, loader *countingLoader, ttl time.Dura
 	if err := log.Init("ERROR"); err != nil {
 		t.Fatalf("failed to set up the logger: %v", err)
 	}
-	return &corsOriginsCache{load: loader.load, entries: cache.NewCache(ttl)}
+	return &corsOriginsCache{load: loader.load, entries: cache.New[[]string]("test.cors_origins", ttl)}
 }
 
 // Each organization is read once per TTL, including one that has configured no origins.
@@ -210,7 +210,7 @@ func TestCORSOriginsCacheRereadsAfterAnUpdate(t *testing.T) {
 	_, _ = origins.get(ctx, testOrgID)
 	_, _ = origins.get(ctx, "globex-id")
 	loader.origins[testOrgID] = []string{"https://app.acme.com"}
-	origins.invalidate(testOrgID)
+	origins.invalidate(context.Background(), testOrgID)
 
 	if got, _ := origins.get(ctx, testOrgID); !reflect.DeepEqual(got, []string{"https://app.acme.com"}) {
 		t.Errorf("origins of acme = %v, want the updated ones", got)
@@ -228,7 +228,7 @@ func TestCORSOriginsCacheDoesNotCacheAReadOverlappingAnUpdate(t *testing.T) {
 	origins.load = func(ctx context.Context, orgId string) ([]string, error) {
 		read, err := loader.load(ctx, orgId)
 		if loader.reads[orgId] == 1 {
-			origins.invalidate(orgId)
+			origins.invalidate(ctx, orgId)
 		}
 		return read, err
 	}
@@ -279,7 +279,7 @@ func newTestCORSOrgIDResolver(t *testing.T, lookup *countingOrgLookup) *corsOrgI
 	if err := log.Init("ERROR"); err != nil {
 		t.Fatalf("failed to set up the logger: %v", err)
 	}
-	return &corsOrgIDResolver{lookup: lookup.lookup, unknown: cache.NewCache(time.Hour)}
+	return &corsOrgIDResolver{lookup: lookup.lookup, unknown: cache.New[bool]("test.cors_unknown_handles", time.Hour)}
 }
 
 // A handle CDS has no organization for, as an unauthenticated preflight may carry, is read once
@@ -310,7 +310,7 @@ func TestCORSOrgIdResolverResolvesAForgottenHandle(t *testing.T) {
 
 	_, _, _ = resolver.resolve(ctx, "acme")
 	lookup.orgs["acme"] = testOrgID
-	resolver.forget("acme")
+	resolver.forget(context.Background(), "acme")
 
 	if orgID, found, err := resolver.resolve(ctx, "acme"); err != nil || !found || orgID != testOrgID {
 		t.Errorf("resolve(acme) = %q, %v, %v, want acme-id", orgID, found, err)

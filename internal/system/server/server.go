@@ -36,6 +36,7 @@ import (
 	_ "github.com/lib/pq"
 
 	adminConfigProvider "github.com/wso2/identity-customer-data-service/internal/admin_config/provider"
+	"github.com/wso2/identity-customer-data-service/internal/system/cache"
 	"github.com/wso2/identity-customer-data-service/internal/system/config"
 	"github.com/wso2/identity-customer-data-service/internal/system/cors"
 	"github.com/wso2/identity-customer-data-service/internal/system/database"
@@ -139,6 +140,17 @@ func Run(cdsHome string) {
 		os.Exit(1)
 	}
 	log.GetLogger().Info(fmt.Sprintf("Shutdown grace period is %s", shutdownGrace))
+
+	// Select the cache provider. An unknown one stops the server here.
+	if err := cache.Init(cdsConfig.Cache); err != nil {
+		log.GetLogger().Error("Invalid cache configuration.", log.Error(err))
+		os.Exit(1)
+	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			log.GetLogger().Error("Failed to close the cache store.", log.Error(err))
+		}
+	}()
 
 	// Initialize database. This creates and initializes the inbuilt database when
 	// one is configured, and must happen before the workers start since they

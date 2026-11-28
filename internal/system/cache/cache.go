@@ -16,136 +16,152 @@
  * under the License.
  */
 
-// Package cache provides an in-memory cache with a time-to-live.
+// Package cache is the cache layer of CDD. A Cache is typed and named, and gives its entries a
+// time-to-live. By default each process keeps the entries of its caches in memory. A deployment
+// can plug in a shared store instead, for example one that every replica reaches, by
+// registering a provider (see RegisterProvider) and naming it in cache.type.
+//
+// A cache is never the source of truth: when the shared store fails, a read is a miss and the
+// caller goes to the database.
 package cache
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
+	"github.com/wso2/identity-customer-data-service/internal/system/constants"
 	"github.com/wso2/identity-customer-data-service/internal/system/log"
 )
 
-// CacheItem is a cached value and the time it expires.
-type CacheItem struct {
-	Value      interface{}
-	Expiration time.Time
+// Option configures a cache.
+type Option func(*options)
+
+type options struct {
+	local bool
 }
 
-// Cache is an in-memory key-value store that gives every entry the same TTL. It is safe for
-// concurrent use.
-type Cache struct {
-	items map[string]CacheItem
-	mutex sync.RWMutex
-	ttl   time.Duration
-	// sweepAt is the entry count that triggers a sweep of expired items on the next Set.
-	// It rises with the cache so a genuinely large working set is not swept on every write.
-	sweepAt int
+// Local keeps the entries of the cache in this process even when a shared store is configured.
+// Use it for a cache that is read on a hot path, where a network round trip would cost more than
+// the read it saves, or whose values must not leave the process.
+func Local() Option {
+	return func(o *options) { o.local = true }
 }
 
-// initialSweepThreshold is the entry count at which a cache first sweeps expired items.
-const initialSweepThreshold = 1024
-
-// NewCache creates a new cache with a TTL (time-to-live)
-func NewCache(defaultTTL time.Duration) *Cache {
-	return &Cache{
-		items:   make(map[string]CacheItem),
-		ttl:     defaultTTL,
-		sweepAt: initialSweepThreshold,
-	}
+// Cache is a typed cache with one TTL for every entry. It is safe for concurrent use.
+//
+// With a shared store, values are stored as JSON, so V must survive a JSON round trip: only its
+// exported fields are kept.
+type Cache[V any] struct {
+	// name is the namespace of the cache in a shared store. Two caches with one name share
+	// their entries there, so each cache needs a name of its own.
+	name   string
+	ttl    time.Duration
+	local  bool
+	memory *memory[V]
 }
 
-// Set adds an item to the cache
-func (c *Cache) Set(key string, value interface{}) {
-	logger := log.GetLogger()
-	logger.Debug(fmt.Sprint("Setting cache for key: ", key))
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	expiration := time.Now().Add(c.ttl)
-	c.items[key] = CacheItem{
-		Value:      value,
-		Expiration: expiration,
+// New creates a cache whose entries live for ttl. name identifies the cache in a shared store.
+func New[V any](name string, ttl time.Duration, opts ...Option) *Cache[V] {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
 	}
-
-	// An expired entry is invisible to Get but still occupies the map, so a cache keyed by
-	// something high-cardinality — an email address, say — would otherwise grow for the
-	// life of the process and never shrink. Sweeping on a size trigger keeps that bounded
-	// without a background goroutine that would outlive the cache.
-	if len(c.items) >= c.sweepAt {
-		c.sweepExpiredLocked()
-	}
+	return &Cache[V]{name: name, ttl: ttl, local: o.local, memory: newMemory[V]()}
 }
 
-// sweepExpiredLocked drops every expired entry. The caller must hold the write lock.
-func (c *Cache) sweepExpiredLocked() {
-	now := time.Now()
-	for key, item := range c.items {
-		if now.After(item.Expiration) {
-			delete(c.items, key)
-		}
+// store returns the shared store the cache uses, or nil when it keeps its entries in memory.
+func (c *Cache[V]) store() Store {
+	if c.local {
+		return nil
 	}
-
-	// If sweeping freed little, the live set really is this large; raise the bar so the
-	// next sweep is not attempted on every subsequent write.
-	if next := len(c.items) * 2; next > c.sweepAt {
-		c.sweepAt = next
-	} else if initialSweepThreshold > c.sweepAt {
-		c.sweepAt = initialSweepThreshold
-	}
+	return sharedStore()
 }
 
-// Get retrieves an item from the cache
-func (c *Cache) Get(key string) (interface{}, bool) {
-	logger := log.GetLogger()
-	logger.Debug(fmt.Sprint("Getting cache for key: ", key))
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	item, found := c.items[key]
+// Get returns the value of the key, and false when there is none or it has expired.
+func (c *Cache[V]) Get(ctx context.Context, key string) (V, bool) {
+	var zero V
+	s := c.store()
+	if s == nil {
+		return c.memory.get(key)
+	}
+	data, found, err := s.Get(ctx, c.name, key)
+	if err != nil {
+		c.warn("read from", err)
+		return zero, false
+	}
 	if !found {
-		logger.Debug(fmt.Sprint("Cache not found for key: ", key))
-		return nil, false
+		return zero, false
 	}
-	// Check if expired
-	if time.Now().After(item.Expiration) {
-		logger.Debug(fmt.Sprint("Cache expired for key: ", key))
-		c.mutex.RUnlock()
-		c.mutex.Lock()
-		// Re-check: another writer may have refreshed the entry while the lock was handed over.
-		if current, stillThere := c.items[key]; stillThere && time.Now().After(current.Expiration) {
-			delete(c.items, key)
-		}
-		c.mutex.Unlock()
-		c.mutex.RLock()
-		return nil, false
+	var value V
+	if err := json.Unmarshal(data, &value); err != nil {
+		c.warn("decode an entry of", err)
+		return zero, false
 	}
-
-	return item.Value, true
+	return value, true
 }
 
-// Len reports how many entries the cache currently holds, expired ones included.
-func (c *Cache) Len() int {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	return len(c.items)
+// Set stores the value of the key for the TTL of the cache.
+func (c *Cache[V]) Set(ctx context.Context, key string, value V) {
+	s := c.store()
+	if s == nil {
+		c.memory.set(key, value, c.ttl)
+		return
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		c.warn("encode an entry of", err)
+		return
+	}
+	if err := s.Set(ctx, c.name, key, data, c.ttl); err != nil {
+		c.warn("write to", err)
+	}
 }
 
-// Delete removes an item from the cache
-func (c *Cache) Delete(key string) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	delete(c.items, key)
+// Delete removes the key. It goes ahead even when ctx is cancelled, since an invalidation that is
+// dropped leaves a stale entry for the rest of its TTL.
+func (c *Cache[V]) Delete(ctx context.Context, key string) {
+	s := c.store()
+	if s == nil {
+		c.memory.delete(key)
+		return
+	}
+	ctx, cancel := invalidationContext(ctx)
+	defer cancel()
+	if err := s.Delete(ctx, c.name, key); err != nil {
+		c.invalidationFailed(err)
+	}
 }
 
 // Clear removes every entry. Used where a write invalidates a whole cached namespace and
-// threading the affected keys through the write path would cost more than re-reading.
-func (c *Cache) Clear() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+// threading the affected keys through the write path would cost more than re-reading. Like
+// Delete, it goes ahead even when ctx is cancelled.
+func (c *Cache[V]) Clear(ctx context.Context) {
+	s := c.store()
+	if s == nil {
+		c.memory.clear()
+		return
+	}
+	ctx, cancel := invalidationContext(ctx)
+	defer cancel()
+	if err := s.Clear(ctx, c.name); err != nil {
+		c.invalidationFailed(err)
+	}
+}
 
-	c.items = make(map[string]CacheItem)
-	c.sweepAt = initialSweepThreshold
+// invalidationContext keeps the values of ctx but not its cancellation, and bounds the call
+// instead, so that a store that does not answer cannot hold the write that triggered it.
+func invalidationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), constants.CacheInvalidationTimeout)
+}
+
+func (c *Cache[V]) warn(action string, err error) {
+	log.GetLogger().Warn(fmt.Sprintf("Could not %s the %s cache; using the database instead.", action, c.name),
+		log.Error(err))
+}
+
+func (c *Cache[V]) invalidationFailed(err error) {
+	log.GetLogger().Error(fmt.Sprintf("Could not invalidate an entry of the %s cache; it may be served for up to %s.",
+		c.name, c.ttl), log.Error(err))
 }

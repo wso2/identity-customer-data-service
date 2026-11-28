@@ -37,7 +37,7 @@ const unknownTTL = time.Minute
 
 var (
 	// unknownHandles holds the handles that the identity provider does not know.
-	unknownHandles = cache.NewCache(unknownTTL)
+	unknownHandles = cache.New[bool]("organization.unknown_handles", unknownTTL)
 	// storeLocks makes sure that one request at a time stores the organization of a handle.
 	storeLocks sync.Map
 )
@@ -53,7 +53,7 @@ func ResolveOrganization(ctx context.Context, orgHandle string) (model.Ref, erro
 	if ref, found, err := store.LookupOrganizationRef(ctx, orgHandle); err != nil || found {
 		return ref, err
 	}
-	if _, ok := unknownHandles.Get(orgHandle); ok {
+	if _, ok := unknownHandles.Get(ctx, orgHandle); ok {
 		return model.Ref{}, organizationNotFound(orgHandle)
 	}
 
@@ -67,7 +67,7 @@ func ResolveOrganization(ctx context.Context, orgHandle string) (model.Ref, erro
 	}
 	primary, err := EnsurePrimary(ctx, orgHandle)
 	if isNotFound(err) {
-		unknownHandles.Set(orgHandle, true)
+		unknownHandles.Set(ctx, orgHandle, true)
 		return model.Ref{}, organizationNotFound(orgHandle)
 	}
 	if err != nil {

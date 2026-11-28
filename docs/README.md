@@ -73,6 +73,7 @@ covers configuration, certificates, secrets and running CDD as a service.
 | [Schema Sync](guides/schema-sync.md) | Keeping CDD schema aligned with IS claim changes |
 | [Service Credentials](guides/service-credentials.md) | Where the credentials CDD calls the Identity Server management APIs with come from, one pair per organization |
 | [Extending Queue Providers](guides/extending-queue-providers.md) | Adding a new message queue provider (Kafka, RabbitMQ, SQS, etc.) |
+| [Extending Cache Providers](guides/extending-cache-providers.md) | Plugging a shared cache store (Redis, Valkey, etc.) into the cache layer |
 | [Logging](guides/logging.md) | Application, access, and audit logs — configuration, record formats, audit events, and how to log from a component |
 
 ## API

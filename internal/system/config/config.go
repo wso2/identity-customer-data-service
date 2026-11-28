@@ -259,6 +259,16 @@ type MessageQueueConfig struct {
 	Broker ExternalBrokerConfig `yaml:"broker"`
 }
 
+// CacheConfig selects where the caches of CDD keep their entries. When Type is empty or
+// "memory" each process keeps its own in memory. Set Type to the name of a registered provider
+// to use a shared store. See docs/guides/extending-cache-providers.md.
+type CacheConfig struct {
+	// Type is the cache provider: "memory" (default) or the name of a registered provider.
+	Type string `yaml:"type"`
+	// Properties are the settings of the provider, which reads the ones it needs.
+	Properties map[string]string `yaml:"properties"`
+}
+
 // Application identifier types.
 const (
 	ApplicationIdentifierTypeClientID = "client_id"
@@ -278,6 +288,7 @@ type Config struct {
 	TLS          TLSConfig          `yaml:"tls"`
 	Cleanup      CleanupConfig      `yaml:"cleanup"`
 	MessageQueue MessageQueueConfig `yaml:"message_queue"`
+	Cache        CacheConfig        `yaml:"cache"`
 	Shutdown     ShutdownConfig     `yaml:"shutdown"`
 	// ApplicationIdentifierType selects how applications are identified: "app_id", as the shipped
 	// configuration sets it, or "client_id", which is also what an unset value means.

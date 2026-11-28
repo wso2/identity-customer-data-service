@@ -38,7 +38,7 @@ import (
 
 // AddUnificationRule adds a new unification rule to the database
 func AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgID string) error {
-	defer invalidateRulesCache()
+	defer invalidateRulesCache(ctx)
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -79,26 +79,24 @@ func AddUnificationRule(ctx context.Context, rule model.UnificationRule, orgID s
 //
 // Every profile write reads the rules at least twice — once to decide whether the write is
 // worth resolving, once in the worker that resolves it — and rules change perhaps a few
-// times a year. The TTL is a backstop rather than the mechanism: a write on this instance
-// invalidates immediately, and the TTL bounds how long another instance can serve a stale
-// set after a rule changes elsewhere.
-var rulesCache = cache.NewCache(constants.UnificationRulesCacheTTL)
+// times a year. The TTL is a backstop rather than the mechanism: a write invalidates
+// immediately, and, with the in-memory cache, the TTL bounds how long another instance can
+// serve a stale set after a rule changes elsewhere.
+var rulesCache = cache.New[[]model.UnificationRule]("unification_rules.by_org", constants.UnificationRulesCacheTTL)
 
 // invalidateRulesCache drops every cached rule set. Rule writes are rare and the cache is
 // small, so clearing all of it is cheaper than threading an org handle through the write
 // paths that only carry a rule id.
-func invalidateRulesCache() {
-	rulesCache.Clear()
+func invalidateRulesCache(ctx context.Context) {
+	rulesCache.Clear(ctx)
 }
 
 // GetUnificationRules returns the organization's unification rules and caches them per organization.
 func GetUnificationRules(ctx context.Context, orgID string) ([]model.UnificationRule, error) {
 	// An organization that CDS does not know gets an empty key, which matches no row.
 
-	if cached, found := rulesCache.Get(orgID); found {
-		if rules, ok := cached.([]model.UnificationRule); ok {
-			return rules, nil
-		}
+	if rules, found := rulesCache.Get(ctx, orgID); found {
+		return rules, nil
 	}
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
@@ -136,7 +134,7 @@ func GetUnificationRules(ctx context.Context, orgID string) ([]model.Unification
 		rules = append(rules, scanUnificationRule(row))
 	}
 
-	rulesCache.Set(orgID, rules)
+	rulesCache.Set(ctx, orgID, rules)
 
 	logger.Info(fmt.Sprintf("Successfully fetched all unification rules for organization: %s", orgID))
 	return rules, nil
@@ -228,7 +226,7 @@ func GetUnificationRulesByIDs(ctx context.Context, ruleIDs []string) ([]model.Un
 func PatchUnificationRule(ctx context.Context, ruleID, orgID string, updatedRule model.UnificationRule) error {
 	// An organization that CDS does not know gets an empty key, which matches no row.
 
-	defer invalidateRulesCache()
+	defer invalidateRulesCache(ctx)
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()
@@ -268,7 +266,7 @@ func PatchUnificationRule(ctx context.Context, ruleID, orgID string, updatedRule
 func DeleteUnificationRule(ctx context.Context, ruleID, orgID string) error {
 	// An organization that CDS does not know gets an empty key, which matches no row.
 
-	defer invalidateRulesCache()
+	defer invalidateRulesCache(ctx)
 
 	dbClient, err := provider.NewDBProvider().GetDBClient()
 	logger := log.GetLogger()

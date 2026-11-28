@@ -35,9 +35,9 @@ import (
 	"github.com/wso2/identity-customer-data-service/internal/system/errors"
 )
 
-// corsOriginsCacheTTL bounds how long the origins of an organization are served from memory.
-// An update drops the entry of this process at once, so this is the window in which another
-// replica may still answer with the previous list.
+// corsOriginsCacheTTL bounds how long the origins of an organization are served from the cache.
+// An update drops the entry at once; with the in-memory cache only on this process, so this is
+// the window in which another replica may still answer with the previous list.
 const corsOriginsCacheTTL = 30 * time.Second
 
 // unknownCORSHandleTTL bounds how long a handle that CDS has no organization for is answered
@@ -54,12 +54,12 @@ const maxStoredCORSOriginsLength = 500
 // once per TTL, and one that has configured none is cached as such.
 var corsOrigins = &corsOriginsCache{
 	load:    store.GetCORSAllowedOrigins,
-	entries: cache.NewCache(corsOriginsCacheTTL),
+	entries: cache.New[[]string]("admin_config.cors_origins", corsOriginsCacheTTL),
 }
 
 type corsOriginsCache struct {
 	load    func(ctx context.Context, orgId string) ([]string, error)
-	entries *cache.Cache
+	entries *cache.Cache[[]string]
 	// generation counts updates, so that a read that started before an update committed is
 	// not cached over it.
 	generation atomic.Uint64
@@ -69,19 +69,19 @@ type corsOriginsCache struct {
 // middleware, remembering for a while the handles that CDS has no organization for.
 var corsOrgIDs = &corsOrgIDResolver{
 	lookup:  orgService.LookupOrganization,
-	unknown: cache.NewCache(unknownCORSHandleTTL),
+	unknown: cache.New[bool]("admin_config.cors_unknown_handles", unknownCORSHandleTTL),
 }
 
 type corsOrgIDResolver struct {
 	lookup  func(ctx context.Context, orgHandle string) (orgModel.Ref, bool, error)
-	unknown *cache.Cache
+	unknown *cache.Cache[bool]
 }
 
 // resolve returns the org ID of the handle. found is false when CDS has no organization for it.
 // It neither stores the organization nor asks the identity provider, as the request is not
 // authenticated yet.
 func (r *corsOrgIDResolver) resolve(ctx context.Context, orgHandle string) (string, bool, error) {
-	if _, unknown := r.unknown.Get(orgHandle); unknown {
+	if _, unknown := r.unknown.Get(ctx, orgHandle); unknown {
 		return "", false, nil
 	}
 	ref, found, err := r.lookup(ctx, orgHandle)
@@ -89,7 +89,7 @@ func (r *corsOrgIDResolver) resolve(ctx context.Context, orgHandle string) (stri
 		return "", false, err
 	}
 	if !found {
-		r.unknown.Set(orgHandle, true)
+		r.unknown.Set(ctx, orgHandle, true)
 		return "", false, nil
 	}
 	return ref.ID, true, nil
@@ -97,16 +97,14 @@ func (r *corsOrgIDResolver) resolve(ctx context.Context, orgHandle string) (stri
 
 // forget drops the handle from the unknown ones, so that an organization that has just been
 // stored is resolved at once.
-func (r *corsOrgIDResolver) forget(orgHandle string) {
-	r.unknown.Delete(orgHandle)
+func (r *corsOrgIDResolver) forget(ctx context.Context, orgHandle string) {
+	r.unknown.Delete(ctx, orgHandle)
 }
 
 // get returns the origins the organization has configured, or nil if it has none.
 func (c *corsOriginsCache) get(ctx context.Context, orgID string) ([]string, error) {
-	if cached, ok := c.entries.Get(orgID); ok {
-		if origins, ok := cached.([]string); ok {
-			return origins, nil
-		}
+	if origins, ok := c.entries.Get(ctx, orgID); ok {
+		return origins, nil
 	}
 	generation := c.generation.Load()
 	origins, err := c.load(ctx, orgID)
@@ -114,16 +112,15 @@ func (c *corsOriginsCache) get(ctx context.Context, orgID string) ([]string, err
 		return nil, err
 	}
 	if c.generation.Load() == generation {
-		c.entries.Set(orgID, origins)
+		c.entries.Set(ctx, orgID, origins)
 	}
 	return origins, nil
 }
 
-// invalidate drops the cached origins of the organization, so that this process serves an
-// update at once.
-func (c *corsOriginsCache) invalidate(orgID string) {
+// invalidate drops the cached origins of the organization, so that an update is served at once.
+func (c *corsOriginsCache) invalidate(ctx context.Context, orgID string) {
 	c.generation.Add(1)
-	c.entries.Delete(orgID)
+	c.entries.Delete(ctx, orgID)
 }
 
 // normalizeOrigin lower-cases the scheme and host of an origin so that comparison against
