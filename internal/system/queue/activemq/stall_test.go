@@ -139,7 +139,7 @@ func (b *dispatchBroker) serve(conn *brokerConn) {
 		_, body, _ := strings.Cut(raw, "\n\n")
 
 		switch command {
-		case "CONNECT", "STOMP":
+		case frameConnect, frameStomp:
 			if conn.write("CONNECTED\nversion:1.2\n\n\x00") != nil {
 				return
 			}
@@ -172,7 +172,7 @@ func (b *dispatchBroker) serve(conn *brokerConn) {
 			}
 			b.mu.Unlock()
 			b.dispatch()
-		case "DISCONNECT", "ABORT", "COMMIT":
+		case frameDisconnect, "ABORT", "COMMIT":
 			if receipt := headers["receipt"]; receipt != "" {
 				_ = conn.write(fmt.Sprintf("RECEIPT\nreceipt-id:%s\n\n\x00", receipt))
 			}

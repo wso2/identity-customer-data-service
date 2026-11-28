@@ -127,7 +127,7 @@ func (b *fakeBroker) serve(conn net.Conn, answerReceipt bool) {
 		command, headers := parseFrame(frame)
 
 		switch command {
-		case "CONNECT", "STOMP":
+		case frameConnect, frameStomp:
 			if err := b.write(conn, "CONNECTED\nversion:1.2\n\n\x00"); err != nil {
 				return
 			}
@@ -140,7 +140,7 @@ func (b *fakeBroker) serve(conn net.Conn, answerReceipt bool) {
 			b.subscribes <- headers
 		case "ACK":
 			b.acks <- headers
-		case "DISCONNECT":
+		case frameDisconnect:
 			if !answerReceipt {
 				continue
 			}
@@ -158,6 +158,13 @@ func (b *fakeBroker) write(conn net.Conn, frame string) error {
 	_, err := conn.Write([]byte(frame))
 	return err
 }
+
+// The commands of the client frames that the fake brokers answer.
+const (
+	frameConnect    = "CONNECT"
+	frameStomp      = "STOMP"
+	frameDisconnect = "DISCONNECT"
+)
 
 // readFrame reads one STOMP frame, which ends at a null byte.
 func readFrame(reader *bufio.Reader) (string, error) {

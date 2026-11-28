@@ -173,9 +173,9 @@ func startHandshakeBroker(t *testing.T, answered int) (addr string, accepted fun
 					}
 					command, headers := parseFrame(frame)
 					switch {
-					case answer && (command == "CONNECT" || command == "STOMP"):
+					case answer && (command == frameConnect || command == frameStomp):
 						_, _ = conn.Write([]byte("CONNECTED\nversion:1.2\n\n\x00"))
-					case answer && command == "DISCONNECT":
+					case answer && command == frameDisconnect:
 						_, _ = conn.Write([]byte("RECEIPT\nreceipt-id:" + headers["receipt"] + "\n\n\x00"))
 					}
 				}
