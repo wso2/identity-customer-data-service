@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -144,16 +143,6 @@ func TestFetchTokenUsesTheSystemAppGrantWhenEnabled(t *testing.T) {
 	assert.Equal(t, "/t/carbon.super/oauth2/token", is.tokenPaths[0], "the grant is requested from the super tenant")
 	assert.Equal(t, "system_app_grant", is.tokenRequests[0].Get("grant_type"))
 	assert.Equal(t, "acme", is.tokenRequests[0].Get("organizationHandle"))
-}
-
-func TestFetchTokenForASubOrganizationUsesTheSuperTenantPath(t *testing.T) {
-	is, c := newIdentityServer(t, false)
-	subOrg := uuid.New().String()
-
-	_, err := c.FetchToken(subOrg)
-
-	require.NoError(t, err)
-	assert.Equal(t, "/t/carbon.super/o/"+subOrg+"/oauth2/token", is.tokenPaths[0])
 }
 
 func TestFetchTokenFailures(t *testing.T) {
@@ -392,22 +381,20 @@ func TestGetProfileSchemaFailures(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestSubOrganizationCallsUseTheOrgPath(t *testing.T) {
+func TestClaimCallsUseTheTenantPath(t *testing.T) {
 	is, c := newIdentityServer(t, false)
-	subOrg := uuid.New().String()
 	var path string
-	is.handle("/o/api/server/v1/claim-dialects/local/claims", func(w http.ResponseWriter, r *http.Request) {
+	is.handle("/t/acme/api/server/v1/claim-dialects/local/claims", func(w http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
 		writeJSON(w, http.StatusOK, []map[string]string{{"claimURI": "http://wso2.org/claims/givenname"}})
 	})
 
-	claims, err := c.GetLocalClaimsMap(subOrg)
+	claims, err := c.GetLocalClaimsMap("acme")
 
 	require.NoError(t, err)
 	assert.Contains(t, claims, "http://wso2.org/claims/givenname")
-	assert.Equal(t, "/o/api/server/v1/claim-dialects/local/claims", path, "the organization is carried by the token")
-	assert.Equal(t, "/o", c.orgAPIPathPrefix(subOrg))
-	assert.Equal(t, "/t/acme", c.orgAPIPathPrefix("acme"))
+	assert.Equal(t, "/t/acme/api/server/v1/claim-dialects/local/claims", path)
+	assert.Equal(t, "/t/acme/oauth2/token", is.tokenPaths[0])
 }
 
 func TestOrgEndpointRefusesURLsThatLeaveTheHost(t *testing.T) {
